@@ -3,6 +3,12 @@ import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
 
 void initOpenNextCloudflareForDev();
 
+/** Next.js `next dev` (Fast Refresh) requires eval; strict CSP breaks the app + Turnstile. Production build omits unsafe-eval. */
+const isDev = process.env['NODE_ENV'] === 'development';
+const scriptSrc = isDev
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com"
+  : "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com";
+
 const nextConfig: NextConfig = {
   // Required for @opennextjs/cloudflare
   // Do NOT set output: 'export' — OpenNext handles the build
@@ -24,7 +30,7 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https:",
               "font-src 'self'",

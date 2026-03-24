@@ -50,3 +50,26 @@ export async function checkEmailLeadRateLimit(
 export function emailRateKey(email: string): string {
   return email.trim().toLowerCase();
 }
+
+const CHECKOUT_WINDOW_SEC = 3600;
+const CHECKOUT_MAX_PER_IP = 5;
+
+function hourBucket(): string {
+  return String(Math.floor(Date.now() / 3_600_000));
+}
+
+/** Stripe checkout: 5 attempts per IP per hour (security rules). */
+export async function checkCheckoutRateLimit(
+  kv: KVNamespace | undefined,
+  ip: string
+): Promise<RateLimitResult> {
+  if (!kv) return { ok: true };
+  const key = `rl:checkout:ip:${ip}:${hourBucket()}`;
+  const raw = await kv.get(key);
+  const n = raw ? Number.parseInt(raw, 10) : 0;
+  if (Number.isFinite(n) && n >= CHECKOUT_MAX_PER_IP) {
+    return { ok: false, code: 'ip', retryAfterSec: CHECKOUT_WINDOW_SEC };
+  }
+  await kv.put(key, String(n + 1), { expirationTtl: CHECKOUT_WINDOW_SEC * 2 });
+  return { ok: true };
+}

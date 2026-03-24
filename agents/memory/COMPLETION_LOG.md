@@ -202,6 +202,26 @@ Files: `workers/lib/ssrf.test.ts`, `workers/scan-engine/scoring.test.ts`.
 
 ---
 
+### Phase 1→2 manual gate — operator report (2026-03-24)
+**Agent:** Operator (Uzziel / team)  
+**Claimed complete:** 2026-03-24  
+**Evidence type:** End-to-end run in local/preview environment (user report)
+
+#### Evidence
+
+- Target URL: `https://techehealthservices.com/`
+- Outcome: Results page showed **AI Search Readiness Score 46 / 100**, letter grade **F**, top issues (LLM Q&A check showed `http_400` finding; JSON-LD missing; title length 85 chars vs 10–70 band).
+- Email gate: success message **“You are on the list.”** (lead capture path exercised).
+
+**Follow-up (engineering):** `http_400` on the LLM check indicates **Gemini API HTTP 400** (model name, API version, or key scope) — not a verdict on site Q&A quality. Review `GEMINI_MODEL` / endpoint vs [Google AI Studio](https://ai.google.dev/) when hardening Phase 1 checks.
+
+#### Orchestrator Decision
+**Date:** _pending_  
+**Decision:** _pending_  
+**Notes:** Confirm `leads` + optional KV counters; then ACCEPT Phase 1→2 gate.
+
+---
+
 ## Rejection History
 
 _Agents whose claimed completions were challenged will be logged here for pattern tracking._

@@ -8,6 +8,19 @@ type ScanFormProps = {
   siteKey: string;
 };
 
+function messageFromScanError(data: unknown): string {
+  if (!data || typeof data !== 'object' || !('error' in data)) return 'Scan failed';
+  const err = (data as { error?: unknown }).error;
+  if (!err || typeof err !== 'object') return 'Scan failed';
+  const code = 'code' in err && typeof (err as { code?: string }).code === 'string' ? (err as { code: string }).code : '';
+  const raw = (err as { message?: unknown }).message;
+  let detail = '';
+  if (typeof raw === 'string') detail = raw;
+  else if (raw !== undefined) detail = JSON.stringify(raw);
+  const prefix = code ? `${code}: ` : '';
+  return `${prefix}${detail || 'Scan failed'}`;
+}
+
 export function ScanForm({ siteKey }: ScanFormProps) {
   const router = useRouter();
   const [url, setUrl] = useState('');
@@ -31,11 +44,7 @@ export function ScanForm({ siteKey }: ScanFormProps) {
       });
       const data: unknown = await res.json();
       if (!res.ok) {
-        const msg =
-          data && typeof data === 'object' && 'error' in data
-            ? String((data as { error?: { message?: string } }).error?.message ?? 'Scan failed')
-            : 'Scan failed';
-        setError(msg);
+        setError(messageFromScanError(data));
         setLoading(false);
         return;
       }
@@ -50,7 +59,7 @@ export function ScanForm({ siteKey }: ScanFormProps) {
       }
       router.push(`/results/${id}`);
     } catch {
-      setError('Network error');
+      setError('Network error — check the dev server terminal for /api/scan errors.');
     }
     setLoading(false);
   }

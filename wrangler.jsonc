@@ -1,15 +1,30 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   // GEO-Pulse — Cloudflare Workers configuration
   // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
   // Stack: Next.js 15 via @opennextjs/cloudflare (NOT @cloudflare/next-on-pages — deprecated)
 
   "name": "geo-pulse",
-  "main": ".open-next/worker.js",
+  "main": "workers/cloudflare-entry.ts",
   "compatibility_date": "2025-04-01", // Required for process.env population with OpenNext
   "compatibility_flags": ["nodejs_compat"], // Required for Supabase client + pdf-lib
 
+  // Required by @opennextjs/cloudflare — without this, /_next/static/* returns HTML and CSS/JS MIME errors
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "geo-pulse"
+    }
+  ],
+
   // Non-sensitive config only — secrets go via `wrangler secret put`
   "vars": {
+    "STRIPE_PRICE_ID_DEEP_AUDIT": "price_1TEYQF3GRIW7Ej20UD4lcsp5s",
     "NEXT_PUBLIC_SUPABASE_URL": "https://vynrlgtxqnomxenakafn.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-anon-key-here",
     "NEXT_PUBLIC_APP_URL": "https://geopulse.io",
@@ -51,6 +66,12 @@
         "max_batch_timeout": 30,
         "max_retries": 3,
         "dead_letter_queue": "geo-pulse-dlq"
+      },
+      {
+        "queue": "geo-pulse-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 1
       }
     ]
   },

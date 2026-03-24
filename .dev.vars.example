@@ -2,6 +2,12 @@
 # Copy this file to .dev.vars and fill in real values
 # .dev.vars is in .gitignore — NEVER commit it
 # These mirror the secrets set via `wrangler secret put` for production
+#
+# --- `next dev` vs Wrangler ---
+# `npm run dev` (Next.js only) loads server env from `.env.local`, NOT from `.dev.vars`.
+# If POST /api/scan returns 503 or turnstile/db errors, add the same server secrets to
+# `.env.local` (gitignored): SUPABASE_SERVICE_ROLE_KEY, TURNSTILE_SECRET_KEY, GEMINI_API_KEY,
+# plus NEXT_PUBLIC_* lines as needed. Or use `npm run preview` so Wrangler injects `.dev.vars`.
 
 # Supabase — use project API settings page
 # anon key is safe to expose client-side; service_role is NOT
@@ -10,7 +16,10 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 # Stripe — use test mode keys during development (sk_test_...)
 STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
 STRIPE_WEBHOOK_SECRET=whsec_your_webhook_signing_secret
-# Get the webhook secret from: stripe listen --forward-to localhost:3000/api/webhooks/stripe
+# Price ID for deep audit ($29 prod or $1 test price in Stripe Dashboard → Products)
+STRIPE_PRICE_ID_DEEP_AUDIT=price_your_price_id
+# Get the webhook secret from: stripe listen --forward-to localhost:8787/api/webhooks/stripe
+# (use the port shown by `npm run preview` / `wrangler dev` — queue + webhook need the Worker)
 
 # Google Gemini API
 # Free tier: 1,000 req/day (Gemini 2.5 Flash-Lite)
@@ -20,6 +29,8 @@ GEMINI_API_KEY=your-gemini-api-key-here
 # Resend — transactional email
 # Get key: https://resend.com/api-keys
 RESEND_API_KEY=re_your_resend_api_key
+# Verified sender (domain or onboarding@resend.dev for tests)
+RESEND_FROM_EMAIL=GEO-Pulse <onboarding@resend.dev>
 
 # Cloudflare Turnstile — CAPTCHA
 # Use always-pass test key for local dev: 1x0000000000000000000000000000000AA
@@ -32,5 +43,8 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 # ============================================================
 NEXT_PUBLIC_SUPABASE_URL=https://vynrlgtxqnomxenakafn.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Must match the origin you use in the browser (Stripe redirects here after checkout).
+# next dev: http://localhost:3000
+# wrangler preview / npm run preview: use the URL Wrangler prints, e.g. http://127.0.0.1:8787
+NEXT_PUBLIC_APP_URL=http://127.0.0.1:8787
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA

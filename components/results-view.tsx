@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { DeepAuditCheckout } from '@/components/deep-audit-checkout';
 import { EmailGate } from '@/components/email-gate';
 import { ScoreDisplay } from '@/components/score-display';
 
@@ -72,6 +73,9 @@ export function ResultsView({ scanId, turnstileSiteKey }: Props) {
         <p className="mt-1 break-all text-lg font-medium text-geo-ink">{data.url}</p>
       </div>
       <ScoreDisplay score={data.score} letterGrade={data.letterGrade} issues={data.topIssues} />
+      {turnstileSiteKey ? (
+        <DeepAuditCheckout siteKey={turnstileSiteKey} scanId={data.scanId} />
+      ) : null}
       {turnstileSiteKey ? (
         <EmailGate
           siteKey={turnstileSiteKey}

@@ -10,7 +10,7 @@
 
 **Phase 1 — CLOSED (2026-03-24).** Free scan path implemented (landing, Turnstile, SSRF-gated fetch, 11 deterministic + 2 Gemini checks, weighted score, results + email gate, `scans`/`leads` via service role, KV rate limits). Evidence: `COMPLETION_LOG.md` *Phase 1 — implementation bundle*.
 
-**Before treating Phase 1→2 gate as fully signed off:** Orchestrator should run **one** manual end-to-end pass on `npm run preview` or `wrangler dev` (scan → results → email gate → row in `leads`) and confirm rate-limit keys in KV — per `ORCHESTRATOR.md` Phase 1→2 rules.
+**Phase 1→2 gate (manual) — operator verified (2026-03-24):** End-to-end run on `https://techehealthservices.com/`: scan completed, **AI Search Readiness Score** returned, results page + email gate (“You are on the list.”). Orchestrator may mark **ACCEPTED** per `ORCHESTRATOR.md` once `leads` row + optional KV rate-limit spot-check are confirmed in Supabase/CF dashboard.
 
 **Phase 0 — CLOSED (2026-03-24).** Gate per `ORCHESTRATOR.md`: `wrangler dev` + Supabase tables/RLS + anon RLS check + type-check — see `COMPLETION_LOG.md` section *Phase 0 — P0-002 / P0-003 / P0-004 / P0-005 / P0-006 evidence bundle*.
 
@@ -120,6 +120,7 @@ _None at this time._
 |------|--------|
 | 2026-03-24 | Phase 0 scaffold gate closed; **Current Phase → Phase 1 — Core Scan Engine**. P0-002…P0-006 ✅; API-001 ✅ (remote matches `002_api_keys.sql`). |
 | 2026-03-24 | **Phase 1 — Core Scan Engine** implementation complete; **Current Phase → Phase 2 — Payment + PDF + Email**. P1-001…P1-011 ✅ (see COMPLETION_LOG). |
+| 2026-03-24 | **Phase 1→2 manual gate:** live scan + results + email capture reported successful (domain: techehealthservices.com). |
 
 ---
 
