@@ -4,18 +4,20 @@
 
 ---
 
-## Current Phase: Phase 0 — Scaffold
+## Current Phase: Phase 1 — Core Scan Engine
 
-**Phase goal:** `wrangler dev` runs locally. Supabase tables exist with RLS. Cursor rules active.
+**Phase goal:** Free scan path end-to-end: form → Worker scan → score + top issues → email gate → leads row; Turnstile + SSRF + rate limits.
 
-**Phase 0 exit criteria:**
-- [ ] `npm install` completes without errors
-- [ ] `wrangler dev` starts the dev server
-- [ ] Supabase project created, migration `001` applied successfully
-- [ ] All 6 tables exist with RLS enabled (verified via anon key test)
-- [ ] `.cursor/rules/` files loaded and active in Cursor
-- [ ] `.dev.vars` populated from `.dev.vars.example`
-- [ ] `npm run type-check` returns 0 errors
+**Phase 0 — CLOSED (2026-03-24).** Gate per `ORCHESTRATOR.md`: `wrangler dev` + Supabase tables/RLS + anon RLS check + type-check — see `COMPLETION_LOG.md` section *Phase 0 — P0-002 / P0-003 / P0-004 / P0-005 / P0-006 evidence bundle*.
+
+**Phase 0 exit criteria (archived):**
+- [x] `npm install` completes without errors
+- [x] `wrangler dev` starts the dev server
+- [x] Supabase project created; schema from `001_initial_schema.sql` (+ `002_api_keys.sql`) applied on remote `geo_pulse`
+- [x] Core 6 tables + API tables: RLS enabled; `leads` verified via **anon** PostgREST (200 + `[]`)
+- [x] `.cursor/rules/` files present in repo
+- [x] `.dev.vars` present at repo root (from `.dev.vars.example` pattern)
+- [x] `npm run type-check` returns 0 errors
 
 ---
 
@@ -25,11 +27,11 @@
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
 | P0-001 | Scaffold files created | Orchestrator | ✅ DONE | Files exist in repo |
-| P0-002 | `npm install` passes | Backend | ⬜ PENDING | — |
-| P0-003 | Supabase project created + migration applied | Database | ⬜ PENDING | — |
-| P0-004 | RLS verified via anon key | Security | ⬜ PENDING | — |
-| P0-005 | `wrangler dev` runs locally | Backend | ⬜ PENDING | — |
-| P0-006 | Type check passes (0 errors) | QA | ⬜ PENDING | — |
+| P0-002 | `npm install` passes | Backend | ✅ DONE | COMPLETION_LOG Phase 0 bundle |
+| P0-003 | Supabase project created + migration applied | Database | ✅ DONE | COMPLETION_LOG Supabase audit + Phase 0 bundle |
+| P0-004 | RLS verified via anon key | Security | ✅ DONE | COMPLETION_LOG Phase 0 bundle (PostgREST `leads`) |
+| P0-005 | `wrangler dev` runs locally | Backend | ✅ DONE | COMPLETION_LOG Phase 0 bundle |
+| P0-006 | Type check passes (0 errors) | QA | ✅ DONE | COMPLETION_LOG Phase 0 bundle |
 
 ### Phase 1 — Core Scan Engine
 | Task ID | Task | Agent | Status | Evidence |
@@ -79,7 +81,7 @@
 ### API-as-a-Service Layer (parallel track)
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
-| API-001 | API key schema + migration | Database | ⬜ PENDING | — |
+| API-001 | API key schema + migration | Database | ✅ DONE | `002_api_keys.sql` on remote; COMPLETION_LOG Supabase audit |
 | API-002 | API key issuance + validation Worker | API | ⬜ PENDING | — |
 | API-003 | OpenAPI spec v1 | API + Architect | ⬜ PENDING | — |
 | API-004 | Rate limiting per API key | API + Security | ⬜ PENDING | — |
@@ -106,6 +108,13 @@ _None at this time._
 | ADR-004 | Supabase RLS on all tables; leads = service_role only | ✅ Final |
 | ADR-005 | n8n self-hosted on Oracle Cloud Free (not Make.com) | ✅ Final |
 | ADR-006 | API-first architecture: GEO-Pulse is an API with a UI on top | ✅ Final |
+
+---
+
+## State history
+| Date | Change |
+|------|--------|
+| 2026-03-24 | Phase 0 scaffold gate closed; **Current Phase → Phase 1 — Core Scan Engine**. P0-002…P0-006 ✅; API-001 ✅ (remote matches `002_api_keys.sql`). |
 
 ---
 

@@ -31,8 +31,8 @@
   "kv_namespaces": [
     {
       "binding": "SCAN_CACHE",
-      "id": "REPLACE_WITH_KV_ID", // wrangler kv:namespace create SCAN_CACHE
-      "preview_id": "REPLACE_WITH_PREVIEW_KV_ID"
+      "id": "670fa578cf3b430687683445aac48eea",
+      "preview_id": "f1c7e4c68ddc464ab3bcf0517206611f"
     }
   ],
 
