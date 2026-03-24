@@ -1,20 +1,28 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
-import type { ReportQueueMessageV1 } from '@/lib/queue/report-job';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
+import {
+  ensureDeepAuditJobQueued,
+  type EnsureDeepAuditJobResult,
+} from '@/lib/server/stripe/ensure-deep-audit-job-queued';
 
-export type CheckoutCompletedResult =
-  | { ok: true; duplicate: true }
-  | { ok: true; duplicate: false }
-  | { ok: false; reason: string; status: number };
+export type CheckoutCompletedResult = EnsureDeepAuditJobResult;
 
 function isUniqueViolation(err: { code?: string } | null): boolean {
   return err?.code === '23505';
 }
 
+function paymentLookupOrFilter(stripeEventId: string, stripeSessionId: string): string {
+  return `stripe_event_id.eq.${stripeEventId},stripe_session_id.eq.${stripeSessionId}`;
+}
+
+function normalizeGuestEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 /**
  * Idempotent handler for Stripe `checkout.session.completed`.
- * Inserts `payments`, enqueues PDF job. Duplicate `stripe_event_id` → success no-op.
+ * Inserts `payments`, enqueues PDF job. Replays enqueue on webhook retry when payment exists but report does not.
  */
 export async function handleCheckoutSessionCompleted(
   supabase: SupabaseClient,
@@ -42,18 +50,19 @@ export async function handleCheckoutSessionCompleted(
 
   const { data: existing } = await supabase
     .from('payments')
-    .select('id')
-    .eq('stripe_event_id', stripeEventId)
+    .select('id, scan_id')
+    .or(paymentLookupOrFilter(stripeEventId, stripeSessionId))
     .maybeSingle();
 
   if (existing?.id) {
-    return { ok: true, duplicate: true };
+    return ensureDeepAuditJobQueued(supabase, env, session, email, existing, true);
   }
 
   const { data: paymentRow, error: insertErr } = await supabase
     .from('payments')
     .insert({
       user_id: null,
+      guest_email: normalizeGuestEmail(email),
       stripe_session_id: stripeSessionId,
       stripe_event_id: stripeEventId,
       amount_cents: amountCents,
@@ -62,12 +71,30 @@ export async function handleCheckoutSessionCompleted(
       status: 'complete',
       scan_id: scanId,
     })
-    .select('id')
+    .select('id, scan_id')
     .single();
 
   if (insertErr) {
     if (isUniqueViolation(insertErr)) {
-      return { ok: true, duplicate: true };
+      const { data: byEvent } = await supabase
+        .from('payments')
+        .select('id, scan_id')
+        .eq('stripe_event_id', stripeEventId)
+        .maybeSingle();
+      const row =
+        byEvent?.id != null
+          ? byEvent
+          : (
+              await supabase
+                .from('payments')
+                .select('id, scan_id')
+                .eq('stripe_session_id', stripeSessionId)
+                .maybeSingle()
+            ).data;
+      if (!row?.id) {
+        return { ok: false, reason: 'payment_reconcile_failed', status: 500 };
+      }
+      return ensureDeepAuditJobQueued(supabase, env, session, email, row, true);
     }
     return { ok: false, reason: insertErr.message, status: 500 };
   }
@@ -76,19 +103,5 @@ export async function handleCheckoutSessionCompleted(
     return { ok: false, reason: 'payment_insert_failed', status: 500 };
   }
 
-  const payload: ReportQueueMessageV1 = {
-    v: 1,
-    scanId,
-    customerEmail: email,
-    paymentId: paymentRow.id,
-    stripeSessionId,
-  };
-
-  try {
-    await env.SCAN_QUEUE.send(JSON.stringify(payload));
-  } catch {
-    return { ok: false, reason: 'queue_send_failed', status: 500 };
-  }
-
-  return { ok: true, duplicate: false };
+  return ensureDeepAuditJobQueued(supabase, env, session, email, paymentRow, false);
 }

@@ -10,11 +10,11 @@ These five items block launch if incomplete. They are not optional.
 
 | # | Item | Where | Status |
 |---|------|--------|--------|
-| 1 | RLS enabled on every Supabase table | `supabase/migrations/001_initial_schema.sql` | ✅ In migration |
-| 2 | SSRF validation on every user-submitted URL | `workers/lib/ssrf.ts` | ✅ Utility written |
-| 3 | Stripe webhook signature verification | `app/api/webhooks/stripe/route.ts` | ⬜ Implement in Phase 2 |
-| 4 | Cloudflare Turnstile on scan form, server-side validated | `workers/scan-engine/index.ts` | ⬜ Implement in Phase 1 |
-| 5 | SPF + DKIM + DMARC before first email send | Cloudflare DNS + Resend dashboard | ⬜ Configure before launch |
+| 1 | RLS enabled on every Supabase table | `supabase/migrations/*.sql` | ✅ Migrations + new tables must keep RLS |
+| 2 | SSRF validation on every user-submitted URL | `workers/lib/ssrf.ts` + callers | ✅ Enforced on scan path — extend to any new fetch of user URLs |
+| 3 | Stripe webhook signature verification | `app/api/webhooks/stripe/route.ts` | ✅ `constructEvent` before handling |
+| 4 | Cloudflare Turnstile on scan form, server-side validated | `components/scan-form.tsx`, `app/api/scan`, `lib/server/turnstile.ts` | ✅ Server validates token |
+| 5 | SPF + DKIM + DMARC before first email send | Cloudflare DNS + Resend dashboard | ⬜ Configure before production launch |
 
 ---
 

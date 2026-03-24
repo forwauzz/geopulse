@@ -1,0 +1,259 @@
+# The GEO-Pulse AI Agency Playbook: Ship a $0-Budget SaaS on Autopilot
+
+**GEO-Pulse can be built, launched, and grown for $0 upfront — but the free tier limits define your architecture.** The GEO (Generative Engine Optimization) market hit **$1.01 billion in 2025** and is projected to reach $1.48 billion this year, growing at 45.5% CAGR toward $17 billion by 2034. Most enterprise teams have a GEO initiative; most SMBs have not started. That gap is your opening. This playbook covers exact pricing benchmarks, verified free-tier limits, automation stacks, security architecture, growth loops, and build methodology — all confirmed as of March 2026.
+
+---
+
+## 1. Monetization: $49/month is the market's default entry price
+
+### Competitive pricing landscape
+
+The GEO audit tool market has settled into clear pricing tiers. **Geoptie** leads the GEO-specific category at **$49/month** (Starter) with 7 free tools requiring no signup. **Peec AI** starts at **€85/month** with 50 tracked prompts across 3 AI models — they hit €650K ARR within four months of launch. **Scrunch AI** targets enterprise at **$300–$500/month**. WordLift's new Agent Plan runs **€160/month** annually.
+
+The closest architectural comp to GEO-Pulse is **SEOptimer**, which proves the freemium audit model works at scale: unlimited free basic audits, then **$29/month** (DIY SEO), **$39/month** (White Label with branded PDF reports), and **$59/month** (White Label + Embedding with lead-gen widget). Their entire funnel — free audit → subscription conversion — is the template GEO-Pulse should follow.
+
+Traditional SEO suites price significantly higher: **Ahrefs Lite** at $129/month, **Semrush Pro** at $139.95/month. Ahrefs added a new **$29/month Starter** tier in January 2026 (a 70% price cut from their old entry), signaling downward pressure. **Ubersuggest** remains the outlier with $12–40/month plans and lifetime purchases at $120–$400.
+
+### Conversion rates and pricing model
+
+Industry data from First Page Sage's 2026 report across 86 SaaS companies shows **freemium-to-paid conversion rates of 2.6–2.8%** for self-serve products, with good performers hitting 6–8% and great ones exceeding 10%. Free trials with credit-card-required convert at **~25%**. For a URL-input GEO audit tool, plan on **3% as your baseline** conversion rate.
+
+**Subscription has decisively won over one-time reports.** No major SEO or GEO audit tool sells one-time reports as a SaaS product. SEOptimer charges $29–59/month for unlimited audits. Geoptie gives unlimited reports on every plan. The math is simple: a $49/month subscriber yields **$588/year** at 12-month retention versus $49 total from a one-time report. However, a **one-time "Deep GEO Audit" upsell at $49–99** works well as a conversion accelerator alongside the subscription.
+
+### Agency white-label sweet spot
+
+Agencies charge their clients **$2,500–$15,000** for one-time GEO audits and **$500–$10,000/month** for ongoing retainers. The tool-cost sweet spot is **$59–99/month** for white-label access, letting agencies maintain 80%+ margins. Key features agencies require: custom branding on PDF reports, embeddable audit widget for lead generation, custom domain, Zapier/webhook integration, and multi-client management.
+
+### Recommended GEO-Pulse pricing
+
+- **Free:** 3–5 audits/month, limited scoring depth, no PDF export
+- **Pro:** $39–49/month — full reports, PDF export, action items, monitoring
+- **Agency/White-Label:** $79–99/month — branded reports, embeddable widget, bulk audits, API access
+- **Optional upsell:** $49–99 one-time "Deep Dive GEO Report"
+
+---
+
+## 2. The $0 tech stack: verified limits that define your ceiling
+
+Every number below was confirmed against official documentation in March 2026. These limits are your architectural constraints — design around them, not against them.
+
+### Cloudflare Workers (free tier)
+
+| Resource | Limit |
+|----------|-------|
+| Requests/day | **100,000** (resets midnight UTC) |
+| CPU time/invocation | **10 ms** (CPU time, not wall clock) |
+| Subrequests/request | 50 |
+| Script size | 3 MB compressed |
+| KV reads/day | 100,000 |
+| KV writes/day | 1,000 |
+| KV storage | 1 GB |
+
+**Critical gotcha:** The 10ms CPU limit is the hardest constraint. Waiting on `fetch()` calls doesn't count, but any computation does. PDF generation and complex LLM response parsing will exceed this. On the **paid tier ($5/month)**, CPU time jumps to 30 seconds — this is likely your first forced upgrade.
+
+**Durable Objects** are available on the free plan but only with the SQLite storage backend. **Cloudflare Queues** gained a free tier in early 2026: **10,000 operations/day** with up to 10,000 queues and 24-hour retention. This is critical for async scan processing. Verify this in your dashboard, as this was a recent addition and documentation may lag.
+
+### Cloudflare Pages (free tier)
+
+Commercial use is **explicitly allowed**. Bandwidth and requests are **unlimited** with no stated cap. You get 500 builds/month, 100 sites, 100 custom domains per project. Pages Functions count toward your Workers quota. This is the most generous free hosting tier available.
+
+### Supabase (free tier)
+
+| Resource | Limit |
+|----------|-------|
+| Database size | **500 MB** |
+| API calls | Unlimited |
+| Auth MAUs | 50,000 |
+| File storage | 1 GB |
+| Edge Function invocations | 500,000/month |
+| Realtime connections | 200 concurrent |
+| Bandwidth | ~2 GB egress |
+
+**Two production-killing gotchas.** First, projects **pause after 7 days of inactivity** — you must keep the project alive with a cron job or health-check endpoint. Second, the **2 GB bandwidth limit** can be exhausted in days with moderate traffic (500 DAU × 20 API calls × 50 KB = 500 MB/day). No automated backups exist on the free tier. Plan your migration to the $25/month Pro tier early.
+
+### Resend (free tier)
+
+**100 emails/day**, 3,000/month, 1 custom domain, 5 requests/second API rate limit. The daily cap means you're limited to ~100 audit report emails per day. Data retention is only 1 day on free. This was upgraded from 100/month to 3,000/month in 2024.
+
+### Gemini 2.5 Flash-Lite (free tier — best free LLM option)
+
+| Model | RPM | RPD | TPM |
+|-------|-----|-----|-----|
+| Gemini 2.5 Flash-Lite | 15 | **1,000** | 250,000 |
+| Gemini 2.5 Flash | 10 | 250 | 250,000 |
+| Gemini 2.5 Pro | 5 | 100 | 250,000 |
+
+Google cut free tier limits by 50–80% in December 2025 — these are the post-cut stabilized numbers. **Flash-Lite at 1,000 requests/day is your workhorse.** Use Flash (250 RPD) for complex reasoning and Pro (100 RPD) sparingly. No credit card required. Free tier data may be used for Google product improvement — upgrading to Tier 1 (just enable billing) removes this. Claude and OpenAI have no comparable free API tiers.
+
+### Stripe
+
+No monthly fee, no setup fees, no minimums. **2.9% + $0.30** per successful card charge. Stripe Billing adds 0.5% on recurring charges. Purely pay-as-you-go.
+
+### n8n and automation hosting at $0
+
+n8n Cloud has **no permanent free tier** — only a 14-day trial. Railway offers only a **$5 trial credit**, not a permanent free tier. Render's free tier spins down after 15 minutes of inactivity with 30-second cold starts, making it unreliable for webhook-based automation.
+
+The real $0 path: **self-host n8n on Oracle Cloud's Always Free Tier** — 4 OCPU ARM, 24 GB RAM, 200 GB storage. This is genuinely free forever and runs n8n comfortably 24/7. Alternative: Google Cloud's free e2-micro instance (0.25 vCPU, 1 GB RAM) works but is tight. Open-source alternatives to Make.com include **Automatisch**, **Activepieces** (has a limited free cloud tier), and **Windmill**.
+
+### PDF generation in Cloudflare Workers
+
+Puppeteer cannot run in V8 isolates. **pdf-lib** is the production-ready choice — pure JavaScript, runs in Workers, supports custom fonts, form filling, and merging. It handles programmatic PDF construction within the 10ms CPU limit for simple reports. **jsPDF** works but produces low-quality output with limited font support. For styled reports, the **Satori + resvg-wasm → pdf-lib pipeline** converts JSX-like markup to SVG to PDF, producing beautiful output but potentially exceeding free-tier CPU limits. On the $5/month paid plan, **Cloudflare Browser Rendering** (Puppeteer/Playwright) gives full HTML/CSS-to-PDF at ~6 seconds per invocation.
+
+---
+
+## 3. Headless social media: Buffer is the clear winner
+
+### Content generation at $0
+
+**Buffer** offers **unlimited AI content generation on its free tier** — a rare and valuable differentiator. The AI generates post ideas, repurposes content, adjusts tone, and translates. Free tier gives 3 channels with 10 posts/channel/month. For bulk generation beyond what Buffer's AI provides, **Gemini's free API** (1,000 requests/day) can produce hundreds of social posts for $0. At ~$0.50/month via API, GPT-4o Mini or Gemini Flash generates 30+ posts.
+
+**Taplio** ($39/month, LinkedIn-only, zero AI credits on Starter) and **Lately.ai** ($19/month minimum, rebranding to "Kately") are overpriced for a $0 budget. **Metricool** and **Publer** both exclude X/Twitter from their free tiers, making them non-starters for full-platform coverage.
+
+### Faceless video production
+
+For a brand with no human presenter, you need tools that combine stock footage, AI voiceover, and text overlays. At **true $0**, **InVideo AI** offers 10 videos/week (watermarked, 720p, non-commercial) and **Kling AI** gives 66 credits/day (watermarked). Both produce unusable output for a professional brand.
+
+The realistic minimum: **Kling AI Standard at $6.99/month** for generative social clips, or **Pictory at ~$19/month** for converting blog posts into 30 polished faceless videos with voiceover and captions. **InVideo AI Plus at ~$20–28/month** gives 50 videos/month at 1080p with commercial license. Budget **$7–19/month** for usable video — this is not where $0 works.
+
+Avoid avatar tools (Synthesia, HeyGen) — those are for talking-head videos, not faceless brand content.
+
+### Auto-scheduling across platforms
+
+| Tool | Free Channels | Posts/Month | X/Twitter | All Platforms | AI |
+|------|:---:|:---:|:---:|:---:|:---:|
+| **Buffer** | 3 | 30 total | ✅ | ✅ (12+) | ✅ Unlimited |
+| Later | 8 | 96 total | ✅ | ✅ | ❌ |
+| Metricool | 1 brand | 50 | ❌ | Partial | Limited |
+| Publer | 3 | 30 | ❌ | Partial | ❌ |
+
+**Buffer Free wins.** Three channels, unlimited AI, supports every major platform. To cover 5+ platforms, use Buffer for your top 3 (X, LinkedIn, Instagram) plus **TikTok's native scheduler** and **YouTube Studio** (both free) for the rest.
+
+### The $0 content repurposing pipeline
+
+No single tool does blog → thread + carousel + video → auto-schedule at $0. The closest automated pipeline:
+
+1. New blog post triggers n8n webhook (self-hosted, free)
+2. n8n calls Gemini API to generate X post, LinkedIn post, Instagram caption, video script
+3. n8n pushes posts to Buffer queue via API
+4. Carousel designed in Canva Free templates
+5. Video script fed into InVideo AI or CapCut (manual step)
+
+This requires developer skills to set up but runs autonomously afterward.
+
+### LinkedIn for a faceless brand
+
+Company pages get **2–5% organic reach** versus 10–30%+ for personal profiles. LinkedIn's algorithm aggressively favors individuals over brands. Set up the page and schedule 2–3 posts/week via Buffer (counts as 1 of your 3 free channels), but **don't over-invest**. The SEO/GEO audience is far more active on X/Twitter.
+
+---
+
+## 4. Security architecture: free doesn't mean insecure
+
+### Cloudflare's free security stack is surprisingly strong
+
+**Rate limiting is free** — you get 1 custom rule via the WAF dashboard. Configure it to limit `/api/scan` to 10–20 requests/minute per IP with a 10-minute block action. Additionally, Cloudflare Workers now provide a **native Rate Limiting binding** (`env.MY_RATE_LIMITER.limit({ key })`) enabling per-user, per-path rate limiting in code — also free.
+
+**DDoS protection is unlimited and unmetered** on all plans, including free. Cloudflare once mitigated 26M requests/second for a free-plan customer. **Bot Fight Mode** is free and automatically challenges automated traffic. The free WAF includes a managed ruleset covering Log4J, Shellshock, and high-severity CVEs, plus **5 custom WAF rules**. Critically, enable the managed rule for **CVE-2025-29927** — a Next.js authentication bypass via the `x-middleware-subrequest` header that Cloudflare specifically deployed a rule for.
+
+**Cloudflare Turnstile** is **100% free** — a privacy-preserving CAPTCHA alternative that runs non-interactive JavaScript challenges. Embed it on the scan form and validate tokens server-side before processing any audit.
+
+### Supabase RLS: the non-negotiable foundation
+
+Every table needs Row Level Security enabled. The core pattern is `user_id = auth.uid()` for ownership isolation:
+
+```sql
+ALTER TABLE audit_reports ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users see own reports" ON audit_reports
+  FOR SELECT USING (user_id = auth.uid());
+```
+
+**Three mistakes that break production:** forgetting to enable RLS on a table (everything becomes publicly accessible via the REST API), exposing the `service_role` key in client code (bypasses all RLS), and testing only in the SQL Editor (which bypasses RLS). Always index columns used in RLS policies — missing indexes cause **2–11x performance degradation**. For multi-tenant isolation, store `tenant_id` in a profiles table and join against it in policies.
+
+### SSRF prevention is your #1 specific risk
+
+Users submit URLs that your server fetches — a classic Server-Side Request Forgery vector. Validate the URL scheme (http/https only), block private/internal IP ranges (127.x, 10.x, 172.16–31.x, 192.168.x, 169.254.169.254 metadata endpoints), resolve DNS and validate the resolved IP before fetching, and set `redirect: 'manual'` to validate redirect targets. Cloudflare Workers provide some natural protection since they don't access internal networks, but input validation is still mandatory.
+
+### API key management
+
+Store all secrets (Stripe, Supabase service key, LLM API keys, Resend) via `wrangler secret put` — never in `wrangler.toml` or source code. Non-sensitive configuration (Supabase URL, app URL) goes in `[vars]` in wrangler.toml. The new **Cloudflare Secrets Store** (beta, 2025) enables account-level secrets shared across multiple Workers with 2-level encryption. For local development, use a `.dev.vars` file added to `.gitignore`.
+
+### Email authentication setup for Resend
+
+Add the domain in Resend's dashboard, then configure three DNS records in Cloudflare: **SPF** (TXT record on send subdomain with `v=spf1 include:_spf.resend.com ~all`), **DKIM** (TXT record with the public key Resend generates), and **DMARC** (start with `p=none` for monitoring, escalate to `p=quarantine`, then `p=reject`). Google, Yahoo, and Microsoft all require SPF + DKIM + DMARC for bulk senders since 2024. Use a subdomain for transactional email to protect root domain reputation.
+
+### Day-one security checklist
+
+Enable RLS on every Supabase table. Store all API keys as Wrangler secrets. Add Cloudflare Turnstile to the scan form. Enable Bot Fight Mode. Set up the 1 free rate limiting rule. Enable the CVE-2025-29927 WAF rule. Implement SSRF validation. Configure CSP and security headers. Set up SPF/DKIM/DMARC for Resend.
+
+---
+
+## 5. Growth loops: build virality into the product, not around it
+
+### The "share your score" mechanic is your primary growth engine
+
+Build a visual scorecard (0–100 with letter grade) with a pre-generated Open Graph image that unfurls on social platforms. Include one-click share buttons with pre-populated copy: *"My site scored 72/100 on GEO readiness 🤖 Check yours →"*. Add a competitive element: *"You scored better than 68% of sites in your industry."* **Design the scoring rubric so most sites score 40–65/100** — this triggers both ego (high scorers brag) and anxiety (low scorers share seeking validation).
+
+### Embeddable widget: the B2B growth loop that compounds
+
+Provide a white-label JavaScript embed that agencies paste onto their websites. The widget shows a "Check your GEO readiness" form with URL input and email capture. Results are gated behind email — the agency gets the lead, GEO-Pulse gets brand exposure via a "Powered by GEO-Pulse" footer link. This is exactly how HubSpot Website Grader, Moz, and Ahrefs grew — embeddable widgets on agency sites created thousands of backlinks. Revenue model: free with branding → paid to remove branding or add agency logo.
+
+### Cold outreach reality check
+
+**Apollo.io's free tier** offers 10,000 email credits/month with ~250/day fair use limits and 2 active sequences. **Hunter.io** gives just 25 email searches/month but 500 campaign recipients. **Instantly.ai has no free tier** (starts at $37/month). **Lemlist's free plan** finds contacts but cannot send campaigns.
+
+The honest assessment: cold email at $0 is marginal. You need 3–5 sending domains (~$50 total), 4–6 weeks of warming, and expect 1–3% response rates. At 250 emails/day via Apollo, that's ~75–225 responses per month. **Building in public, community participation, and the share-your-score loop will outperform cold outreach** per hour invested.
+
+### SEO content strategy
+
+Target both "GEO" and "AI SEO" keywords — the latter has more current volume but GEO is where the category is heading. High-intent long-tail queries to target: "Is my site GEO ready," "GEO readiness checker," "how to optimize for AI search," "ChatGPT SEO checker," "AI Overviews optimization tool." Comparison pages ("GEO-Pulse vs Surfer SEO") convert visitors who are already in decision mode. Programmatic SEO (city/niche pages like "GEO readiness for dentists in Austin") works but has a **60% failure rate** without 500+ unique words and 30%+ content differentiation per page.
+
+### Free distribution channels worth the effort
+
+Submit to every AI directory — **There's An AI For That**, **Toolify.ai**, **FutureTools**, **Futurepedia**, **AI Scout**. Each takes 5–10 minutes and provides both backlinks and discovery traffic. Submit to **Product Hunt** (launch Tuesday–Thursday at midnight PT, respond to every comment), **BetaList** (free submission takes 1–4 months), and **AlternativeTo**, **G2**, **Capterra**, **SaaSHub** for credibility signals. On Reddit (r/SEO, r/SaaS), become a genuine contributor first — share insights, not links. Hacker News Show HN rewards technical honesty and founder transparency.
+
+---
+
+## 6. Building GEO-Pulse with Cursor: the vibe-coding blueprint
+
+### Cursor rules have changed — `.cursorrules` is deprecated
+
+Cursor now uses **`.cursor/rules/*.mdc`** files with YAML frontmatter instead of a single `.cursorrules` file. Create scoped rule files: `base.mdc` (always applied), `cloudflare.mdc` (scoped to worker files), `frontend.mdc` (scoped to components/app), `api.mdc` (scoped to API routes).
+
+The best community template for this stack is from **PatrickJS/awesome-cursorrules** — the `typescript-react-nextjs-cloudflare-cursorrules-pro` rule at `github.com/PatrickJS/awesome-cursorrules`. Cloudflare also publishes an official AI prompt for Workers development at `developers.cloudflare.com/workers/get-started/prompting/`. Add **vibe-tools** (`github.com/eastlondoner/vibe-tools`) to extend Cursor with web search, repo analysis, and plan generation.
+
+### Next.js on Cloudflare: use OpenNext, not next-on-pages
+
+**`@cloudflare/next-on-pages` is deprecated.** The official path is now **`@opennextjs/cloudflare`**, which deploys Next.js to Cloudflare Workers (not Pages). Next.js 15 and 16 are fully supported with App Router, Server Components, Server Actions, ISR via R2 cache, and streaming SSR. Set `compatibility_date` to 2025-04-01 or later (required for `process.env` population) and enable the `nodejs_compat` flag. Watch bundle sizes — free tier limit is 3 MiB, paid is 10 MiB.
+
+If you hit friction, **SvelteKit on Cloudflare Pages** is the most battle-tested alternative with the smoothest deployment experience.
+
+### Build order optimized for momentum
+
+**Phase 1 (Days 1–3):** Scaffold with `npm create cloudflare@latest -- geo-pulse --framework=next --experimental`. Set up `.cursor/rules/`. Configure wrangler.jsonc with D1 and KV bindings. Generate the landing page with Cursor agent mode. Define database schema with Drizzle ORM.
+
+**Phase 2 (Days 4–7):** Authentication via **Better Auth** or **Clerk** (both work on Cloudflare — never let AI write auth from scratch). Stripe integration with Checkout and webhook handling. User dashboard skeleton.
+
+**Phase 3 (Days 8–14):** The core GEO audit engine — analyze robots.txt for AI crawler access (GPTBot, ClaudeBot, PerplexityBot), structured data/Schema.org markup, content extractability, citation signals, llms.txt presence, and technical SEO baseline. Results display with scoring. PDF report generation via pdf-lib.
+
+**Phase 4 (Days 15–21):** Recurring audits via Cloudflare Queues. Share-your-score social proof. Email notifications via Resend. Embeddable widget for agencies.
+
+### Open-source repos to reference
+
+- **GEO-optim/GEO** — Princeton KDD 2024 research implementation with GEO-BENCH dataset and 9 optimization strategies showing 40% visibility improvements
+- **ai-search-guru/getcito** — First open-source AIO/AEO/GEO tool built with Next.js 13, Firebase auth, Azure OpenAI + Gemini
+- **houtini-ai/geo-analyzer** — Local GEO analysis MCP tool analyzing content extractability, claim density, citation signals
+- **mockkey/flarekit** — Production-ready SaaS starter with React Router + Cloudflare Workers + Stripe + Better Auth using D1, KV, R2, Queues
+- **GoogleChrome/lighthouse** — The gold standard for website audit architecture
+
+### Vibe-coding pitfalls to avoid
+
+CodeRabbit found AI co-authored code has **1.7x more "major" issues** and **2.74x more security vulnerabilities** than human-written code. A METR study showed experienced developers were actually **19% slower** with AI tools while believing they were 24% faster. The speed gains come from workflow mastery, not just tool adoption. Never let AI generate authentication, billing webhook handlers, or security validation from scratch — use battle-tested libraries and review every line that touches money or user data.
+
+---
+
+## Conclusion: the $0 ceiling and the $5 unlock
+
+The viable $0 stack is: Cloudflare Pages (unlimited bandwidth) + Workers (100K requests/day) + Supabase (500 MB, keep alive with cron) + Resend (100 emails/day) + Gemini Flash-Lite (1,000 requests/day) + Stripe (pay per transaction) + n8n self-hosted on Oracle Cloud Free + pdf-lib for basic PDFs + Buffer Free (3 channels with unlimited AI).
+
+Your first forced upgrade is **Cloudflare Workers paid at $5/month** — the 10ms CPU limit will break PDF generation and complex processing. Your second is **Supabase Pro at $25/month** when bandwidth or the inactivity-pause becomes untenable. Your third is **~$20–30/month for video and social scheduling** when you need professional faceless video and full platform coverage. Total runway to first revenue: approximately **$0 for MVP**, scaling to **~$55/month** once you need production reliability.
+
+The GEO market is at an inflection point: mainstream enough for real demand, early enough that a free-tier auditor with a "share your score" viral loop can capture significant mindshare. Build the scoring rubric to make most sites uncomfortable with their score, embed the share mechanic into every interaction, and let the product do the selling. The founder stays invisible; the score is the brand.

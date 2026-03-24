@@ -30,6 +30,8 @@ export async function sendDeepAuditEmail(input: {
   url: string;
   pdfBytes: Uint8Array;
   filename: string;
+  /** Resend dedupes within 24h — safe when queue retries or DLQ replays. */
+  idempotencyKey: string;
 }): Promise<ResendEmailResult> {
   const b64 = uint8ToBase64(input.pdfBytes);
 
@@ -38,6 +40,7 @@ export async function sendDeepAuditEmail(input: {
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
       'Content-Type': 'application/json',
+      'Idempotency-Key': input.idempotencyKey,
     },
     body: JSON.stringify({
       from: input.from,

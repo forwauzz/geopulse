@@ -144,3 +144,4 @@ If any agent hits a blocker it cannot resolve:
 4. `.cursor/rules/base.mdc` — base coding rules
 5. Your role-specific agent file in `agents/`
 6. Your scoped cursor rule in `.cursor/rules/`
+7. **Merge discipline:** Open PRs use `.github/pull_request_template.md`. CI (`.github/workflows/ci.yml`) must be green; Security sign-off rules are in `agents/SECURITY_AGENT.md`. Security reference: `SECURITY.md`.

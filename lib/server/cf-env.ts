@@ -21,6 +21,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   NEXT_PUBLIC_APP_URL: string;
+  /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
+  RECONCILE_SECRET: string;
 };
 
 function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
@@ -70,6 +72,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: String(e['RESEND_API_KEY'] ?? ''),
       RESEND_FROM_EMAIL: String(e['RESEND_FROM_EMAIL'] ?? ''),
       NEXT_PUBLIC_APP_URL: String(e['NEXT_PUBLIC_APP_URL'] ?? ''),
+      RECONCILE_SECRET: String(e['RECONCILE_SECRET'] ?? ''),
     };
   } catch {
     return {
@@ -81,6 +84,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
+      RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
     };
   }
 }

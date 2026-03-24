@@ -21,6 +21,10 @@ STRIPE_PRICE_ID_DEEP_AUDIT=price_your_price_id
 # Get the webhook secret from: stripe listen --forward-to localhost:8787/api/webhooks/stripe
 # (use the port shown by `npm run preview` / `wrangler dev` — queue + webhook need the Worker)
 
+# Optional: POST /api/admin/reconcile-deep-audit (header x-reconcile-secret) to backfill payments + PDF queue
+# for paid Checkout sessions that never created a `payments` row (e.g. webhook URL wrong or offline).
+RECONCILE_SECRET=
+
 # Google Gemini API
 # Free tier: 1,000 req/day (Gemini 2.5 Flash-Lite)
 # Get key: https://ai.google.dev/
@@ -43,6 +47,8 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 # ============================================================
 NEXT_PUBLIC_SUPABASE_URL=https://vynrlgtxqnomxenakafn.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+# Magic link auth: add redirect URL in Supabase Dashboard → Auth → URL configuration:
+#   {NEXT_PUBLIC_APP_URL}/auth/callback
 # Must match the origin you use in the browser (Stripe redirects here after checkout).
 # next dev: http://localhost:3000
 # wrangler preview / npm run preview: use the URL Wrangler prints, e.g. http://127.0.0.1:8787

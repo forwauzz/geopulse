@@ -3,6 +3,7 @@ import { createServiceRoleClient } from '../../lib/supabase/service-role';
 import { structuredLog } from '../../lib/server/structured-log';
 import { buildDeepAuditPdf } from '../report/build-deep-audit-pdf';
 import { sendDeepAuditEmail } from '../report/resend-delivery';
+import { replayReportJobFromDlq } from './dlq-replay';
 
 const DLQ_NAME = 'geo-pulse-dlq';
 
@@ -27,17 +28,15 @@ function bodyToString(body: string | ArrayBuffer | Uint8Array): string {
 export async function dispatchQueueBatch(batch: ReportQueueBatch, env: CloudflareEnv): Promise<void> {
   if (batch.queue === DLQ_NAME) {
     for (const m of batch.messages) {
-      const len =
-        typeof m.body === 'string'
-          ? m.body.length
-          : m.body instanceof ArrayBuffer
-            ? m.body.byteLength
-            : m.body.length;
-      structuredLog('dlq_message_received', {
-        bodyChars: String(len),
-        queue: batch.queue,
-      });
-      m.ack();
+      try {
+        await handleDlqMessage(bodyToString(m.body), env);
+        m.ack();
+      } catch (err) {
+        structuredLog('dlq_handler_failed', {
+          message: err instanceof Error ? err.message.slice(0, 200) : 'unknown',
+        });
+        m.retry();
+      }
     }
     return;
   }
@@ -53,6 +52,18 @@ export async function dispatchQueueBatch(batch: ReportQueueBatch, env: Cloudflar
       m.retry();
     }
   }
+}
+
+async function handleDlqMessage(rawBody: string, env: CloudflareEnv): Promise<void> {
+  const job = parseReportQueueMessage(rawBody);
+  if (!job) {
+    structuredLog('dlq_invalid_payload', { rawLen: String(rawBody.length) });
+    return;
+  }
+  if (!env.SCAN_QUEUE || !env.SCAN_CACHE) {
+    throw new Error('dlq_missing_queue_or_kv');
+  }
+  await replayReportJobFromDlq(job, { SCAN_QUEUE: env.SCAN_QUEUE, SCAN_CACHE: env.SCAN_CACHE });
 }
 
 async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<void> {
@@ -117,6 +128,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     url: scan.url,
     pdfBytes,
     filename: `geo-pulse-deep-audit-${job.scanId}.pdf`,
+    idempotencyKey: `deep-audit/${job.scanId}/${job.paymentId}`,
   });
 
   if (!emailResult.ok) {
@@ -127,7 +139,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   const { error: repErr } = await supabase.from('reports').insert({
     scan_id: job.scanId,
     user_id: null,
-    guest_email: job.customerEmail,
+    guest_email: job.customerEmail.trim().toLowerCase(),
     pdf_generated_at: now,
     email_delivered_at: now,
     type: 'deep_audit',

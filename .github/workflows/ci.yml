@@ -1,0 +1,41 @@
+# Automated verification — supports Orchestrator evidence requirements (type-check, tests, build).
+# Does not replace Security manual sign-off for auth/Stripe/RLS/SSRF — see agents/SECURITY_AGENT.md
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      # Build-time placeholders only — real secrets never go in CI env (see SECURITY.md)
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder-anon-key-not-for-production
+      NEXT_PUBLIC_APP_URL: https://placeholder.example
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build

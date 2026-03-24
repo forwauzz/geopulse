@@ -4,9 +4,23 @@
 
 ---
 
-## Current Phase: Phase 2 — Payment + PDF + Email
+## Current Phase: Phase 4 — Launch
 
-**Phase goal:** Stripe checkout → webhook (verified) → queue → pdf-lib report → Resend delivery + idempotency + DLQ.
+**Phase goal:** Production deploy, OG share image, email DNS (SPF/DKIM/DMARC), WAF, keep-alive cron, launch security audit.
+
+**Phase 2 — CLOSED (implementation in repo; operator: apply migration `004_payments_guest_email.sql`, verify PDF &lt;60s + webhook in staging).** Checkout (`app/api/checkout`), Stripe webhook + idempotency (`app/api/webhooks/stripe`, `lib/server/stripe/checkout-completed.ts`), queue → PDF → Resend (`workers/queue/report-queue-consumer.ts`), DLQ replay (`workers/queue/dlq-replay.ts`). Tests: `npm run test`, `lib/server/stripe/checkout-completed.test.ts`.
+
+**Phase 3 — CLOSED (implementation in repo).** Magic link (`app/login`, `app/login/actions.ts`), OAuth callback + guest purchase linking (`app/auth/callback`, `lib/server/link-guest-purchases.ts`), middleware session + CVE header (`middleware.ts`, `lib/supabase/middleware.ts`), dashboard (`app/dashboard`). Gate: sign in → `/dashboard` lists `scans` / `reports` for `auth.uid()`; unauthenticated `/dashboard` → `/login`.
+
+**Prior phase goal (Phase 2):** Stripe checkout → webhook (verified) → queue → pdf-lib report → Resend delivery + idempotency + DLQ.
+
+**Orchestrator sequencing (2026-03-24):** Finish **Phase 2** (all P2 tasks + **Phase 2→3 gate**) and **Phase 3** (all P3 tasks + **Phase 3→4 gate**) **before** implementing **API-as-a-Service** (**API-002 … API-007**). **API-001** (schema) stays done; no API product work until Phase 3 is closed.
+
+**Phase 2→3 gate** (`agents/ORCHESTRATOR.md`): $1 test payment succeeds · PDF delivered in &lt;60s · Stripe webhook never processed without signature verification.
+
+**Phase 3→4 gate** (`agents/ORCHESTRATOR.md`): Registered user can log in · past scans visible · auth middleware blocks unauthenticated routes.
+
+**Operator note (2026-03-24):** $1 payment reported **working end-to-end**. Remaining gate items (PDF SLA, webhook verification, task evidence in `COMPLETION_LOG.md`) still required before advancing phase.
 
 **Phase 1 — CLOSED (2026-03-24).** Free scan path implemented (landing, Turnstile, SSRF-gated fetch, 11 deterministic + 2 Gemini checks, weighted score, results + email gate, `scans`/`leads` via service role, KV rate limits). Evidence: `COMPLETION_LOG.md` *Phase 1 — implementation bundle*.
 
@@ -55,22 +69,22 @@
 ### Phase 2 — Payment + PDF + Email
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
-| P2-001 | Stripe $29 checkout integration | Backend | ⬜ PENDING | — |
-| P2-002 | Stripe webhook handler (with signature verification) | Backend | ⬜ PENDING | — |
-| P2-003 | Cloudflare Queue: enqueue deep audit on payment | Backend | ⬜ PENDING | — |
-| P2-004 | pdf-lib report generator | Backend | ⬜ PENDING | — |
-| P2-005 | Resend: HTML email + PDF attachment delivery | Backend | ⬜ PENDING | — |
-| P2-006 | Dead-letter queue handler + retry logic | Backend | ⬜ PENDING | — |
-| P2-007 | Payment idempotency (Stripe event ID dedup) | Security | ⬜ PENDING | — |
-| P2-008 | $1 test payment end-to-end test | QA | ⬜ PENDING | — |
+| P2-001 | Stripe $29 checkout integration | Backend | ✅ DONE | `app/api/checkout/route.ts` |
+| P2-002 | Stripe webhook handler (with signature verification) | Backend | ✅ DONE | `app/api/webhooks/stripe/route.ts` |
+| P2-003 | Cloudflare Queue: enqueue deep audit on payment | Backend | ✅ DONE | `lib/server/stripe/ensure-deep-audit-job-queued.ts` |
+| P2-004 | pdf-lib report generator | Backend | ✅ DONE | `workers/report/build-deep-audit-pdf.ts` |
+| P2-005 | Resend: HTML email + PDF attachment delivery | Backend | ✅ DONE | `workers/report/resend-delivery.ts` |
+| P2-006 | Dead-letter queue handler + retry logic | Backend | ✅ DONE | `workers/queue/report-queue-consumer.ts`, `workers/queue/dlq-replay.ts` |
+| P2-007 | Payment idempotency (Stripe event ID dedup) | Security | ✅ DONE | `lib/server/stripe/checkout-completed.ts` |
+| P2-008 | $1 test payment end-to-end test | QA | ⬜ OPERATOR | Operator-verified $1 e2e; run `npm run test` + staging webhook |
 
 ### Phase 3 — Auth + Dashboard
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
-| P3-001 | Supabase magic link auth | Backend | ⬜ PENDING | — |
-| P3-002 | Auth middleware (CVE-2025-29927 protected) | Security | ⬜ PENDING | — |
-| P3-003 | User dashboard: scan history + past reports | Frontend | ⬜ PENDING | — |
-| P3-004 | Auto-account creation post-payment | Backend | ⬜ PENDING | — |
+| P3-001 | Supabase magic link auth | Backend | ✅ DONE | `app/login`, `app/login/actions.ts`, `lib/supabase/server.ts` |
+| P3-002 | Auth middleware (CVE-2025-29927 protected) | Security | ✅ DONE | `middleware.ts` (session + block `x-middleware-subrequest`); Next.js patched |
+| P3-003 | User dashboard: scan history + past reports | Frontend | ✅ DONE | `app/dashboard/page.tsx` |
+| P3-004 | Auto-account creation post-payment | Backend | ✅ DONE | `lib/server/link-guest-purchases.ts`, `app/auth/callback/route.ts`, `004_payments_guest_email.sql` |
 
 ### Phase 4 — Launch
 | Task ID | Task | Agent | Status | Evidence |
@@ -82,16 +96,18 @@
 | P4-005 | Supabase keep-alive cron configured | Backend | ⬜ PENDING | — |
 | P4-006 | Launch security audit (all 5 blockers) | Security | ⬜ PENDING | — |
 
-### API-as-a-Service Layer (parallel track)
+### API-as-a-Service Layer (deferred — start after Phase 3 gate)
+> Per orchestrator sequencing 2026-03-24: **API-002 … API-007** begin only after Phase 3 is complete and the Phase 3→4 gate is satisfied. **API-001** remains complete.
+
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
 | API-001 | API key schema + migration | Database | ✅ DONE | `002_api_keys.sql` on remote; COMPLETION_LOG Supabase audit |
-| API-002 | API key issuance + validation Worker | API | ⬜ PENDING | — |
-| API-003 | OpenAPI spec v1 | API + Architect | ⬜ PENDING | — |
-| API-004 | Rate limiting per API key | API + Security | ⬜ PENDING | — |
-| API-005 | API billing tiers (free/pro/enterprise) | API | ⬜ PENDING | — |
-| API-006 | Webhook delivery for async results | API | ⬜ PENDING | — |
-| API-007 | API documentation site | API + Frontend | ⬜ PENDING | — |
+| API-002 | API key issuance + validation Worker | API | ⬜ DEFERRED | Starts after Phase 3 gate |
+| API-003 | OpenAPI spec v1 | API + Architect | ⬜ DEFERRED | Starts after Phase 3 gate |
+| API-004 | Rate limiting per API key | API + Security | ⬜ DEFERRED | Starts after Phase 3 gate |
+| API-005 | API billing tiers (free/pro/enterprise) | API | ⬜ DEFERRED | Starts after Phase 3 gate |
+| API-006 | Webhook delivery for async results | API | ⬜ DEFERRED | Starts after Phase 3 gate |
+| API-007 | API documentation site | API + Frontend | ⬜ DEFERRED | Starts after Phase 3 gate |
 
 ---
 
@@ -121,6 +137,8 @@ _None at this time._
 | 2026-03-24 | Phase 0 scaffold gate closed; **Current Phase → Phase 1 — Core Scan Engine**. P0-002…P0-006 ✅; API-001 ✅ (remote matches `002_api_keys.sql`). |
 | 2026-03-24 | **Phase 1 — Core Scan Engine** implementation complete; **Current Phase → Phase 2 — Payment + PDF + Email**. P1-001…P1-011 ✅ (see COMPLETION_LOG). |
 | 2026-03-24 | **Phase 1→2 manual gate:** live scan + results + email capture reported successful (domain: techehealthservices.com). |
+| 2026-03-24 | **Sequencing:** API-as-a-Service (**API-002…007**) deferred until **Phase 2 + Phase 3** complete and **Phase 3→4 gate** satisfied (`ORCHESTRATOR.md`). Operator: $1 payment e2e reported working; Phase 2 task registry + COMPLETION_LOG evidence still to be closed out. |
+| 2026-03-24 | **Phase 2 + Phase 3** implementation landed (auth, dashboard, `guest_email` on payments, middleware). **Current Phase → Phase 4 — Launch**. P2-001…P2-007 ✅; P2-008 operator QA; P3-001…P3-004 ✅. Run `supabase db push` for `004_payments_guest_email.sql`. |
 
 ---
 
