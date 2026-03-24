@@ -1,0 +1,124 @@
+---
+description: Security rules — always applied to every file in the project
+alwaysApply: true
+---
+
+# Security Rules — Non-Negotiable
+
+These rules are not suggestions. Every item here is a launch blocker if incomplete.
+
+## The Five Launch Blockers
+1. RLS enabled on every Supabase table
+2. SSRF validation on every user-submitted URL fetch
+3. Stripe webhook signature verification on every webhook event
+4. Cloudflare Turnstile on the scan form, validated server-side
+5. SPF + DKIM + DMARC configured before first email send
+
+## Supabase RLS
+- EVERY table must have `ALTER TABLE [table] ENABLE ROW LEVEL SECURITY;` before the first row is inserted
+- The `leads` table has NO user-facing policy — it is service_role only (pre-auth email captures)
+- Test all queries using the anon key, not the SQL Editor (SQL Editor bypasses RLS)
+- Index all columns used in RLS policies: `CREATE INDEX ON scans(user_id);`
+- Never pass `service_role` key to client-side code — it bypasses all RLS
+
+```sql
+-- Required on every table at migration time:
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+```
+
+## SSRF Prevention
+User-submitted URLs are a Server-Side Request Forgery vector. Before any fetch:
+
+```typescript
+// Block list — NEVER fetch these ranges:
+// 127.0.0.0/8    — loopback
+// 10.0.0.0/8     — private class A
+// 172.16.0.0/12  — private class B
+// 192.168.0.0/16 — private class C
+// 169.254.0.0/16 — link-local (AWS/GCP metadata endpoint lives here)
+// ::1             — IPv6 loopback
+
+// Steps:
+// 1. Validate scheme is https only
+// 2. Parse the hostname
+// 3. Resolve DNS (use Workers' fetch with redirect: 'manual' — Workers don't expose DNS directly)
+// 4. Reject if resolved IP is in any private range
+// 5. Set redirect: 'manual' and re-validate redirect targets
+```
+
+See `workers/lib/ssrf.ts` for the implementation. **Always import from there — never write inline URL validation.**
+
+## Secrets Management
+- ALL secrets via `wrangler secret put` — never in `wrangler.jsonc`, never in source code
+- Local dev: use `.dev.vars` file (it is in `.gitignore` — verify this before first commit)
+- Non-sensitive config (Supabase URL, app URL) goes in `[vars]` in wrangler.jsonc
+- Never log secrets — no `console.log(env.STRIPE_SECRET_KEY)` ever
+
+```
+# Required secrets (via wrangler secret put):
+SUPABASE_SERVICE_ROLE_KEY
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+GEMINI_API_KEY
+RESEND_API_KEY
+TURNSTILE_SECRET_KEY
+```
+
+## Stripe Webhook Security
+```typescript
+// ALWAYS verify before processing — reject unverified with 400:
+let event: Stripe.Event;
+try {
+  event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET);
+} catch (err) {
+  return new Response('Webhook signature verification failed', { status: 400 });
+}
+// Idempotency check: store processed event IDs in Supabase
+```
+
+## Input Validation
+- Validate ALL user inputs with zod before processing
+- URL inputs: validate with zod `z.string().url()` then pass through `validateUrl()`
+- Email inputs: `z.string().email()` minimum
+- Never trust client-side validation alone
+
+## Security Headers
+Set these headers on all responses from the Next.js app:
+```typescript
+// next.config.ts headers:
+'X-Content-Type-Options': 'nosniff'
+'X-Frame-Options': 'DENY'
+'X-XSS-Protection': '1; mode=block'
+'Referrer-Policy': 'strict-origin-when-cross-origin'
+'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
+// CSP: start permissive, tighten after launch
+```
+
+## CVE-2025-29927 (Next.js Auth Bypass)
+- This is a critical Next.js vulnerability via the `x-middleware-subrequest` header
+- Enable the Cloudflare WAF managed rule in the CF dashboard: Security → WAF → Managed Rules
+- Keep Next.js updated — this is patched in recent versions but the WAF rule is a defence-in-depth layer
+
+## Rate Limiting
+- Scan endpoint: 10 req/min per IP (CF Workers Rate Limiting binding)
+- Email gate: 20 scans/day per email address (KV storage)
+- Stripe checkout: 5 attempts per IP per hour (KV storage)
+- Never expose scan results without the email gate
+
+## Email Security (Resend + Cloudflare DNS)
+Before sending the first email:
+1. Add SPF record: `v=spf1 include:_spf.resend.com ~all` on send subdomain
+2. Add DKIM TXT record from Resend dashboard
+3. Add DMARC: start with `p=none` for 30 days, then escalate to `p=quarantine`, then `p=reject`
+4. Use a subdomain for sending (e.g., `mail.geopulse.io`) to protect root domain reputation
+
+## GDPR / Quebec Law 25
+- The `leads` table stores email addresses of non-authenticated users
+- Before targeting Quebec or EU users: add a compliant privacy notice at the email gate
+- Provide opt-out mechanism in all emails
+- Do not launch active targeting of these regions without legal review

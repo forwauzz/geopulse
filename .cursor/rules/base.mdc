@@ -1,0 +1,54 @@
+---
+description: Base rules — always applied to every file in the project
+alwaysApply: true
+---
+
+# GEO-Pulse Base Rules
+
+## Project Context
+GEO-Pulse is a freemium AI Search Readiness auditor built on:
+- Next.js 15 App Router deployed via `@opennextjs/cloudflare` (NOT `@cloudflare/next-on-pages` — that package is deprecated)
+- Cloudflare Workers for the scan engine, PDF generation, and webhook handling
+- Supabase for database + auth (Row Level Security required on ALL tables)
+- Gemini 2.5 Flash-Lite for semantic reasoning (2 calls only: Q&A detection + extractability)
+- pdf-lib for PDF generation (NOT Puppeteer — cannot run in CF Worker V8 isolate)
+- Stripe for payments (2.9% + $0.30 per transaction, no monthly fee)
+- Resend for transactional email
+
+## TypeScript
+- Always use `strict: true` TypeScript
+- No `any` types — use `unknown` and narrow with type guards
+- Prefer explicit return types on all exported functions
+- No `console.log` in production code — use structured logging only
+- Use `satisfies` operator for config objects
+
+## Code Style
+- Prefer `const` over `let`; never use `var`
+- Use named exports, not default exports (except Next.js page components)
+- Keep functions small and single-purpose
+- All async functions must have explicit error handling — never swallow errors silently
+- Prefer early returns over nested conditionals
+
+## Naming Conventions
+- Files: kebab-case (`scan-engine.ts`, not `scanEngine.ts`)
+- Components: PascalCase (`ScanForm.tsx`)
+- Functions/variables: camelCase
+- Constants: SCREAMING_SNAKE_CASE
+- Database tables: snake_case (matches Supabase convention)
+
+## What Never To Do
+- NEVER let the AI generate authentication logic from scratch — use Supabase Auth or Better Auth
+- NEVER let the AI generate Stripe webhook handlers from scratch — copy from official Stripe docs
+- NEVER hardcode secrets, API keys, or credentials in source code
+- NEVER use `@cloudflare/next-on-pages` — it is deprecated, use `@opennextjs/cloudflare`
+- NEVER suggest Vercel for hosting — commercial use is prohibited on the hobby plan
+- NEVER suggest Make.com — 1,000 ops/month free tier is 15x too low for this workload
+- NEVER use Puppeteer or Playwright in Workers — they cannot run in V8 isolates
+- NEVER use Node.js built-ins in Workers code (`fs`, `path`, `crypto` from Node, etc.)
+
+## Score Naming
+The score is ALWAYS called "AI Search Readiness Score". Never use:
+- "citation probability"
+- "AI ranking score"
+- "AI visibility score"
+- Any phrasing that implies predicted outcomes

@@ -1,0 +1,77 @@
+{
+  // GEO-Pulse — Cloudflare Workers configuration
+  // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
+  // Stack: Next.js 15 via @opennextjs/cloudflare (NOT @cloudflare/next-on-pages — deprecated)
+
+  "name": "geo-pulse",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-04-01", // Required for process.env population with OpenNext
+  "compatibility_flags": ["nodejs_compat"], // Required for Supabase client + pdf-lib
+
+  // Non-sensitive config only — secrets go via `wrangler secret put`
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://vynrlgtxqnomxenakafn.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-anon-key-here",
+    "NEXT_PUBLIC_APP_URL": "https://geopulse.io",
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "your-turnstile-site-key",
+    "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
+    "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models"
+  },
+
+  // Secrets — set via: wrangler secret put SECRET_NAME
+  // Required secrets (never put these in this file):
+  //   SUPABASE_SERVICE_ROLE_KEY
+  //   STRIPE_SECRET_KEY
+  //   STRIPE_WEBHOOK_SECRET
+  //   GEMINI_API_KEY
+  //   RESEND_API_KEY
+  //   TURNSTILE_SECRET_KEY
+
+  // KV Namespaces
+  "kv_namespaces": [
+    {
+      "binding": "SCAN_CACHE",
+      "id": "REPLACE_WITH_KV_ID", // wrangler kv:namespace create SCAN_CACHE
+      "preview_id": "REPLACE_WITH_PREVIEW_KV_ID"
+    }
+  ],
+
+  // Cloudflare Queues (free: 10,000 ops/day — verify in dashboard, added early 2026)
+  "queues": {
+    "producers": [
+      {
+        "binding": "SCAN_QUEUE",
+        "queue": "geo-pulse-scan-queue"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "geo-pulse-scan-queue",
+        "max_batch_size": 5,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "dead_letter_queue": "geo-pulse-dlq"
+      }
+    ]
+  },
+
+  // Rate Limiting (free tier)
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": {
+          "limit": 10,
+          "period": 60
+        }
+      }
+    ]
+  },
+
+  // Observability
+  "observability": {
+    "enabled": true
+  }
+}

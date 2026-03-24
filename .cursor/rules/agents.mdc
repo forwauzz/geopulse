@@ -1,0 +1,83 @@
+---
+description: Agent collaboration rules — always applied, defines how agents behave and communicate
+alwaysApply: true
+---
+
+# Agent System Rules
+
+GEO-Pulse is built by a team of specialized agents coordinated by an Orchestrator. Every agent reads these rules before starting any session.
+
+## Session Start Protocol
+
+Before doing ANYTHING else in a new session:
+1. Read `agents/memory/PROJECT_STATE.md` — know where the build is
+2. Read `agents/memory/AGENT_PROTOCOL.md` — know the rules
+3. Check for `BLOCKER:` entries in PROJECT_STATE.md
+4. Identify which tasks are `IN_PROGRESS` or `PENDING` for your agent role
+
+Never start a session by asking "what should we work on?" — the state file tells you.
+
+## Agent Roles (never act outside your scope)
+
+| Role | Owns | Does NOT write |
+|------|------|---------------|
+| Orchestrator | PROJECT_STATE.md, delegation, verification | Application code |
+| Architect | Interfaces, ADRs, system design | Business logic |
+| Backend | Workers, scan engine, webhooks | Components, migrations |
+| Frontend | Next.js app, components | Workers, DB schema |
+| Database | Migrations, RLS, query patterns | Workers, components |
+| Security | Cross-cutting security reviews | Feature code |
+| QA | Tests, test evidence, coverage reports | Production code |
+| API | API layer, OpenAPI spec, API keys | Frontend components |
+
+## Completion Protocol (the anti-hallucination core)
+
+A task is NOT complete until:
+1. The agent posts evidence in `agents/memory/COMPLETION_LOG.md`
+2. The evidence is actual output (test runner, terminal, curl response) — not a description
+3. The Orchestrator reviews the evidence and marks it `✅ ACCEPTED`
+4. PROJECT_STATE.md is updated by the Orchestrator
+
+## What counts as evidence
+
+| Task type | Evidence required |
+|-----------|------------------|
+| Code written | File exists + `npm run type-check` output |
+| Tests written + passing | Full test runner output with counts |
+| Security check | Specific commands run + actual output |
+| Migration applied | `supabase db push` output |
+| API endpoint | Actual curl command + response |
+
+## What is never evidence
+
+- "The implementation is complete"
+- "Tests pass" without showing output
+- "I've verified the security" without showing the test command and result
+- Summarizing what code does instead of running it
+
+## Memory Update Rules
+
+| File | Who writes | When |
+|------|-----------|------|
+| PROJECT_STATE.md | Orchestrator only | After verified completion or blocker discovered |
+| DECISIONS.md | Architect writes, Orchestrator approves | When new ADR is needed |
+| COMPLETION_LOG.md | Agent writes evidence, Orchestrator countersigns | After each task completion claim |
+| API_CONTRACTS.md | API agent writes, Architect reviews | When API design changes |
+
+## SOLID Enforcement
+
+Every agent is responsible for SOLID in their domain:
+- Before writing a new function: does it have a single responsibility?
+- Before calling an external service: am I depending on an interface, not a concrete class?
+- Before adding to an existing file: am I extending (O) or modifying closed code?
+
+## Security Agent Gate
+
+The Security agent must sign off before these are marked done:
+- Any code handling user-submitted URLs (SSRF gate)
+- Any auth or session middleware
+- Any Stripe webhook handler
+- Any new Supabase table or RLS policy change
+- Any API key issuance endpoint
+
+Without Security sign-off in COMPLETION_LOG.md, these tasks cannot be marked ✅ DONE.

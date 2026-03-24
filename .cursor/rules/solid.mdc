@@ -1,0 +1,131 @@
+---
+description: SOLID principles enforcement — always applied to every file in the project
+alwaysApply: true
+---
+
+# SOLID Principles — GEO-Pulse
+
+These principles are enforced across every layer of the codebase. They are not aspirational — they are required.
+
+---
+
+## S — Single Responsibility
+
+Each module, Worker, component, and function has one reason to change.
+
+**Required separations:**
+- `scan-engine` Worker — scans URLs only. Does NOT generate PDFs, send emails, or handle payments.
+- `report-generator` Worker — consumes Queue jobs, generates PDFs, triggers email. Does NOT scan URLs.
+- `webhook-handler` route — handles Stripe events only. Does NOT call the scan engine directly.
+- Each audit check is a separate file in `workers/scan-engine/checks/`
+- Each `lib/` utility does one thing (ssrf validation, scoring, domain extraction, etc.)
+
+**Violation signal:** If you see a function longer than 50 lines or a file with more than 3 `import` blocks from different domains, it's doing too much. Split it.
+
+---
+
+## O — Open/Closed
+
+The audit check registry is the canonical example: open for extension, closed for modification.
+
+**The rule:** Adding a new audit check requires:
+- ✅ Creating a new file in `workers/scan-engine/checks/`
+- ✅ Adding it to the registry in `workers/scan-engine/checks/registry.ts`
+- ❌ NOT editing `workers/scan-engine/scoring.ts`
+- ❌ NOT editing any existing check file
+
+**Other Open/Closed patterns:**
+- LLM providers: add a new `LLMProvider` implementation without touching the scan engine
+- Email providers: swap Resend for another provider by implementing `EmailProvider` interface
+- PDF generators: swap pdf-lib for another by implementing `PDFGenerator` interface
+- API tiers: add a new tier by extending the tier config, not by adding `if (tier === 'new')` in handlers
+
+**Violation signal:** If you see `if (checkId === '...')` or `if (provider === 'gemini')` in the engine code, the O principle is broken.
+
+---
+
+## L — Liskov Substitution
+
+Any implementation of an interface must be substitutable for any other without changing caller behavior.
+
+**All LLMProvider implementations must:**
+- Accept the same `analyze(prompt, context)` signature
+- Return the same `LLMResult` shape
+- Handle failures gracefully (return `{ passed: false, reasoning: 'error', confidence: 'low' }`)
+- Never throw uncaught exceptions that would crash the caller
+
+**Test for this:** The QA agent writes a substitution test for each interface:
+```typescript
+// Both GeminiProvider and MockLLMProvider must pass this test suite
+testLLMProviderContract(new GeminiProvider(config));
+testLLMProviderContract(new MockLLMProvider());
+```
+
+If only one implementation passes the contract tests, LSP is violated.
+
+---
+
+## I — Interface Segregation
+
+Do not force consumers to depend on interfaces they don't use.
+
+**API layer:**
+- Free tier consumers only receive the `ScanResult` interface (score + top 3 issues)
+- Paid tier consumers receive `FullScanResult` (all 15 checks + action plan)
+- Enterprise consumers receive `FullScanResult` + `ReportMetadata` (PDF URL + webhook config)
+
+**Worker dependencies:**
+- The scan engine only receives `LLMProvider` — not `EmailProvider` or `PDFGenerator`
+- The report generator only receives `PDFGenerator` + `EmailProvider` — not `LLMProvider`
+- Never inject dependencies a module doesn't need
+
+**Component layer:**
+- The `ScanForm` component only needs the scan submission interface
+- The `ScoreDisplay` component only needs the score + checks data
+- Do not pass the entire API response to every child component — destructure and pass minimally
+
+---
+
+## D — Dependency Inversion
+
+High-level modules do not depend on low-level modules. Both depend on abstractions.
+
+**Interface definitions live in `workers/lib/interfaces/`** — these are the abstractions.
+
+**Correct pattern:**
+```typescript
+// The scan engine depends on the LLMProvider INTERFACE:
+import type { LLMProvider } from '../lib/interfaces/providers';
+
+export class ScanEngine {
+  constructor(private llm: LLMProvider) {}
+  // ...
+}
+
+// Wired at the entry point:
+const engine = new ScanEngine(new GeminiProvider(env));
+```
+
+**Violation (never do this):**
+```typescript
+// DO NOT import concrete implementations in the engine:
+import { GeminiProvider } from '../providers/gemini'; // ❌ violates DI
+```
+
+**Test impact:** This pattern means the scan engine can be unit tested with a mock LLM provider — no real Gemini calls in unit tests. If your unit tests require a real API key, DI is broken.
+
+---
+
+## SOLID Enforcement in Code Reviews
+
+When reviewing any PR, check:
+
+| Principle | Check |
+|-----------|-------|
+| S | Does this function/module do more than one thing? |
+| O | Was an existing engine/registry file modified to add a feature? |
+| L | Does the new implementation fulfill the same contract as existing implementations? |
+| I | Are unused dependencies being injected? |
+| D | Are concrete classes imported inside business logic modules? |
+
+If any answer triggers a violation, the code is not accepted until refactored.

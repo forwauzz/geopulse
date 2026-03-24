@@ -1,0 +1,182 @@
+---
+description: API-as-a-Service rules — scoped to workers/api/** and any API endpoint code
+globs: ["workers/api/**/*.ts", "app/api/v1/**/*.ts", "workers/lib/api-auth.ts"]
+alwaysApply: false
+---
+
+# API-as-a-Service Rules
+
+GEO-Pulse is an API-first product. The UI is a first-party consumer. External developers buy API access as a separate product tier.
+
+---
+
+## Versioning (mandatory from day one)
+
+- All external endpoints are under `/api/v1/`
+- The internal UI may use `/api/internal/` (not versioned, not documented externally)
+- Breaking changes require `/api/v2/` — v1 is maintained for 12 months after v2 launch
+- Additive changes (new optional fields, new endpoints) are non-breaking — do them in-place
+- Never rename or remove a response field in a live version — that is a breaking change
+
+---
+
+## API Key Architecture
+
+```typescript
+// Key format: gp_{tier}_{32-byte-hex}
+// Examples:
+//   gp_free_a3f8c2e1d4b7a9f0c5e2d8b1a4f7c0e3d6b9a2f5c8e1d4b7a0
+//   gp_pro_b4c9d3e8f2a7b1c6d0e5f9a4b8c2d7e1f5a0b3c6d9e2f6a1b4c7
+//   gp_ent_c5d0e4f9a3b8c2d7e1f6a0b5c9d3e8f2a7b1c6d0e5f9a4b8c2d7
+
+// Storage in api_keys table:
+//   key_prefix: "gp_pro_a3f8c2" (first 14 chars — for user to identify key)
+//   key_hash:   sha256(full_key) — never the plaintext key
+//   tier: 'free' | 'pro' | 'enterprise'
+
+// On issuance: return full key ONCE. After that: only prefix is retrievable.
+// On validation: hash the incoming key, look up by hash.
+```
+
+---
+
+## Required Response Headers
+
+Every API response must include these headers:
+
+```typescript
+// Rate limit headers (always):
+'X-RateLimit-Limit': string        // limit for this tier
+'X-RateLimit-Remaining': string    // requests remaining this minute
+'X-RateLimit-Reset': string        // unix timestamp when limit resets
+
+// Quota headers (always):
+'X-GeoP-Scans-Used': string        // scans used this month
+'X-GeoP-Scans-Limit': string       // monthly scan limit for this tier
+'X-GeoP-Scans-Reset': string       // ISO date when quota resets
+```
+
+---
+
+## Error Response Shape (always consistent)
+
+```typescript
+// Every error, from every endpoint, uses this exact shape:
+{
+  "error": {
+    "code": string,        // machine-readable, snake_case: "invalid_url", "rate_limited"
+    "message": string,     // human-readable explanation
+    "details"?: unknown    // optional additional context
+  }
+}
+
+// Standard error codes:
+// 400: invalid_url, invalid_request, missing_field
+// 401: unauthorized, invalid_api_key
+// 402: scan_limit_exceeded, payment_required
+// 403: tier_not_allowed, forbidden
+// 404: not_found
+// 429: rate_limited
+// 500: internal_error (never expose stack traces)
+```
+
+---
+
+## Async-First Design
+
+All scan operations are async. Never make consumers wait for a scan to complete synchronously.
+
+```
+POST /api/v1/scans → 202 Accepted { scan_id, poll_url }
+GET  /api/v1/scans/{id} → 200 { status: 'processing' | 'complete' }
+POST /api/v1/webhooks → register for push notification when complete
+```
+
+Consumers choose polling or webhooks. Both must work correctly.
+
+---
+
+## Tier Gating Middleware
+
+Tier enforcement happens in middleware, never in individual handlers:
+
+```typescript
+// workers/api/middleware/tier-gate.ts
+export function requireTier(minimumTier: ApiTier) {
+  return async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response | null> => {
+    const apiKey = await validateApiKey(request, env);
+    if (!apiKey.ok) return Response.json({ error: { code: 'unauthorized' } }, { status: 401 });
+    if (!hasTierAccess(apiKey.tier, minimumTier)) {
+      return Response.json({
+        error: { code: 'tier_not_allowed', message: `This endpoint requires ${minimumTier} tier or above` }
+      }, { status: 403 });
+    }
+    return null; // pass through
+  };
+}
+
+// Usage:
+// Webhook endpoint: requireTier('pro')
+// PDF endpoint: requireTier('pro')
+// Custom rate limits: requireTier('enterprise')
+```
+
+---
+
+## Usage Logging (async — never block the response)
+
+```typescript
+// After every API call, log usage asynchronously:
+ctx.waitUntil(logApiUsage(env, {
+  apiKeyHash: apiKey.hash,
+  endpoint: request.url,
+  method: request.method,
+  status: response.status,
+  timestamp: Date.now(),
+}));
+// ctx.waitUntil() allows the response to be sent immediately
+// while the usage log is written in the background
+```
+
+---
+
+## SDK Generation
+
+The OpenAPI spec at `/api/v1/openapi.json` must be kept accurate. It is used to:
+- Auto-generate client SDKs (TypeScript, Python) for API consumers
+- Drive the API documentation site
+- Power the Postman/Insomnia collection for developers
+
+If the spec diverges from the actual implementation, the API agent is responsible for fixing the spec.
+
+---
+
+## Webhook Security
+
+```typescript
+// All outbound webhooks are signed:
+const signature = await crypto.subtle.sign(
+  'HMAC',
+  await importKey(webhookSecret),
+  new TextEncoder().encode(rawBody)
+);
+const hexSignature = bufferToHex(signature);
+// Header: X-GeoP-Signature: sha256={hexSignature}
+
+// Documentation to API consumers:
+// Verify signature before processing:
+// const expected = sha256(rawBody, webhookSecret);
+// if (!timingSafeEqual(incoming, expected)) reject
+```
+
+---
+
+## Never Do in API Code
+
+- Never return a full API key after the issuance endpoint
+- Never expose internal error details or stack traces in API responses
+- Never skip rate limiting on any endpoint
+- Never implement quota logic in individual handlers — only in middleware
+- Never break the `/api/v1/` contract — add `/api/v2/` for breaking changes
+- Never use IP-only rate limiting for API keys — rate limit by key
+- Never allow a free-tier key to trigger paid features (PDF, webhooks)

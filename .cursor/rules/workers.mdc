@@ -1,0 +1,109 @@
+---
+description: Cloudflare Workers rules — scoped to all files under /workers/**
+globs: ["workers/**/*.ts", "workers/**/*.tsx"]
+alwaysApply: false
+---
+
+# Cloudflare Workers Rules
+
+## Runtime Constraints
+- Workers run in the V8 isolate runtime, NOT Node.js
+- CPU time limit: 10ms on free tier (wall-clock time for `fetch()` does not count, but computation does)
+- No Node.js built-ins: no `fs`, no `path`, no `crypto` (use Web Crypto API instead)
+- No `require()` — use ES module imports only
+- No Puppeteer, no Playwright, no Chrome DevTools Protocol
+- Bundle size limit: 3 MB compressed on free tier, 10 MB on paid ($5/mo)
+
+## HTML Parsing
+- Use `HTMLRewriter` for streaming HTML parsing — it is the native CF Worker API
+- Do NOT use `cheerio`, `jsdom`, or any DOM library — they pull in Node.js APIs
+- HTMLRewriter is streaming: process elements as they arrive, do not buffer the full response
+
+## Fetch / HTTP
+- ALL outbound fetches to user-submitted URLs MUST pass through `validateUrl()` from `../lib/ssrf`
+- Set `redirect: 'manual'` on all fetches that follow user-supplied URLs
+- Re-validate redirect target URLs through `validateUrl()` before following
+- Set a timeout on all external fetches: wrap with `Promise.race` and a `AbortController`
+- Default fetch timeout: 10 seconds for scan requests
+
+## SSRF Prevention (non-negotiable)
+```typescript
+// Always do this before fetching a user-submitted URL:
+import { validateUrl } from '../lib/ssrf';
+
+const validation = await validateUrl(userSuppliedUrl);
+if (!validation.ok) {
+  return new Response(JSON.stringify({ error: validation.reason }), { status: 400 });
+}
+const response = await fetch(validation.safeUrl, { redirect: 'manual' });
+```
+
+## Rate Limiting
+- Use the native CF Workers Rate Limiting binding: `env.RATE_LIMITER.limit({ key: clientIp })`
+- Default: 10 requests/minute per IP on the scan endpoint
+- Block IPs making >20 scan requests per day (write to KV)
+- Always read the `CF-Connecting-IP` header, not `X-Forwarded-For` (CF strips/replaces it)
+
+## Cloudflare Queues
+- Enqueue deep audit jobs on payment confirmation — never process synchronously in the webhook handler
+- Consumer Worker retries up to 3 times with exponential backoff
+- Dead-letter queue: write failed jobs to KV with error details, trigger Resend alert email
+- Always acknowledge queue messages: return from the handler (implicit ack) or throw to retry
+
+## Secrets and Environment
+- ALL secrets come from `env` bindings — they are injected at runtime
+- Never access `process.env` in Workers — use the typed `Env` interface
+- Define the `Env` interface at the top of every Worker entry file:
+
+```typescript
+export interface Env {
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_ROLE_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  GEMINI_API_KEY: string;
+  RESEND_API_KEY: string;
+  TURNSTILE_SECRET_KEY: string;
+  SCAN_QUEUE: Queue;
+  RATE_LIMITER: RateLimit;
+  SCAN_CACHE: KVNamespace;
+}
+```
+
+## PDF Generation
+- Use `pdf-lib` — it is pure JavaScript and runs in Workers
+- Do NOT use jsPDF (low quality output)
+- Do NOT use Satori (may exceed 10ms CPU limit on free tier)
+- Keep PDF generation within the paid Workers plan ($5/mo) — the 10ms free-tier CPU limit WILL break PDF generation
+- Generate PDFs in the Queue consumer Worker, not in the request handler
+
+## Gemini API
+- Gemini is called for EXACTLY TWO checks: Q&A block detection and extractability scoring
+- All other audit checks are deterministic — no AI required
+- Wrap all Gemini calls with a try/catch; on failure, mark the check as "unable to assess" (do not fail the entire audit)
+- The Gemini provider (model name + endpoint) MUST be a config variable, not hardcoded:
+```typescript
+const GEMINI_MODEL = env.GEMINI_MODEL ?? 'gemini-2.5-flash-lite-preview-06-17';
+```
+- Respect 1,000 RPD free tier limit — add request queuing if approaching limit
+
+## Stripe Webhooks
+- ALWAYS verify the `Stripe-Signature` header before processing any webhook:
+```typescript
+const event = stripe.webhooks.constructEvent(rawBody, sig, env.STRIPE_WEBHOOK_SECRET);
+```
+- Reject unverified events with 400 — never process without signature verification
+- Handle idempotency: check if the Stripe event ID has already been processed (store in Supabase)
+- Only act on `checkout.session.completed` and `invoice.payment_succeeded` — ignore all others silently
+
+## Turnstile Validation
+- Validate Turnstile tokens server-side before processing any scan request:
+```typescript
+const turnstileUrl = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+const result = await fetch(turnstileUrl, {
+  method: 'POST',
+  body: JSON.stringify({ secret: env.TURNSTILE_SECRET_KEY, response: token }),
+  headers: { 'Content-Type': 'application/json' },
+});
+const data = await result.json();
+if (!data.success) return new Response('Bot detected', { status: 403 });
+```

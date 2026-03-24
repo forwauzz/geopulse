@@ -1,0 +1,78 @@
+---
+description: Frontend rules — scoped to Next.js app directory
+globs: ["app/**/*.tsx", "app/**/*.ts", "components/**/*.tsx", "components/**/*.ts"]
+alwaysApply: false
+---
+
+# Next.js Frontend Rules
+
+## Deployment Target
+- This app deploys to Cloudflare Workers via `@opennextjs/cloudflare`
+- Do NOT use `next/image` default loader — it requires Node.js sharp. Use Cloudflare Images or a simple `<img>` tag
+- Do NOT use `next export` — OpenNext handles the build
+- Compatibility date must be `2025-04-01` or later in wrangler.jsonc (required for `process.env` population)
+- Enable `nodejs_compat` flag in wrangler.jsonc
+
+## App Router Patterns
+- Use Server Components by default — only add `'use client'` when interactivity is required
+- Never call Supabase directly from client components — use Server Actions or Route Handlers
+- Supabase service_role key is NEVER passed to client components or browser
+- Use `cookies()` from `next/headers` in Server Components for Supabase session
+- Route Handlers (`app/api/**/route.ts`) handle webhooks; Workers handle the scan engine
+
+## Supabase Client Pattern
+```typescript
+// lib/supabase/server.ts — for Server Components and Server Actions
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+export function createClient() {
+  const cookieStore = cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, // anon key only — never service_role here
+    { cookies: { getAll: () => cookieStore.getAll(), setAll: (cs) => cs.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } }
+  );
+}
+```
+
+## Forms and Mutations
+- Use Server Actions for all form submissions
+- Validate all inputs server-side — never trust client-side validation alone
+- Use `zod` for schema validation on all form inputs
+- Return structured errors from Server Actions, never throw unhandled exceptions to the client
+
+## Score Display
+- The score badge must be visible BEFORE the email gate — users see the number first, then are asked for email
+- Score name: always "AI Search Readiness Score" — never any other phrasing
+- Letter grades: A+ (90-100), B (75-89), C (55-74), D (35-54), F (0-34)
+- Design intent: most sites should visually land in the 45-65 range (C grade triggers action)
+
+## Social Share / OG Images
+- Generate OG images using `next/og` (ImageResponse) in a Route Handler
+- OG image must include: score badge, letter grade, domain name, benchmark percentile
+- Pre-populate share copy: `"My site scored {score}/100 on GEO readiness 🤖 Check yours → geopulse.io"`
+- Add competitive framing: "You scored better than {percentile}% of sites in your industry"
+
+## Authentication
+- Use Supabase Auth magic link + Google OAuth — do NOT write custom auth
+- Auth state lives in Supabase session cookies, not localStorage
+- Protected routes: use middleware.ts with `@supabase/ssr` to check session
+- After $29 purchase: auto-create account via magic link email (user did not sign up separately)
+
+## Cloudflare Turnstile
+- Embed Turnstile widget on the scan form using the official `@marsidev/react-turnstile` package
+- Pass the token to the scan API — never skip this check
+- Use invisible challenge mode for lowest friction
+
+## UI Constraints
+- Dark-mode-adjacent visual design — score-centric, minimal
+- Mobile-first: scan form must be fully functional on mobile
+- Results page must load and display score in <8 seconds end-to-end
+- Email gate appears after score is visible — not before
+
+## What Stitch-Generated Components Should Follow
+- When importing components from Stitch, wrap them to match these naming and type conventions
+- Ensure all Stitch components are typed — add TypeScript interfaces for props
+- Never use inline styles from Stitch output — convert to Tailwind utility classes
+- Check Stitch-generated components for hardcoded colours that should use CSS variables
