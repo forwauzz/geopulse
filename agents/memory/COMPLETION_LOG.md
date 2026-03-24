@@ -163,6 +163,45 @@ Bindings included `SCAN_CACHE` (preview KV id), `SCAN_QUEUE (geo-pulse-scan-queu
 
 ---
 
+### Phase 1 — implementation bundle (2026-03-24)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-24  
+**Evidence type:** `npm run type-check`, `npm run build`, `npm run test` (vitest), key paths listed  
+
+#### Evidence
+
+**`npm run type-check`** — exit code 0 (re-run after Phase 1 code landed).
+
+**`npm run build`** — Next.js 15 production build succeeded; routes include `/`, `/results/[id]`, `/api/scan`, `/api/scans/[id]`, `/api/leads`.
+
+**`npm run test` (vitest)**
+
+```
+ Test Files  2 passed (2)
+      Tests  13 passed (13)
+```
+
+Files: `workers/lib/ssrf.test.ts`, `workers/scan-engine/scoring.test.ts`.
+
+**Implementation map (concise)**
+
+- UI: `app/layout.tsx`, `app/page.tsx`, `app/globals.css`, `app/results/[id]/page.tsx`, `components/scan-form.tsx`, `components/results-view.tsx`, `components/score-display.tsx`, `components/email-gate.tsx`, Tailwind `tailwind.config.ts`, `postcss.config.mjs`.
+- APIs: `app/api/scan/route.ts` (Turnstile → rate limit → `runFreeScan` → insert `scans`), `app/api/scans/[id]/route.ts` (service_role read, free scan only, 48h window), `app/api/leads/route.ts` (Turnstile → email day limit → insert `leads`).
+- Scan engine: `workers/scan-engine/run-scan.ts`, `fetch-page.ts`, `parse-signals.ts`, `scoring.ts`, `workers/scan-engine/checks/*`, `workers/scan-engine/checks/registry.ts`, `workers/providers/gemini.ts`, interfaces under `workers/lib/interfaces/`.
+- Shared: `lib/server/turnstile.ts`, `lib/server/rate-limit-kv.ts`, `lib/server/cf-env.ts`, `lib/supabase/service-role.ts`.
+- Next + OpenNext dev: `next.config.ts` calls `initOpenNextCloudflareForDev()`.
+
+**Note (P1-004):** Target HTML is fetched with SSRF validation and a **bounded** body read; signals use **regex / string extraction** for portability (Node + Workers). **HTMLRewriter** streaming is not used in this path yet — follow-up if a standalone scan Worker splits from the Next bundle.
+
+**Phase 1→2 gate (manual):** Run `npm run preview` (or `wrangler dev` after OpenNext build), complete a scan and email gate, confirm `leads` row and KV rate-limit keys — Orchestrator per `ORCHESTRATOR.md`.
+
+#### Orchestrator Decision
+**Date:** _pending_  
+**Decision:** _pending_  
+**Notes:** _pending_
+
+---
+
 ## Rejection History
 
 _Agents whose claimed completions were challenged will be logged here for pattern tracking._

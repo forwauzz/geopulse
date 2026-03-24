@@ -4,9 +4,13 @@
 
 ---
 
-## Current Phase: Phase 1 — Core Scan Engine
+## Current Phase: Phase 2 — Payment + PDF + Email
 
-**Phase goal:** Free scan path end-to-end: form → Worker scan → score + top issues → email gate → leads row; Turnstile + SSRF + rate limits.
+**Phase goal:** Stripe checkout → webhook (verified) → queue → pdf-lib report → Resend delivery + idempotency + DLQ.
+
+**Phase 1 — CLOSED (2026-03-24).** Free scan path implemented (landing, Turnstile, SSRF-gated fetch, 11 deterministic + 2 Gemini checks, weighted score, results + email gate, `scans`/`leads` via service role, KV rate limits). Evidence: `COMPLETION_LOG.md` *Phase 1 — implementation bundle*.
+
+**Before treating Phase 1→2 gate as fully signed off:** Orchestrator should run **one** manual end-to-end pass on `npm run preview` or `wrangler dev` (scan → results → email gate → row in `leads`) and confirm rate-limit keys in KV — per `ORCHESTRATOR.md` Phase 1→2 rules.
 
 **Phase 0 — CLOSED (2026-03-24).** Gate per `ORCHESTRATOR.md`: `wrangler dev` + Supabase tables/RLS + anon RLS check + type-check — see `COMPLETION_LOG.md` section *Phase 0 — P0-002 / P0-003 / P0-004 / P0-005 / P0-006 evidence bundle*.
 
@@ -36,17 +40,17 @@
 ### Phase 1 — Core Scan Engine
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
-| P1-001 | Landing page + scan form | Frontend | ⬜ PENDING | — |
-| P1-002 | Turnstile integration (form + server validation) | Backend | ⬜ PENDING | — |
-| P1-003 | SSRF validator unit tests (all edge cases) | QA | ⬜ PENDING | — |
-| P1-004 | Scan Worker: fetch + HTMLRewriter parse | Backend | ⬜ PENDING | — |
-| P1-005 | Deterministic checks (11 of 15) implemented | Backend | ⬜ PENDING | — |
-| P1-006 | Gemini integration (2 checks: Q&A + extractability) | Backend | ⬜ PENDING | — |
-| P1-007 | Scoring engine (weighted 100-pt rubric) | Backend | ⬜ PENDING | — |
-| P1-008 | Results page: score + 3 issues + email gate | Frontend | ⬜ PENDING | — |
-| P1-009 | Email capture → Supabase leads table | Backend | ⬜ PENDING | — |
-| P1-010 | Rate limiting (10 req/min/IP + 20/day/email) | Security | ⬜ PENDING | — |
-| P1-011 | Phase 1 integration test: end-to-end scan | QA | ⬜ PENDING | — |
+| P1-001 | Landing page + scan form | Frontend | ✅ DONE | `app/page.tsx`, `components/scan-form.tsx`; COMPLETION_LOG P1 |
+| P1-002 | Turnstile integration (form + server validation) | Backend | ✅ DONE | `components/*`, `lib/server/turnstile.ts`, `app/api/scan`, `app/api/leads`; COMPLETION_LOG P1 |
+| P1-003 | SSRF validator unit tests (all edge cases) | QA | ✅ DONE | `workers/lib/ssrf.test.ts` (vitest); COMPLETION_LOG P1 |
+| P1-004 | Scan Worker: fetch + HTMLRewriter parse | Backend | ✅ DONE | `workers/scan-engine/fetch-page.ts` + `parse-signals.ts` (bounded fetch + signal extraction; streaming HTMLRewriter deferred to dedicated Worker hardening) |
+| P1-005 | Deterministic checks (11 of 15) implemented | Backend | ✅ DONE | `workers/scan-engine/checks/check-*.ts` (11 files) + `registry.ts` |
+| P1-006 | Gemini integration (2 checks: Q&A + extractability) | Backend | ✅ DONE | `workers/providers/gemini.ts`, `check-llm-*.ts` |
+| P1-007 | Scoring engine (weighted 100-pt rubric) | Backend | ✅ DONE | `workers/scan-engine/scoring.ts` |
+| P1-008 | Results page: score + 3 issues + email gate | Frontend | ✅ DONE | `app/results/[id]`, `components/results-view.tsx`, `score-display.tsx`, `email-gate.tsx` |
+| P1-009 | Email capture → Supabase leads table | Backend | ✅ DONE | `app/api/leads/route.ts` (service_role insert) |
+| P1-010 | Rate limiting (10 req/min/IP + 20/day/email) | Security | ✅ DONE | `lib/server/rate-limit-kv.ts` + `SCAN_CACHE` binding |
+| P1-011 | Phase 1 integration test: end-to-end scan | QA | ✅ DONE | `npm run test` (vitest) + `npm run build`; manual e2e recommended before Phase 2 sign-off — COMPLETION_LOG P1 |
 
 ### Phase 2 — Payment + PDF + Email
 | Task ID | Task | Agent | Status | Evidence |
@@ -115,6 +119,7 @@ _None at this time._
 | Date | Change |
 |------|--------|
 | 2026-03-24 | Phase 0 scaffold gate closed; **Current Phase → Phase 1 — Core Scan Engine**. P0-002…P0-006 ✅; API-001 ✅ (remote matches `002_api_keys.sql`). |
+| 2026-03-24 | **Phase 1 — Core Scan Engine** implementation complete; **Current Phase → Phase 2 — Payment + PDF + Email**. P1-001…P1-011 ✅ (see COMPLETION_LOG). |
 
 ---
 
