@@ -103,6 +103,14 @@ You enforce these gates before advancing phases:
 **Phase 3 → Phase 4:** Registered user can log in + see past scans + auth middleware blocks unauthenticated routes
 **Phase 4 → Launch:** All 5 security launch blockers complete + production deploy live + first real scan works
 
+### API-as-a-Service vs product phases
+
+Product phases (P0–P4) and **API-002 … API-007** are tracked in `agents/memory/PROJECT_STATE.md`. **Do not** start the API product layer until **Phase 3→4 gate** is verified with evidence and `PROJECT_STATE.md` moves API tasks out of deferred — see the **API-as-a-Service Layer** table there. **API-001** (schema) may already be done; issuance/OpenAPI/docs are separate. Finishing **Phase 4 (Launch)** before shipping the public API is allowed and does not block launch gates.
+
+### Automated verification
+
+GitHub Actions runs `npm run type-check`, `npm run test`, and `npm run build` on push/PR (`.github/workflows/ci.yml`). Green CI supports evidence requirements; it **does not** replace Security sign-off on auth, payments, or URL handling (`agents/SECURITY_AGENT.md`).
+
 ---
 
 ## What You Never Do
