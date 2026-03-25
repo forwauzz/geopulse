@@ -8,13 +8,21 @@
 
 **Phase goal:** Production deploy, OG share image, email DNS (SPF/DKIM/DMARC), WAF, keep-alive cron, launch security audit.
 
+**Implementation status (2026-03-25):** P4-002 + P4-005 **in repo**. **P4-001** ✅ — production Worker `https://geo-pulse.uzzielt.workers.dev` + **live Stripe checkout** (redirect `?checkout=success`, “Payment received.”) — see `COMPLETION_LOG.md` *Phase 4 — operator evidence*. **P2-008** ✅ — production paid path verified. **Still to close with evidence in log:** **P4-003** (SPF/DKIM/DMARC), **P4-004** (WAF CVE-2025-29927), **P4-006** (Security sign-off on five blockers). **Phase 4→Launch gate** (`agents/ORCHESTRATOR.md`) requires all five security blockers + production smoke — Orchestrator marks when P4-003/004/006 evidence is attached.
+
+**Operator note (2026-03-25):** Production checkout **`POST /api/checkout`** is rate-limited (**5 attempts per IP per hour**, `Retry-After: 3600` — see `lib/server/rate-limit-kv.ts` `checkCheckoutRateLimit`). Retesting paid checkout may require **waiting up to one hour** or using **another network/IP**. This is **not** a Stripe configuration failure by itself. **Sequencing:** **DA-001** ✅ · **DA-002** ✅ · **DA-003** ✅ · **DA-004 (partial)** ✅ — see `COMPLETION_LOG` DA-004-inc. **Orchestrator (2026-03-25):** close **Phase 4 — Launch** first (`agents/ORCHESTRATOR.md` § *Phase 4 first — defer remaining Deep Audit*); **DA-004** remainder + **DA-005** **after** Phase 4→Launch evidence. **Next (Phase 4):** paste **P4-003 / P4-004 / P4-006** evidence in `COMPLETION_LOG.md`; then **Phase 4→Launch gate**. **DA** remains deferred until Orchestrator clears launch.
+
+**Deep Audit Upgrade (v2):** Tracked in Task Registry (**DA-001…DA-005**); spec `.cursor/plans/report_depth_and_formats_fa7e556e.plan.md`, narrative [`PLAYBOOK/audit-upgrade.md`](../../PLAYBOOK/audit-upgrade.md). **DA-001** ✅ **DONE** — `005_scan_runs_scan_pages.sql`, queue **v2**, `runDeepAuditCrawl`, multi-page PDF (operator-verified). **DA-002** ✅ **DONE** — `workers/lib/fetch-gate.ts`, `validateEngineFetchUrl`, `robots-and-sitemap.ts`, `crawl-url-utils.ts` (section-aware cap), migration `006_scan_pages_section.sql`; **Security** formal sign-off on fetch path still recommended per `agents/SECURITY_AGENT.md`. **DA-003** ✅ **DONE** — `DeepAuditReportPayload`, `build-deep-audit-markdown.ts`, R2 upload + `reports.pdf_url`, Resend attach vs link policy (`DEEP_AUDIT_ATTACH_MAX_BYTES`). **DA-004 (partial)** — robots `Crawl-delay` + crawl metrics in `coverage_summary` / logs (`COMPLETION_LOG` DA-004-inc); full scale still deferred. Independent of Phase 4 closure; Orchestrator sets parallel vs sequential execution.
+
+**How to close Phase 4:** Follow **`COMPLETION_LOG.md` → *Phase 4 — operator execution order*** — numbered steps + **Stripe Live checkpoint** (after production hostname is fixed). Paste deploy + DNS + WAF + smoke evidence there; Orchestrator marks tasks and Phase 4→Launch gate per `agents/ORCHESTRATOR.md`.
+
 **Phase 2 — CLOSED (implementation in repo; operator: apply migration `004_payments_guest_email.sql`, verify PDF &lt;60s + webhook in staging).** Checkout (`app/api/checkout`), Stripe webhook + idempotency (`app/api/webhooks/stripe`, `lib/server/stripe/checkout-completed.ts`), queue → PDF → Resend (`workers/queue/report-queue-consumer.ts`), DLQ replay (`workers/queue/dlq-replay.ts`). Tests: `npm run test`, `lib/server/stripe/checkout-completed.test.ts`.
 
 **Phase 3 — CLOSED (implementation in repo).** Magic link (`app/login`, `app/login/actions.ts`), OAuth callback + guest purchase linking (`app/auth/callback`, `lib/server/link-guest-purchases.ts`), middleware session + CVE header (`middleware.ts`, `lib/supabase/middleware.ts`), dashboard (`app/dashboard`). Gate: sign in → `/dashboard` lists `scans` / `reports` for `auth.uid()`; unauthenticated `/dashboard` → `/login`.
 
 **Prior phase goal (Phase 2):** Stripe checkout → webhook (verified) → queue → pdf-lib report → Resend delivery + idempotency + DLQ.
 
-**Orchestrator sequencing (2026-03-24):** Finish **Phase 2** (all P2 tasks + **Phase 2→3 gate**) and **Phase 3** (all P3 tasks + **Phase 3→4 gate**) **before** implementing **API-as-a-Service** (**API-002 … API-007**). **API-001** (schema) stays done; no API product work until Phase 3 is closed.
+**Orchestrator sequencing:** Phases **2** and **3** are complete in repo; **Phase 4 — Launch** is in progress. **Deep Audit Upgrade:** **DA-001–003** ✅; **DA-004** partial (politeness + metrics) ✅ / full scope deferred; **DA-005** deferred — **does not replace** Phase 4 tasks or API deferral rules. **API-as-a-Service** (**API-002 … API-007**) starts only after **Phase 4→Launch gate** (see `ORCHESTRATOR.md`). **API-001** (schema) stays done.
 
 **Phase 2→3 gate** (`agents/ORCHESTRATOR.md`): $1 test payment succeeds · PDF delivered in &lt;60s · Stripe webhook never processed without signature verification.
 
@@ -76,7 +84,7 @@
 | P2-005 | Resend: HTML email + PDF attachment delivery | Backend | ✅ DONE | `workers/report/resend-delivery.ts` |
 | P2-006 | Dead-letter queue handler + retry logic | Backend | ✅ DONE | `workers/queue/report-queue-consumer.ts`, `workers/queue/dlq-replay.ts` |
 | P2-007 | Payment idempotency (Stripe event ID dedup) | Security | ✅ DONE | `lib/server/stripe/checkout-completed.ts` |
-| P2-008 | $1 test payment end-to-end test | QA | ⬜ OPERATOR | Operator-verified $1 e2e; run `npm run test` + staging webhook |
+| P2-008 | $1 test payment end-to-end test | QA | ✅ DONE | COMPLETION_LOG Phase 4 — operator evidence; live payment `geo-pulse.uzzielt.workers.dev` → `checkout=success` |
 
 ### Phase 3 — Auth + Dashboard
 | Task ID | Task | Agent | Status | Evidence |
@@ -89,25 +97,36 @@
 ### Phase 4 — Launch
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
-| P4-001 | Production deploy to Cloudflare Pages + Workers | Backend | ⬜ PENDING | — |
-| P4-002 | Share-your-score OG image generation | Frontend | ⬜ PENDING | — |
-| P4-003 | SPF + DKIM + DMARC configured | Security | ⬜ PENDING | — |
-| P4-004 | WAF rules enabled (CVE-2025-29927) | Security | ⬜ PENDING | — |
-| P4-005 | Supabase keep-alive cron configured | Backend | ⬜ PENDING | — |
-| P4-006 | Launch security audit (all 5 blockers) | Security | ⬜ PENDING | — |
+| P4-001 | Production deploy to Cloudflare Pages + Workers | Backend | ✅ DONE | COMPLETION_LOG Phase 4 — operator evidence; prod URL + live Stripe + `lib/server/cf-env.ts` `pickEnvString` for Worker env |
+| P4-002 | Share-your-score OG image generation | Frontend | ✅ DONE | `app/results/[id]/opengraph-image.tsx`, `lib/server/get-scan-for-public-share.ts`, `page.tsx` `generateMetadata`; COMPLETION_LOG Phase 4 bundle |
+| P4-003 | SPF + DKIM + DMARC configured | Security | ⬜ PENDING | Operator: DNS + Resend; evidence in COMPLETION_LOG |
+| P4-004 | WAF rules enabled (CVE-2025-29927) | Security | ⬜ DEFERRED (paid CF) / mitigated | Managed WAF often needs **paid** Cloudflare — **mitigation in repo:** `middleware.ts` + patched Next.js; full WAF when upgraded — `COMPLETION_LOG` P4-004 paid-plan note; **P4-006** Security acknowledges |
+| P4-005 | Supabase keep-alive cron configured | Backend | ✅ DONE | `wrangler.jsonc` `triggers.crons`, `workers/cloudflare-entry.ts` `scheduled`; COMPLETION_LOG Phase 4 bundle |
+| P4-006 | Launch security audit (all 5 blockers) | Security | ⬜ PENDING | Checklist in COMPLETION_LOG Phase 4 bundle; sign-off after P4-003/P4-004 + production smoke |
 
-### API-as-a-Service Layer (deferred — start after Phase 3 gate)
-> Per orchestrator sequencing 2026-03-24: **API-002 … API-007** begin only after Phase 3 is complete and the Phase 3→4 gate is satisfied. **API-001** remains complete.
+### Deep Audit Upgrade (multi-page paid audit — “v2”)
+> **Spec:** `.cursor/plans/report_depth_and_formats_fa7e556e.plan.md` (§ Target architecture). **Narrative / executive summary:** [`PLAYBOOK/audit-upgrade.md`](../../PLAYBOOK/audit-upgrade.md). **Does not replace** Phase 4 or API deferral rules in `agents/ORCHESTRATOR.md` — Orchestrator sets **start date** and whether this runs **in parallel with** or **after** Phase 4 operator tasks. **Security** sign-off required on fetch-gate / SSRF changes (DA-002).
+
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| DA-001 | Phase 0: `scan_runs` / `scan_pages` + RLS; payment → deep crawl + cap; free scan unchanged | Backend + Database | ✅ DONE | COMPLETION_LOG DA-001 (✅ ACCEPTED); operator smoke: paid PDF for `https://techehealthservices.com/` — **Pages scanned** + per-page checklist (10 URLs, site aggregate score); migration `005_scan_runs_scan_pages.sql` |
+| DA-002 | Phase 1: Central fetch gate (extend `workers/lib/ssrf.ts`); robots + sitemap streaming; section-aware sampling | Backend + Security | ✅ DONE | `workers/lib/fetch-gate.ts`, `validateEngineFetchUrl`, `deep-audit-crawl` + robots/sitemap + `prioritizeUrlsBySection`; `006_scan_pages_section.sql`; `npm run test` 36 passed; COMPLETION_LOG DA-002 — **Security** review recommended |
+| DA-003 | Reporting: `DeepAuditReportPayload`; PDF/MD; R2 + email link policy | Backend | ✅ DONE | COMPLETION_LOG DA-003; `workers/report/*`, `report-queue-consumer.ts`, `wrangler.jsonc` `r2_buckets` + `DEEP_AUDIT_R2_PUBLIC_BASE`; CI runs `cf-typegen` |
+| DA-004 | Phase 2: Scale (Queues/Workflows), politeness, metrics | Backend | ⬜ IN_PROGRESS (partial) | **Done in repo:** `Crawl-delay` parse + between-fetch delay (cap 10s), `coverage_summary` + `structuredLog` metrics — COMPLETION_LOG DA-004-inc. **Deferred:** chunked queue/Workflow, 100+ pages |
+| DA-005 | Phase 3 (optional): Browser Rendering / SPA crawl | Backend | ⬜ DEFERRED | Tier-gated; evidence in COMPLETION_LOG |
+
+### API-as-a-Service Layer (deferred — start after Phase 4 launch readiness)
+> **Phase 3→4 gate** is satisfied (auth + dashboard in repo). **API-002 … API-007** remain deferred until **Orchestrator** clears **Phase 4 — Launch** (at minimum **P4-001** production deploy + security evidence per `ORCHESTRATOR.md` Phase 4→Launch gate). **API-001** remains complete.
 
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
 | API-001 | API key schema + migration | Database | ✅ DONE | `002_api_keys.sql` on remote; COMPLETION_LOG Supabase audit |
-| API-002 | API key issuance + validation Worker | API | ⬜ DEFERRED | Starts after Phase 3 gate |
-| API-003 | OpenAPI spec v1 | API + Architect | ⬜ DEFERRED | Starts after Phase 3 gate |
-| API-004 | Rate limiting per API key | API + Security | ⬜ DEFERRED | Starts after Phase 3 gate |
-| API-005 | API billing tiers (free/pro/enterprise) | API | ⬜ DEFERRED | Starts after Phase 3 gate |
-| API-006 | Webhook delivery for async results | API | ⬜ DEFERRED | Starts after Phase 3 gate |
-| API-007 | API documentation site | API + Frontend | ⬜ DEFERRED | Starts after Phase 3 gate |
+| API-002 | API key issuance + validation Worker | API | ⬜ DEFERRED | Starts after Phase 4 launch gate (Orchestrator) |
+| API-003 | OpenAPI spec v1 | API + Architect | ⬜ DEFERRED | Starts after Phase 4 launch gate |
+| API-004 | Rate limiting per API key | API + Security | ⬜ DEFERRED | Starts after Phase 4 launch gate |
+| API-005 | API billing tiers (free/pro/enterprise) | API | ⬜ DEFERRED | Starts after Phase 4 launch gate |
+| API-006 | Webhook delivery for async results | API | ⬜ DEFERRED | Starts after Phase 4 launch gate |
+| API-007 | API documentation site | API + Frontend | ⬜ DEFERRED | Starts after Phase 4 launch gate |
 
 ---
 
@@ -139,6 +158,16 @@ _None at this time._
 | 2026-03-24 | **Phase 1→2 manual gate:** live scan + results + email capture reported successful (domain: techehealthservices.com). |
 | 2026-03-24 | **Sequencing:** API-as-a-Service (**API-002…007**) deferred until **Phase 2 + Phase 3** complete and **Phase 3→4 gate** satisfied (`ORCHESTRATOR.md`). Operator: $1 payment e2e reported working; Phase 2 task registry + COMPLETION_LOG evidence still to be closed out. |
 | 2026-03-24 | **Phase 2 + Phase 3** implementation landed (auth, dashboard, `guest_email` on payments, middleware). **Current Phase → Phase 4 — Launch**. P2-001…P2-007 ✅; P2-008 operator QA; P3-001…P3-004 ✅. Run `supabase db push` for `004_payments_guest_email.sql`. |
+| 2026-03-24 | **Phase 4 (partial):** P4-002 OG + P4-005 keep-alive cron **✅ in repo** (`COMPLETION_LOG.md` Phase 4 bundle). P4-001/P4-003/P4-004/P4-006 **pending** operator + Security. API-002…007 deferral clarified → **after Phase 4 launch gate**. |
+| 2026-03-24 | **Deep Audit Upgrade** initiative added to Task Registry (**DA-001…DA-005**). Spec: `.cursor/plans/report_depth_and_formats_fa7e556e.plan.md`; companion: [`PLAYBOOK/audit-upgrade.md`](../../PLAYBOOK/audit-upgrade.md). Sequencing vs Phase 4: Orchestrator call (parallel vs after P4 operator work). |
+| 2026-03-24 | **PLAYBOOK:** Renamed `audit uprade.md` → [`audit-upgrade.md`](../../PLAYBOOK/audit-upgrade.md); links in this file updated. |
+| 2026-03-25 | **Checkout rate limit + DA-001:** Operator note — `POST /api/checkout` capped at **5/IP/hour** (wait or alternate IP). **DA-001** marked **IN_PROGRESS**; parallel with Phase 4 operator work per `agents/ORCHESTRATOR.md`. |
+| 2026-03-25 | **DA-001 (implementation):** `scan_runs` / `scan_pages` migration + RLS; paid flow creates `scan_run` and enqueues **v2**; Worker runs capped same-origin crawl, updates `scans` aggregate + PDF multi-page. **Pending:** remote DB migration + Orchestrator acceptance + optional Security note (fetch path unchanged from P1 `fetch-page` until DA-002). |
+| 2026-03-25 | **DA-001 — CLOSED (Orchestrator):** Paid deep-audit smoke on **techehealthservices.com** — multi-page PDF (10 URLs, aggregate score, per-page checklist). **DA-002** marked **IN_PROGRESS** (central fetch gate + robots/sitemap + sampling; Security review on fetch/SSRF). |
+| 2026-03-25 | **DA-002 — DONE (implementation):** Central fetch gate (`fetchGateText`, stream byte cap), `validateEngineFetchUrl` (http/https for engine only), robots.txt + sitemap.xml discovery, section-aware URL ordering, `scan_pages.section`; free scan still uses HTTPS-only `validateUrl`. **Next:** **DA-003**. |
+| 2026-03-25 | **DA-004 (incremental):** `parseRobotsTxt` reads `Crawl-delay` for `*`; `deep-audit-crawl` sleeps between non-seed fetches (cap 10s); `scan_runs.coverage_summary` adds `wall_time_ms`, `pages_errored`, `crawl_delay_ms`; `structuredLog` `deep_audit_crawl_complete`. Full DA-004 (Workflows / 100+ pages) still deferred. |
+| 2026-03-25 | **Orchestrator sequencing:** Complete **Phase 4 → Launch** (P4-001, P4-003, P4-004, P4-006 + evidence) **before** resuming **DA-004** remainder / **DA-005** — see `agents/ORCHESTRATOR.md` § *Phase 4 first — defer remaining Deep Audit until Launch gate*. |
+| 2026-03-25 | **Phase 4 — P4-001 + P2-008:** Production **`https://geo-pulse.uzzielt.workers.dev`** — live Stripe checkout returns to `/results/<scanId>?checkout=success` (“Payment received.”). **P4-003 / P4-004 / P4-006** still need evidence in `COMPLETION_LOG.md` for full Launch gate. |
 
 ---
 

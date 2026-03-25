@@ -11,11 +11,20 @@ dist/
 
 # Secrets — NEVER commit these
 .dev.vars
+.dev.vars.*
+!.dev.vars.example
 .env
+.env.*
+!.env.example
+!.env.*.example
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+# Misc credential dumps
+credentials.json
+secrets.json
+*-service-role*.txt
 
 # Cloudflare
 .wrangler/

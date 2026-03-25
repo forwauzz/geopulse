@@ -17,20 +17,27 @@ import { robotsMetaCheck } from './check-robots-meta';
 import { titleTagCheck } from './check-title';
 import { viewportCheck } from './check-viewport';
 
+const DETERMINISTIC_CHECKS: AuditCheck[] = [
+  httpsOnlyCheck,
+  titleTagCheck,
+  metaDescriptionCheck,
+  canonicalCheck,
+  robotsMetaCheck,
+  openGraphCheck,
+  jsonLdCheck,
+  headingStructureCheck,
+  viewportCheck,
+  htmlSizeCheck,
+  internalLinksCheck,
+];
+
+/**
+ * Deterministic checks only (no LLM) — used for secondary pages in deep audits to cap Gemini usage.
+ */
+export function buildDeterministicChecks(): AuditCheck[] {
+  return [...DETERMINISTIC_CHECKS];
+}
+
 export function buildFreeTierChecks(llm: LLMProvider): AuditCheck[] {
-  return [
-    httpsOnlyCheck,
-    titleTagCheck,
-    metaDescriptionCheck,
-    canonicalCheck,
-    robotsMetaCheck,
-    openGraphCheck,
-    jsonLdCheck,
-    headingStructureCheck,
-    viewportCheck,
-    htmlSizeCheck,
-    internalLinksCheck,
-    createQaPatternCheck(llm),
-    createExtractabilityCheck(llm),
-  ];
+  return [...DETERMINISTIC_CHECKS, createQaPatternCheck(llm), createExtractabilityCheck(llm)];
 }

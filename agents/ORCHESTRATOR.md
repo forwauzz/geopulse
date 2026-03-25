@@ -107,6 +107,20 @@ You enforce these gates before advancing phases:
 
 Product phases (P0–P4) and **API-002 … API-007** are tracked in `agents/memory/PROJECT_STATE.md`. **Do not** start the API product layer until **Phase 3→4 gate** is verified with evidence and `PROJECT_STATE.md` moves API tasks out of deferred — see the **API-as-a-Service Layer** table there. **API-001** (schema) may already be done; issuance/OpenAPI/docs are separate. Finishing **Phase 4 (Launch)** before shipping the public API is allowed and does not block launch gates.
 
+### Parallel work during Phase 4
+
+If production or operator verification is **temporarily blocked** by expected safeguards (e.g. **checkout rate limit**: 5 `POST /api/checkout` per IP per hour — see `PROJECT_STATE.md` operator notes), the team may continue **Deep Audit Upgrade** tasks (**DA-001 …**) as marked in `PROJECT_STATE.md`. This **does not** waive Phase 4 exit criteria, **API-002 … API-007** deferral, or Security sign-off.
+
+### Phase 4 first — defer remaining Deep Audit until Launch gate (Orchestrator)
+
+**Effective:** 2026-03-25  
+
+**Prioritize completing Phase 4 — Launch** and its evidence (`agents/memory/PROJECT_STATE.md` Phase 4 registry, `agents/memory/COMPLETION_LOG.md` *Phase 4 — operator execution order*): **P4-001** (production deploy + vars/secrets), **P4-003** (SPF/DKIM/DMARC), **P4-004** (WAF / CVE-2025-29927), **P4-006** (launch security audit — all five blockers with evidence).  
+
+**Defer** net-new **Deep Audit Upgrade** work (**DA-004** remainder: Workflows/scale/100+ pages; **DA-005**: Browser Rendering / SPA crawl) until **Phase 4 → Launch** is satisfied and documented — unless the Orchestrator **explicitly** reopens parallel DA work and records that in **State history** in `PROJECT_STATE.md`.  
+
+Implementation agents default to **Phase 4** closure; **API-002 … API-007** remain deferred per existing rules until the Launch gate.
+
 ### Automated verification
 
 GitHub Actions runs `npm run type-check`, `npm run test`, and `npm run build` on push/PR (`.github/workflows/ci.yml`). Green CI supports evidence requirements; it **does not** replace Security sign-off on auth, payments, or URL handling (`agents/SECURITY_AGENT.md`).
@@ -138,3 +152,5 @@ After every blocker:
 ```
 
 The PROJECT_STATE.md is the single source of truth for where the build is. It is never ahead of reality.
+
+**Parallel product initiatives (e.g. Deep Audit Upgrade — `DA-001`… in `PROJECT_STATE.md`):** Use the same verification ritual and **COMPLETION_LOG** evidence as phase tasks. Any change to **outbound URL fetching / SSRF / crawl** requires **Security** review before marking done. Initiatives do **not** replace Phase 4 or API deferral sequencing unless the Orchestrator explicitly reprioritizes and documents that in **State history**.

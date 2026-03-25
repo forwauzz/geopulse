@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateRedirect, validateUrl } from './ssrf';
+import { validateEngineFetchUrl, validateRedirect, validateUrl } from './ssrf';
 
 describe('validateUrl', () => {
   it('rejects http', async () => {
@@ -42,6 +42,18 @@ describe('validateUrl', () => {
 
   it('rejects credentials in URL', async () => {
     const r = await validateUrl('https://user:pass@example.com/');
+    expect(r.ok).toBe(false);
+  });
+});
+
+describe('validateEngineFetchUrl', () => {
+  it('allows http on default port', async () => {
+    const r = await validateEngineFetchUrl('http://example.com/path');
+    expect(r.ok).toBe(true);
+  });
+
+  it('rejects http on non-80 port', async () => {
+    const r = await validateEngineFetchUrl('http://example.com:8080/');
     expect(r.ok).toBe(false);
   });
 });

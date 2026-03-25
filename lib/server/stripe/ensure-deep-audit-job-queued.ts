@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
-import type { ReportQueueMessageV1 } from '@/lib/queue/report-job';
+import type { ReportQueueMessageV2 } from '@/lib/queue/report-job';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
 
 export type PaymentRow = { id: string; scan_id: string | null };
@@ -10,8 +10,14 @@ export type EnsureDeepAuditJobResult =
   | { ok: true; duplicate: false }
   | { ok: false; reason: string; status: number };
 
+function isUniqueViolation(err: { code?: string } | null): boolean {
+  return err?.code === '23505';
+}
+
+const DEFAULT_DEEP_PAGE_LIMIT = 10;
+
 /**
- * Ensure a queue message exists for this payment when no deep_audit report row yet.
+ * Ensure a scan_run row exists and a queue message is sent when no deep_audit report row yet.
  */
 export async function ensureDeepAuditJobQueued(
   supabase: SupabaseClient,
@@ -40,9 +46,60 @@ export async function ensureDeepAuditJobQueued(
     return { ok: true, duplicate: true };
   }
 
-  const payload: ReportQueueMessageV1 = {
-    v: 1,
+  const { data: scanRow, error: scanErr } = await supabase
+    .from('scans')
+    .select('id,domain')
+    .eq('id', payment.scan_id)
+    .maybeSingle();
+
+  if (scanErr || !scanRow?.domain) {
+    return { ok: false, reason: scanErr?.message ?? 'scan_not_found', status: 500 };
+  }
+
+  const { data: existingRun } = await supabase
+    .from('scan_runs')
+    .select('id')
+    .eq('scan_id', payment.scan_id)
+    .maybeSingle();
+
+  let scanRunId: string | undefined = existingRun?.id;
+
+  if (!scanRunId) {
+    const { data: inserted, error: insertErr } = await supabase
+      .from('scan_runs')
+      .insert({
+        scan_id: payment.scan_id,
+        domain: scanRow.domain,
+        mode: 'deep',
+        config: { page_limit: DEFAULT_DEEP_PAGE_LIMIT },
+      })
+      .select('id')
+      .single();
+
+    if (insertErr) {
+      if (isUniqueViolation(insertErr)) {
+        const { data: row } = await supabase
+          .from('scan_runs')
+          .select('id')
+          .eq('scan_id', payment.scan_id)
+          .maybeSingle();
+        scanRunId = row?.id;
+      } else {
+        return { ok: false, reason: insertErr.message, status: 500 };
+      }
+    } else {
+      scanRunId = inserted?.id;
+    }
+  }
+
+  if (!scanRunId) {
+    return { ok: false, reason: 'scan_run_missing', status: 500 };
+  }
+
+  const payload: ReportQueueMessageV2 = {
+    v: 2,
     scanId: payment.scan_id,
+    scanRunId,
     customerEmail,
     paymentId: payment.id,
     stripeSessionId: session.id,

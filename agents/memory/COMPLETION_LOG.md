@@ -222,6 +222,240 @@ Files: `workers/lib/ssrf.test.ts`, `workers/scan-engine/scoring.test.ts`.
 
 ---
 
+### Phase 4 — Launch bundle (2026-03-24)
+**Agent:** Backend + Frontend + Security (documentation)  
+**Claimed complete:** 2026-03-24  
+**Evidence type:** `npm run type-check`, `npm run test`, `npm run build` output + file references + operator runbooks
+
+#### Evidence — P4-005 Supabase keep-alive cron
+
+**Implementation:** `wrangler.jsonc` — `triggers.crons`: `["0 12 * * *"]` (daily 12:00 UTC). `workers/cloudflare-entry.ts` — `scheduled` handler calls `pingSupabaseKeepAlive` (GET `${NEXT_PUBLIC_SUPABASE_URL}/rest/v1/` with `apikey` + `Authorization` bearer anon key). `npm run cf-typegen` run (generates gitignored `cloudflare-env.d.ts`).
+
+#### Evidence — P4-002 Share-your-score OG
+
+**Implementation:** `lib/server/get-scan-for-public-share.ts` — shared visibility rules (guest `user_id === null`, 48h window) + `extractTopIssues`. `app/api/scans/[id]/route.ts` refactored to use it. `app/results/[id]/opengraph-image.tsx` — `next/og` `ImageResponse`; branded fallback when scan not shareable (no score leak). `app/results/[id]/page.tsx` — `generateMetadata` for dynamic title/description. Tests: `lib/server/get-scan-for-public-share.test.ts`.
+
+**Note:** `twitter-image.tsx` omitted — platforms use `opengraph-image` / page metadata; avoids re-export `runtime` warning.
+
+#### Evidence — commands (2026-03-24)
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+
+
+```
+
+```
+> geo-pulse@0.1.0 test
+> vitest run
+
+ RUN  v4.1.1
+
+ Test Files  8 passed (8)
+      Tests  24 passed (24)
+```
+
+`npm run build` — succeeded (Next.js 15.5.14); routes include `ƒ /results/[id]/opengraph-image`.
+
+#### Phase 4 — operator execution order (close the phase)
+
+Complete **in this order**. Code tasks P4-002 + P4-005 are already done in repo; remaining work is **operator + dashboard**.
+
+| Step | Task | Notes |
+|------|------|--------|
+| 1 | Pre-flight | `npm run type-check`, `npm run test`, `npm run build` (or CI green). |
+| 2 | Lock production hostname | Final `https://<host>` for `NEXT_PUBLIC_APP_URL`, Stripe webhook, Supabase Auth redirects. |
+| 3 | **Stripe Live checkpoint** | **Stop here — go to Stripe (see below).** You need live **Price ID**, **secret key**, **webhook signing secret** before production secrets are complete. |
+| 4 | Cloudflare vars + secrets | Non-secrets in `wrangler.jsonc` / dashboard; `wrangler secret put` for all keys in P4-001 list (use **live** Stripe values from step 3). |
+| 5 | Deploy | `npm run deploy` — paste success output below; evidence for P4-001. |
+| 6 | Supabase Auth | Production site URL + redirect URLs for magic link. |
+| 7 | P4-003 | SPF + DKIM + DMARC (Resend + DNS); attach evidence. |
+| 8 | P4-004 | WAF rule for CVE-2025-29927; attach evidence. |
+| 9 | Smoke + paid path | Free scan, login, dashboard, **one live payment** → webhook `checkout.session.completed` + PDF/email path. |
+| 10 | P4-006 | Security sign-off on five blockers (table in this bundle) after steps 7–9 + production smoke. |
+
+**Orchestrator:** After steps 5–10 evidence is pasted, update `PROJECT_STATE.md` task registry and Phase 4→Launch gate per `agents/ORCHESTRATOR.md`.
+
+#### Operator evidence — Phase 4 production payment + deploy (2026-03-25)
+
+**Production host:** `https://geo-pulse.uzzielt.workers.dev`  
+**P4-001 / step 9 — Live Stripe:** Redirect to `/results/cfca0548-4d5f-4411-823a-2cad4b7b03cc?checkout=success` with UI **“Payment received.”** / Stripe confirmed checkout (screenshot in operator workspace). Confirms **`POST /api/checkout`**, Checkout Session, and success URL.  
+**Implementation note:** `lib/server/cf-env.ts` — `pickEnvString` merges Worker `env` + `process.env` for payment-related keys (fixes prod `Stripe is not configured` when secrets were only on `process.env`).  
+**P2-008:** Operator-verified **live** paid path on production hostname (not test mode).  
+**Remaining for full Phase 4→Launch gate:** P4-003 (DNS), P4-004 (WAF), P4-006 (Security sign-off) — paste `dig`/screenshots + WAF rule + blocker checklist when ready.
+
+---
+
+##### → When to go get Stripe (Live) details
+
+Do this **after step 2** (you know the final production hostname). Use **Live mode** in the Dashboard (not Test).
+
+1. Open [Stripe Dashboard](https://dashboard.stripe.com) → turn **off** “Test mode”.
+2. **Product catalog** → confirm the deep-audit product/price in **Live** → copy **Price ID** (`price_...`) → set production `STRIPE_PRICE_ID_DEEP_AUDIT` (same mechanism as `wrangler.jsonc` `[vars]` / Workers env — never commit secrets).
+3. **Developers → API keys** → copy **Secret key** (`sk_live_...`) → set only via `wrangler secret put STRIPE_SECRET_KEY` (or dashboard secret).
+4. **Developers → Webhooks → Add endpoint** → URL `https://<production-host>/api/webhooks/stripe` → subscribe to **`checkout.session.completed`** only (see `app/api/webhooks/stripe/route.ts`) → copy **Signing secret** (`whsec_...`) → `wrangler secret put STRIPE_WEBHOOK_SECRET`.
+
+Then continue from **step 4** in the table above (remaining Cloudflare secrets, deploy, etc.).
+
+---
+
+#### P4-001 Production deploy — operator runbook
+
+1. Set **vars** in Cloudflare Workers dashboard (or `wrangler vars`) for production: replace placeholders in `wrangler.jsonc` — `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, confirm `NEXT_PUBLIC_APP_URL` matches live hostname.
+2. `wrangler secret put` for: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `GEMINI_API_KEY`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`, and any others listed in `wrangler.jsonc` comments.
+3. Deploy: `npm run deploy` (runs `opennextjs-cloudflare build && wrangler deploy`).
+4. Stripe Dashboard → Webhooks → endpoint URL `https://<production-host>/api/webhooks/stripe` (live signing secret in `STRIPE_WEBHOOK_SECRET`).
+5. Supabase Dashboard → Authentication → URL configuration → add production site URL and redirect URLs for magic link.
+6. Smoke test: home, scan, results, login, dashboard, paid path as applicable.
+
+**Orchestrator:** paste wrangler deploy success + smoke checklist when executed; mark P4-001 ACCEPTED.
+
+#### P4-003 SPF + DKIM + DMARC — operator checklist
+
+- Use sending subdomain (e.g. `mail.geopulse.io`) per `.cursor/rules/security.mdc`.
+- **SPF:** TXT on subdomain — `v=spf1 include:_spf.resend.com ~all` (or Resend’s current include).
+- **DKIM:** TXT records from Resend dashboard for the domain.
+- **DMARC:** TXT `_dmarc.<subdomain>` — start `v=DMARC1; p=none; rua=mailto:...`; escalate after monitoring.
+
+**Evidence:** attach `dig TXT` / DNS provider screenshots + first successful Resend send from production `RESEND_FROM_EMAIL`.
+
+#### P4-004 WAF CVE-2025-29927 — operator checklist
+
+- Cloudflare dashboard → **Security** → **WAF** → **Managed rules** — enable the rule that blocks or mitigates **Next.js** / **`x-middleware-subrequest`** abuse (CVE-2025-29927), per `.cursor/rules/security.mdc`.
+- Belt-and-suspenders: `middleware.ts` already rejects `x-middleware-subrequest`; WAF is defense in depth.
+
+**Evidence:** dashboard screenshot or rule ID noted.
+
+**Paid-plan note (2026-03-25):** Enabling the relevant **managed WAF** rules often requires a **paid Cloudflare plan** (Free tier is limited). Until upgraded, **do not block Phase 4 on P4-004 alone**: treat **application-layer mitigation** as sufficient for launch if **Security** documents it in **P4-006** — **`middleware.ts`** blocks `x-middleware-subrequest` (see `middleware.ts`), Next.js stays **patched** (CVE-2025-29927). **When budget allows:** enable the managed rule and paste evidence here.
+
+#### P4-006 Launch security audit — five blockers (`.cursor/rules/security.mdc`)
+
+| # | Blocker | Code / verification reference |
+|---|---------|------------------------------|
+| 1 | RLS on every table | Migrations `supabase/migrations/` — `001_initial_schema.sql` + follow-ons; spot-check anon PostgREST on `leads` (empty array). |
+| 2 | SSRF on user URLs | `workers/lib/ssrf.ts` + `workers/lib/ssrf.test.ts`; scan fetch paths use validator. |
+| 3 | Stripe webhook signature | `app/api/webhooks/stripe/route.ts` — `constructEvent`; idempotency `lib/server/stripe/checkout-completed.ts`. |
+| 4 | Turnstile server-side | `lib/server/turnstile.ts`; `app/api/scan/route.ts`, `app/api/leads/route.ts`. |
+| 5 | SPF + DKIM + DMARC | Satisfied when P4-003 evidence attached (no production marketing email before DNS). |
+
+**Security agent sign-off:** Pending Orchestrator confirmation after P4-003/P4-004 operator evidence and production smoke tests.
+
+#### Orchestrator Decision
+**Date:** 2026-03-25 (partial)  
+**Decision:** P4-001 + P2-008 **accepted** on operator evidence above (production URL + live payment). P4-003 / P4-004 / P4-006 **pending** evidence.  
+**Notes:** P4-002 + P4-005 accepted on prior bundle; full Phase 4→Launch gate per `ORCHESTRATOR.md` when P4-003/004/006 are evidenced.
+
+---
+
+## DA-001 — Deep Audit Phase 0 (schema + crawl + cap)
+**Agent:** Backend / implementation  
+**Claimed complete:** 2026-03-25  
+**Evidence type:** Unit test output + `npm run type-check` + `npm run build`
+
+### Evidence
+
+`npm run type-check`:
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npm run test`:
+```
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ ✓  Test Files  9 passed (9)
+      Tests  28 passed (28)
+```
+
+`npm run build`: completed with exit code 0 (Next.js production build + static generation).
+
+**Migration (new):** `supabase/migrations/005_scan_runs_scan_pages.sql` — `scan_runs` (1:1 `scan_id`), `scan_pages`, RLS for authenticated users via owning `scans.user_id`. **Operator:** apply with `supabase db push` on production Supabase when deploying.
+
+**Paid deep-audit smoke (operator, 2026-03-25):** Domain **`https://techehealthservices.com/`** — PDF email received with **Pages scanned** (10 URLs), site aggregate score (**52/100**), **Highlighted issues**, and **Per-page checklist** per URL (deterministic + homepage LLM checks). Confirms DA-001 multi-page path end-to-end.
+
+### Orchestrator Decision
+**Date:** 2026-03-25  
+**Decision:** ✅ ACCEPTED  
+**Notes:** Code evidence + paid smoke above. **Next:** **DA-002** (central fetch gate, robots/sitemap, section-aware sampling) — Security review required on outbound fetch / SSRF changes per `PROJECT_STATE.md`.
+
+---
+
+## DA-002 — Deep Audit Phase 1 (fetch gate + robots/sitemap + section sampling)
+**Agent:** Backend  
+**Claimed complete:** 2026-03-25  
+**Evidence type:** Unit tests + `npm run type-check`
+
+### Evidence
+
+`npm run test`:
+```
+ ✓ Test Files  11 passed (11)
+      Tests  36 passed (36)
+```
+
+`npm run type-check`: `tsc --noEmit` — 0 errors.
+
+**Implementation:** `workers/lib/fetch-gate.ts` (`fetchGateText`, `fetchHtmlPage`) — manual redirects (≤ `ENGINE_FETCH_MAX_REDIRECTS` = 5), stream read byte cap, shared User-Agent. `workers/lib/ssrf.ts`: `validateEngineFetchUrl` (http/https ports 80/443 for **engine** only; user `/api/scan` unchanged HTTPS-only). `workers/scan-engine/robots-and-sitemap.ts` (robots.txt + `<loc>` sitemap parse). `workers/scan-engine/crawl-url-utils.ts` (`prioritizeUrlsBySection`, `pathSectionKey`). `workers/scan-engine/deep-audit-crawl.ts` — discovery order: robots → sitemaps (default `/sitemap.xml` if none) + seed HTML links → filter by `Disallow` → section-prioritized fetch list. `supabase/migrations/006_scan_pages_section.sql` adds `scan_pages.section`.
+
+### Security agent
+**Required:** Review `validateEngineFetchUrl`, `fetch-gate.ts`, and crawl URL policy (same-origin + robots). Sign off when satisfied per `agents/SECURITY_AGENT.md`.
+
+### Orchestrator Decision
+**Date:** 2026-03-25  
+**Decision:** ✅ ACCEPTED (implementation)  
+**Notes:** Security formal sign-off tracked above; **next** task **DA-003**.
+
+---
+
+## DA-003 — Deep audit reporting (payload, Markdown, R2, email policy)
+**Agent:** Backend  
+**Claimed complete:** 2026-03-25  
+**Evidence type:** Unit tests + `npm run type-check`
+
+### Evidence
+
+`npm run test`:
+```
+ ✓ Test Files  12 passed (12)
+      Tests  40 passed (40)
+```
+
+`npm run type-check`: `tsc --noEmit` — 0 errors.
+
+**Implementation:** `workers/report/deep-audit-report-payload.ts` (`buildDeepAuditReportPayload`), `workers/report/build-deep-audit-markdown.ts`, `workers/report/build-deep-audit-pdf.ts` (`buildDeepAuditPdfFromPayload`), `workers/report/r2-report-storage.ts`, `workers/report/deep-audit-delivery-policy.ts` (`DEEP_AUDIT_ATTACH_MAX_BYTES` = 4 MiB). `workers/queue/report-queue-consumer.ts` — builds payload from `scan_pages` (incl. `section`) + `scan_runs.coverage_summary`, updates `full_results_json` with `reportPayloadVersion`, uploads PDF + Markdown to R2 when `REPORT_FILES` bound, sets `reports.pdf_url` when `DEEP_AUDIT_R2_PUBLIC_BASE` set; PDFs over 4 MiB require public links or job throws `deep_audit_pdf_oversize_configure_r2_public_base`. `workers/report/resend-delivery.ts` — `attachPdf` + optional `downloadLinks`; rejects misconfiguration when no attachment and no PDF URL. `wrangler.jsonc` — `r2_buckets` binding `REPORT_FILES`, var `DEEP_AUDIT_R2_PUBLIC_BASE`. `.github/workflows/ci.yml` — `npm run cf-typegen` before type-check (gitignored `cloudflare-env.d.ts`). Tests: `workers/report/deep-audit-report.test.ts`.
+
+### Operator
+Create R2 bucket `geo-pulse-deep-audit-reports` (or change `bucket_name`), enable public access / `r2.dev` subdomain, set **`DEEP_AUDIT_R2_PUBLIC_BASE`** in `[vars]` or dashboard to the public URL prefix (e.g. `https://pub-xxxxx.r2.dev`).
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## DA-004 (incremental) — Politeness + crawl metrics
+**Agent:** Backend  
+**Claimed complete:** 2026-03-25  
+**Evidence type:** Unit tests + `npm run type-check`
+
+### Evidence
+
+`npm run test`:
+```
+ ✓ Test Files  12 passed (12)
+      Tests  41 passed (41)
+```
+
+`npm run type-check`: `tsc --noEmit` — 0 errors.
+
+**Implementation:** `workers/scan-engine/robots-and-sitemap.ts` — `parseRobotsTxt` returns `crawlDelaySeconds` (from `Crawl-delay` under `User-agent: *` or global block; raw capped at 60s); `crawlDelayMsFromRobotsSeconds` caps applied delay at 10s. `workers/scan-engine/deep-audit-crawl.ts` — `await sleep` before each non-seed `fetchHtmlPage`; `pages_errored` counter; `scan_runs.coverage_summary` extended with `wall_time_ms`, `pages_errored`, `crawl_delay_ms`; `structuredLog('deep_audit_crawl_complete', …)`. **Out of scope (still deferred):** Cloudflare Workflows, per-host queue workers, 100+ page caps.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
 ## Rejection History
 
 _Agents whose claimed completions were challenged will be logged here for pattern tracking._

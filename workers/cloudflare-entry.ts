@@ -10,10 +10,37 @@ const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
 };
 
+async function pingSupabaseKeepAlive(env: CloudflareEnv): Promise<void> {
+  const base = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '') ?? '';
+  const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  if (!base || !key) {
+    return;
+  }
+  const res = await fetch(`${base}/rest/v1/`, {
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+    },
+  });
+  if (!res.ok) {
+    console.error(
+      JSON.stringify({ event: 'supabase_keepalive_failed', status: res.status })
+    );
+  }
+}
+
 export default {
   fetch: next.fetch.bind(next),
 
   async queue(batch: ReportQueueBatch, env: CloudflareEnv, _ctx: ExecutionContext): Promise<void> {
     await dispatchQueueBatch(batch, env);
+  },
+
+  async scheduled(_event: ScheduledEvent, env: CloudflareEnv, _ctx: ExecutionContext): Promise<void> {
+    try {
+      await pingSupabaseKeepAlive(env);
+    } catch {
+      console.error(JSON.stringify({ event: 'supabase_keepalive_error' }));
+    }
   },
 };

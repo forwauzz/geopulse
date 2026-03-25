@@ -24,6 +24,8 @@ These five items block launch if incomplete. They are not optional.
 - Production: `wrangler secret put SECRET_NAME` — secrets injected at Workers runtime, never in source
 - Local dev: `.dev.vars` file — already in `.gitignore`, never committed
 
+**Git:** Never commit API keys, JWTs, `sk_live_` / `sk_test_`, `whsec_`, `service_role` keys, or Turnstile/Resend secrets. Only commit env **templates** (e.g. `.dev.vars.example`, optional `.env.example`) with placeholders. `wrangler.jsonc` `[vars]` is for non-sensitive config only (public URLs, Stripe **Price IDs**, Turnstile **site** key). Verify before push: `git diff` has no new secrets; optional `git check-ignore -v .dev.vars` should show it ignored.
+
 **Required secrets (set via `wrangler secret put`):**
 ```
 SUPABASE_SERVICE_ROLE_KEY

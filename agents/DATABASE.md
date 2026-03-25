@@ -43,20 +43,12 @@ Migrations are append-only. Never edit a migration that has been applied. Create
 
 Supabase pauses projects after 7 days of inactivity on the free tier.
 
-Add a Cloudflare Cron Trigger to `wrangler.jsonc`:
+**Implemented in repo:** `wrangler.jsonc` has `triggers.crons` (daily noon UTC) and `workers/cloudflare-entry.ts` exports `scheduled`, which pings PostgREST with `apikey` + `Authorization: Bearer` (anon key).
+
+Reference pattern (must stay non-secret in logs):
 ```jsonc
 "triggers": {
-  "crons": ["0 12 * * *"]  // daily at noon UTC
-}
-```
-
-And a health-check handler in the main Worker:
-```typescript
-// Triggered by cron — just pings Supabase to keep it alive
-export async function scheduled(event: ScheduledEvent, env: Env): Promise<void> {
-  await fetch(`${env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/`, {
-    headers: { apikey: env.NEXT_PUBLIC_SUPABASE_ANON_KEY }
-  });
+  "crons": ["0 12 * * *"]
 }
 ```
 

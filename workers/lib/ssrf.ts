@@ -123,6 +123,72 @@ export async function validateUrl(rawUrl: string): Promise<UrlValidationResult> 
 }
 
 /**
+ * Validate URLs for the **scan engine** (deep audit, robots.txt, sitemap): http or https on ports 80/443 only.
+ * User-facing `/api/scan` must keep using {@link validateUrl} (HTTPS-only).
+ */
+export async function validateEngineFetchUrl(rawUrl: string): Promise<UrlValidationResult> {
+  if (!rawUrl || rawUrl.length > MAX_URL_LENGTH) {
+    return { ok: false, reason: 'URL is empty or exceeds maximum length' };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return { ok: false, reason: 'Invalid URL format' };
+  }
+
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    return { ok: false, reason: 'Only HTTP and HTTPS URLs are allowed' };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { ok: false, reason: 'URLs with credentials are not allowed' };
+  }
+
+  const port = parsed.port;
+  if (parsed.protocol === 'https:' && port && port !== '443') {
+    return { ok: false, reason: 'Non-standard HTTPS port is not allowed' };
+  }
+  if (parsed.protocol === 'http:' && port && port !== '80') {
+    return { ok: false, reason: 'Non-standard HTTP port is not allowed' };
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  for (const pattern of BLOCKED_HOSTNAME_PATTERNS) {
+    if (pattern.test(hostname)) {
+      return { ok: false, reason: 'Internal or private addresses are not allowed' };
+    }
+  }
+
+  for (const tld of BLOCKED_TLDS) {
+    if (hostname.endsWith(tld)) {
+      return { ok: false, reason: 'Internal network hostnames are not allowed' };
+    }
+  }
+
+  const ipv4Pattern = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+  if (ipv4Pattern.test(hostname)) {
+    return { ok: false, reason: 'IP address literals are not allowed — use a domain name' };
+  }
+
+  if (hostname.startsWith('[')) {
+    return { ok: false, reason: 'IPv6 address literals are not allowed' };
+  }
+
+  if (!hostname.includes('.')) {
+    return { ok: false, reason: 'Single-label hostnames are not allowed' };
+  }
+
+  const safeUrl = `${parsed.protocol}//${parsed.host}${parsed.pathname}${parsed.search}`;
+  return { ok: true, safeUrl };
+}
+
+/** Max redirect hops for engine fetches (OWASP-style manual follow). */
+export const ENGINE_FETCH_MAX_REDIRECTS = 5;
+
+/**
  * Validate a redirect target URL returned in a Location header.
  * Use this when fetch() returns a 3xx response with redirect: 'manual'.
  *
@@ -160,6 +226,32 @@ export async function validateRedirect(
 
   // Re-validate the redirect target through the full validation pipeline
   return validateUrl(absoluteUrl);
+}
+
+/**
+ * Like {@link validateRedirect} but allows http(s) targets for engine fetches.
+ */
+export async function validateEngineRedirect(
+  locationHeader: string | null,
+  originalUrl: string,
+  redirectCount = 0
+): Promise<UrlValidationResult> {
+  if (redirectCount >= ENGINE_FETCH_MAX_REDIRECTS) {
+    return { ok: false, reason: 'Too many redirects' };
+  }
+
+  if (!locationHeader) {
+    return { ok: false, reason: 'Empty redirect location' };
+  }
+
+  let absoluteUrl: string;
+  try {
+    absoluteUrl = new URL(locationHeader, originalUrl).toString();
+  } catch {
+    return { ok: false, reason: 'Invalid redirect URL' };
+  }
+
+  return validateEngineFetchUrl(absoluteUrl);
 }
 
 /**

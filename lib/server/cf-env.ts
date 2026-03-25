@@ -25,6 +25,39 @@ export type PaymentApiEnv = ScanApiEnv & {
   RECONCILE_SECRET: string;
 };
 
+/**
+ * OpenNext may expose bindings on `env` or via `process.env` (nodejs_compat). Prefer non-empty `env`, then process.
+ */
+function pickEnvString(e: Record<string, unknown>, key: string): string {
+  const fromBinding = e[key];
+  if (typeof fromBinding === 'string' && fromBinding.length > 0) {
+    return fromBinding;
+  }
+  const fromProcess = process.env[key];
+  return typeof fromProcess === 'string' && fromProcess.length > 0 ? fromProcess : '';
+}
+
+/**
+ * OpenNext: `getCloudflareContext({ async: true })` may use the Node path and omit **Queue** bindings.
+ * Sync `getCloudflareContext({ async: false })` reads the Worker global and often has the full `env` (incl. `SCAN_QUEUE`).
+ */
+function resolveScanQueue(e: Record<string, unknown>): Queue | undefined {
+  const direct = e['SCAN_QUEUE'];
+  if (direct && typeof (direct as Queue).send === 'function') {
+    return direct as Queue;
+  }
+  try {
+    const { env: syncEnv } = getCloudflareContext({ async: false });
+    const q = (syncEnv as unknown as Record<string, unknown>)['SCAN_QUEUE'];
+    if (q && typeof (q as Queue).send === 'function') {
+      return q as Queue;
+    }
+  } catch {
+    /* sync context unavailable (e.g. SSG, top-level, or dev without init) */
+  }
+  return undefined;
+}
+
 function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
   return {
     SCAN_CACHE: e['SCAN_CACHE'] as KVNamespace | undefined,
@@ -65,14 +98,14 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
     const base = readEnvRecord(e);
     return {
       ...base,
-      SCAN_QUEUE: e['SCAN_QUEUE'] as Queue | undefined,
-      STRIPE_SECRET_KEY: String(e['STRIPE_SECRET_KEY'] ?? ''),
-      STRIPE_WEBHOOK_SECRET: String(e['STRIPE_WEBHOOK_SECRET'] ?? ''),
-      STRIPE_PRICE_ID_DEEP_AUDIT: String(e['STRIPE_PRICE_ID_DEEP_AUDIT'] ?? ''),
-      RESEND_API_KEY: String(e['RESEND_API_KEY'] ?? ''),
-      RESEND_FROM_EMAIL: String(e['RESEND_FROM_EMAIL'] ?? ''),
-      NEXT_PUBLIC_APP_URL: String(e['NEXT_PUBLIC_APP_URL'] ?? ''),
-      RECONCILE_SECRET: String(e['RECONCILE_SECRET'] ?? ''),
+      SCAN_QUEUE: resolveScanQueue(e),
+      STRIPE_SECRET_KEY: pickEnvString(e, 'STRIPE_SECRET_KEY'),
+      STRIPE_WEBHOOK_SECRET: pickEnvString(e, 'STRIPE_WEBHOOK_SECRET'),
+      STRIPE_PRICE_ID_DEEP_AUDIT: pickEnvString(e, 'STRIPE_PRICE_ID_DEEP_AUDIT'),
+      RESEND_API_KEY: pickEnvString(e, 'RESEND_API_KEY'),
+      RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
+      NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
+      RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
     };
   } catch {
     return {

@@ -6,7 +6,7 @@ import type { LLMProvider } from '../lib/interfaces/providers';
 import { extractDomain } from '../lib/ssrf';
 import { fetchPage } from './fetch-page';
 import { buildTextSample, parsePageSignals } from './parse-signals';
-import { buildFreeTierChecks } from './checks/registry';
+import { buildDeterministicChecks, buildFreeTierChecks } from './checks/registry';
 import { attachWeights, computeScore, letterGrade, topFailedIssues } from './scoring';
 
 export interface ScanIssueJson {
@@ -25,18 +25,20 @@ export interface FreeScanOutput {
   topIssues: ScanIssueJson[];
 }
 
-export async function runFreeScan(url: string, llm: LLMProvider): Promise<
-  | { ok: true; output: FreeScanOutput; finalUrl: string; domain: string }
-  | { ok: false; reason: string }
-> {
-  const fetched = await fetchPage(url);
-  if (!fetched.ok) return { ok: false, reason: fetched.reason };
+/**
+ * Run audit checks on already-fetched HTML (deep crawl: one fetch per URL).
+ */
+export async function auditPageFromHtml(
+  finalUrl: string,
+  html: string,
+  llm: LLMProvider,
+  options: { useLlm: boolean }
+): Promise<FreeScanOutput> {
+  const signals = parsePageSignals(html);
+  const textSample = buildTextSample(html);
+  const ctx = { signals, finalUrl, textSample };
 
-  const signals = parsePageSignals(fetched.html);
-  const textSample = buildTextSample(fetched.html);
-  const ctx = { signals, finalUrl: fetched.finalUrl, textSample };
-
-  const checks = buildFreeTierChecks(llm);
+  const checks = options.useLlm ? buildFreeTierChecks(llm) : buildDeterministicChecks();
   const results: CheckResult[] = [];
   for (const c of checks) {
     results.push(await c.run(ctx));
@@ -69,6 +71,24 @@ export async function runFreeScan(url: string, llm: LLMProvider): Promise<
     fix: r.fix,
   }));
 
+  return {
+    score,
+    letterGrade: lg,
+    issues,
+    topIssues:
+      topIssues.length > 0 ? topIssues : issues.filter((i) => !i.passed).slice(0, 3),
+  };
+}
+
+export async function runFreeScan(url: string, llm: LLMProvider): Promise<
+  | { ok: true; output: FreeScanOutput; finalUrl: string; domain: string }
+  | { ok: false; reason: string }
+> {
+  const fetched = await fetchPage(url);
+  if (!fetched.ok) return { ok: false, reason: fetched.reason };
+
+  const output = await auditPageFromHtml(fetched.finalUrl, fetched.html, llm, { useLlm: true });
+
   const domain = extractDomain(fetched.finalUrl);
   if (!domain) return { ok: false, reason: 'Could not extract domain' };
 
@@ -76,12 +96,6 @@ export async function runFreeScan(url: string, llm: LLMProvider): Promise<
     ok: true,
     finalUrl: fetched.finalUrl,
     domain,
-    output: {
-      score,
-      letterGrade: lg,
-      issues,
-      topIssues:
-        topIssues.length > 0 ? topIssues : issues.filter((i) => !i.passed).slice(0, 3),
-    },
+    output,
   };
 }

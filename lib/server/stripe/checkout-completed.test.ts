@@ -76,6 +76,47 @@ describe('handleCheckoutSessionCompleted', () => {
             },
           };
         }
+        if (table === 'scans') {
+          return {
+            select() {
+              return {
+                eq() {
+                  return {
+                    maybeSingle: async () => ({
+                      data: { id: 'scan-uuid', domain: 'example.com' },
+                      error: null,
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        }
+        if (table === 'scan_runs') {
+          return {
+            select() {
+              return {
+                eq() {
+                  return {
+                    maybeSingle: async () => ({ data: null, error: null }),
+                  };
+                },
+              };
+            },
+            insert() {
+              return {
+                select() {
+                  return {
+                    single: async () => ({
+                      data: { id: 'run-uuid-1' },
+                      error: null,
+                    }),
+                  };
+                },
+              };
+            },
+          };
+        }
         throw new Error(`unexpected table ${table}`);
       },
     } as unknown as SupabaseClient;
@@ -90,8 +131,9 @@ describe('handleCheckoutSessionCompleted', () => {
     expect(r).toEqual({ ok: true, duplicate: true });
     expect(send).toHaveBeenCalledOnce();
     expect(JSON.parse(send.mock.calls[0]![0] as string)).toMatchObject({
-      v: 1,
+      v: 2,
       scanId: 'scan-uuid',
+      scanRunId: 'run-uuid-1',
       paymentId: 'pay-1',
       customerEmail: 'buyer@example.com',
     });

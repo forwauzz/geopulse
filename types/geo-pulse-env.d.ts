@@ -19,6 +19,10 @@ interface CloudflareEnv {
   STRIPE_PRICE_ID_DEEP_AUDIT: string;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
+  /** Optional — set when R2 bucket exposes a public base URL for report links. */
+  DEEP_AUDIT_R2_PUBLIC_BASE?: string;
+  /** Optional R2 binding for deep-audit artifacts (DA-003). */
+  REPORT_FILES?: R2Bucket;
 }
 
 declare namespace Cloudflare {

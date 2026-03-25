@@ -31,6 +31,10 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Wrangler-generated bindings (gitignored `cloudflare-env.d.ts`) — required for `tsc`
+      - name: Cloudflare Worker types
+        run: npm run cf-typegen
+
       - name: Type check
         run: npm run type-check
 

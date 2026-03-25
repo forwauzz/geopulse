@@ -24,14 +24,24 @@
 
   // Non-sensitive config only — secrets go via `wrangler secret put`
   "vars": {
-    "STRIPE_PRICE_ID_DEEP_AUDIT": "price_1TEYQF3GRIW7Ej20UD4lcsp5s",
+    "STRIPE_PRICE_ID_DEEP_AUDIT": "price_1TEi0JKknNpProh1sKThObxl",
     "NEXT_PUBLIC_SUPABASE_URL": "https://vynrlgtxqnomxenakafn.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-anon-key-here",
     "NEXT_PUBLIC_APP_URL": "https://geopulse.io",
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "your-turnstile-site-key",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
-    "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models"
+    "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
+    // Public R2.dev base for deep-audit PDF/MD links (not a secret). Override in .dev.vars locally if needed.
+    "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev"
   },
+
+  // R2 — deep-audit PDF + Markdown (DA-003). Bucket must exist; public URL must match DEEP_AUDIT_R2_PUBLIC_BASE.
+  "r2_buckets": [
+    {
+      "binding": "REPORT_FILES",
+      "bucket_name": "geo-pulse-deep-audit-reports"
+    }
+  ],
 
   // Secrets — set via: wrangler secret put SECRET_NAME
   // Required secrets (never put these in this file):
@@ -90,6 +100,11 @@
         }
       }
     ]
+  },
+
+  // Daily ping — keeps Supabase free-tier project from pausing after 7 days idle (see agents/DATABASE.md)
+  "triggers": {
+    "crons": ["0 12 * * *"]
   },
 
   // Observability

@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import type { DeepAuditReportPayload } from './deep-audit-report-payload';
 
 export type IssueRow = {
   check?: string;
@@ -32,6 +33,13 @@ function wrapLine(text: string, maxChars: number): string[] {
   return lines;
 }
 
+export type DeepAuditPageSummaryInput = {
+  readonly url: string;
+  readonly score: number | null;
+  readonly letterGrade: string | null;
+  readonly issuesJson: unknown;
+};
+
 /**
  * Single responsibility: build PDF bytes for a paid deep-audit report (pdf-lib).
  */
@@ -41,6 +49,7 @@ export async function buildDeepAuditPdf(input: {
   score: number | null;
   letterGrade: string | null;
   issuesJson: unknown;
+  pageSummaries?: readonly DeepAuditPageSummaryInput[];
 }): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
@@ -81,20 +90,67 @@ export async function buildDeepAuditPdf(input: {
   draw(`URL: ${input.url}`, 10);
   draw(`Domain: ${input.domain}`, 10);
   y -= 10;
-  draw('All checks', 13, true);
-  y -= 4;
 
+  const summaries = input.pageSummaries?.length ? input.pageSummaries : null;
   const issues = parseIssues(input.issuesJson);
-  if (issues.length === 0) {
-    draw('No issue rows stored for this scan.', 10);
-  } else {
-    for (const row of issues) {
-      const title = row.check ?? row.checkId ?? 'Check';
-      const status = row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—';
-      draw(`• ${title} [${status}]`, 10, true);
-      if (row.finding) draw(`  ${row.finding}`, 9, false, rgb(0.2, 0.2, 0.25));
-      if (row.fix) draw(`  Fix: ${row.fix}`, 9, false, rgb(0.15, 0.35, 0.2));
+  const multi = summaries !== null && summaries.length > 1;
+
+  if (multi) {
+    draw('Pages scanned', 13, true);
+    y -= 4;
+    for (const pg of summaries) {
+      const sc =
+        pg.score !== null && pg.score !== undefined
+          ? `${pg.score}/100 (${pg.letterGrade ?? '—'})`
+          : '—';
+      draw(`• ${pg.url}`, 10, true);
+      draw(`  Score: ${sc}`, 9);
       y -= 4;
+    }
+    y -= 6;
+    if (issues.length > 0) {
+      draw('Highlighted issues', 11, true);
+      y -= 4;
+      for (const row of issues) {
+        const title = row.check ?? row.checkId ?? 'Check';
+        const status = row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—';
+        draw(`• ${title} [${status}]`, 10, true);
+        if (row.finding) draw(`  ${row.finding}`, 9, false, rgb(0.2, 0.2, 0.25));
+        y -= 4;
+      }
+      y -= 4;
+    }
+    draw('Per-page checklist', 13, true);
+    y -= 4;
+    for (const pg of summaries) {
+      draw(pg.url, 10, true);
+      const pageIssues = parseIssues(pg.issuesJson);
+      if (pageIssues.length === 0) {
+        draw('  (no issue rows)', 9, false, rgb(0.45, 0.45, 0.5));
+      } else {
+        for (const row of pageIssues) {
+          const title = row.check ?? row.checkId ?? 'Check';
+          const status = row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—';
+          draw(`  • ${title} [${status}]`, 9, true);
+          if (row.finding) draw(`    ${row.finding}`, 8, false, rgb(0.2, 0.2, 0.25));
+        }
+      }
+      y -= 4;
+    }
+  } else {
+    draw('All checks', 13, true);
+    y -= 4;
+    if (issues.length === 0) {
+      draw('No issue rows stored for this scan.', 10);
+    } else {
+      for (const row of issues) {
+        const title = row.check ?? row.checkId ?? 'Check';
+        const status = row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—';
+        draw(`• ${title} [${status}]`, 10, true);
+        if (row.finding) draw(`  ${row.finding}`, 9, false, rgb(0.2, 0.2, 0.25));
+        if (row.fix) draw(`  Fix: ${row.fix}`, 9, false, rgb(0.15, 0.35, 0.2));
+        y -= 4;
+      }
     }
   }
 
@@ -107,4 +163,25 @@ export async function buildDeepAuditPdf(input: {
   );
 
   return doc.save();
+}
+
+/**
+ * Build PDF from the canonical {@link DeepAuditReportPayload} (DA-003).
+ */
+export async function buildDeepAuditPdfFromPayload(
+  payload: DeepAuditReportPayload
+): Promise<Uint8Array> {
+  return buildDeepAuditPdf({
+    url: payload.seedUrl,
+    domain: payload.domain,
+    score: payload.aggregateScore,
+    letterGrade: payload.aggregateLetterGrade,
+    issuesJson: payload.highlightedIssues,
+    pageSummaries: payload.pages.map((p) => ({
+      url: p.url,
+      score: p.score,
+      letterGrade: p.letterGrade,
+      issuesJson: p.issuesJson,
+    })),
+  });
 }

@@ -1,4 +1,4 @@
-import type { ReportQueueMessageV1 } from '../../lib/queue/report-job';
+import type { ReportQueueMessage } from '../../lib/queue/report-job';
 import { structuredLog } from '../../lib/server/structured-log';
 
 const DLQ_REPLAY_KV_PREFIX = 'report:dlq-replay:';
@@ -13,7 +13,7 @@ type DlqReplayEnv = {
  * After max_retries on the main queue, one guarded replay to the primary queue.
  * KV ensures we do not loop forever if the job is poisoned.
  */
-export async function replayReportJobFromDlq(job: ReportQueueMessageV1, env: DlqReplayEnv): Promise<void> {
+export async function replayReportJobFromDlq(job: ReportQueueMessage, env: DlqReplayEnv): Promise<void> {
   const kvKey = `${DLQ_REPLAY_KV_PREFIX}${job.paymentId}`;
   const already = await env.SCAN_CACHE.get(kvKey);
   if (already) {

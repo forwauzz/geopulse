@@ -51,7 +51,10 @@ export async function POST(request: Request): Promise<Response> {
   const result = await handleCheckoutSessionCompleted(supabase, session, event.id, env);
 
   if (!result.ok) {
-    return new Response(result.reason, { status: result.status });
+    return Response.json(
+      { error: { code: result.reason, message: result.reason } },
+      { status: result.status }
+    );
   }
 
   return new Response(null, { status: 200 });

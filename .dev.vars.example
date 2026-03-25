@@ -41,6 +41,9 @@ RESEND_FROM_EMAIL=GEO-Pulse <onboarding@resend.dev>
 # Get real keys: https://developers.cloudflare.com/turnstile/
 TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 
+# DEEP_AUDIT_R2_PUBLIC_BASE — single source of truth is wrangler.jsonc [vars]. Set here only to override local Wrangler.
+# DEEP_AUDIT_R2_PUBLIC_BASE=https://pub-xxxxx.r2.dev
+
 # ============================================================
 # NON-SECRET CONFIG (also in wrangler.jsonc [vars] for production)
 # These are duplicated here for local dev convenience
