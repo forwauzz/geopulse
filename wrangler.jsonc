@@ -4,7 +4,7 @@
   // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
   // Stack: Next.js 15 via @opennextjs/cloudflare (NOT @cloudflare/next-on-pages — deprecated)
 
-  // Run before `wrangler deploy` / `wrangler dev` — produces `.open-next/` (plain `next build` is not enough).
+  // Local `wrangler deploy` / `wrangler dev`: runs before bundling. Git-connected Workers Builds does NOT use this — set dashboard Build to `npm run build:worker` or Deploy to `npm run deploy` (see PLAYBOOK/cloudflare-workers-builds.md).
   "build": {
     "command": "npx opennextjs-cloudflare build"
   },
