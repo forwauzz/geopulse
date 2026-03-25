@@ -41,5 +41,5 @@ jobs:
       - name: Unit tests
         run: npm run test
 
-      - name: Production build
-        run: npm run build
+      - name: Production build (OpenNext + Next — matches Cloudflare)
+        run: npm run build:worker

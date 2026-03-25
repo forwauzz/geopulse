@@ -4,6 +4,11 @@
   // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
   // Stack: Next.js 15 via @opennextjs/cloudflare (NOT @cloudflare/next-on-pages — deprecated)
 
+  // Run before `wrangler deploy` / `wrangler dev` — produces `.open-next/` (plain `next build` is not enough).
+  "build": {
+    "command": "npx opennextjs-cloudflare build"
+  },
+
   "name": "geo-pulse",
   "main": "workers/cloudflare-entry.ts",
   "compatibility_date": "2025-04-01", // Required for process.env population with OpenNext
