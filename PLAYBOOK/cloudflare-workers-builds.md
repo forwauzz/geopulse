@@ -45,3 +45,7 @@ If you use a custom **non-production deploy command**, ensure the OpenNext bundl
 5. **Workers Builds** should pass the same `NEXT_PUBLIC_*` values at **build** time if the client bundle was inlined with placeholders; otherwise a redeploy after fixing Worker vars may be enough depending on OpenNext env behavior.
 
 `wrangler.jsonc` defaults `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to empty — set the real key in the dashboard, not a placeholder string.
+
+### `*.workers.dev` preview URLs
+
+Preview deployments (e.g. `https://geo-pulse.yoursubdomain.workers.dev/`) use the **same** Worker variables as production for that Worker, but the hostname is different from `geopulse.io`. In **Turnstile → your widget → Hostnames**, add the exact preview host (e.g. `geo-pulse.uzzielt.workers.dev`) or whatever Cloudflare allows for your account; otherwise challenges can fail with domain errors after the site key is set.
