@@ -8,6 +8,7 @@
 # If POST /api/scan returns 503 or turnstile/db errors, add the same server secrets to
 # `.env.local` (gitignored): SUPABASE_SERVICE_ROLE_KEY, TURNSTILE_SECRET_KEY, GEMINI_API_KEY,
 # plus NEXT_PUBLIC_* lines as needed. Or use `npm run preview` so Wrangler injects `.dev.vars`.
+# Quick start for `next dev`: copy `.env.local.example` → `.env.local` (Turnstile test keys included).
 
 # Supabase — use project API settings page
 # anon key is safe to expose client-side; service_role is NOT

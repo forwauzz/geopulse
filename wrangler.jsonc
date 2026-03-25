@@ -31,10 +31,11 @@
   "vars": {
     "STRIPE_PRICE_ID_DEEP_AUDIT": "price_1TEi0JKknNpProh1sKThObxl",
     "NEXT_PUBLIC_SUPABASE_URL": "https://vynrlgtxqnomxenakafn.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "your-anon-key-here",
-    "NEXT_PUBLIC_APP_URL": "https://geopulse.io",
-    // Set in Worker dashboard or Workers Builds env — never use a fake key (Turnstile 400020).
-    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "",
+    // Public anon key (RLS-enforced); same as Supabase Dashboard → Settings → API
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
+    "NEXT_PUBLIC_APP_URL": "https://geo-pulse.uzzielt.workers.dev/",
+    // Public Turnstile site key (secret is TURNSTILE_SECRET_KEY via wrangler secret put)
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACvc7UFcxK8LCQjT",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
     // Public R2.dev base for deep-audit PDF/MD links (not a secret). Override in .dev.vars locally if needed.
