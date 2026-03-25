@@ -33,3 +33,15 @@ Add the same **build environment variables** as GitHub Actions (see `.github/wor
 ## Preview / non-production branches
 
 If you use a custom **non-production deploy command**, ensure the OpenNext bundle exists before upload (e.g. run `npm run build:worker` in the build step, or a deploy script that builds then `wrangler versions upload`).
+
+## Turnstile in production (error `400020` / invalid sitekey)
+
+[Error 400020](https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/error-codes/) means **invalid sitekey** — not a hostname issue (that is a different code, e.g. domain not authorized).
+
+1. **Cloudflare Turnstile** → your site → copy the **Site key** (public).
+2. **Worker** → **Variables** → set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to that value (public, not a secret).
+3. **`wrangler secret put TURNSTILE_SECRET_KEY`** with the **secret key** for the same widget (server-side verify).
+4. In the Turnstile widget, **Hostnames** must include your production host (e.g. `geopulse.io`, `www.geopulse.io` if used).
+5. **Workers Builds** should pass the same `NEXT_PUBLIC_*` values at **build** time if the client bundle was inlined with placeholders; otherwise a redeploy after fixing Worker vars may be enough depending on OpenNext env behavior.
+
+`wrangler.jsonc` defaults `NEXT_PUBLIC_TURNSTILE_SITE_KEY` to empty — set the real key in the dashboard, not a placeholder string.

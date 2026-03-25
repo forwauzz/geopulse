@@ -4,6 +4,7 @@ import { CheckoutStatusBanner } from '@/components/checkout-status-banner';
 import { ResultsView } from '@/components/results-view';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
+import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -38,7 +39,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function ResultsPage({ params }: PageProps) {
   const { id } = await params;
-  const siteKey = process.env['NEXT_PUBLIC_TURNSTILE_SITE_KEY'] ?? '';
+  const siteKey = getTurnstileSiteKey();
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-10 px-6 py-16">

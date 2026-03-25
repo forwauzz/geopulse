@@ -1,7 +1,8 @@
 import { ScanForm } from '@/components/scan-form';
+import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 export default function HomePage() {
-  const siteKey = process.env['NEXT_PUBLIC_TURNSTILE_SITE_KEY'] ?? '';
+  const siteKey = getTurnstileSiteKey();
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-16">
