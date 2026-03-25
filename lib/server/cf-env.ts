@@ -11,6 +11,7 @@ export type ScanApiEnv = {
   GEMINI_API_KEY: string;
   GEMINI_MODEL: string;
   GEMINI_ENDPOINT: string;
+  MARKETING_INGEST_KEY: string;
 };
 
 export type PaymentApiEnv = ScanApiEnv & {
@@ -34,6 +35,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     GEMINI_ENDPOINT: String(
       e['GEMINI_ENDPOINT'] ?? 'https://generativelanguage.googleapis.com/v1beta/models'
     ),
+    MARKETING_INGEST_KEY: String(e['MARKETING_INGEST_KEY'] ?? ''),
   };
 }
 
@@ -52,6 +54,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       GEMINI_ENDPOINT:
         process.env['GEMINI_ENDPOINT'] ??
         'https://generativelanguage.googleapis.com/v1beta/models',
+      MARKETING_INGEST_KEY: process.env['MARKETING_INGEST_KEY'] ?? '',
     };
   }
 }

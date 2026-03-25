@@ -4,8 +4,8 @@ import type { ReportQueueMessageV1 } from '@/lib/queue/report-job';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
 
 export type CheckoutCompletedResult =
-  | { ok: true; duplicate: true }
-  | { ok: true; duplicate: false }
+  | { ok: true; duplicate: true; paymentId: string | null }
+  | { ok: true; duplicate: false; paymentId: string }
   | { ok: false; reason: string; status: number };
 
 function isUniqueViolation(err: { code?: string } | null): boolean {
@@ -47,7 +47,7 @@ export async function handleCheckoutSessionCompleted(
     .maybeSingle();
 
   if (existing?.id) {
-    return { ok: true, duplicate: true };
+    return { ok: true, duplicate: true, paymentId: existing.id };
   }
 
   const { data: paymentRow, error: insertErr } = await supabase
@@ -67,7 +67,7 @@ export async function handleCheckoutSessionCompleted(
 
   if (insertErr) {
     if (isUniqueViolation(insertErr)) {
-      return { ok: true, duplicate: true };
+      return { ok: true, duplicate: true, paymentId: null };
     }
     return { ok: false, reason: insertErr.message, status: 500 };
   }
@@ -90,5 +90,5 @@ export async function handleCheckoutSessionCompleted(
     return { ok: false, reason: 'queue_send_failed', status: 500 };
   }
 
-  return { ok: true, duplicate: false };
+  return { ok: true, duplicate: false, paymentId: paymentRow.id };
 }

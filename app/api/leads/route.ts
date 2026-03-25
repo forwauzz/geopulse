@@ -3,6 +3,10 @@ import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
 import { checkEmailLeadRateLimit, emailRateKey } from '@/lib/server/rate-limit-kv';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import {
+  emitMarketingEventBestEffort,
+  marketingContextFromRequest,
+} from '@/lib/server/marketing/events';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +29,7 @@ async function hashEmail(email: string): Promise<string> {
 
 export async function POST(request: Request): Promise<Response> {
   const env = await getScanApiEnv();
+  const mkt = marketingContextFromRequest(request);
 
   let json: unknown;
   try {
@@ -69,16 +74,29 @@ export async function POST(request: Request): Promise<Response> {
     env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const { error } = await supabase.from('leads').insert({
-    email: parsed.data.email,
-    url: parsed.data.url,
-    score: parsed.data.score,
-    source: 'organic',
-  });
+  const { data: leadRow, error } = await supabase
+    .from('leads')
+    .insert({
+      email: parsed.data.email,
+      url: parsed.data.url,
+      score: parsed.data.score,
+      source: 'organic',
+    })
+    .select('id')
+    .single();
 
   if (error) {
     return Response.json({ error: { code: 'db_error', message: error.message } }, { status: 500 });
   }
+
+  await emitMarketingEventBestEffort({
+    eventName: 'lead_submitted',
+    scanId: parsed.data.scanId,
+    leadId: leadRow?.id,
+    email: parsed.data.email,
+    ...mkt,
+    metadata: { url: parsed.data.url, score: parsed.data.score },
+  });
 
   return Response.json({ ok: true });
 }

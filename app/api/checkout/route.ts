@@ -4,6 +4,10 @@ import { checkCheckoutRateLimit } from '@/lib/server/rate-limit-kv';
 import { createStripeClient } from '@/lib/server/stripe-client';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import {
+  emitMarketingEventBestEffort,
+  marketingContextFromRequest,
+} from '@/lib/server/marketing/events';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +19,7 @@ const bodySchema = z.object({
 export async function POST(request: Request): Promise<Response> {
   const env = await getPaymentApiEnv();
   const ip = getClientIp(request);
+  const mkt = marketingContextFromRequest(request);
 
   const rl = await checkCheckoutRateLimit(env.SCAN_CACHE, ip);
   if (!rl.ok) {
@@ -111,6 +116,17 @@ export async function POST(request: Request): Promise<Response> {
         { status: 502 }
       );
     }
+
+    await emitMarketingEventBestEffort({
+      eventName: 'checkout_started',
+      scanId,
+      ...mkt,
+      metadata: {
+        ip,
+        stripeSessionId: session.id,
+        priceId: env.STRIPE_PRICE_ID_DEEP_AUDIT,
+      },
+    });
 
     return Response.json({ url: session.url });
   } catch (e) {

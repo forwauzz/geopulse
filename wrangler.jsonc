@@ -41,6 +41,7 @@
   //   GEMINI_API_KEY
   //   RESEND_API_KEY
   //   TURNSTILE_SECRET_KEY
+  //   MARKETING_INGEST_KEY
 
   // KV Namespaces
   "kv_namespaces": [

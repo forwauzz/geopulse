@@ -6,6 +6,10 @@ import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
 import { checkScanRateLimit } from '@/lib/server/rate-limit-kv';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import {
+  emitMarketingEventBestEffort,
+  marketingContextFromRequest,
+} from '@/lib/server/marketing/events';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +27,7 @@ class UnconfiguredLlm implements LLMProvider {
 export async function POST(request: Request): Promise<Response> {
   const env = await getScanApiEnv();
   const ip = getClientIp(request);
+  const mkt = marketingContextFromRequest(request);
 
   const rl = await checkScanRateLimit(env.SCAN_CACHE, ip);
   if (!rl.ok) {
@@ -64,6 +69,12 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  await emitMarketingEventBestEffort({
+    eventName: 'scan_started',
+    ...mkt,
+    metadata: { ip, submittedUrl: url },
+  });
+
   const llm: LLMProvider = env.GEMINI_API_KEY
     ? new GeminiProvider({
         GEMINI_API_KEY: env.GEMINI_API_KEY,
@@ -103,6 +114,19 @@ export async function POST(request: Request): Promise<Response> {
       { status: 500 }
     );
   }
+
+  await emitMarketingEventBestEffort({
+    eventName: 'scan_completed',
+    scanId: row.id,
+    ...mkt,
+    metadata: {
+      ip,
+      finalUrl: scan.finalUrl,
+      domain: scan.domain,
+      score: scan.output.score,
+      letterGrade: scan.output.letterGrade,
+    },
+  });
 
   return Response.json({
     scanId: row.id,

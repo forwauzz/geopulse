@@ -3,6 +3,7 @@ import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createStripeClient } from '@/lib/server/stripe-client';
 import { handleCheckoutSessionCompleted } from '@/lib/server/stripe/checkout-completed';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { emitMarketingEventBestEffort } from '@/lib/server/marketing/events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -53,6 +54,20 @@ export async function POST(request: Request): Promise<Response> {
   if (!result.ok) {
     return new Response(result.reason, { status: result.status });
   }
+
+  await emitMarketingEventBestEffort({
+    eventName: 'payment_completed',
+    scanId: typeof session.metadata?.['scan_id'] === 'string' ? session.metadata['scan_id'] : undefined,
+    paymentId: result.paymentId ?? undefined,
+    email: session.customer_details?.email ?? session.customer_email ?? undefined,
+    metadata: {
+      stripeEventId: event.id,
+      stripeSessionId: session.id,
+      duplicate: result.duplicate,
+      amountTotal: session.amount_total ?? 0,
+      currency: session.currency ?? 'usd',
+    },
+  });
 
   return new Response(null, { status: 200 });
 }
