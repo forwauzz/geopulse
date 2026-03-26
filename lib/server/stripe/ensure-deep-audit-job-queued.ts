@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import type { ReportQueueMessageV2 } from '@/lib/queue/report-job';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
+import { resolveDefaultDeepAuditPageLimit } from '@/lib/server/deep-audit-page-limit';
 
 export type PaymentRow = { id: string; scan_id: string | null };
 
@@ -13,8 +14,6 @@ export type EnsureDeepAuditJobResult =
 function isUniqueViolation(err: { code?: string } | null): boolean {
   return err?.code === '23505';
 }
-
-const DEFAULT_DEEP_PAGE_LIMIT = 10;
 
 /**
  * Ensure a scan_run row exists and a queue message is sent when no deep_audit report row yet.
@@ -65,13 +64,14 @@ export async function ensureDeepAuditJobQueued(
   let scanRunId: string | undefined = existingRun?.id;
 
   if (!scanRunId) {
+    const pageLimit = resolveDefaultDeepAuditPageLimit(env.DEEP_AUDIT_DEFAULT_PAGE_LIMIT);
     const { data: inserted, error: insertErr } = await supabase
       .from('scan_runs')
       .insert({
         scan_id: payment.scan_id,
         domain: scanRow.domain,
         mode: 'deep',
-        config: { page_limit: DEFAULT_DEEP_PAGE_LIMIT },
+        config: { page_limit: pageLimit },
       })
       .select('id')
       .single();

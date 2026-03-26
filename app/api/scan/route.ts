@@ -6,13 +6,15 @@ import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
 import { checkScanRateLimit } from '@/lib/server/rate-limit-kv';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import { emitMarketingEvent } from '@services/marketing-attribution/emit';
+import { optionalAttributionFields } from '@services/marketing-attribution/attribution-params';
 
 export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   url: z.string().url(),
   turnstileToken: z.string().min(1),
-});
+}).extend(optionalAttributionFields.shape);
 
 class UnconfiguredLlm implements LLMProvider {
   async analyze(): Promise<{ passed: boolean; reasoning: string; confidence: 'low' }> {
@@ -47,7 +49,8 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const { url, turnstileToken } = parsed.data;
+  const { url, turnstileToken, anonymous_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer_url, landing_path } = parsed.data;
+  const attrCtx = { anonymous_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer_url, landing_path };
 
   const ts = await verifyTurnstileToken(env.TURNSTILE_SECRET_KEY, turnstileToken, ip);
   if (!ts.ok) {
@@ -72,6 +75,13 @@ export async function POST(request: Request): Promise<Response> {
       })
     : new UnconfiguredLlm();
 
+  const supabaseForAttr = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
+
+  await emitMarketingEvent(supabaseForAttr, 'scan_started', { ...attrCtx, metadata: { url } });
+
   const scan = await runFreeScan(url, llm);
   if (!scan.ok) {
     return Response.json({ error: { code: 'scan_failed', message: scan.reason } }, { status: 400 });
@@ -91,7 +101,7 @@ export async function POST(request: Request): Promise<Response> {
       score: scan.output.score,
       letter_grade: scan.output.letterGrade,
       issues_json: scan.output.issues,
-      full_results_json: scan.output.issues,
+      full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
       user_id: null,
     })
     .select('id')
@@ -104,11 +114,18 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
+  await emitMarketingEvent(supabaseForAttr, 'scan_completed', {
+    ...attrCtx,
+    scan_id: row.id,
+    metadata: { url: scan.finalUrl, domain: scan.domain, score: scan.output.score },
+  });
+
   return Response.json({
     scanId: row.id,
     score: scan.output.score,
     letterGrade: scan.output.letterGrade,
     topIssues: scan.output.topIssues,
+    categoryScores: scan.output.categoryScores,
     finalUrl: scan.finalUrl,
     domain: scan.domain,
   });

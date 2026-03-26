@@ -1,13 +1,95 @@
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
 import { getScanApiEnv } from '@/lib/server/cf-env';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export const runtime = 'nodejs';
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   const { id } = await context.params;
+
+  // If the requester is authenticated, allow reading their own scan (not subject to guest/public-share rules).
+  try {
+    const sessionClient = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await sessionClient.auth.getUser();
+
+    if (user?.id) {
+      const env = await getScanApiEnv();
+      if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+        return Response.json({ error: { code: 'server_misconfigured' } }, { status: 503 });
+      }
+
+      const adminDb = createServiceRoleClient(
+        env.NEXT_PUBLIC_SUPABASE_URL,
+        env.SUPABASE_SERVICE_ROLE_KEY
+      );
+
+      const { data: scan, error: scanErr } = await adminDb
+        .from('scans')
+        .select('id,url,domain,score,letter_grade,issues_json,full_results_json,user_id')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (scanErr) {
+        return Response.json(
+          { error: { code: 'db_error', message: scanErr.message } },
+          { status: 500 }
+        );
+      }
+      if (!scan) {
+        return Response.json({ error: { code: 'not_found' } }, { status: 404 });
+      }
+      if (scan.user_id !== null && scan.user_id !== user.id) {
+        return Response.json({ error: { code: 'forbidden' } }, { status: 403 });
+      }
+
+      if (scan.user_id === user.id) {
+        const [paymentRes, reportRes] = await Promise.all([
+          adminDb
+            .from('payments')
+            .select('id')
+            .eq('scan_id', id)
+            .eq('status', 'complete')
+            .limit(1)
+            .maybeSingle(),
+          adminDb
+            .from('reports')
+            .select('id,pdf_url,markdown_url,email_delivered_at')
+            .eq('scan_id', id)
+            .eq('type', 'deep_audit')
+            .limit(1)
+            .maybeSingle(),
+        ]);
+
+        const hasPaid = !!paymentRes.data?.id;
+        const report = reportRes.data;
+        const reportStatus = report?.email_delivered_at ? 'delivered' : hasPaid ? 'generating' : 'none';
+
+        const fullResults = scan.full_results_json as { categoryScores?: unknown[] } | null;
+        return Response.json({
+          scanId: scan.id,
+          url: scan.url,
+          domain: scan.domain,
+          score: scan.score,
+          letterGrade: scan.letter_grade,
+          topIssues: Array.isArray(scan.issues_json) ? scan.issues_json.slice(0, 3) : [],
+          categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
+          hasPaidReport: hasPaid,
+          reportStatus,
+          pdfUrl: report?.pdf_url ?? null,
+          markdownUrl: report?.markdown_url ?? null,
+        });
+      }
+      // Guest scan (user_id is null) — fall through to public-share path
+    }
+  } catch {
+    // not authenticated or server component cookie access unavailable — fall back to guest/public rules below
+  }
 
   const env = await getScanApiEnv();
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -49,5 +131,10 @@ export async function GET(
     score: data.score,
     letterGrade: data.letterGrade,
     topIssues: data.topIssues,
+    categoryScores: data.categoryScores,
+    hasPaidReport: data.hasPaidReport,
+    reportStatus: data.reportStatus,
+    pdfUrl: data.pdfUrl,
+    markdownUrl: data.markdownUrl,
   });
 }

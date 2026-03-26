@@ -456,6 +456,64 @@ _Pending review._
 
 ---
 
+## ADM-001 … EVAL-004 — Admin password login + report eval pipeline (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, `npm run test`, `npm run build`, Supabase migration `009_admin_report_eval` applied to project `geo_pulse` (`vynrlgtxqnomxenakafn`)
+
+### Evidence
+
+**Migrations:** `supabase/migrations/009_admin_report_eval.sql` — `reports.markdown_url`, `reports.report_payload_version`, `public.report_eval_runs` with RLS enabled and no policies (service_role writes only).
+
+**App:** `app/admin/login` (password sign-in; non-admin session cleared with generic error), `app/dashboard/evals` (service-role read after `requireAdminOrRedirect`), dashboard link for admin. **Worker:** `workers/queue/report-queue-consumer.ts` persists `markdown_url` + `report_payload_version` on `reports` insert.
+
+**Eval:** `lib/server/report-eval-structural.ts` + tests; `scripts/report-eval-smoke.ts` + `npm run eval:smoke` (requires `SUPABASE_SERVICE_ROLE_KEY` + `NEXT_PUBLIC_SUPABASE_URL`); fixture `eval/fixtures/sample-deep-audit.md`.
+
+`npm run type-check`:
+```
+> tsc --noEmit
+(0 errors)
+```
+
+`npm run test`:
+```
+ Test Files  18 passed (18)
+      Tests  91 passed (91)
+```
+
+`npm run build`: completed successfully (exit 0); routes include `/admin/login`, `/dashboard/evals`.
+
+**Operator:** Enable Email **password** in Supabase Auth for the `ADMIN_EMAIL` user; bootstrap password in Dashboard → Users. Run `supabase db push` (or apply `009`) on any environment missing the new columns/table.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## P4-004 / P4-006 — CVE-2025-29927 middleware guard unit tests (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** Vitest output + `npm run type-check`
+
+### Evidence
+
+**Implementation:** `lib/server/middleware-cve.ts` (`shouldRejectForMiddlewareSubrequest`), covered by `lib/server/middleware-cve.test.ts`; `middleware.ts` calls the helper (belt-and-suspenders with patched Next.js).
+
+`npm run test`:
+```
+ Test Files  19 passed (19)
+      Tests  93 passed (93)
+```
+
+`npm run type-check`: `tsc --noEmit` — 0 errors.
+
+**Purpose:** Automated regression for **P4-004** application-layer mitigation / **P4-006** launch security checklist (forged `x-middleware-subrequest`). Does not replace operator WAF/DNS evidence.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
 ## Rejection History
 
 _Agents whose claimed completions were challenged will be logged here for pattern tracking._

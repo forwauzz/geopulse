@@ -29,6 +29,7 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     RESEND_FROM_EMAIL: '',
     NEXT_PUBLIC_APP_URL: '',
     RECONCILE_SECRET: '',
+    DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '',
   };
 }
 

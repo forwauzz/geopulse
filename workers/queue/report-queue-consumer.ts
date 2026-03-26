@@ -10,8 +10,9 @@ import { publicObjectUrl, uploadDeepAuditReportFiles } from '../report/r2-report
 import type { DeepAuditDownloadLinks } from '../report/resend-delivery';
 import { sendDeepAuditEmail } from '../report/resend-delivery';
 import { GeminiProvider } from '../providers/gemini';
-import { runDeepAuditCrawl } from '../scan-engine/deep-audit-crawl';
-import { letterGrade } from '../scan-engine/scoring';
+import { MAX_DEEP_AUDIT_PAGE_LIMIT } from '../../lib/server/deep-audit-page-limit';
+import { parseCrawlPending, runDeepAuditCrawl } from '../scan-engine/deep-audit-crawl';
+import { computeCategoryScores, letterGrade, type WeightedResult } from '../scan-engine/scoring';
 import { replayReportJobFromDlq } from './dlq-replay';
 
 const DLQ_NAME = 'geo-pulse-dlq';
@@ -41,7 +42,14 @@ function isUniqueViolation(err: { code?: string } | null): boolean {
 function extractPageLimit(config: unknown): number {
   if (!config || typeof config !== 'object') return 10;
   const pl = (config as Record<string, unknown>)['page_limit'];
-  return typeof pl === 'number' && pl > 0 ? Math.min(Math.floor(pl), 50) : 10;
+  return typeof pl === 'number' && pl > 0 ? Math.min(Math.floor(pl), MAX_DEEP_AUDIT_PAGE_LIMIT) : 10;
+}
+
+function extractChunkSize(config: unknown): number | undefined {
+  if (!config || typeof config !== 'object') return undefined;
+  const c = (config as Record<string, unknown>)['chunk_size'];
+  if (typeof c === 'number' && c > 0) return Math.min(Math.floor(c), 40);
+  return undefined;
 }
 
 function averageScores(scores: readonly number[]): number {
@@ -50,18 +58,50 @@ function averageScores(scores: readonly number[]): number {
   return Math.round(sum / scores.length);
 }
 
-function topFailedIssuesFromPages(
-  pages: readonly { issues_json: unknown }[]
-): unknown {
+function issuesAsWeightedResults(pages: readonly { issues_json: unknown }[]): WeightedResult[] {
+  const results: WeightedResult[] = [];
   for (const p of pages) {
     if (!Array.isArray(p.issues_json)) continue;
-    const failed = p.issues_json.filter(
-      (x): x is Record<string, unknown> =>
-        x !== null && typeof x === 'object' && (x as { passed?: boolean }).passed === false
-    );
-    if (failed.length > 0) return failed.slice(0, 3);
+    for (const x of p.issues_json) {
+      if (x === null || typeof x !== 'object') continue;
+      const rec = x as Record<string, unknown>;
+      results.push({
+        id: String(rec['checkId'] ?? rec['check'] ?? ''),
+        passed: rec['passed'] === true,
+        status: (rec['status'] as WeightedResult['status']) ?? (rec['passed'] === true ? 'PASS' : 'FAIL'),
+        finding: String(rec['finding'] ?? ''),
+        weight: typeof rec['weight'] === 'number' ? rec['weight'] : 0,
+        category: (rec['category'] as WeightedResult['category']) ?? 'ai_readiness',
+        confidence: rec['confidence'] as WeightedResult['confidence'],
+      });
+    }
   }
-  return [];
+  return results;
+}
+
+function topFailedIssuesFromPages(
+  pages: readonly { issues_json: unknown }[]
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const allFailed: Record<string, unknown>[] = [];
+
+  for (const p of pages) {
+    if (!Array.isArray(p.issues_json)) continue;
+    for (const x of p.issues_json) {
+      if (x === null || typeof x !== 'object') continue;
+      const rec = x as Record<string, unknown>;
+      if (rec['passed'] !== false) continue;
+      const key = String(rec['checkId'] ?? rec['check'] ?? '');
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      allFailed.push(rec);
+    }
+  }
+
+  allFailed.sort(
+    (a, b) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0)
+  );
+  return allFailed.slice(0, 3);
 }
 
 async function resolveScanRunId(
@@ -208,6 +248,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   }
 
   const pageLimit = extractPageLimit(runRow.config);
+  const chunkSize = extractChunkSize(runRow.config);
+
+  const crawlPending =
+    runRow.config && typeof runRow.config === 'object'
+      ? parseCrawlPending((runRow.config as Record<string, unknown>)['crawl_pending'])
+      : null;
 
   const { count: pageCount, error: countErr } = await supabase
     .from('scan_pages')
@@ -216,7 +262,9 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
 
   if (countErr) throw new Error(countErr.message);
 
-  if (!pageCount || pageCount === 0) {
+  const shouldRunCrawl = (pageCount ?? 0) === 0 || crawlPending !== null;
+
+  if (shouldRunCrawl) {
     const llm = new GeminiProvider({
       GEMINI_API_KEY: env.GEMINI_API_KEY,
       GEMINI_MODEL: env.GEMINI_MODEL,
@@ -226,9 +274,17 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       runId: scanRunId,
       seedUrl: scan.url,
       pageLimit,
+      chunkSize,
     });
     if (!crawl.ok) {
       throw new Error(crawl.reason);
+    }
+    if (crawl.ok && crawl.phase === 'partial') {
+      if (!env.SCAN_QUEUE) {
+        throw new Error('scan_queue_not_configured_for_chunked_crawl');
+      }
+      await env.SCAN_QUEUE.send(rawBody);
+      return;
     }
   }
 
@@ -259,6 +315,14 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     .eq('id', scanRunId)
     .maybeSingle();
 
+  const allWeighted = issuesAsWeightedResults(pages);
+  const catScores = computeCategoryScores(allWeighted).map((cs) => ({
+    category: cs.category,
+    score: cs.score,
+    letterGrade: cs.letterGrade,
+    checkCount: cs.checkCount,
+  }));
+
   const payload = buildDeepAuditReportPayload({
     scanId: job.scanId,
     runId: scanRunId,
@@ -275,6 +339,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     })),
     coverageSummary: runCoverage?.coverage_summary ?? null,
     highlightedIssues: issuesForScan,
+    categoryScores: catScores,
   });
 
   const fullResults = {
@@ -329,6 +394,17 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     throw new Error('deep_audit_pdf_oversize_configure_r2_public_base');
   }
 
+  const allIssueRows = Array.isArray(issuesForScan) ? issuesForScan : [];
+  const failedForEmail = allIssueRows
+    .filter((r: Record<string, unknown>) => r['passed'] === false)
+    .sort((a: Record<string, unknown>, b: Record<string, unknown>) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0))
+    .slice(0, 3)
+    .map((r: Record<string, unknown>) => ({
+      check: String(r['check'] ?? r['checkId'] ?? 'Check'),
+      fix: r['fix'] ? String(r['fix']) : undefined,
+      weight: typeof r['weight'] === 'number' ? r['weight'] : undefined,
+    }));
+
   const emailResult = await sendDeepAuditEmail({
     apiKey: env.RESEND_API_KEY,
     from: env.RESEND_FROM_EMAIL,
@@ -340,6 +416,13 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     idempotencyKey: `deep-audit/${job.scanId}/${job.paymentId}`,
     attachPdf,
     downloadLinks,
+    score: aggregateScore,
+    grade: aggLetter,
+    topIssues: failedForEmail,
+    appUrl: (env.NEXT_PUBLIC_APP_URL ?? '').trim() || undefined,
+    totalChecks: allIssueRows.length,
+    passedChecks: allIssueRows.filter((r: Record<string, unknown>) => r['passed'] === true).length,
+    scanId: job.scanId,
   });
 
   if (!emailResult.ok) {
@@ -352,6 +435,8 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     user_id: null,
     guest_email: job.customerEmail.trim().toLowerCase(),
     pdf_url: pdfUrl,
+    markdown_url: downloadLinks?.markdownUrl ?? null,
+    report_payload_version: payload.version,
     pdf_generated_at: now,
     email_delivered_at: now,
     type: 'deep_audit',

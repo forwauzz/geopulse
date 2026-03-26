@@ -39,7 +39,9 @@
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
     // Public R2.dev base for deep-audit PDF/MD links (not a secret). Override in .dev.vars locally if needed.
-    "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev"
+    "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
+    // Default page cap for new paid deep audits (1–120); same ceiling as crawl Worker.
+    "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "10"
   },
 
   // R2 — deep-audit PDF + Markdown (DA-003). Bucket must exist; public URL must match DEEP_AUDIT_R2_PUBLIC_BASE.

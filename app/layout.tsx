@@ -1,11 +1,19 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { Inter } from 'next/font/google';
+import { Inter, Newsreader } from 'next/font/google';
 import './globals.css';
+import { AttributionInit } from '@/components/attribution-init';
+import { SiteFooter } from '@/components/site-footer';
+import { SiteHeader } from '@/components/site-header';
 
 const inter = Inter({
   subsets: ['latin'],
-  variable: '--font-geist-sans',
+  variable: '--font-inter',
+});
+
+const newsreader = Newsreader({
+  subsets: ['latin'],
+  variable: '--font-newsreader',
+  weight: ['400', '700'],
 });
 
 export const metadata: Metadata = {
@@ -20,16 +28,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} min-h-screen font-sans antialiased`}>
-        <header className="flex justify-end gap-4 border-b border-geo-mist/20 px-6 py-3 text-sm text-geo-mist">
-          <Link href="/login" className="hover:text-geo-ink">
-            Sign in
-          </Link>
-          <Link href="/dashboard" className="hover:text-geo-ink">
-            Dashboard
-          </Link>
-        </header>
-        {children}
+      <head>
+        <link
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body
+        className={`${inter.variable} ${newsreader.variable} flex min-h-screen flex-col bg-surface font-body text-on-surface antialiased`}
+      >
+        <AttributionInit />
+        <SiteHeader />
+        <div className="flex-1">{children}</div>
+        <SiteFooter />
       </body>
     </html>
   );

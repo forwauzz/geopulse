@@ -9,6 +9,13 @@ export type DeepAuditReportPagePayload = {
   readonly section: string | null;
 };
 
+export type CategoryScorePayload = {
+  readonly category: string;
+  readonly score: number;
+  readonly letterGrade: string;
+  readonly checkCount: number;
+};
+
 export type DeepAuditReportPayload = {
   readonly version: 1;
   readonly scanId: string;
@@ -20,6 +27,7 @@ export type DeepAuditReportPayload = {
   /** Top highlighted issues (typically failed checks) for the executive summary. */
   readonly highlightedIssues: unknown;
   readonly coverageSummary: unknown;
+  readonly categoryScores?: readonly CategoryScorePayload[];
   readonly pages: readonly DeepAuditReportPagePayload[];
   readonly generatedAt: string;
 };
@@ -42,6 +50,7 @@ export function buildDeepAuditReportPayload(input: {
   readonly pages: readonly PageRowInput[];
   readonly coverageSummary: unknown;
   readonly highlightedIssues: unknown;
+  readonly categoryScores?: readonly CategoryScorePayload[];
   readonly generatedAt?: string;
 }): DeepAuditReportPayload {
   const pages: DeepAuditReportPagePayload[] = input.pages.map((p) => ({
@@ -62,6 +71,7 @@ export function buildDeepAuditReportPayload(input: {
     aggregateLetterGrade: input.aggregateLetterGrade,
     highlightedIssues: input.highlightedIssues,
     coverageSummary: input.coverageSummary,
+    categoryScores: input.categoryScores,
     pages,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
   };

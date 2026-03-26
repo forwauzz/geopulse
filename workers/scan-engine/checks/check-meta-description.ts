@@ -6,7 +6,8 @@ const MAX = 170;
 export const metaDescriptionCheck: AuditCheck = {
   id: 'meta-description',
   name: 'Meta description',
-  weight: 8,
+  weight: 4,
+  category: 'extractability',
   run(ctx: CheckContext): CheckResult {
     const d = ctx.signals.metaDescription?.trim() ?? '';
     const len = d.length;
@@ -14,6 +15,7 @@ export const metaDescriptionCheck: AuditCheck = {
     return {
       id: 'meta-description',
       passed,
+      status: passed ? 'PASS' : 'FAIL',
       finding: passed
         ? `Meta description present (${String(len)} characters).`
         : len === 0

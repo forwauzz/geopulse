@@ -50,6 +50,13 @@ describe('buildDeepAuditMarkdown', () => {
           issues_json: [{ check: 'Title', passed: true }],
           section: 'docs',
         },
+        {
+          url: 'https://example.com/q',
+          score: 60,
+          letter_grade: 'B',
+          issues_json: [{ check: 'Meta', passed: false }],
+          section: 'blog',
+        },
       ],
       coverageSummary: null,
       highlightedIssues: [],
@@ -60,7 +67,7 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('example.com');
     expect(md).toContain('50/100');
     expect(md).toContain('section docs');
-    expect(md).toContain('Per-page checklist');
+    expect(md).toContain('Per-Page Checklist');
   });
 });
 

@@ -3,13 +3,15 @@ import type { AuditCheck, CheckContext, CheckResult } from '../../lib/interfaces
 export const headingStructureCheck: AuditCheck = {
   id: 'heading-structure',
   name: 'Heading structure',
-  weight: 6,
+  weight: 5,
+  category: 'extractability',
   run(ctx: CheckContext): CheckResult {
     const h1 = ctx.signals.h1Count;
     const passed = h1 === 1;
     return {
       id: 'heading-structure',
       passed,
+      status: passed ? 'PASS' : 'FAIL',
       finding:
         h1 === 0
           ? 'No H1 found.'

@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, '.'),
       '@workers': path.resolve(__dirname, 'workers'),
+      '@services': path.resolve(__dirname, 'services'),
     },
   },
 });

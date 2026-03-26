@@ -4,7 +4,8 @@ import type { AuditCheck, CheckContext, CheckResult } from '../../lib/interfaces
 export const robotsMetaCheck: AuditCheck = {
   id: 'robots-meta',
   name: 'Robots meta (AI visibility)',
-  weight: 10,
+  weight: 7,
+  category: 'ai_readiness',
   run(ctx: CheckContext): CheckResult {
     const r = ctx.signals.robotsMetaContent?.toLowerCase() ?? '';
     const noindex = r.includes('noindex');
@@ -16,6 +17,7 @@ export const robotsMetaCheck: AuditCheck = {
     return {
       id: 'robots-meta',
       passed,
+      status: passed ? 'PASS' : 'FAIL',
       finding: passed
         ? 'Meta robots does not appear to block indexing entirely.'
         : `Restrictive robots meta: "${r.slice(0, 120)}${r.length > 120 ? '…' : ''}"`,

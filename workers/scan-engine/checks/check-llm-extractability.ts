@@ -11,13 +11,17 @@ export function createExtractabilityCheck(llm: LLMProvider): AuditCheck {
   return {
     id: 'llm-extractability',
     name: 'Content extractability (LLM)',
-    weight: 8,
+    weight: 7,
+    category: 'extractability',
     async run(ctx: CheckContext): Promise<CheckResult> {
       const r = await llm.analyze(PROMPT, ctx.textSample);
+      const status = r.confidence === 'low' ? 'LOW_CONFIDENCE' : r.passed ? 'PASS' : 'FAIL';
       return {
         id: 'llm-extractability',
         passed: r.passed,
+        status,
         finding: r.reasoning,
+        confidence: r.confidence,
         fix: r.passed ? undefined : 'Add concrete facts, definitions, and scannable lists that stand alone without layout.',
       };
     },

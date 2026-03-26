@@ -26,7 +26,8 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@workers/*": ["./workers/*"]
+      "@workers/*": ["./workers/*"],
+      "@services/*": ["./services/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "types/**/*.d.ts"],

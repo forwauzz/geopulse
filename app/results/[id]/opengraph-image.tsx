@@ -7,10 +7,10 @@ export const alt = 'GEO-Pulse AI Search Readiness';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
-const ink = '#0f172a';
-const accent = '#0ea5e9';
-const mist = '#64748b';
-const surface = '#f8fafc';
+const ink = '#2c3435';
+const primary = '#565e74';
+const mist = '#586162';
+const surface = '#f8f9f9';
 
 function truncateUrl(s: string, max: number): string {
   if (s.length <= max) return s;
@@ -60,7 +60,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
               marginTop: 16,
             }}
           >
-            <span style={{ fontSize: 120, fontWeight: 800, color: accent, lineHeight: 1 }}>{scoreText}</span>
+            <span style={{ fontSize: 120, fontWeight: 800, color: primary, lineHeight: 1 }}>{scoreText}</span>
             <span style={{ fontSize: 56, fontWeight: 700, color: ink }}>{gradeText}</span>
           </div>
         );
@@ -81,7 +81,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
           alignItems: 'flex-start',
           justifyContent: 'center',
           padding: 64,
-          background: `linear-gradient(135deg, ${surface} 0%, #e2e8f0 100%)`,
+          background: surface,
         }}
       >
         <div

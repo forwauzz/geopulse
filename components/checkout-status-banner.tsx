@@ -7,19 +7,18 @@ export function CheckoutStatusBanner() {
   const checkout = sp.get('checkout');
   if (checkout === 'success') {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-        <p className="font-medium">Payment received.</p>
-        <p className="mt-1 text-emerald-800">
-          Stripe has confirmed checkout. Your PDF is generated and sent in the background — usually within a few minutes.
-          If nothing arrives in 15 minutes, check spam or contact support with your receipt.
+      <div className="rounded-xl border border-primary/20 bg-surface-container-low px-4 py-4 text-sm text-on-background md:px-6">
+        <p className="font-headline font-medium">Payment received.</p>
+        <p className="mt-1 font-body text-on-surface-variant">
+          Report generation typically completes within about 60 seconds.
         </p>
       </div>
     );
   }
   if (checkout === 'cancel') {
     return (
-      <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-geo-ink">
-        Checkout canceled — no charge. You can upgrade whenever you are ready.
+      <div className="rounded-xl bg-surface-container-high/60 px-4 py-4 text-sm text-on-background md:px-6">
+        Checkout cancelled. No charge was made.
       </div>
     );
   }

@@ -42,11 +42,13 @@ export default async function ResultsPage({ params }: PageProps) {
   const siteKey = getTurnstileSiteKey();
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-10 px-6 py-16">
+    <main className="mx-auto max-w-7xl px-6 py-12 md:px-10 md:py-16">
       <Suspense fallback={null}>
         <CheckoutStatusBanner />
       </Suspense>
-      <ResultsView scanId={id} turnstileSiteKey={siteKey} />
+      <div className="mt-6 md:mt-8">
+        <ResultsView scanId={id} turnstileSiteKey={siteKey} />
+      </div>
     </main>
   );
 }
