@@ -111,13 +111,17 @@ Product phases (P0–P4) and **API-002 … API-007** are tracked in `agents/memo
 
 If production or operator verification is **temporarily blocked** by expected safeguards (e.g. **checkout rate limit**: 5 `POST /api/checkout` per IP per hour — see `PROJECT_STATE.md` operator notes), the team may continue **Deep Audit Upgrade** tasks (**DA-001 …**) as marked in `PROJECT_STATE.md`. This **does not** waive Phase 4 exit criteria, **API-002 … API-007** deferral, or Security sign-off.
 
+If Phase 4 is blocked by an **external operator dependency** (for example domain / DNS / billing), the team may also continue **user-journey clarity** work that improves product truth, step sequencing, and loading-state communication for the core scan → preview → pay / save → report flow. This work must be tracked explicitly in `PROJECT_STATE.md`, must not be presented as Phase 4 closure, and should prefer **state-driven UX** over query-string-only success messaging.
+
+If Phase 4 is blocked by an **external operator dependency**, the team may also continue **measurement-platform planning and internal foundation work** for the future benchmark layer, as long as it is explicitly tracked in `PROJECT_STATE.md`, documented in `PLAYBOOK/`, and does not replace launch-closure truth. The audit/report product remains the current wedge; the measurement layer is a staged internal platform, not a claim of launched capability.
+
 ### Phase 4 first — defer remaining Deep Audit until Launch gate (Orchestrator)
 
 **Effective:** 2026-03-25  
 
 **Prioritize completing Phase 4 — Launch** and its evidence (`agents/memory/PROJECT_STATE.md` Phase 4 registry, `agents/memory/COMPLETION_LOG.md` *Phase 4 — operator execution order*): **P4-001** (production deploy + vars/secrets), **P4-003** (SPF/DKIM/DMARC), **P4-004** (WAF / CVE-2025-29927), **P4-006** (launch security audit — all five blockers with evidence).  
 
-**Defer** net-new **Deep Audit Upgrade** work (**DA-004** remainder: Workflows/scale/100+ pages; **DA-005**: Browser Rendering / SPA crawl) until **Phase 4 → Launch** is satisfied and documented — unless the Orchestrator **explicitly** reopens parallel DA work and records that in **State history** in `PROJECT_STATE.md`.  
+**Defer** net-new work that is unrelated to launch closure until **Phase 4 → Launch** is satisfied and documented — unless the Orchestrator explicitly reopens parallel work and records that in **State history** in `PROJECT_STATE.md`. **DA-004** and **DA-005** are already implemented in the shipped repo scope; future Workflows or larger-scale crawl work should be treated as new follow-on work, not as unfinished DA-004/DA-005 baseline scope.  
 
 Implementation agents default to **Phase 4** closure; **API-002 … API-007** remain deferred per existing rules until the Launch gate.
 

@@ -31,6 +31,142 @@
 
 ## Log
 
+### UX-002 … UX-006 — audit journey clarity + state-driven report status (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + `npm.cmd run type-check` + `npm.cmd run build`
+
+#### Evidence
+
+Updated files:
+
+- `components/results-view.tsx`
+- `components/deep-audit-checkout.tsx`
+- `components/email-gate.tsx`
+- `lib/client/loading-journeys.ts`
+- `app/results/[id]/page.tsx`
+- `agents/ORCHESTRATOR.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/04-open-work-and-risks.md`
+
+Behavioral changes implemented:
+
+- Results page now shows one explicit audit journey: preview ready → choose next step → full audit in progress → report delivered
+- Paid path is primary; preview-save remains available but visually secondary
+- Removed page-level query-string success banner from `app/results/[id]/page.tsx`
+- Results-page status is now driven by real `hasPaidReport` / `reportStatus` data instead of `?checkout=success` copy alone
+- Full-audit generation now uses the centralized long-wait overlay through `useLongWaitEffect(data?.reportStatus === 'generating', reportLoadingJourney)`
+- Preliminary and final audit loading copy now share one continuous story in `lib/client/loading-journeys.ts`
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial `npm.cmd run build` inside sandbox:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+unhandledRejection [Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }
+```
+
+Escalated retry `npm.cmd run build`:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+Using secrets defined in .dev.vars
+   ▲ Next.js 15.5.14
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+ ✓ Compiled successfully in 19.9s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/10) ...
+   Generating static pages (2/10) 
+   Generating static pages (4/10) 
+   Generating static pages (7/10) 
+ ✓ Generating static pages (10/10)
+   Finalizing page optimization ...
+   Collecting build traces ...
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** UX-002 through UX-006 are implemented in repo. UX-007 remains pending for manual journey verification.
+
+---
+
+### UX-007 — guest + signed-in journey verification (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code-path verification notes + targeted Vitest + `npm.cmd run type-check`
+
+#### Evidence
+
+Verification notes:
+
+- Guest/public results path: `lib/server/get-scan-for-public-share.ts` returns `hasPaidReport`, `reportStatus`, `pdfUrl`, and `markdownUrl`
+- Signed-in results path: `app/api/scans/[id]/route.ts` returns the same shape for the owner-view path
+- Shared UI consumer: `components/results-view.tsx` uses that common shape for journey steps, status card, report CTA, checkout CTA, and preview-save branch
+- Shared state helper: `lib/client/results-journey.ts`
+
+Covered states in `lib/client/results-journey.test.ts`:
+
+- preview ready before payment
+- checkout cancelled
+- returned from checkout while awaiting payment confirmation
+- full audit generating after payment confirmation
+- report delivered
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial `npx.cmd vitest run lib/client/results-journey.test.ts` inside sandbox:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry `npx.cmd vitest run lib/client/results-journey.test.ts`:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  16:53:05
+   Duration  839ms (transform 205ms, setup 0ms, import 263ms, tests 14ms, environment 0ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** UX-007 is accepted as repo-side journey verification. Live operator smoke is still useful later, but the shared state model is now explicitly tested and logged.
+
+---
+
 ### MCP — Cloudflare `set_active_account` (2026-03-24)
 **Agent:** Cursor / implementation assistant  
 **Claimed complete:** 2026-03-24  
@@ -1102,6 +1238,464 @@ Browser Rendering remains disabled by default unless operator config and credent
 
 ### Orchestrator Decision
 _Pending review._
+
+---
+
+## RE-011 … RE-015 — Eval analytics metadata + Promptfoo writer + admin site history (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, Promptfoo harness output, file references, sandbox build/test note
+
+### Evidence
+
+**Implementation**
+
+- `supabase/migrations/011_eval_run_metadata.sql`
+  - adds `framework`, `domain`, `site_url`, and metadata fields needed for site-level eval history
+  - extends both `report_eval_runs` and `retrieval_eval_runs`
+- `lib/server/promptfoo-results.ts`
+  - normalizes site/domain identity
+  - summarizes Promptfoo JSON outputs into admin-friendly metrics
+- `lib/server/promptfoo-results.test.ts`
+  - covers domain normalization and Promptfoo result summarization
+- `scripts/promptfoo-eval-write.ts`
+  - runs Promptfoo with repo-local output
+  - parses results
+  - writes report or retrieval eval runs into Supabase
+- `app/dashboard/evals/page.tsx`
+  - merges report + retrieval eval tables
+  - adds site filter, framework filter, trend chart, metric cards, and run history table
+- `app/dashboard/page.tsx`
+  - updates the admin entrypoint label to `Eval analytics`
+
+**`npm.cmd run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**`npm.cmd run eval:promptfoo:report`**
+
+```
+> geo-pulse@0.1.0 eval:promptfoo:report
+> node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.report.yaml --no-progress-bar
+
+Results:
+  ✓ 5 passed (100%)
+  0 failed (0%)
+  0 errors (0%)
+```
+
+**`npm.cmd run eval:promptfoo:retrieval`**
+
+```
+> geo-pulse@0.1.0 eval:promptfoo:retrieval
+> node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.retrieval.yaml --no-progress-bar
+
+Results:
+  ✓ 2 passed (100%)
+  0 failed (0%)
+  0 errors (0%)
+```
+
+**Sandbox note — build/test runner**
+
+```
+> geo-pulse@0.1.0 build
+> next build
+
+unhandledRejection [Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }
+```
+
+`npx.cmd vitest run ...` also failed in this sandbox during Vite/Vitest startup with the same process-spawn restriction:
+
+```
+failed to load config ... Startup Error ... Error: spawn EPERM
+```
+
+This prevented local execution of the new Vitest file in this environment, but TypeScript passed and both Promptfoo suites executed successfully.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## RE-017 — Deterministic retrieval writer persisted into run/prompt/passage/answer tables (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, file references, sandbox execution note
+
+### Evidence
+
+**Implementation**
+
+- `lib/server/retrieval-eval-writer.ts`
+  - runs the existing deterministic retrieval harness over a fixture
+  - aggregates run-level metrics for `retrieval_eval_runs`
+- `lib/server/retrieval-eval-writer.test.ts`
+  - covers aggregate scoring and domain normalization for the writer helper
+- `scripts/retrieval-eval-write.ts`
+  - reads a retrieval fixture
+  - inserts one `retrieval_eval_runs` row
+  - inserts related `retrieval_eval_prompts`, `retrieval_eval_passages`, and `retrieval_eval_answers` rows
+- `eval/fixtures/retrieval-eval-sample.json`
+  - sample fixture matching the current GEO-Pulse retrieval-eval use case
+- `app/dashboard/evals/page.tsx`
+  - adds `Deterministic Retrieval` as an explicit framework filter
+- `PLAYBOOK/retrieval-eval-foundation.md`
+  - now documents the active fixture shape and writer command
+
+**`npm.cmd run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Sandbox execution note**
+
+Attempted:
+
+```
+node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars .\node_modules\tsx\dist\cli.mjs scripts\retrieval-eval-write.ts --site-url https://example.com --prompt-set-name retrieval-sample
+```
+
+Observed:
+
+```
+Error: spawn EPERM
+...
+at ensureServiceIsRunning (...node_modules\esbuild\lib\main.js:2268:29)
+```
+
+This sandbox blocks the `tsx` / esbuild subprocess that the script uses for execution. The writer code type-checks, but the actual insert path still needs to be run in a normal local shell or CI runner with process spawning enabled.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## RE-018 — Retrieval drilldown page + auth-aware landing header (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, file references
+
+### Evidence
+
+**Implementation**
+
+- `app/dashboard/evals/retrieval/[id]/page.tsx`
+  - admin-only retrieval eval detail page
+  - loads one `retrieval_eval_runs` row plus related prompt, passage, and answer rows
+  - shows run metadata, prompt-level expected evidence, stored answer metrics, and selected passages
+- `app/dashboard/evals/page.tsx`
+  - adds `View detail` links for retrieval runs
+- `components/site-header.tsx`
+  - now checks the current Supabase session server-side
+  - shows `Dashboard` only when logged in
+  - shows `Sign out` for signed-in users
+  - keeps `Sign in` / `Admin sign in` for signed-out users
+
+**`npm.cmd run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## DA-004 — Queue-scale deep-audit remainder (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, file references
+
+### Evidence
+
+**Implementation**
+
+- `lib/server/deep-audit-page-limit.ts`
+  - raises `MAX_DEEP_AUDIT_PAGE_LIMIT` from `120` to `1000`
+- `workers/scan-engine/deep-audit-crawl.ts`
+  - threads the configured `chunkSize` through finalization
+  - fixes final coverage summary so `chunk_size` reflects the actual configured chunk size
+  - keeps the existing queue continuation model and expands the reachable crawl size under that model
+- `.dev.vars.example`
+- `wrangler.jsonc`
+- `lib/server/cf-env.ts`
+  - updated comments/docs so env truth matches the new cap
+
+**`npm.cmd run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Scope note**
+
+This closes the remaining code-side cap mismatch in the queue-scale DA-004 path.
+It does not provide operator evidence for a real large multi-chunk production run, so `PROJECT_STATE.md` remains conservative and keeps DA-004 open until that proof exists.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## DA-004 — Queue-scale deep-audit completion (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm.cmd run type-check`, targeted Vitest output, crawl test implementation
+
+### Evidence
+
+**Implementation**
+
+- `workers/scan-engine/deep-audit-crawl.test.ts`
+  - adds a mocked multi-chunk crawl test with an in-memory Supabase stub
+  - proves first pass returns `phase: 'partial'`
+  - proves `crawl_pending.next_index`, `chunk_size`, and `chunks_processed` persist between queue turns
+  - proves second pass completes, clears `crawl_pending`, and writes final `coverage_summary` with the configured chunk size
+- `workers/scan-engine/deep-audit-crawl.ts`
+  - already carries the queue continuation path, 1000-page cap, and final chunk-size reporting fixed earlier in this slice
+
+**`npm.cmd run type-check`**
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**`npx.cmd vitest run workers/scan-engine/deep-audit-crawl.test.ts`**
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  14:15:22
+   Duration  489ms (transform 163ms, setup 0ms, import 211ms, tests 14ms, environment 0ms)
+```
+
+**Scope note**
+
+This closes DA-004 as the shipped queue-scale crawl path:
+- politeness via `Crawl-delay`
+- chunked queue continuation
+- pending-state guardrails
+- final chunk metrics
+- 1000-page cap
+
+Future Workflows adoption is now optional future scale work, not an unfinished DA-004 requirement.
+
+### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** User explicitly reopened DA-004 despite Phase 4-first sequencing. Repo evidence now covers the multi-chunk continuation path directly, so the task is accepted as implementation-complete.
+
+---
+
+## UX-001 — Centralized delayed long-wait loading overlay (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm.cmd run type-check`, `npm.cmd run build`, frontend implementation
+
+### Evidence
+
+**Implementation**
+
+- `components/long-wait-provider.tsx`
+  - added a centralized client-side provider for long waits
+  - uses delayed escalation rather than immediate blocking
+  - shows animated step progression only after the request passes a threshold
+- `lib/client/loading-journeys.ts`
+  - defines the step sequences for:
+    - scan submit
+    - results load
+    - save results
+    - checkout redirect
+    - magic-link sign-in
+    - admin sign-in
+    - report load
+- `app/layout.tsx`
+  - mounts the provider once at the app root
+- `components/scan-form.tsx`
+- `components/deep-audit-checkout.tsx`
+- `components/email-gate.tsx`
+- `app/login/login-form.tsx`
+- `app/admin/login/admin-login-form.tsx`
+- `components/results-view.tsx`
+- `components/report-viewer.tsx`
+  - each flow now keeps its existing inline pending UI for short waits and opts into the centralized overlay for longer waits
+- `app/globals.css`
+  - adds the overlay animation primitives
+
+**Recommended strategy implemented**
+
+```text
+1. Keep local button/inline pending states for the fast path.
+2. Show the centralized overlay only after ~1.4s.
+3. Use flow-specific step copy so the wait feels explainable rather than generic.
+4. Reuse one provider at the app root instead of duplicating custom loaders per screen.
+```
+
+**`npm.cmd run type-check`**
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**`npm.cmd run build`**
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+▲ Next.js 15.5.14
+✓ Compiled successfully
+✓ Generating static pages (10/10)
+✓ Collecting build traces
+```
+
+**Note on earlier build failure**
+
+```text
+An earlier `next build` failure (`ENOENT ... .next/export/500.html`) coincided with a concurrent local `npm run build:worker`.
+After the overlapping local build finished, `npm.cmd run build` passed cleanly.
+```
+
+### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** This is a bounded UI slice with build + type-check evidence. No deploy performed.
+
+---
+
+## P4-006 — Launch security audit evidence bundle refresh (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** targeted Vitest output + `npm.cmd run type-check` + `npm.cmd run build`
+
+### Evidence
+
+**Implementation**
+
+- `lib/server/turnstile.test.ts`
+  - verifies server-side Turnstile handling for:
+    - missing token
+    - missing secret
+    - successful verification
+    - returned error codes
+    - network failure
+- `app/api/webhooks/stripe/route.test.ts`
+  - verifies webhook route behavior for:
+    - missing `stripe-signature`
+    - invalid signature
+    - unrelated event types ignored after verification
+    - `checkout.session.completed` reaches the payment handler only after verified signature
+
+**Launch-blocker evidence now covered in repo**
+
+```text
+1. RLS on every table:
+   Existing migration truth + prior Supabase/PostgREST evidence already logged.
+
+2. SSRF on user URLs:
+   workers/lib/ssrf.test.ts included in the targeted security run.
+
+3. Stripe webhook signature verification:
+   app/api/webhooks/stripe/route.test.ts now covers missing/invalid signature and verified success path.
+
+4. Turnstile server-side validation:
+   lib/server/turnstile.test.ts now covers the verification helper directly.
+
+5. SPF + DKIM + DMARC:
+   Still operator-side and pending P4-003 evidence.
+```
+
+**`npm.cmd run type-check`**
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**`npx.cmd vitest run lib/server/middleware-cve.test.ts lib/server/turnstile.test.ts workers/lib/ssrf.test.ts lib/server/stripe/checkout-completed.test.ts app/api/webhooks/stripe/route.test.ts`**
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  5 passed (5)
+      Tests  25 passed (25)
+   Start at  14:47:38
+   Duration  1.33s (transform 1.43s, setup 0ms, import 1.75s, tests 606ms, environment 6ms)
+```
+
+**`npm.cmd run build`**
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+▲ Next.js 15.5.14
+✓ Compiled successfully
+✓ Generating static pages (10/10)
+✓ Collecting build traces
+```
+
+**Scope note**
+
+This strengthens `P4-006` repo evidence and narrows the remaining launch gap to operator evidence:
+- `P4-003` DNS / Resend setup
+- `P4-004` final WAF policy decision
+- final security sign-off referencing those operator facts
+
+### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED as repo-side P4-006 evidence refresh; Phase 4 still not closed  
+**Notes:** Launch remains blocked on `P4-003` and final `P4-006` operator/security sign-off.
+
+---
+
+## Phase 4 — operator blocker recorded: domain purchase / DNS paused (2026-03-26)
+**Agent:** Founder / Orchestrator record  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** operator statement
+
+### Evidence
+
+```text
+Founder could not complete domain purchase due to a credit-card issue.
+As a result, DNS setup for SPF / DKIM / DMARC cannot be completed yet.
+```
+
+**Impact**
+
+```text
+- P4-003 remains pending and operator-blocked.
+- P4-006 final sign-off remains pending because blocker #5 (SPF / DKIM / DMARC) cannot be evidenced yet.
+- P4-004 remains a separate launch-policy decision, but Phase 4 is not launch-closed.
+```
+
+**Resume condition**
+
+```text
+Once the card issue is resolved and the domain can be purchased / configured:
+1. add the Resend DNS records
+2. capture DNS / Resend verification evidence
+3. update P4-003
+4. complete final P4-006 sign-off
+```
+
+### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED as blocker documentation  
+**Notes:** This records the pause truthfully. It does not close Phase 4 and does not mark `P4-003` or `P4-006` done.
 
 ---
 

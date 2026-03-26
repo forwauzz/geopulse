@@ -1,0 +1,113 @@
+GeoPulse 2.0 – AI Visibility & Retrieval Intelligence Platform
+Executive Summary
+Generative Engine Optimization (GEO) focuses on making your content discoverable, understandable, and cited by AI systems. Unlike classic SEO, which seeks rankings on search engine results pages, GEO aims to make your content part of the answer when users ask questions of AI search engines such as ChatGPT, Gemini, Perplexity or Google AI Overviews.
+Recent research shows that AI search engines break user prompts into sub-queries, retrieve relevant passages using retrieval-augmented generation (RAG), synthesize answers and provide citations. Your goal is to be one of those cited sources. You achieve this by ensuring technical crawlability, semantic structure, authoritative content, prompt‑oriented research and continuous measurement of AI visibility.
+GeoPulse 2.0 expands beyond a simple ‘AI readiness score’ to become a comprehensive AI visibility & retrieval intelligence platform. It introduces a transparent scoring model, retrieval simulation, industry‑specific recommendations, demand & conversion metrics, and robust reporting to help organisations capture demand from AI search and convert it into revenue.
+1. Market Trends & Research Insights
+Generative search is reshaping discovery.
+Generative AI search engines handle queries differently from traditional search engines. When users ask a question, AI systems break the query into multiple sub‑queries, perform web searches, retrieve specific passages using RAG, synthesise the information and output a narrative answer with citations【959417131931305†L64-L87】. Consequently, the key question for marketers has shifted from ‘are we on page one?’ to ‘are we in the answer?’【959417131931305†L110-L120】.
+Importance of GEO in 2026.
+With AI assistants handling an increasing share of search volume, GEO has become critical. Emerging guides highlight eight pillars for AI visibility: technical readiness, prompt‑oriented research, answer‑first design, citation‑ready content, authority through mentions, smart interlinking, snippet optimisation and continuous feedback loops【473680404240708†L160-L203】【473680404240708†L320-L362】.
+Prompt‑oriented research.
+Keyword research alone is no longer sufficient; marketers need to study how people phrase questions in natural language across Reddit, Quora and AI platforms. Reverse‑engineer AI answers by identifying the implicit prompts and track how prompts evolve over time【473680404240708†L82-L121】.
+Content structuring and definitions.
+AI models prefer content that follows a question → answer → supporting evidence pattern. Each page should start with an explicit question, provide a concise two‑sentence answer and then offer evidence and context. Definitions, comparison charts and structured content outperform long essays【473680404240708†L160-L203】【473680404240708†L170-L198】.
+Authority through mentions and structured data.
+Backlinks still matter, but AI systems infer authority from brand mentions in trusted third‑party content. Schema markup (JSON‑LD), semantic headings and internal links that explain relationships help AI models build knowledge graphs and extract answers【473680404240708†L205-L243】【473680404240708†L245-L267】.
+Measurement & tracking.
+Share‑of‑voice tracking across high‑value queries, citation frequency, position within answers and section‑level performance provide early indicators of AI visibility. Combining SOV, referral tracking from AI search and branded search traffic yields a multi‑facet measurement framework【858689370710159†L250-L302】. No single tool currently captures everything; data should be treated as directional.
+2. Key Deficiencies in GeoPulse 1.0
+•	The original GeoPulse report treats HTTP 403/401 errors as content failures, conflating blocked access with poor structure. This leads to false negatives and undermines trust.
+•	Opaque scoring: site‑level scores are presented without disclosing the full rubric or how page checks aggregate. Users cannot understand how to improve their scores.
+•	Undefined metrics: terms like ‘E‑E‑A‑T signals’ and ‘extractability’ are not operationally defined or tied to detection logic.
+•	Generic recommendations: advice such as ‘add schema’ or ‘add Q&A’ is not mapped to specific pages or industries.
+•	No aggregation of insights: pages are listed individually without identifying site‑wide patterns or template‑level issues.
+•	Lacks demand and conversion layers: the report does not analyse which queries matter or whether traffic converts to leads or revenue.
+•	No benchmarking or validation against peer sites or visibility outcomes; the score lacks context.
+3. Product Vision & Objectives
+GeoPulse 2.0 positions itself as the operating system for AI visibility, retrieval and revenue. The platform’s mission is to make clients’ content discoverable and extractable by AI systems, ensure it appears as trusted citations in answers, map demand from natural language prompts, and convert AI‑generated visibility into leads and sales.
+•	Provide transparent, actionable AI readiness scoring across multiple categories.
+•	Simulate AI retrieval and synthesis to identify which pages and sections are extractable and where hallucinations occur.
+•	Map demand by analysing prompt clusters and aligning them with business objectives.
+•	Integrate conversion metrics to connect AI visibility with revenue impact.
+•	Deliver industry‑specific recommendations and code snippets for immediate implementation.
+•	Offer benchmarking against peers and track improvement over time.
+4. Architecture Overview
+GeoPulse 2.0 is built as a modular platform. Each layer performs a discrete function, feeding data into subsequent layers. This architecture ensures scalability, transparency and extensibility.
+Layer	Function
+Access & Crawl Intelligence	Validate robots directives and HTTP status for GPTBot, PerplexityBot, Google‑Extended and other AI crawlers. Identify blocked pages separately from failures.
+Rendering & Visibility	Fetch rendered DOM and compare it with raw HTML to detect client‑side rendering gaps. Flag JS‑only content that AI crawlers miss.
+Extractability Engine	Compute chunkability scores, answer density, and citation‑ready sentences. Analyse semantic heading structure and lists for LLM extraction.
+Retrieval Simulation	Use RAG simulation to test whether an AI can retrieve and quote each section. Ask representative questions and measure which passages are returned and whether hallucinations occur.
+Semantic & Entity Layer	Parse JSON‑LD, microdata and meta tags; validate schema types; align entities with on‑page text; and detect missing or conflicting schema.
+Trust & E‑E‑A‑T	Detect author bios, credentials, citations to external sources and review signals. Build a trust graph across the site.
+Governance Layer	Check llms.txt and robots policies for AI access, including allowances for specific bots and disallowed sections. Provide guidance on AI access governance.
+Demand Layer	Analyse prompt clusters from forums, Q&A sites and AI outputs. Estimate prompt volume based on SEO keywords and AI adoption rates【858689370710159†L318-L352】.
+Conversion Layer	Audit CTAs, form placement, tracking scripts and funnel flows to ensure AI‑generated visits convert. Provide CRO recommendations tied to pages.
+Scoring & Status Model	Aggregate metrics into category scores (AI Readiness, Extractability, Trust, Demand Coverage, Conversion Readiness). Apply clear status values: PASS, FAIL, BLOCKED, NOT_EVALUATED, LOW_CONFIDENCE and WARNING.
+Recommendation Engine	Generate page‑specific, template‑level and site‑wide recommendations with prioritisation and industry overlays.
+Reporting & Analytics	Produce executive summaries, template insights, per‑URL exceptions, benchmarking, and machine‑readable exports (CSV, JSON, Jira tasks).
+5. Status Model & Scoring Framework
+GeoPulse 2.0 introduces a robust evaluation state model. Each check returns a status from the following set:
+•	PASS: The criterion was evaluated successfully and met.
+•	FAIL: The criterion was evaluated successfully but did not meet the standard.
+•	BLOCKED: The crawler could not access the resource (e.g., HTTP 403/401, robots disallow). These do not affect scores but require whitelisting.
+•	NOT_EVALUATED: The check was not applicable (e.g., no videos, no forms).
+•	LOW_CONFIDENCE: The signal was ambiguous; manual review recommended.
+•	WARNING: Non‑critical issue that may impede AI visibility (e.g., missing alt text).
+•	Scoring philosophy: Each category receives a score from 0–100 based on weighted sub‑metrics. Categories include AI Readiness (crawl & rendering), Extractability, Trust, Demand Coverage and Conversion Readiness.
+•	Page‑level scores roll up into template‑level and site‑wide scores via weighted averaging, adjusting for page importance (traffic, conversion value).
+•	BLOCKED checks are excluded from scoring; NOT_EVALUATED checks are neutral; LOW_CONFIDENCE checks are included with half‑weight.
+•	An overall score summarises all categories but is accompanied by category scores to provide diagnostic granularity.
+6. Metric Taxonomy
+Metric Category	Representative Checks
+Foundational Web/SEO Hygiene	Robots accessibility, HTTPS & redirects, Canonical tags, Page load speed
+AI Retrieval & Extractability	Crawlable HTML, Rendered DOM vs raw HTML, Semantic heading hierarchy, Chunkability (passage length, lists), Answer density
+Semantic Structure	Schema types (Organization, Article, Service), Entity definitions, FAQ & Q&A blocks, Internal link descriptions
+Trust / E‑E‑A‑T	Author bios & credentials, External citations, Testimonials/Reviews, Professional affiliations
+AI Access Governance	llms.txt presence, Robots AI directives, Block vs allow policies
+Performance / Rendering	Server‑side rendering, Client‑side script detection, Core Web Vitals
+Outcome Proxies	Citation frequency, Position in AI answers, Section‑level citation performance, Share‑of‑voice
+7. Detection Methods & Data Flow
+•	Crawlers interact with the site using both raw HTTP and headless browsers to capture server‑rendered HTML and fully rendered DOM.
+•	A parsing engine extracts headings, paragraphs, lists, tables and schema markup. It computes chunk sizes and answer density, highlights questions framed as headings and identifies stand‑alone answer sentences.
+•	A schema validator checks JSON‑LD types and properties; misaligned or missing schema triggers specific recommendations.
+•	LLM classifiers evaluate author bios, credential statements and external citations, flagging missing trust signals.
+•	Retrieval simulation uses RAG to ask representative prompts; retrieved passages are compared with ground truth to detect hallucinations and measure extractability.
+•	Prompt mining modules crawl forums (Reddit, Quora) and generative search results to identify recurring question patterns and cluster them by topic and intent.
+•	Conversion audit scripts scan for forms, CTAs, analytics tags and funnel flows to measure conversion readiness.
+8. Recommendation Engine & Industry Overlays
+Recommendations are generated at three levels: page‑specific, template‑level and site‑wide. Each recommendation is contextualised by industry and prioritised by impact vs effort.
+Healthcare: emphasise MedicalOrganization and MedicalWebPage schema, cite government or peer‑reviewed sources, include author credentials and clinic licensing information.
+Legal: use LegalService and Attorney schema, provide case law citations, disclose bar memberships and highlight privacy compliance.
+Financial services: include FinancialProduct and InvestmentFund schema, ensure risk disclosures, link to regulatory filings and demonstrate fiduciary credentials.
+B2B SaaS: implement SoftwareApplication and Service schema, provide customer testimonials, pricing pages, and emphasise integration capabilities.
+For each missing schema or trust signal, the engine supplies a code snippet (e.g., JSON‑LD) and clarifies which pages require insertion.
+9. Reporting & UX Design
+The report begins with an executive summary highlighting overall and category scores, top issues and recommended next steps.
+Site‑wide findings are presented as matrices showing how many pages pass or fail each check. Drill‑downs allow users to see which templates or URLs deviate from averages.
+Template analysis groups pages by type (e.g., homepage, service page, blog post) to identify systemic problems and avoid repetitive lists.
+Per‑URL exceptions are highlighted only when they diverge significantly from the template pattern.
+Each recommendation includes an effort vs impact rating and a suggested owner (developer, content writer, marketer).
+Reports are available as interactive dashboards and machine‑readable exports (CSV, JSON). Enterprise tiers integrate with project management (Jira) and CMS platforms for streamlined implementation.
+10. Benchmarking & Validation
+GeoPulse 2.0 provides context by comparing your scores to industry benchmarks. It tracks citation share across queries and estimates prompt volume by applying adoption rates to existing SEO search volume【858689370710159†L318-L352】.
+Validation is performed through periodic RAG simulations and measurement of actual citations in AI platforms (ChatGPT, Gemini, Perplexity, Copilot). The platform monitors branded traffic, referral traffic from AI tools and changes in share of voice over time【858689370710159†L250-L302】.
+Score versioning ensures that changes to the scoring model are transparent; users can compare historical scores across versions.
+11. Premium Features & Product Roadmap
+•	Real‑time crawl debugger with blocked‑crawler troubleshooting and automated whitelist testing.
+•	AI‑answer simulation: users can test how their content surfaces for specific prompts across AI engines.
+•	Competitor comparison: benchmarking against peer sites for citations, prompt coverage, extractability and trust signals.
+•	Template‑level fix packs: packaged recommendations and code snippets for common CMSs (WordPress, Webflow, Shopify, custom) to accelerate implementation.
+•	Integration with project management tools (Jira, Asana) and CMSs via APIs for automatic ticket creation.
+•	Continuous monitoring with alerting when new pages are blocked, trust signals expire or citation frequency drops.
+•	Automated prompt research module using generative AI to propose content topics based on emerging user questions.
+12. Go-To-Market Strategy & Positioning
+Positioning: GeoPulse 2.0 is marketed as the end‑to‑end AI visibility platform that bridges SEO, AI search optimisation and conversion optimisation. Messaging emphasises that being visible in AI answers is critical to future customer acquisition.
+Target markets: regulated industries (healthcare, legal, financial services) and B2B SaaS where trust and compliance are paramount. Secondary audiences include SEO agencies seeking to offer AI search services.
+Pricing tiers: Audit (one‑off assessment and report), Pro (full platform access with simulation and recommendations), Enterprise (benchmarks, integrations and continuous monitoring).
+Marketing tactics: publish thought leadership on AI search changes, case studies of before/after AI visibility improvements, webinars for content and SEO teams, and partnerships with CMS and digital agencies.
+Sales strategy: founder‑led outreach to early adopters in core industries, product‑led growth via free sample scans, and channel partnerships with SEO tools and analytics platforms.
+13. Conclusion
+The search landscape of 2026 is dominated by AI‑powered generative answers. GeoPulse 2.0 transforms a basic AI readiness report into a comprehensive system that makes your content discoverable, citable and trusted by AI engines. By combining technical crawlability, semantic structure, trust signals, prompt research, demand mapping and conversion analysis, the platform becomes the essential tool for businesses seeking to thrive in the AI discovery era.
+By adopting this blueprint, GeoPulse will not only diagnose issues but also drive outcomes—ensuring clients are present in AI‑generated answers, capturing new demand and converting it into measurable business results.

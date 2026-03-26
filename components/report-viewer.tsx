@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import ReactMarkdown, { type Components } from 'react-markdown';
+import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { reportLoadingJourney } from '@/lib/client/loading-journeys';
 import remarkGfm from 'remark-gfm';
 
 type Issue = {
@@ -374,6 +376,7 @@ function ReportSections({ sections }: { sections: MarkdownSection[] }) {
 export function ReportViewer({ scanId }: { scanId: string }) {
   const [state, setState] = useState<ViewState>({ phase: 'loading' });
   const [activeId, setActiveId] = useState('');
+  useLongWaitEffect(state.phase === 'loading', reportLoadingJourney);
 
   useEffect(() => {
     let cancelled = false;

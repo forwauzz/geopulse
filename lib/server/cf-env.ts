@@ -23,7 +23,7 @@ export type PaymentApiEnv = ScanApiEnv & {
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
-  /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–120). */
+  /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–1000). */
   DEEP_AUDIT_DEFAULT_PAGE_LIMIT: string;
   /** Plaintext var: off, auto, or force for optional Browser Rendering on paid deep audits. */
   DEEP_AUDIT_BROWSER_RENDER_MODE: string;

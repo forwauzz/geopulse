@@ -36,6 +36,9 @@ Key files:
 - `app/results/[id]/page.tsx`
 - `components/results-view.tsx`
 - `components/score-display.tsx`
+- `lib/client/results-journey.ts`
+- `components/long-wait-provider.tsx`
+- `lib/client/loading-journeys.ts`
 - `app/results/[id]/report/page.tsx`
 - `components/report-viewer.tsx`
 - `app/results/[id]/opengraph-image.tsx`
@@ -43,7 +46,9 @@ Key files:
 Responsibilities:
 - show score and category breakdown
 - show top issues
-- expose upgrade path
+- present the guided preview → pay / save → report journey
+- expose state-driven payment/report status
+- escalate long waits into the centralized overlay
 - render interactive markdown-backed report view
 - provide OG sharing image
 
@@ -87,6 +92,7 @@ Key files:
 - `app/auth/callback/route.ts`
 - `middleware.ts`
 - `app/dashboard/page.tsx`
+- `components/site-header.tsx`
 - `lib/server/link-guest-purchases.ts`
 
 Responsibilities:
@@ -94,20 +100,29 @@ Responsibilities:
 - guest purchase linking
 - dashboard access
 - session protection
+- auth-aware landing navigation
 
 ### 6. Admin / report eval
 Key files:
 - `app/admin/login/*`
 - `app/dashboard/evals/page.tsx`
+- `app/dashboard/evals/retrieval/[id]/page.tsx`
 - `lib/server/report-eval-structural.ts`
+- `lib/server/promptfoo-results.ts`
+- `lib/server/retrieval-eval-writer.ts`
 - `scripts/report-eval-smoke.ts`
+- `scripts/promptfoo-eval-write.ts`
+- `scripts/retrieval-eval-write.ts`
 - `eval/fixtures/*`
 - `eval/promptfoo/*`
 
 Responsibilities:
 - admin auth
-- eval history display
+- site-centric eval history display
+- retrieval drilldown display
 - smoke eval insertion
+- promptfoo result normalization + persistence
+- deterministic retrieval eval persistence
 - prompt regression suites
 - golden report assertions
 
@@ -156,10 +171,11 @@ Key files:
 - integrity rubric
 - promptfoo harness
 - deterministic retrieval simulation
+- site-history eval analytics
+- retrieval drilldown
 
 ## Important Non-Goals / Not Implemented
 - API product layer beyond schema foundation
 - benchmark percentile engine
 - ragas runtime pipeline
-- Workflows-scale deep-audit orchestration for 1000+ pages
 - full Browser Rendering `/crawl` orchestration
