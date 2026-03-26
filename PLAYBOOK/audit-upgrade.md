@@ -1,6 +1,6 @@
 # Deep Audit Upgrade Plan (Executive Summary)
 
-> **Registry:** Task IDs **DA-001…DA-005** in [`agents/memory/PROJECT_STATE.md`](../agents/memory/PROJECT_STATE.md). **Canonical technical plan:** `.cursor/plans/report_depth_and_formats_fa7e556e.plan.md` (Cursor workspace plan; § Target architecture) — same reference as `PROJECT_STATE.md`. This file is the narrative companion.
+> **Registry:** Task IDs **DA-001…DA-005** in [`agents/memory/PROJECT_STATE.md`](../agents/memory/PROJECT_STATE.md). This file is the narrative companion for the shipped deep-audit upgrade scope. If older planning notes disagree, trust `PROJECT_STATE.md`, `COMPLETION_LOG.md`, and the implemented code paths first.
 
 Deep Audit Upgrade Plan (Executive Summary)
 We will eliminate the truth gap by making paid deep audits run a true multi-page scan (new ScanRun records with per-page ScanPage data) instead of reusing the free scan’s one-page results. We adopt a policy‑driven, capped crawl (robots.txt → sitemap(s) → link graph with section-aware sampling) within Cloudflare Workers limits (30s CPU, 128MB RAM, 10k subreqs). A central fetch gate enforces SSRF safety (allow only http/https, safe ports, block internal IPs, manual redirect mode with DNS+IP validation on each hop) per OWASP guidance. We store discovery state in Supabase (Postgres) with tables ScanRun and ScanPage (each page has status, issues, parent, etc.), using SELECT ... FOR UPDATE SKIP LOCKED to pop frontier URLs without contention.

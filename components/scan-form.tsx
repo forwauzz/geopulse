@@ -3,6 +3,8 @@
 import { Turnstile } from '@marsidev/react-turnstile';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { scanLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
 
 type ScanFormProps = {
@@ -29,6 +31,7 @@ export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  useLongWaitEffect(loading, scanLoadingJourney);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

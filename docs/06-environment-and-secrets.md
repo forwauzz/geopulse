@@ -24,6 +24,7 @@ Required:
 - `DEEP_AUDIT_BROWSER_RENDER_MODE`
 - `GEMINI_MODEL`
 - `GEMINI_ENDPOINT`
+- `ADMIN_EMAIL`
 
 Source of truth:
 - `wrangler.jsonc`
@@ -46,6 +47,7 @@ Conditional secrets:
 - `RECONCILE_SECRET`
 - `BROWSER_RENDERING_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
+- `MARKETING_REPORT_TO`
 
 Browser Rendering note:
 - `BROWSER_RENDERING_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are only required when `DEEP_AUDIT_BROWSER_RENDER_MODE=auto`.
@@ -118,6 +120,11 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - Supabase URL
 - service role key
 - admin user email in auth/db
+- optional local write tooling:
+  - `npm run eval:smoke`
+  - `npm run eval:promptfoo:write:report -- --site-url https://example.com`
+  - `npm run eval:promptfoo:write:retrieval -- --site-url https://example.com`
+  - `npm run eval:retrieval:write -- --site-url https://example.com`
 
 ## Sanity checks
 
@@ -126,4 +133,5 @@ Before handing off to another team, verify:
 2. `npm run build`
 3. `npm run eval:smoke`
 4. admin eval page shows inserted row
-5. report page can fetch markdown and PDF without CSP errors
+5. retrieval drilldown opens when retrieval rows exist
+6. report page can fetch markdown and PDF without CSP errors

@@ -2,6 +2,8 @@
 
 import { Turnstile } from '@marsidev/react-turnstile';
 import { useState } from 'react';
+import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { saveResultsLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
 
 type EmailGateProps = {
@@ -17,6 +19,7 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  useLongWaitEffect(loading, saveResultsLoadingJourney);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -58,10 +61,10 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
 
   if (done) {
     return (
-      <div className="rounded-xl bg-surface-container-low p-6 text-on-background">
-        <p className="font-headline font-semibold">Saved.</p>
+      <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-6 text-on-background">
+        <p className="font-headline font-semibold">Preview saved.</p>
         <p className="mt-2 font-body text-sm text-on-surface-variant">
-          We&apos;ll send you a summary and notify you when we add new checks for your site.
+          We&apos;ll email this preview summary so you can come back to it later. Paid full audits are still delivered to the email entered at checkout.
         </p>
       </div>
     );
@@ -70,11 +73,11 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
   return (
     <form
       onSubmit={onSubmit}
-      className="flex flex-col gap-4 rounded-xl bg-surface-container-low p-6 md:p-8"
+      className="flex flex-col gap-4 rounded-xl border border-dashed border-outline-variant/30 bg-surface-container-low/60 p-6 md:p-8"
     >
-      <h2 className="font-headline text-lg font-semibold text-on-background">Save your results</h2>
+      <h2 className="font-headline text-lg font-semibold text-on-background">Or save this preview for later</h2>
       <p className="font-body text-sm text-on-surface-variant">
-        Enter your email to bookmark this report and get improvement tips as we add new checks.
+        This is the lighter option. We&apos;ll save the preview you already unlocked so you can revisit it without starting over.
       </p>
       <input
         type="email"
@@ -91,7 +94,7 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
         disabled={loading}
         className="rounded-xl bg-primary px-4 py-3 text-sm font-medium text-on-primary transition hover:bg-primary-dim disabled:opacity-50"
       >
-        {loading ? 'Saving…' : 'Save my results'}
+        {loading ? 'Saving…' : 'Save this preview'}
       </button>
     </form>
   );

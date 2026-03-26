@@ -49,7 +49,7 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 # DEEP_AUDIT_R2_PUBLIC_BASE — single source of truth is wrangler.jsonc [vars]. Set here only to override local Wrangler.
 # DEEP_AUDIT_R2_PUBLIC_BASE=https://pub-xxxxx.r2.dev
 
-# Default page count for new paid deep audits (1–120). Plaintext; mirrors wrangler.jsonc DEEP_AUDIT_DEFAULT_PAGE_LIMIT.
+# Default page count for new paid deep audits (1–1000). Plaintext; mirrors wrangler.jsonc DEEP_AUDIT_DEFAULT_PAGE_LIMIT.
 # DEEP_AUDIT_DEFAULT_PAGE_LIMIT=10
 
 # Optional: paid deep-audit SPA rendering via Cloudflare Browser Rendering REST API.

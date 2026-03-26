@@ -10,6 +10,10 @@ import { structuralReportScore } from '../lib/server/report-eval-structural';
 
 const RUBRIC_VERSION = 'integrity-v2';
 const GENERATOR_VERSION = 'smoke-fixture';
+const SITE_URL = 'https://example.com/';
+const DOMAIN = 'example.com';
+const PROMPT_SET_NAME = 'smoke-fixture';
+const FRAMEWORK = 'report_smoke';
 
 async function main(): Promise<void> {
   const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
@@ -36,6 +40,14 @@ async function main(): Promise<void> {
       metrics: metrics as unknown as Record<string, unknown>,
       report_id: null,
       scan_id: null,
+      framework: FRAMEWORK,
+      domain: DOMAIN,
+      site_url: SITE_URL,
+      prompt_set_name: PROMPT_SET_NAME,
+      metadata: {
+        suite_description: 'offline smoke fixture',
+        fixture_path: fixturePath,
+      },
     })
     .select('id')
     .single();

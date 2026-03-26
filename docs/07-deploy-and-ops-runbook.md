@@ -23,6 +23,9 @@ Targeted validation used recently:
 - targeted Vitest for report generation, deep-audit crawl, Browser Rendering, and retrieval eval
 - `npm run eval:smoke`
 - `npm run eval:promptfoo`
+- `npm run eval:promptfoo:write:report -- --site-url https://example.com`
+- `npm run eval:promptfoo:write:retrieval -- --site-url https://example.com`
+- `npm run eval:retrieval:write -- --site-url https://example.com`
 
 ## Local deploy-oriented workflow
 
@@ -50,8 +53,13 @@ If a deploy behaves differently than local build:
 
 ### Public app
 - home page loads
+- landing header shows `Sign in` when logged out and does not show `Dashboard`
+- after login, landing header shows `Dashboard` and `Sign out`
 - free scan submits
 - results page renders
+- results page shows the guided journey cards
+- paid path is primary and preview-save remains secondary
+- returning from Stripe does not rely on a `Payment received` query-string banner; status should come from real report state
 - report markdown route loads
 - PDF link opens
 - no CSP error for R2 markdown/PDF fetches
@@ -61,10 +69,18 @@ If a deploy behaves differently than local build:
 - webhook records payment state
 - queue processes report
 - report artifacts land in R2
+- paid report is sent to the email collected in Stripe checkout
 - results report route renders interactive summary + markdown sections
 
 ### Admin pages
+- apply `supabase/migrations/011_eval_run_metadata.sql` before using the new eval analytics view
 - `/dashboard/evals` shows at least one row after `npm run eval:smoke`
+- `/dashboard/evals` shows site-grouped Promptfoo rows after:
+  - `npm run eval:promptfoo:write:report -- --site-url https://example.com`
+  - `npm run eval:promptfoo:write:retrieval -- --site-url https://example.com`
+- retrieval detail tables populate after:
+  - `npm run eval:retrieval:write -- --site-url https://example.com`
+- retrieval runs expose a working drilldown page from `/dashboard/evals`
 - `/dashboard/attribution` loads without a query error
 - empty attribution data is acceptable; query failure is not
 
@@ -87,6 +103,7 @@ Operational dependencies:
 Runbook expectations:
 - do not treat queue success as sufficient; verify the report artifact exists and the UI can fetch it
 - do not treat eval dashboard emptiness as a bug until `npm run eval:smoke` has been executed against the same project
+- for site-history analytics, use the same `--site-url` or `--domain` across repeated Promptfoo runs; otherwise trend lines will fragment across multiple site keys
 
 ## Incident triage shortcuts
 
@@ -107,7 +124,21 @@ Check:
 Check:
 1. `report_eval_runs` contains rows
 2. `npm run eval:smoke` was run against active DB
-3. admin access is correct
+3. `011_eval_run_metadata.sql` was applied if using the new analytics page
+4. admin access is correct
+
+### Evals page shows rows but no site trend
+Check:
+1. repeated evals used the same `domain` / `site_url`
+2. Promptfoo runs were written with `eval:promptfoo:write:report` or `eval:promptfoo:write:retrieval`
+3. framework filter is not hiding the relevant rows
+
+### Retrieval detail tables empty
+Check:
+1. `retrieval_eval_runs` contains the aggregate run row
+2. `npm run eval:retrieval:write` was run against the active DB
+3. the fixture contains both `pages` and `prompts`
+4. `retrieval_eval_prompts`, `retrieval_eval_passages`, and `retrieval_eval_answers` were inserted for the same `run_id`
 
 ### Deep audit stuck or incomplete
 Check:

@@ -2,6 +2,11 @@
 
 This file is the security reference for the GEO-Pulse codebase. Every item marked **[LAUNCH BLOCKER]** must be complete before going live. Every item marked **[AI PITFALL]** is something AI coding tools commonly get wrong — review manually.
 
+Current truth:
+- repo-side protections for RLS, SSRF, Stripe webhook verification, and Turnstile are implemented
+- launch is still not fully closed because DNS/email auth (`P4-003`) and final launch sign-off (`P4-006`) remain open
+- Cloudflare managed WAF remains an operator decision (`P4-004`), while repo mitigation is already in place
+
 ---
 
 ## The Five Launch Blockers
@@ -14,7 +19,7 @@ These five items block launch if incomplete. They are not optional.
 | 2 | SSRF validation on every user-submitted URL | `workers/lib/ssrf.ts` + callers | ✅ Enforced on scan path — extend to any new fetch of user URLs |
 | 3 | Stripe webhook signature verification | `app/api/webhooks/stripe/route.ts` | ✅ `constructEvent` before handling |
 | 4 | Cloudflare Turnstile on scan form, server-side validated | `components/scan-form.tsx`, `app/api/scan`, `lib/server/turnstile.ts` | ✅ Server validates token |
-| 5 | SPF + DKIM + DMARC before first email send | Cloudflare DNS + Resend dashboard | ⬜ Configure before production launch |
+| 5 | SPF + DKIM + DMARC before first email send | Cloudflare DNS + Resend dashboard | ⬜ Pending operator completion before production launch |
 
 ---
 
@@ -181,7 +186,11 @@ Before sending the first email, configure in Cloudflare DNS:
 
 Start with `p=none` (monitor mode), escalate to `p=quarantine` after 30 days, then `p=reject`.
 
-Use a subdomain (`mail.geopulse.io`) to protect the root domain reputation.
+Use a dedicated sending subdomain to protect the root domain reputation.
+
+Current operator note:
+- domain purchase / DNS setup is currently blocked outside the repo by a billing issue
+- do not claim email-launch readiness until that blocker is resolved and evidence is attached in `COMPLETION_LOG.md`
 
 ---
 
@@ -193,6 +202,11 @@ A critical vulnerability allowing authentication bypass via the `x-middleware-su
 1. Enable the Cloudflare WAF managed rule: Dashboard → Security → WAF → Managed Rules
 2. Keep Next.js updated (patched in recent versions)
 3. Do not rely solely on middleware for auth checks — validate session in Server Components too
+
+Current repo truth:
+- `middleware.ts` includes the application-layer `x-middleware-subrequest` guard
+- targeted tests exist for the middleware CVE guard and Stripe / Turnstile launch checks
+- managed WAF is still an operator-side closure item, not a missing repo implementation
 
 ---
 
@@ -215,6 +229,11 @@ Before actively targeting Quebec or EU users:
 - Implement email unsubscribe in Resend
 - Store consent timestamp in leads table
 
+Current product nuance:
+- the free results page includes a preview-save email path
+- paid deep-audit delivery email comes from Stripe checkout
+- both flows should remain truthful about what is being saved or delivered
+
 **Do not launch active targeting of these regions without legal review.**
 
 ---
@@ -233,4 +252,4 @@ When using Cursor or any AI tool on this codebase:
 
 ---
 
-*Last updated: March 2026 | GEO-Pulse v0.1.0*
+*Last updated: 2026-03-26 | GEO-Pulse v0.1.0*

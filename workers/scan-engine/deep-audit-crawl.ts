@@ -429,6 +429,7 @@ async function startChunkedCrawl(
     crawlWallStart,
     crawlDelayMs,
     limit,
+    chunkSize,
     robotsStatus: robotsRes.status,
     sitemapCount: smList.length,
     browserRenderStats: sliceRes.browserRenderStats,
@@ -541,6 +542,7 @@ async function continueChunkedCrawl(
     crawlWallStart: pending.started_at ? new Date(pending.started_at).getTime() : Date.now(),
     crawlDelayMs,
     limit,
+    chunkSize,
     robotsStatus: pending.robots_status,
     sitemapCount: pending.sitemap_urls_considered,
     chunksProcessed: chunksProcessed + 1,
@@ -773,6 +775,7 @@ async function finalizeDeepCrawl(
     readonly crawlWallStart: number;
     readonly crawlDelayMs: number;
     readonly limit: number;
+    readonly chunkSize: number;
     readonly robotsStatus: number;
     readonly sitemapCount: number;
     readonly chunksProcessed?: number;
@@ -788,6 +791,7 @@ async function finalizeDeepCrawl(
     crawlWallStart,
     crawlDelayMs,
     limit,
+    chunkSize,
     robotsStatus,
     sitemapCount,
     chunksProcessed,
@@ -838,7 +842,7 @@ async function finalizeDeepCrawl(
         urls_planned: ordered.length,
         chunked: true,
         chunks_processed: completedChunks,
-        chunk_size: Math.min(limit, MAX_CHUNK_SIZE),
+        chunk_size: chunkSize,
         urls_remaining: 0,
         browser_render_mode: browserRenderMode,
         browser_render_enabled: browserRenderEnabled,

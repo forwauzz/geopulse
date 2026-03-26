@@ -1,12 +1,10 @@
 import type { Metadata } from 'next';
-import { Suspense } from 'react';
-import { CheckoutStatusBanner } from '@/components/checkout-status-banner';
 import { ResultsView } from '@/components/results-view';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<{ checkout?: string }> };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { id } = await params;
@@ -37,18 +35,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 }
 
-export default async function ResultsPage({ params }: PageProps) {
+export default async function ResultsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const query = searchParams ? await searchParams : undefined;
   const siteKey = getTurnstileSiteKey();
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 md:px-10 md:py-16">
-      <Suspense fallback={null}>
-        <CheckoutStatusBanner />
-      </Suspense>
-      <div className="mt-6 md:mt-8">
-        <ResultsView scanId={id} turnstileSiteKey={siteKey} />
-      </div>
+      <ResultsView scanId={id} turnstileSiteKey={siteKey} checkoutState={query?.checkout ?? null} />
     </main>
   );
 }
