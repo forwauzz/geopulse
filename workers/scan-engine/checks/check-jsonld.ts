@@ -3,13 +3,15 @@ import type { AuditCheck, CheckContext, CheckResult } from '../../lib/interfaces
 export const jsonLdCheck: AuditCheck = {
   id: 'json-ld',
   name: 'Structured data (JSON-LD)',
-  weight: 10,
+  weight: 8,
+  category: 'extractability',
   run(ctx: CheckContext): CheckResult {
     const n = ctx.signals.jsonLdSnippetCount;
     const passed = n > 0;
     return {
       id: 'json-ld',
       passed,
+      status: passed ? 'PASS' : 'FAIL',
       finding: passed
         ? `Found ${String(n)} JSON-LD script block(s).`
         : 'No JSON-LD structured data detected.',

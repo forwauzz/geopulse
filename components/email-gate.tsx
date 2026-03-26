@@ -2,6 +2,7 @@
 
 import { Turnstile } from '@marsidev/react-turnstile';
 import { useState } from 'react';
+import { getAttributionContext } from '@/lib/client/attribution';
 
 type EmailGateProps = {
   siteKey: string;
@@ -35,6 +36,7 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
           score,
           scanId,
           turnstileToken: token,
+          anonymous_id: getAttributionContext().anonymous_id,
         }),
       });
       if (!res.ok) {
@@ -56,18 +58,23 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
 
   if (done) {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-emerald-900">
-        <p className="font-medium">You are on the list.</p>
-        <p className="mt-1 text-sm">We will follow up with deeper audit tips and product updates.</p>
+      <div className="rounded-xl bg-surface-container-low p-6 text-on-background">
+        <p className="font-headline font-semibold">Saved.</p>
+        <p className="mt-2 font-body text-sm text-on-surface-variant">
+          We&apos;ll send you a summary and notify you when we add new checks for your site.
+        </p>
       </div>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-6">
-      <h2 className="text-lg font-semibold text-geo-ink">Get the full breakdown</h2>
-      <p className="text-sm text-geo-mist">
-        Leave your email to receive the detailed checklist and product updates. We respect your inbox.
+    <form
+      onSubmit={onSubmit}
+      className="flex flex-col gap-4 rounded-xl bg-surface-container-low p-6 md:p-8"
+    >
+      <h2 className="font-headline text-lg font-semibold text-on-background">Save your results</h2>
+      <p className="font-body text-sm text-on-surface-variant">
+        Enter your email to bookmark this report and get improvement tips as we add new checks.
       </p>
       <input
         type="email"
@@ -75,16 +82,16 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
         placeholder="you@company.com"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="rounded-lg border border-slate-200 px-4 py-2 text-base outline-none ring-geo-accent focus:ring-2"
+        className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 font-body text-base text-on-surface outline-none ring-0 focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40"
       />
       <Turnstile siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(null)} />
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-error">{error}</p> : null}
       <button
         type="submit"
         disabled={loading}
-        className="rounded-lg bg-geo-accent px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+        className="rounded-xl bg-primary px-4 py-3 text-sm font-medium text-on-primary transition hover:bg-primary-dim disabled:opacity-50"
       >
-        {loading ? 'Saving…' : 'Send me the report'}
+        {loading ? 'Saving…' : 'Save my results'}
       </button>
     </form>
   );

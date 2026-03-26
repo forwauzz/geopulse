@@ -13,28 +13,28 @@ export function LoginForm({ nextPath }: Props) {
   return (
     <form action={formAction} className="mt-8 flex max-w-md flex-col gap-4">
       <input type="hidden" name="next" value={nextPath} />
-      <label className="flex flex-col gap-2 text-sm font-medium text-geo-ink">
+      <label className="flex flex-col gap-2 font-body text-sm font-medium text-on-background">
         Email
         <input
           name="email"
           type="email"
           required
           autoComplete="email"
-          className="rounded-lg border border-geo-mist/40 bg-white px-4 py-3 text-base text-geo-ink outline-none ring-geo-accent focus:ring-2"
+          className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 font-body text-base text-on-background outline-none ring-0 focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40"
           placeholder="you@company.com"
         />
       </label>
       <button
         type="submit"
         disabled={pending}
-        className="rounded-lg bg-geo-accent px-4 py-3 font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+        className="rounded-xl bg-primary px-4 py-3 font-semibold text-on-primary transition hover:bg-primary-dim disabled:opacity-50"
       >
         {pending ? 'Sending…' : 'Email me a sign-in link'}
       </button>
       {state?.ok === true ? (
-        <p className="text-sm text-green-700">{state.message}</p>
+        <p className="font-body text-sm text-tertiary-dim">{state.message}</p>
       ) : null}
-      {state?.ok === false ? <p className="text-sm text-red-600">{state.message}</p> : null}
+      {state?.ok === false ? <p className="font-body text-sm text-error">{state.message}</p> : null}
     </form>
   );
 }

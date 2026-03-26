@@ -18,17 +18,16 @@ export default async function LoginPage({ searchParams }: Props) {
   const err = sp.error;
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-lg flex-col px-6 py-16">
-      <Link href="/" className="text-sm font-semibold text-geo-accent hover:underline">
+    <main className="mx-auto flex min-h-[60vh] max-w-lg flex-col px-6 py-16">
+      <Link href="/" className="font-body text-sm font-semibold text-tertiary hover:underline">
         ← Back to GEO-Pulse
       </Link>
-      <h1 className="mt-8 text-3xl font-bold tracking-tight text-geo-ink">Sign in</h1>
-      <p className="mt-2 text-geo-mist">
-        We&apos;ll email you a magic link — no password. Use the same email as checkout to see your
-        reports.
+      <h1 className="mt-8 font-headline text-3xl font-bold tracking-tight text-on-background md:text-4xl">Sign in</h1>
+      <p className="mt-2 font-body text-on-surface-variant">
+        We&apos;ll email you a magic link — no password. Use the same email as checkout to see your reports.
       </p>
       {err ? (
-        <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <p className="mt-4 rounded-xl border border-error/30 bg-surface-container-low px-4 py-3 font-body text-sm text-error">
           {decodeURIComponent(err)}
         </p>
       ) : null}

@@ -2,6 +2,7 @@
 
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { useRef, useState } from 'react';
+import { getAttributionContext } from '@/lib/client/attribution';
 
 type Props = {
   siteKey: string;
@@ -41,7 +42,7 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scanId, turnstileToken: tokenToSend }),
+        body: JSON.stringify({ scanId, turnstileToken: tokenToSend, anonymous_id: getAttributionContext().anonymous_id }),
       });
       const data: unknown = await res.json().catch(() => null);
       if (!res.ok) {
@@ -73,25 +74,32 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-sky-200 bg-sky-50/80 p-6">
-      <h2 className="text-lg font-semibold text-geo-ink">Deep audit PDF ($29)</h2>
-      <p className="text-sm text-geo-mist">
-        Get the full checklist as a downloadable PDF, delivered to the email you use in Stripe Checkout.
+    <div className="flex flex-col gap-5 rounded-xl bg-on-background p-6 text-surface md:p-8">
+      <h2 className="font-headline text-xl font-bold text-surface-container-lowest">Unlock the full picture</h2>
+      <p className="font-body text-sm text-surface-container-low/80">
+        Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan.
+        One-time purchase, no subscription.
       </p>
+      <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-surface-container-low/70">
+        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">language</span> Multi-page crawl</li>
+        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">checklist</span> Priority action plan</li>
+        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">mail</span> PDF + email delivery</li>
+        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">code</span> Developer-ready fixes</li>
+      </ul>
       <Turnstile
         ref={turnstileRef}
         siteKey={siteKey}
         onSuccess={setToken}
         onExpire={() => setToken(null)}
       />
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-red-300">{error}</p> : null}
       <button
         type="button"
         onClick={() => void startCheckout()}
         disabled={loading}
-        className="rounded-lg bg-geo-accent px-4 py-2 text-sm font-semibold text-white hover:bg-sky-600 disabled:opacity-50"
+        className="rounded-xl bg-surface-container-lowest px-6 py-3.5 text-sm font-semibold text-on-background transition hover:bg-surface disabled:opacity-50"
       >
-        {loading ? 'Redirecting…' : 'Pay securely with Stripe'}
+        {loading ? 'Redirecting…' : 'Get my full report \u2014 $29'}
       </button>
     </div>
   );

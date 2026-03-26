@@ -3,6 +3,8 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const uuid = z.string().uuid();
 
+export type ReportStatus = 'none' | 'generating' | 'delivered';
+
 export type PublicShareScanRow = {
   scanId: string;
   url: string;
@@ -10,6 +12,11 @@ export type PublicShareScanRow = {
   score: number | null;
   letterGrade: string | null;
   topIssues: unknown[];
+  categoryScores: unknown[];
+  hasPaidReport: boolean;
+  reportStatus: ReportStatus;
+  pdfUrl: string | null;
+  markdownUrl: string | null;
 };
 
 export type PublicShareScanError =
@@ -54,7 +61,7 @@ export async function getScanForPublicShare(
 
   const { data, error } = await supabase
     .from('scans')
-    .select('id,url,domain,score,letter_grade,issues_json,created_at,user_id')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,user_id')
     .eq('id', parsed.data)
     .maybeSingle();
 
@@ -74,6 +81,33 @@ export async function getScanForPublicShare(
     return { ok: false, code: 'expired' };
   }
 
+  const [paymentRes, reportRes] = await Promise.all([
+    supabase
+      .from('payments')
+      .select('id')
+      .eq('scan_id', parsed.data)
+      .eq('status', 'complete')
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('reports')
+      .select('id,pdf_url,markdown_url,email_delivered_at')
+      .eq('scan_id', parsed.data)
+      .eq('type', 'deep_audit')
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const hasPaid = !!paymentRes.data?.id;
+  const report = reportRes.data;
+  let reportStatus: ReportStatus = 'none';
+  if (report?.email_delivered_at) {
+    reportStatus = 'delivered';
+  } else if (hasPaid) {
+    reportStatus = 'generating';
+  }
+
+  const fullResults = data.full_results_json as { categoryScores?: unknown[] } | null;
   return {
     ok: true,
     data: {
@@ -83,6 +117,11 @@ export async function getScanForPublicShare(
       score: data.score,
       letterGrade: data.letter_grade,
       topIssues: extractTopIssues(data.issues_json),
+      categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
+      hasPaidReport: hasPaid,
+      reportStatus,
+      pdfUrl: report?.pdf_url ?? null,
+      markdownUrl: report?.markdown_url ?? null,
     },
   };
 }

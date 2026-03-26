@@ -11,13 +11,17 @@ export function createQaPatternCheck(llm: LLMProvider): AuditCheck {
   return {
     id: 'llm-qa-pattern',
     name: 'Q&A / instructional structure (LLM)',
-    weight: 12,
+    weight: 10,
+    category: 'extractability',
     async run(ctx: CheckContext): Promise<CheckResult> {
       const r = await llm.analyze(PROMPT, ctx.textSample);
+      const status = r.confidence === 'low' ? 'LOW_CONFIDENCE' : r.passed ? 'PASS' : 'FAIL';
       return {
         id: 'llm-qa-pattern',
         passed: r.passed,
+        status,
         finding: r.reasoning,
+        confidence: r.confidence,
         fix: r.passed ? undefined : 'Add clear questions and answers or step-by-step guidance where appropriate.',
       };
     },

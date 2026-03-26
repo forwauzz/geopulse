@@ -6,7 +6,8 @@ const MAX = 70;
 export const titleTagCheck: AuditCheck = {
   id: 'title-tag',
   name: 'Title tag',
-  weight: 8,
+  weight: 4,
+  category: 'extractability',
   run(ctx: CheckContext): CheckResult {
     const t = ctx.signals.title?.trim() ?? '';
     const len = t.length;
@@ -14,6 +15,7 @@ export const titleTagCheck: AuditCheck = {
     return {
       id: 'title-tag',
       passed,
+      status: passed ? 'PASS' : 'FAIL',
       finding: passed
         ? `Title length looks reasonable (${String(len)} characters).`
         : len === 0

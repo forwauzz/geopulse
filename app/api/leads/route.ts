@@ -3,6 +3,7 @@ import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
 import { checkEmailLeadRateLimit, emailRateKey } from '@/lib/server/rate-limit-kv';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 
 export const runtime = 'nodejs';
 
@@ -12,6 +13,7 @@ const bodySchema = z.object({
   score: z.number().int().min(0).max(100),
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1),
+  anonymous_id: z.string().max(128).nullish(),
 });
 
 async function hashEmail(email: string): Promise<string> {
@@ -73,12 +75,20 @@ export async function POST(request: Request): Promise<Response> {
     email: parsed.data.email,
     url: parsed.data.url,
     score: parsed.data.score,
+    scan_id: parsed.data.scanId,
     source: 'organic',
   });
 
   if (error) {
     return Response.json({ error: { code: 'db_error', message: error.message } }, { status: 500 });
   }
+
+  await emitMarketingEvent(supabase, 'lead_submitted', {
+    anonymous_id: parsed.data.anonymous_id,
+    scan_id: parsed.data.scanId,
+    email: parsed.data.email,
+    metadata: { url: parsed.data.url, score: parsed.data.score },
+  });
 
   return Response.json({ ok: true });
 }

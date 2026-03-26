@@ -4,12 +4,14 @@ import { checkCheckoutRateLimit } from '@/lib/server/rate-limit-kv';
 import { createStripeClient } from '@/lib/server/stripe-client';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 
 export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1),
+  anonymous_id: z.string().max(128).nullish(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -111,6 +113,12 @@ export async function POST(request: Request): Promise<Response> {
         { status: 502 }
       );
     }
+
+    await emitMarketingEvent(supabase, 'checkout_started', {
+      anonymous_id: parsed.data.anonymous_id,
+      scan_id: scanId,
+      metadata: { stripe_session_id: session.id },
+    });
 
     return Response.json({ url: session.url });
   } catch (e) {

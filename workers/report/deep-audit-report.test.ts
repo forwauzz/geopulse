@@ -24,6 +24,8 @@ describe('buildDeepAuditReportPayload', () => {
       ],
       coverageSummary: { ok: true },
       highlightedIssues: [],
+      allIssues: [],
+      technicalAppendix: { robotsSummary: 'AI crawler access [PASS]: robots.txt allows crawlers.' },
       generatedAt: '2026-03-25T12:00:00.000Z',
     });
 
@@ -50,9 +52,25 @@ describe('buildDeepAuditMarkdown', () => {
           issues_json: [{ check: 'Title', passed: true }],
           section: 'docs',
         },
+        {
+          url: 'https://example.com/q',
+          score: 60,
+          letter_grade: 'B',
+          issues_json: [{ check: 'Meta', passed: false }],
+          section: 'blog',
+        },
       ],
-      coverageSummary: null,
-      highlightedIssues: [],
+      coverageSummary: { pages_fetched: 2, pages_errored: 0, robots_status: 200 },
+      highlightedIssues: [{ check: 'Meta', passed: false, status: 'FAIL' }],
+      allIssues: [
+        { check: 'Title', passed: true, status: 'PASS', weight: 5, finding: 'ok' },
+        { check: 'Meta', passed: false, status: 'FAIL', weight: 6, finding: 'missing' },
+      ],
+      technicalAppendix: {
+        robotsSummary: 'AI crawler access [PASS]: robots.txt allows crawlers.',
+        schemaSummary: 'Schema.org type coverage [FAIL]: No Schema.org @type values found.',
+        headersSummary: 'Security response headers [WARNING]: HSTS missing.',
+      },
       generatedAt: '2026-03-25T12:00:00.000Z',
     });
 
@@ -60,7 +78,12 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('example.com');
     expect(md).toContain('50/100');
     expect(md).toContain('section docs');
-    expect(md).toContain('Per-page checklist');
+    expect(md).toContain('Per-Page Checklist');
+    expect(md).toContain('Coverage Summary');
+    expect(md).toContain('Technical Appendix');
+    expect(md).toContain('Robots / AI crawler access');
+    expect(md).toContain('Schema findings');
+    expect(md).toContain('| Meta | FAIL | 6 | missing |');
   });
 });
 

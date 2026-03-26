@@ -76,7 +76,6 @@ Poll for scan status and results.
   "status": "complete",
   "score": 58,
   "letter_grade": "C",
-  "benchmark_percentile": 43,
   "checks": [
     {
       "id": "ai_crawler_access",
@@ -93,6 +92,8 @@ Poll for scan status and results.
   "scanned_at": "2026-03-23T14:00:00Z"
 }
 ```
+
+`benchmark_percentile` is intentionally omitted from the current v1 result contract. It remains deferred until the benchmark pipeline described in `PLAYBOOK/benchmark-percentile-design.md` exists.
 
 **Response (200 OK — pending/processing):**
 ```json

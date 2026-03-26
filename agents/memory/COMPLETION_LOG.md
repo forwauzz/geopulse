@@ -456,6 +456,655 @@ _Pending review._
 
 ---
 
+## ADM-001 … EVAL-004 — Admin password login + report eval pipeline (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, `npm run test`, `npm run build`, Supabase migration `009_admin_report_eval` applied to project `geo_pulse` (`vynrlgtxqnomxenakafn`)
+
+### Evidence
+
+**Migrations:** `supabase/migrations/009_admin_report_eval.sql` — `reports.markdown_url`, `reports.report_payload_version`, `public.report_eval_runs` with RLS enabled and no policies (service_role writes only).
+
+**App:** `app/admin/login` (password sign-in; non-admin session cleared with generic error), `app/dashboard/evals` (service-role read after `requireAdminOrRedirect`), dashboard link for admin. **Worker:** `workers/queue/report-queue-consumer.ts` persists `markdown_url` + `report_payload_version` on `reports` insert.
+
+**Eval:** `lib/server/report-eval-structural.ts` + tests; `scripts/report-eval-smoke.ts` + `npm run eval:smoke` (requires `SUPABASE_SERVICE_ROLE_KEY` + `NEXT_PUBLIC_SUPABASE_URL`); fixture `eval/fixtures/sample-deep-audit.md`.
+
+`npm run type-check`:
+```
+> tsc --noEmit
+(0 errors)
+```
+
+`npm run test`:
+```
+ Test Files  18 passed (18)
+      Tests  91 passed (91)
+```
+
+`npm run build`: completed successfully (exit 0); routes include `/admin/login`, `/dashboard/evals`.
+
+**Operator:** Enable Email **password** in Supabase Auth for the `ADMIN_EMAIL` user; bootstrap password in Dashboard → Users. Run `supabase db push` (or apply `009`) on any environment missing the new columns/table.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## P4-004 / P4-006 — CVE-2025-29927 middleware guard unit tests (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** Vitest output + `npm run type-check`
+
+### Evidence
+
+**Implementation:** `lib/server/middleware-cve.ts` (`shouldRejectForMiddlewareSubrequest`), covered by `lib/server/middleware-cve.test.ts`; `middleware.ts` calls the helper (belt-and-suspenders with patched Next.js).
+
+`npm run test`:
+```
+ Test Files  19 passed (19)
+      Tests  93 passed (93)
+```
+
+`npm run type-check`: `tsc --noEmit` — 0 errors.
+
+**Purpose:** Automated regression for **P4-004** application-layer mitigation / **P4-006** launch security checklist (forged `x-middleware-subrequest`). Does not replace operator WAF/DNS evidence.
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## AU-001 … AU-005 / AU-007 — Report integrity + product truth pass (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, targeted Vitest output, `npm run build`, file diff summary
+
+### Evidence
+
+**Implementation**
+
+- `workers/report/deep-audit-report-payload.ts`: added `allIssues` alongside `highlightedIssues` so executive-summary highlights and full sitewide breakdown are no longer conflated.
+- `workers/queue/report-queue-consumer.ts`: added `buildSitewideIssueSummaryFromPages`; stores `highlightedIssues`, `allIssues`, `categoryScores`, and `coverageSummary` in `full_results_json`.
+- `workers/report/build-deep-audit-markdown.ts`: score breakdown now uses `allIssues`; preserves v2 statuses; adds `Coverage Summary` and `Technical Appendix`.
+- `workers/report/build-deep-audit-pdf.ts`: score breakdown now uses `allIssues`; preserves v2 statuses; adds `Coverage Summary`.
+- `workers/report/deep-audit-report.test.ts`, `workers/report/build-deep-audit-pdf.test.ts`: updated fixtures/assertions for full-check rendering, preserved statuses, and coverage summary.
+- `components/deep-audit-checkout.tsx`: removed inaccurate claim `Get all 17 checks across up to 10 pages` and replaced it with implementation-accurate copy.
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Targeted Vitest**
+
+```
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  2 passed (2)
+      Tests  5 passed (5)
+   Start at  04:23:59
+   Duration  876ms (transform 263ms, setup 0ms, import 666ms, tests 89ms, environment 1ms)
+```
+
+**`npm run build`**
+
+```
+> geo-pulse@0.1.0 build
+> next build
+
+Using secrets defined in .dev.vars
+   ▲ Next.js 15.5.14
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 10.2s
+   Linting and checking validity of types ...
+   Collecting page data ...
+ ✓ Generating static pages (10/10)
+   Finalizing page optimization ...
+   Collecting build traces ...
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## AU-009 / AU-010 — Report eval integrity rubric + golden fixtures (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, targeted Vitest output, fixture additions
+
+### Evidence
+
+**Implementation**
+
+- `lib/server/report-eval-structural.ts`: replaced the shallow section-presence rubric with a stronger content-integrity rubric covering title, executive summary, coverage summary, action plan, full check breakdown, pages section, technical appendix, status diversity, check row count, and page coverage count.
+- `lib/server/report-eval-structural.test.ts`: now validates both the primary sample fixture and a status-diversity fixture with blocked / low-confidence states.
+- `eval/fixtures/sample-deep-audit.md`: upgraded to a realistic multi-page report fixture with coverage summary, appendix, and multiple statuses.
+- `eval/fixtures/sample-deep-audit-statuses.md`: added golden fixture covering `FAIL`, `BLOCKED`, `LOW_CONFIDENCE`, `NOT_EVALUATED`, `WARNING`, and `PASS`.
+- `scripts/report-eval-smoke.ts`: rubric version bumped to `integrity-v2`.
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Targeted Vitest**
+
+```
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  3 passed (3)
+      Tests  8 passed (8)
+   Start at  04:34:37
+   Duration  1.30s (transform 424ms, setup 0ms, import 1.11s, tests 124ms, environment 2ms)
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## RE-001 / RE-002 — Retrieval eval scope + schema foundation (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, scope document, migration scaffold
+
+### Evidence
+
+**Implementation**
+
+- `PLAYBOOK/retrieval-eval-foundation.md`: defines retrieval-eval MVP scope, inputs/outputs, non-goals, rollout, and explicit roles for `promptfoo` vs `ragas`.
+- `supabase/migrations/010_retrieval_eval_foundation.sql`: adds service-role-only foundation tables:
+  - `retrieval_eval_runs`
+  - `retrieval_eval_prompts`
+  - `retrieval_eval_passages`
+  - `retrieval_eval_answers`
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Scope excerpt**
+
+```
+This document defines the first implementation boundary for retrieval evaluation in GEO-Pulse. It exists to keep `promptfoo`, `ragas`, and retrieval simulation work concrete and staged rather than aspirational.
+```
+
+**Migration intent excerpt**
+
+```
+-- Retrieval evaluation foundation (RE-002)
+-- Service-role only tables for offline retrieval / answer-quality evaluation.
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## AU-006 / AU-008 — Technical appendix + SSRF documentation truth pass (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, targeted Vitest output, `npm run build`, report/doc updates
+
+### Evidence
+
+**Implementation**
+
+- `workers/report/deep-audit-report-payload.ts`: added `technicalAppendix`.
+- `workers/queue/report-queue-consumer.ts`: derives technical appendix summaries for:
+  - robots / AI crawler access
+  - schema findings
+  - security headers
+- `workers/report/build-deep-audit-markdown.ts`: `Technical Appendix` now includes technical summaries plus coverage payload.
+- `workers/report/build-deep-audit-pdf.ts`: PDF now includes a `Technical Appendix` section in addition to coverage summary.
+- `workers/report/deep-audit-report.test.ts`: asserts appendix headings and summary labels.
+- `SECURITY.md`: SSRF section now states the actual protection model used in code and the Cloudflare Workers DNS-resolution limitation.
+- `PLAYBOOK/prd.md`: SSRF paragraph updated to match implemented protections rather than claiming general-purpose DNS resolution.
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Targeted Vitest**
+
+```
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  3 passed (3)
+      Tests  8 passed (8)
+   Start at  04:44:20
+   Duration  1.56s (transform 442ms, setup 0ms, import 1.18s, tests 205ms, environment 2ms)
+```
+
+**`npm run build`**
+
+```
+> geo-pulse@0.1.0 build
+> next build
+
+Using secrets defined in .dev.vars
+   ▲ Next.js 15.5.14
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 15.3s
+   Linting and checking validity of types ...
+   Collecting page data ...
+ ✓ Generating static pages (10/10)
+   Finalizing page optimization ...
+   Collecting build traces ...
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## RE-003 — Deterministic retrieval simulation harness (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, targeted Vitest output, retrieval harness module
+
+### Evidence
+
+**Implementation**
+
+- `lib/server/retrieval-eval.ts`: added deterministic retrieval foundation with:
+  - `buildPassagesFromPages(...)`
+  - `simulateRetrievalForPrompt(...)`
+  - lexical overlap scoring
+  - top passage ranking
+  - prompt-level metrics:
+    - `retrievedExpectedPage`
+    - `answerHasExpectedSource`
+    - `answerMentionsExpectedFact`
+    - `citationCount`
+    - `unsupportedClaimCount`
+- `lib/server/retrieval-eval.test.ts`: covers passage building, expected-page retrieval, expected-fact matching, and unsupported-answer fallback.
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Targeted Vitest**
+
+```
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  04:50:23
+   Duration  499ms (transform 77ms, setup 0ms, import 111ms, tests 13ms, environment 0ms)
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## RE-004 — Benchmark percentile design + claim removal (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** design note, contract/doc truth pass
+
+### Evidence
+
+**Implementation**
+
+- `PLAYBOOK/benchmark-percentile-design.md`: added the minimum acceptable design for future percentile output:
+  - cohort definition
+  - eligibility rules
+  - computation record
+  - confidence guardrails
+  - suggested API shape with cohort metadata
+  - launch rule forbidding percentile wording until the pipeline exists
+- `agents/memory/API_CONTRACTS.md`: removed the unsupported `benchmark_percentile` field from the example scan result and added an explicit note that percentile stays deferred until the benchmark pipeline exists.
+- `PLAYBOOK/prd.md`: removed percentile from:
+  - deep audit cover promise
+  - share-image description
+  - competitive percentile marketing claim
+- `agents/FRONTEND.md`: OG-image guidance now explicitly forbids percentile until `RE-004` is implemented for real.
+- `PLAYBOOK/audit-upgrade.md`: dashboard metric wording no longer assumes site-score percentile exists today.
+
+**Decision**
+
+```
+Current product/API expectations do not include percentile output.
+Percentile remains deferred until benchmark cohorts, snapshots, and guardrails exist.
+```
+
+**Reason**
+
+```
+There is no benchmark dataset, no cohorting policy, no recomputation pipeline, and no reproducible metadata trail for a percentile value yet.
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## RE-005 — Promptfoo harness skeleton (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, `npm run eval:promptfoo`, package + harness files
+
+### Evidence
+
+**Implementation**
+
+- `package.json`: added `promptfoo` dev dependency and scripts:
+  - `eval:promptfoo`
+  - `eval:promptfoo:report`
+  - `eval:promptfoo:retrieval`
+- `scripts/run-promptfoo.cjs`: wraps the Promptfoo CLI and redirects `HOME` / `USERPROFILE` to the repo root so Promptfoo writes `.promptfoo/` inside the workspace instead of the blocked user profile path.
+- `.gitignore`: added `.promptfoo/`.
+- `eval/promptfoo/providers/report-provider.cjs`: local deterministic provider for report-section extraction and status-preservation checks.
+- `eval/promptfoo/providers/retrieval-provider.cjs`: local deterministic provider for retrieval-style answer/citation regression checks.
+- `eval/promptfoo/promptfooconfig.report.yaml`: report regression suite covering:
+  - executive summary extraction
+  - coverage summary extraction
+  - technical appendix extraction
+  - non-binary status preservation
+- `eval/promptfoo/promptfooconfig.retrieval.yaml`: retrieval regression suite covering:
+  - expected-source retrieval with citations
+  - no unsupported claims when the corpus is unrelated
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**`npm run eval:promptfoo`**
+
+```
+> geo-pulse@0.1.0 eval:promptfoo
+> npm run eval:promptfoo:report && npm run eval:promptfoo:retrieval
+
+> geo-pulse@0.1.0 eval:promptfoo:report
+> node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.report.yaml --no-progress-bar
+
+Results:
+  ✓ 4 passed (100.00%)
+  0 failed (0%)
+  0 errors (0%)
+
+> geo-pulse@0.1.0 eval:promptfoo:retrieval
+> node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.retrieval.yaml --no-progress-bar
+
+Results:
+  ✓ 2 passed (100.00%)
+  0 failed (0%)
+  0 errors (0%)
+```
+
+**Constraint handled**
+
+```
+Promptfoo attempted to create C:\Users\Carine Tamon\.promptfoo, which is blocked by the sandbox.
+The repo-local runner fixes this by setting HOME and USERPROFILE to the current workspace.
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## RE-006 / RE-007 — Promptfoo suites + Ragas fit note (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run eval:promptfoo`, prompt suite expansion, architecture note
+
+### Evidence
+
+**Implementation**
+
+- `eval/promptfoo/providers/report-provider.cjs`: added `Priority Action Plan` extraction path so prompt regressions can assert concrete fix guidance.
+- `eval/promptfoo/promptfooconfig.report.yaml`: expanded report suite to cover:
+  - executive summary extraction
+  - coverage summary extraction
+  - technical appendix extraction
+  - priority action plan fix specificity
+  - status preservation across non-binary statuses
+- `PLAYBOOK/ragas-fit-evaluation.md`: added formal `RE-007` note with:
+  - current repo-state review
+  - explicit no-go decision for immediate `ragas` adoption
+  - reasons for deferral
+  - revisit criteria
+  - constrained adoption plan if revisited later
+
+**`npm run eval:promptfoo`**
+
+```
+> geo-pulse@0.1.0 eval:promptfoo
+> npm run eval:promptfoo:report && npm run eval:promptfoo:retrieval
+
+> geo-pulse@0.1.0 eval:promptfoo:report
+Results:
+  ✓ 5 passed (100.00%)
+  0 failed (0%)
+  0 errors (0%)
+
+> geo-pulse@0.1.0 eval:promptfoo:retrieval
+Results:
+  ✓ 2 passed (100.00%)
+  0 failed (0%)
+  0 errors (0%)
+```
+
+**Ragas decision**
+
+```
+Decision: No-go for `ragas` implementation right now.
+```
+
+**Reason summary**
+
+```
+The baseline is still deterministic, the dataset is still synthetic / small, and there is no external benchmark claim that justifies adding semantic-scoring complexity yet.
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## DA-004 (incremental) — Chunk-progress metrics + continuation guardrails (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, targeted Vitest output, crawl/report updates
+
+### Evidence
+
+**Implementation**
+
+- `workers/scan-engine/deep-audit-crawl.ts`:
+  - extended `crawl_pending` state with:
+    - `chunks_processed`
+    - `started_at`
+  - persists chunk-progress metadata on partial requeue state
+  - adds continuation guardrail for invalid/stale chunk progression:
+    - rejects and clears `crawl_pending` when `chunks_processed` exceeds the expected bound for the capped run
+  - adds chunk metrics to final `coverage_summary`:
+    - `chunk_size`
+    - `chunks_processed`
+    - `urls_remaining`
+- `workers/report/build-deep-audit-markdown.ts`:
+  - `Coverage Summary` now renders chunk-scale metrics when present
+- `workers/report/build-deep-audit-pdf.ts`:
+  - PDF `Coverage Summary` now renders chunk-scale metrics when present
+- `workers/scan-engine/deep-audit-crawl.test.ts`:
+  - covers legacy partial parsing defaults
+  - covers parsing of new chunk-progress metadata
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Targeted Vitest**
+
+```
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  3 passed (3)
+      Tests  11 passed (11)
+   Start at  06:17:24
+   Duration  1.18s (transform 830ms, setup 0ms, import 1.43s, tests 170ms, environment 1ms)
+```
+
+**Scope note**
+
+```
+This advances DA-004 observability and queue-continuation safety.
+It does not implement the remaining Workflows-scale orchestration for 1000+ page crawls.
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## T3-7 — Dynamic interactive report view (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, `npm run build`, frontend report-view implementation
+
+### Evidence
+
+**Implementation**
+
+- `components/report-viewer.tsx` now owns a hybrid interactive report UI on top of the existing markdown artifact:
+  - score + grade summary card
+  - category snapshot cards from `categoryScores`
+  - top-issue summary from `topIssues`
+  - mobile section chips for quick jumps
+  - collapsible report sections split from markdown `##` headings
+  - existing PDF download and back-to-results navigation preserved
+- `app/results/[id]/report/page.tsx` remains a thin route wrapper, consistent with frontend ownership boundaries in `agents/ORCHESTRATOR.md`
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**`npm run build`**
+
+```
+> geo-pulse@0.1.0 build
+> next build
+
+Compiled successfully
+Route (app)
+... /results/[id]/report 47.2 kB 153 kB
+```
+
+**Scope note**
+
+```
+This completes the frontend interactive report-view layer without introducing a new report API.
+The client still consumes the existing scan fields plus markdown/PDF URLs.
+Structured page-level deep-audit JSON exposure remains optional future work, not required for this T3-7 slice.
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
+## DA-005 — Browser Rendering / SPA crawl (2026-03-26)
+**Agent:** Cursor / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** `npm run type-check`, targeted Vitest, `npm run build`, deep-audit browser-render integration
+
+### Evidence
+
+**Implementation**
+
+- `workers/scan-engine/browser-rendering.ts` provides:
+  - env/config parsing for `DEEP_AUDIT_BROWSER_RENDER_MODE`
+  - SPA-shell heuristics
+  - rendered-vs-static HTML comparison
+  - Cloudflare Browser Rendering client for `/browser-rendering/content`
+- `workers/scan-engine/deep-audit-crawl.ts` now:
+  - tracks browser-render attempt/success/failure metrics in `crawl_pending` and final `coverage_summary`
+  - optionally renders SPA-like deep-audit pages after the normal fetch gate succeeds
+  - falls back to raw HTML when rendering is unavailable or not materially better
+- `workers/queue/report-queue-consumer.ts` now threads browser-render mode from `scan_runs.config.render_mode`
+- `lib/server/stripe/ensure-deep-audit-job-queued.ts` stores `render_mode` on new paid `scan_runs`
+- operator/env wiring added in:
+  - `lib/server/cf-env.ts`
+  - `wrangler.jsonc`
+  - `.dev.vars.example`
+  - `.env.local.example`
+- security/docs updated in:
+  - `SECURITY.md`
+  - `PLAYBOOK/audit-upgrade.md`
+
+**`npm run type-check`**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+**Targeted Vitest**
+
+```
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+ Test Files  3 passed (3)
+      Tests  20 passed (20)
+   Start at  07:01:42
+   Duration  611ms
+```
+
+**`npm run build`**
+
+```
+> geo-pulse@0.1.0 build
+> next build
+
+Compiled successfully
+Route (app)
+... /results/[id]/report 47.2 kB 153 kB
+```
+
+**Scope note**
+
+```
+This completes DA-005 as an optional Browser Rendering-backed SPA fallback for paid deep audits.
+It is not a full Cloudflare /crawl orchestration layer.
+Browser Rendering remains disabled by default unless operator config and credentials are provided.
+```
+
+### Orchestrator Decision
+_Pending review._
+
+---
+
 ## Rejection History
 
 _Agents whose claimed completions were challenged will be logged here for pattern tracking._

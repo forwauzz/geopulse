@@ -23,6 +23,10 @@ export type PaymentApiEnv = ScanApiEnv & {
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
+  /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–120). */
+  DEEP_AUDIT_DEFAULT_PAGE_LIMIT: string;
+  /** Plaintext var: off, auto, or force for optional Browser Rendering on paid deep audits. */
+  DEEP_AUDIT_BROWSER_RENDER_MODE: string;
 };
 
 /**
@@ -106,6 +110,8 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
+      DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
+      DEEP_AUDIT_BROWSER_RENDER_MODE: pickEnvString(e, 'DEEP_AUDIT_BROWSER_RENDER_MODE'),
     };
   } catch {
     return {
@@ -118,6 +124,8 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
+      DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
+      DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
     };
   }
 }
@@ -129,3 +137,5 @@ export function getClientIp(request: Request): string {
     'unknown'
   );
 }
+
+

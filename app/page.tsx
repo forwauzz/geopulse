@@ -1,42 +1,208 @@
 import { ScanForm } from '@/components/scan-form';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
-export default function HomePage() {
+const features = [
+  {
+    icon: 'smart_toy',
+    title: 'AI crawler access',
+    body: 'Review robots and server signals so public pages you intend to expose stay discoverable without weakening security controls.',
+  },
+  {
+    icon: 'schema',
+    title: 'Structured data',
+    body: 'Check JSON-LD and schema signals so machines can interpret your page context clearly.',
+  },
+  {
+    icon: 'description',
+    title: 'Content extractability',
+    body: 'Inspect structure and markup so core content is not buried in noise or fragile layout.',
+  },
+  {
+    icon: 'podcasts',
+    title: 'Authority signals',
+    body: 'Surface patterns that affect how clearly your pages present facts and entities — not rankings or predictions.',
+  },
+] as const;
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ url?: string }>;
+}) {
+  const { url: prefillUrl } = await searchParams;
   const siteKey = getTurnstileSiteKey();
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col px-6 py-16">
-      <p className="text-sm font-semibold uppercase tracking-widest text-geo-accent">GEO-Pulse</p>
-      <h1 className="mt-4 text-4xl font-bold tracking-tight text-geo-ink md:text-5xl">
-        How ready is your site for AI search?
-      </h1>
-      <p className="mt-4 max-w-2xl text-lg text-geo-mist">
-        Free instant audit: AI Search Readiness Score plus the top issues to fix. No account required.
-      </p>
-      <div className="mt-12">
-        {siteKey ? (
-          <ScanForm siteKey={siteKey} />
-        ) : (
-          <div className="space-y-3 text-red-600">
-            <p>
-              Turnstile is not configured for this deployment. In{' '}
-              <strong className="font-semibold">Cloudflare → Workers &amp; Pages → your Worker → Settings → Variables</strong>, set{' '}
-              <code className="rounded bg-geo-mist/20 px-1">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> to your widget’s{' '}
-              <em>site key</em> (public), and add <code className="rounded bg-geo-mist/20 px-1">TURNSTILE_SECRET_KEY</code> as a{' '}
-              <em>secret</em>. In the Turnstile dashboard, add this app’s hostname (e.g.{' '}
-              <code className="rounded bg-geo-mist/20 px-1">geo-pulse.uzzielt.workers.dev</code> or{' '}
-              <code className="rounded bg-geo-mist/20 px-1">geopulse.io</code>) to the widget’s hostnames. Redeploy after
-              changing vars; if the UI still shows this, set the same <code className="rounded bg-geo-mist/20 px-1">NEXT_PUBLIC_*</code>{' '}
-              values under Workers Builds → <strong className="font-semibold">Build variables</strong> so the client bundle picks them up.
-            </p>
-            <p className="text-sm text-geo-mist">
-              Local only: for <code className="rounded bg-geo-mist/20 px-1">npm run dev</code>, use{' '}
-              <code className="rounded bg-geo-mist/20 px-1">.env.local</code> — see{' '}
-              <code className="rounded bg-geo-mist/20 px-1">.env.local.example</code>.
+    <main>
+      <section className="relative mx-auto max-w-screen-2xl overflow-hidden px-6 pb-24 pt-16 text-center md:px-10 md:pb-32 md:pt-24">
+        <div className="mb-6">
+          <span className="inline-block rounded-full bg-surface-container-high px-3 py-1 font-label text-xs font-semibold uppercase tracking-widest text-primary">
+            AI search readiness audit
+          </span>
+        </div>
+        <h1 className="mx-auto mb-8 max-w-4xl font-headline text-4xl font-bold leading-tight tracking-tight text-on-background md:text-6xl lg:text-7xl">
+          Check your AI search readiness in <span className="font-normal italic">under a minute</span>
+        </h1>
+        <p className="mx-auto mb-12 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
+          Get one score, the key issues, and priority fixes. No account required.
+        </p>
+        <div className="mx-auto mb-6 max-w-3xl">
+          {siteKey ? (
+            <ScanForm siteKey={siteKey} defaultUrl={prefillUrl} />
+          ) : (
+            <div className="space-y-3 rounded-xl bg-surface-container-low p-6 text-left text-error">
+              <p className="font-medium">Turnstile is not configured for this deployment.</p>
+              <p className="text-sm text-on-surface-variant">
+                In{' '}
+                <strong className="text-on-background">Cloudflare → Workers &amp; Pages → your Worker → Settings → Variables</strong>, set{' '}
+                <code className="rounded bg-surface-container-lowest px-1">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> to your widget’s{' '}
+                <em>site key</em> (public), and add <code className="rounded bg-surface-container-lowest px-1">TURNSTILE_SECRET_KEY</code> as a{' '}
+                <em>secret</em>. Add this app’s hostname to the widget’s hostnames. Redeploy after changing vars; for client bundles, set{' '}
+                <code className="rounded bg-surface-container-lowest px-1">NEXT_PUBLIC_*</code> under Workers Builds → Build variables.
+              </p>
+              <p className="text-sm text-on-surface-variant">
+                Local: use <code className="rounded bg-surface-container-lowest px-1">.env.local</code> — see{' '}
+                <code className="rounded bg-surface-container-lowest px-1">.env.local.example</code>.
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-8 text-on-surface-variant opacity-80">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm">check_circle</span>
+            <span className="font-label text-xs uppercase tracking-wider">Free audit</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm">no_accounts</span>
+            <span className="font-label text-xs uppercase tracking-wider">No account required</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-sm">bolt</span>
+            <span className="font-label text-xs uppercase tracking-wider">Fast results</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-surface-container-low px-6 py-24 md:px-10 md:py-32">
+        <div className="mx-auto grid max-w-screen-2xl grid-cols-1 gap-12 md:grid-cols-2 lg:grid-cols-4">
+          {features.map((f) => (
+            <div key={f.title} className="group space-y-4">
+              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-container-lowest transition-colors duration-300 group-hover:bg-primary group-hover:text-on-primary">
+                <span className="material-symbols-outlined">{f.icon}</span>
+              </div>
+              <h3 className="font-headline text-xl font-bold text-on-background">{f.title}</h3>
+              <p className="font-body text-sm leading-relaxed text-on-surface-variant">{f.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
+        <div className="grid grid-cols-1 items-start gap-16 lg:grid-cols-12">
+          <div className="space-y-12 lg:col-span-5">
+            <div>
+              <h2 className="mb-6 font-headline text-3xl font-bold text-on-background md:text-4xl">What you get</h2>
+              <p className="mb-12 font-body text-on-surface-variant">
+                Every scan produces a concise report: one score, the issues that matter most, and fixes you can act on.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Metrics</h4>
+                <p className="font-headline text-lg font-bold text-on-background">AI Search Readiness Score</p>
+              </div>
+              <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Analysis</h4>
+                <p className="font-headline text-lg font-bold text-on-background">Top issues to fix</p>
+              </div>
+              <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Action</h4>
+                <p className="font-headline text-lg font-bold text-on-background">Priority recommendations</p>
+              </div>
+              <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Optional</h4>
+                <p className="font-headline text-lg font-bold text-on-background">Deep audit PDF</p>
+              </div>
+            </div>
+          </div>
+          <div className="relative overflow-hidden rounded-xl bg-surface-container-low p-8 lg:col-span-7">
+            <div className="relative z-10 rounded-xl bg-surface-container-lowest p-8 md:p-10">
+              <div className="mb-10 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <span className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant opacity-70">
+                    Sample report
+                  </span>
+                  <h3 className="mt-1 font-headline text-2xl font-bold text-on-background">yourdomain.com</h3>
+                </div>
+                <span className="rounded-md bg-tertiary/10 px-3 py-1 font-label text-xs font-bold uppercase tracking-widest text-tertiary-dim">
+                  Illustration
+                </span>
+              </div>
+              <div className="mb-10 grid grid-cols-1 gap-8 md:grid-cols-3">
+                <div>
+                  <div className="mb-2 font-headline text-5xl font-bold text-primary">—</div>
+                  <div className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                    AI Search Readiness Score
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-surface-container">
+                    <div className="h-full w-3/5 bg-primary" />
+                  </div>
+                  <p className="mt-3 font-body text-xs text-on-surface-variant">
+                    Run a scan to see your score and prioritized fixes — numbers here are a layout preview only.
+                  </p>
+                </div>
+              </div>
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Priority fixes</p>
+              <ul className="mt-4 space-y-4 font-body text-sm text-on-surface-variant">
+                <li className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-tertiary text-lg">info</span>
+                  <span>Structured data and crawl signals tailored to your URL.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-tertiary text-lg">info</span>
+                  <span>Actionable fixes — no predicted rankings or traffic outcomes.</span>
+                </li>
+              </ul>
+            </div>
+            <div className="pointer-events-none absolute -bottom-20 -right-20 h-64 w-64 rounded-full bg-primary/5 blur-3xl" aria-hidden />
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-surface-container-high/40 px-6 py-16 md:px-10 md:py-24">
+        <div className="mx-auto flex max-w-screen-2xl flex-col items-center justify-between gap-12 md:flex-row">
+          <div className="max-w-xl">
+            <h2 className="mb-4 font-headline text-2xl font-bold text-on-background md:text-3xl">
+              Built for teams &amp; agencies
+            </h2>
+            <p className="font-body text-on-surface-variant">
+              Use the same audit flow for client sites — free scan first, optional paid deep PDF when you need a
+              shareable artifact.
             </p>
           </div>
-        )}
-      </div>
+          <div className="flex flex-wrap gap-8">
+            <div className="flex items-center gap-2 font-label text-sm uppercase tracking-wide text-on-surface-variant opacity-90">
+              <span className="material-symbols-outlined text-primary">picture_as_pdf</span>
+              PDF export
+            </div>
+            <div className="flex items-center gap-2 font-label text-sm uppercase tracking-wide text-on-surface-variant opacity-90">
+              <span className="material-symbols-outlined text-primary">account_circle</span>
+              Account history
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-screen-xl px-6 py-24 text-center md:py-40">
+        <h2 className="mb-10 font-headline text-3xl font-bold text-on-background md:text-4xl lg:text-5xl">
+          See how clearly your site reads for AI search
+        </h2>
+        <p className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
+          Immediate results · No credit card for the free scan
+        </p>
+      </section>
     </main>
   );
 }

@@ -86,7 +86,7 @@ The scoring visual is the core product interaction:
 // - Domain name
 // - "AI Search Readiness Score" text
 // - GEO-Pulse logo/wordmark
-// - Benchmark percentile
+// - No benchmark percentile until RE-004 benchmark pipeline exists
 // - CTA: "Check yours → geopulse.io"
 ```
 

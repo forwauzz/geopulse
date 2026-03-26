@@ -3,7 +3,8 @@ import type { AuditCheck, CheckContext, CheckResult } from '../../lib/interfaces
 export const openGraphCheck: AuditCheck = {
   id: 'open-graph',
   name: 'Open Graph basics',
-  weight: 8,
+  weight: 4,
+  category: 'extractability',
   run(ctx: CheckContext): CheckResult {
     const hasTitle = Boolean(ctx.signals.ogTitle?.trim());
     const hasDesc = Boolean(ctx.signals.ogDescription?.trim());
@@ -11,6 +12,7 @@ export const openGraphCheck: AuditCheck = {
     return {
       id: 'open-graph',
       passed,
+      status: passed ? 'PASS' : 'FAIL',
       finding: passed
         ? 'og:title and og:description are present.'
         : `Missing Open Graph tags: ${!hasTitle ? 'og:title ' : ''}${!hasDesc ? 'og:description' : ''}`.trim(),

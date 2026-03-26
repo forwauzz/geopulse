@@ -1,0 +1,62 @@
+description: GEO-Pulse report regression harness
+
+prompts:
+  - "{{instruction}}"
+
+providers:
+  - id: file://providers/report-provider.cjs
+    label: report-local
+
+tests:
+  - description: executive summary section remains extractable
+    vars:
+      instruction: extract executive summary
+      report_markdown: file://../fixtures/sample-deep-audit.md
+    assert:
+      - type: icontains
+        value: Executive Summary
+      - type: icontains
+        value: 12 of 17 checks passed
+  - description: coverage summary section remains extractable
+    vars:
+      instruction: extract coverage summary
+      report_markdown: file://../fixtures/sample-deep-audit.md
+    assert:
+      - type: icontains
+        value: Coverage Summary
+      - type: icontains
+        value: Pages fetched
+  - description: technical appendix remains extractable
+    vars:
+      instruction: extract technical appendix
+      report_markdown: file://../fixtures/sample-deep-audit.md
+    assert:
+      - type: icontains
+        value: Technical Appendix
+      - type: icontains
+        value: Coverage payload
+  - description: action plan keeps concrete fixes rather than generic advice
+    vars:
+      instruction: extract priority action plan
+      report_markdown: file://../fixtures/sample-deep-audit.md
+    assert:
+      - type: icontains
+        value: Priority Action Plan
+      - type: icontains
+        value: "**Fix:** Add a compelling 150"
+      - type: javascript
+        value: |
+          return output.includes('Fix:')
+            && output.includes('Meta description')
+            && output.includes('150');
+  - description: status-preservation fixture keeps non-binary statuses
+    vars:
+      instruction: preserve status labels
+      report_markdown: file://../fixtures/sample-deep-audit-statuses.md
+    assert:
+      - type: icontains
+        value: BLOCKED
+      - type: icontains
+        value: LOW_CONFIDENCE
+      - type: icontains
+        value: WARNING

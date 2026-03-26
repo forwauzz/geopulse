@@ -1,25 +1,94 @@
 /**
  * Weighted scoring from check results — does not import individual checks (Open/Closed).
+ *
+ * v2 status rules:
+ *   PASS          → full weight earned
+ *   FAIL          → 0 earned
+ *   BLOCKED       → excluded from scoring (neither earned nor possible)
+ *   NOT_EVALUATED → excluded from scoring
+ *   LOW_CONFIDENCE→ half weight earned (if passed=true)
+ *   WARNING       → full weight earned (non-critical pass)
  */
-import type { CheckResult } from '../lib/interfaces/audit';
+import type { CheckCategory, CheckResult, CheckStatus } from '../lib/interfaces/audit';
 
 export interface WeightedResult extends CheckResult {
   weight: number;
+  category: CheckCategory;
 }
 
-export function attachWeights(checks: { weight: number }[], results: CheckResult[]): WeightedResult[] {
-  return results.map((r, i) => {
-    const w = checks[i]?.weight ?? 0;
-    return { ...r, weight: w };
-  });
+export interface CategoryScore {
+  category: CheckCategory;
+  score: number;
+  letterGrade: string;
+  totalWeight: number;
+  earnedWeight: number;
+  checkCount: number;
+}
+
+const EXCLUDED_FROM_SCORING: ReadonlySet<CheckStatus> = new Set(['BLOCKED', 'NOT_EVALUATED']);
+
+function earnedWeight(r: WeightedResult): number {
+  if (EXCLUDED_FROM_SCORING.has(r.status)) return 0;
+  if (r.status === 'LOW_CONFIDENCE') return r.passed ? r.weight * 0.5 : 0;
+  if (r.status === 'WARNING' || r.status === 'PASS') return r.weight;
+  return 0;
+}
+
+function possibleWeight(r: WeightedResult): number {
+  if (EXCLUDED_FROM_SCORING.has(r.status)) return 0;
+  if (r.status === 'LOW_CONFIDENCE') return r.weight * 0.5;
+  return r.weight;
+}
+
+export function attachWeights(
+  checks: { weight: number; category: CheckCategory }[],
+  results: CheckResult[]
+): WeightedResult[] {
+  return results.map((r, i) => ({
+    ...r,
+    weight: checks[i]?.weight ?? 0,
+    category: checks[i]?.category ?? 'ai_readiness',
+  }));
 }
 
 export function computeScore(weighted: WeightedResult[]): number {
-  let sum = 0;
+  let earned = 0;
+  let possible = 0;
   for (const r of weighted) {
-    if (r.passed) sum += r.weight;
+    earned += earnedWeight(r);
+    possible += possibleWeight(r);
   }
-  return Math.min(100, Math.max(0, sum));
+  if (possible === 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((earned / possible) * 100)));
+}
+
+const ALL_CATEGORIES: CheckCategory[] = [
+  'ai_readiness',
+  'extractability',
+  'trust',
+  'demand_coverage',
+  'conversion_readiness',
+];
+
+export function computeCategoryScores(weighted: WeightedResult[]): CategoryScore[] {
+  return ALL_CATEGORIES.map((cat) => {
+    const group = weighted.filter((r) => r.category === cat);
+    let earned = 0;
+    let possible = 0;
+    for (const r of group) {
+      earned += earnedWeight(r);
+      possible += possibleWeight(r);
+    }
+    const score = possible > 0 ? Math.min(100, Math.max(0, Math.round((earned / possible) * 100))) : -1;
+    return {
+      category: cat,
+      score,
+      letterGrade: score >= 0 ? letterGrade(score) : 'N/A',
+      totalWeight: possible,
+      earnedWeight: earned,
+      checkCount: group.length,
+    };
+  });
 }
 
 export function letterGrade(score: number): string {
