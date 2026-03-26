@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { getScanApiEnv } from '@/lib/server/cf-env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { requireAdminOrRedirect } from '@/lib/server/require-admin';
@@ -57,9 +58,8 @@ export default async function AttributionAdminPage() {
 
   requireAdminOrRedirect(user.email);
 
-  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
-  const service = process.env['SUPABASE_SERVICE_ROLE_KEY'];
-  if (!url || !service) {
+  const env = await getScanApiEnv();
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-16">
         <p className="text-error">Server misconfigured: missing Supabase service role.</p>
@@ -67,7 +67,10 @@ export default async function AttributionAdminPage() {
     );
   }
 
-  const adminDb = createServiceRoleClient(url, service);
+  const adminDb = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
 
   const { data: funnel, error: funnelErr } = await adminDb
     .schema('analytics')

@@ -21,6 +21,15 @@ function severityLabel(weight: number | undefined): string {
   return 'Low';
 }
 
+function issueStatusLabel(row: IssueRow): string {
+  return row.status ?? (row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—');
+}
+
+function parseCoverageSummary(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  return raw as Record<string, unknown>;
+}
+
 /**
  * Markdown export for deep audit — structured to match the branded PDF.
  */
@@ -38,10 +47,13 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   lines.push(`- **Scan ID:** ${payload.scanId}`);
   lines.push('');
 
-  const allIssues = parseIssues(payload.highlightedIssues);
+  const allIssues = parseIssues(payload.allIssues);
+  const topIssues = parseIssues(payload.highlightedIssues);
   const totalChecks = allIssues.length;
-  const passedChecks = allIssues.filter((i) => i.passed).length;
-  const failedSorted = allIssues.filter((i) => !i.passed).sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const passedChecks = allIssues.filter((i) => issueStatusLabel(i) === 'PASS').length;
+  const failedSorted = topIssues
+    .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
 
   lines.push('## Executive Summary');
   lines.push('');
@@ -68,6 +80,39 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     lines.push('');
   }
 
+  const coverage = parseCoverageSummary(payload.coverageSummary);
+  if (coverage) {
+    lines.push('## Coverage Summary');
+    lines.push('');
+    const fetched = coverage['pages_fetched'];
+    const errored = coverage['pages_errored'];
+    const planned = coverage['urls_planned'];
+    const delay = coverage['crawl_delay_ms'];
+    const chunksProcessed = coverage['chunks_processed'];
+    const urlsRemaining = coverage['urls_remaining'];
+    const chunkSize = coverage['chunk_size'];
+    const robotsStatus = coverage['robots_status'];
+    const browserRenderMode = coverage['browser_render_mode'];
+    const browserRenderAttempted = coverage['browser_render_attempted'];
+    const browserRenderSucceeded = coverage['browser_render_succeeded'];
+    const browserRenderFailed = coverage['browser_render_failed'];
+    const seedUrl = coverage['seed_url'];
+    if (seedUrl) lines.push(`- **Seed URL:** ${String(seedUrl)}`);
+    if (planned !== undefined) lines.push(`- **URLs planned:** ${String(planned)}`);
+    if (fetched !== undefined) lines.push(`- **Pages fetched:** ${String(fetched)}`);
+    if (errored !== undefined) lines.push(`- **Pages errored:** ${String(errored)}`);
+    if (robotsStatus !== undefined) lines.push(`- **robots.txt status:** ${String(robotsStatus)}`);
+    if (delay !== undefined) lines.push(`- **Crawl delay applied:** ${String(delay)}ms`);
+    if (chunkSize !== undefined) lines.push(`- **Chunk size:** ${String(chunkSize)}`);
+    if (chunksProcessed !== undefined) lines.push(`- **Chunks processed:** ${String(chunksProcessed)}`);
+    if (urlsRemaining !== undefined) lines.push(`- **URLs remaining at completion:** ${String(urlsRemaining)}`);
+    if (browserRenderMode !== undefined) lines.push(`- **Browser rendering mode:** ${String(browserRenderMode)}`);
+    if (browserRenderAttempted !== undefined) lines.push(`- **Browser render attempts:** ${String(browserRenderAttempted)}`);
+    if (browserRenderSucceeded !== undefined) lines.push(`- **Browser render successes:** ${String(browserRenderSucceeded)}`);
+    if (browserRenderFailed !== undefined) lines.push(`- **Browser render fallbacks:** ${String(browserRenderFailed)}`);
+    lines.push('');
+  }
+
   if (failedSorted.length > 0) {
     lines.push('## Priority Action Plan');
     lines.push('');
@@ -88,7 +133,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   lines.push('|-------|--------|--------|---------|');
   for (const row of allIssues) {
     const title = row.check ?? row.checkId ?? 'Check';
-    const st = row.passed ? 'PASS' : 'FAIL';
+    const st = issueStatusLabel(row);
     const w = String(row.weight ?? 0);
     const finding = (row.finding ?? '').replace(/\|/g, '\\|').slice(0, 100);
     lines.push(`| ${title} | ${st} | ${w} | ${finding} |`);
@@ -118,7 +163,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
       } else {
         for (const row of pageIssues) {
           const title = row.check ?? row.checkId ?? 'Check';
-          const st = row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—';
+          const st = issueStatusLabel(row);
           lines.push(`- **${title}** [${st}]`);
           if (row.finding) lines.push(`  - ${row.finding}`);
           if (row.fix) lines.push(`  - Fix: ${row.fix}`);
@@ -126,6 +171,25 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
       }
       lines.push('');
     }
+  }
+
+  lines.push('## Technical Appendix');
+  lines.push('');
+  const appendix = payload.technicalAppendix;
+  if (appendix?.robotsSummary) lines.push(`- **Robots / AI crawler access:** ${appendix.robotsSummary}`);
+  if (appendix?.schemaSummary) lines.push(`- **Schema findings:** ${appendix.schemaSummary}`);
+  if (appendix?.headersSummary) lines.push(`- **Security headers:** ${appendix.headersSummary}`);
+  if (appendix?.robotsSummary || appendix?.schemaSummary || appendix?.headersSummary) lines.push('');
+  if (coverage) {
+    lines.push('- **Coverage payload:**');
+    lines.push('');
+    lines.push('```json');
+    lines.push(JSON.stringify(coverage, null, 2));
+    lines.push('```');
+    lines.push('');
+  } else if (!(appendix?.robotsSummary || appendix?.schemaSummary || appendix?.headersSummary)) {
+    lines.push('_(no technical appendix recorded)_');
+    lines.push('');
   }
 
   lines.push(

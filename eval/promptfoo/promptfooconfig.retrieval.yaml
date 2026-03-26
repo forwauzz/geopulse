@@ -1,0 +1,52 @@
+description: GEO-Pulse retrieval regression harness
+
+prompts:
+  - "{{question}}"
+
+providers:
+  - id: file://providers/retrieval-provider.cjs
+    label: retrieval-local
+
+tests:
+  - description: retrieval returns the expected page and fact with citations
+    vars:
+      question: What security headers are missing?
+      expected_source: https://acme.test/security
+      expected_fact: Content-Security-Policy
+      documents: |
+        URL: https://acme.test/security
+        TEXT: Security headers are missing on key pages. Content-Security-Policy and X-Frame-Options are absent from the response headers.
+        ---
+        URL: https://acme.test/pricing
+        TEXT: The deep audit costs $29 and includes a prioritized action plan.
+    assert:
+      - type: icontains
+        value: https://acme.test/security
+      - type: icontains
+        value: Content-Security-Policy
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.retrievedExpectedPage === true
+            && result.citationCount >= 1
+            && result.unsupportedClaimCount === 0;
+  - description: retrieval does not invent facts when the corpus is unrelated
+    vars:
+      question: What is the refund policy?
+      expected_source: https://acme.test/refunds
+      expected_fact: 30-day refund policy
+      documents: |
+        URL: https://acme.test/about
+        TEXT: GEO-Pulse audits AI visibility signals across marketing sites.
+        ---
+        URL: https://acme.test/contact
+        TEXT: Contact support by email for help with setup issues.
+    assert:
+      - type: icontains
+        value: "\"unsupportedClaimCount\":0"
+      - type: javascript
+        value: |
+          const result = JSON.parse(output);
+          return result.retrievedExpectedPage === false
+            && result.answerMentionsExpectedFact === false
+            && result.citationCount === 0;

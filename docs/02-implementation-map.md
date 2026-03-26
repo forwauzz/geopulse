@@ -1,0 +1,165 @@
+# Implementation Map
+
+## Stack
+- Next.js App Router
+- Cloudflare Workers via `@opennextjs/cloudflare`
+- Supabase
+- Stripe
+- Resend
+- Gemini
+- pdf-lib
+
+## Primary System Areas
+
+### 1. Free scan path
+Key files:
+- `app/page.tsx`
+- `components/scan-form.tsx`
+- `app/api/scan/route.ts`
+- `workers/scan-engine/run-scan.ts`
+- `workers/scan-engine/checks/registry.ts`
+- `workers/scan-engine/scoring.ts`
+- `workers/lib/ssrf.ts`
+- `workers/lib/fetch-gate.ts`
+
+Responsibilities:
+- collect URL
+- validate Turnstile
+- validate URL safety
+- fetch page
+- run checks
+- persist `scans`
+- return results
+
+### 2. Results + report UI
+Key files:
+- `app/results/[id]/page.tsx`
+- `components/results-view.tsx`
+- `components/score-display.tsx`
+- `app/results/[id]/report/page.tsx`
+- `components/report-viewer.tsx`
+- `app/results/[id]/opengraph-image.tsx`
+
+Responsibilities:
+- show score and category breakdown
+- show top issues
+- expose upgrade path
+- render interactive markdown-backed report view
+- provide OG sharing image
+
+### 3. Paid deep-audit path
+Key files:
+- `app/api/checkout/route.ts`
+- `app/api/webhooks/stripe/route.ts`
+- `lib/server/stripe/checkout-completed.ts`
+- `lib/server/stripe/ensure-deep-audit-job-queued.ts`
+- `workers/queue/report-queue-consumer.ts`
+- `workers/scan-engine/deep-audit-crawl.ts`
+- `workers/scan-engine/browser-rendering.ts`
+
+Responsibilities:
+- take payment
+- verify webhook
+- create `scan_run`
+- queue deep audit
+- crawl multiple pages
+- optionally render SPA-like pages via Browser Rendering fallback
+- generate report payload
+
+### 4. Report generation
+Key files:
+- `workers/report/deep-audit-report-payload.ts`
+- `workers/report/build-deep-audit-markdown.ts`
+- `workers/report/build-deep-audit-pdf.ts`
+- `workers/report/r2-report-storage.ts`
+- `workers/report/resend-delivery.ts`
+
+Responsibilities:
+- canonical report payload
+- markdown generation
+- PDF generation
+- file storage
+- email delivery
+
+### 5. Auth + dashboard
+Key files:
+- `app/login/*`
+- `app/auth/callback/route.ts`
+- `middleware.ts`
+- `app/dashboard/page.tsx`
+- `lib/server/link-guest-purchases.ts`
+
+Responsibilities:
+- magic link auth
+- guest purchase linking
+- dashboard access
+- session protection
+
+### 6. Admin / report eval
+Key files:
+- `app/admin/login/*`
+- `app/dashboard/evals/page.tsx`
+- `lib/server/report-eval-structural.ts`
+- `scripts/report-eval-smoke.ts`
+- `eval/fixtures/*`
+- `eval/promptfoo/*`
+
+Responsibilities:
+- admin auth
+- eval history display
+- smoke eval insertion
+- prompt regression suites
+- golden report assertions
+
+### 7. Marketing attribution
+Key files:
+- `services/marketing-attribution/*`
+- `app/api/internal/marketing/events/route.ts`
+- `lib/client/attribution.ts`
+- `components/attribution-init.tsx`
+- `app/dashboard/attribution/page.tsx`
+
+Responsibilities:
+- event ingestion
+- UTM capture
+- reporting views
+- weekly email summary
+
+### 8. Supabase / migrations
+Key files:
+- `supabase/migrations/005_scan_runs_scan_pages.sql`
+- `supabase/migrations/006_scan_pages_section.sql`
+- `supabase/migrations/007_marketing_attribution.sql`
+- `supabase/migrations/008_marketing_attribution_views.sql`
+- `supabase/migrations/009_admin_report_eval.sql`
+- `supabase/migrations/010_retrieval_eval_foundation.sql`
+
+## Key Implemented Capabilities By Theme
+
+### Scan quality
+- v2 status model
+- category scores
+- LLM confidence surfaced
+- full-check report integrity
+- technical appendix
+
+### Crawl quality
+- robots.txt handling
+- sitemap handling
+- same-origin link discovery
+- section-aware prioritization
+- chunked continuation
+- crawl metrics
+- optional Browser Rendering SPA fallback
+
+### Evaluation quality
+- integrity rubric
+- promptfoo harness
+- deterministic retrieval simulation
+
+## Important Non-Goals / Not Implemented
+- API product layer beyond schema foundation
+- benchmark percentile engine
+- ragas runtime pipeline
+- Workflows-scale deep-audit orchestration for 1000+ pages
+- full Browser Rendering `/crawl` orchestration

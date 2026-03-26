@@ -71,7 +71,10 @@ export async function ensureDeepAuditJobQueued(
         scan_id: payment.scan_id,
         domain: scanRow.domain,
         mode: 'deep',
-        config: { page_limit: pageLimit },
+        config: {
+          page_limit: pageLimit,
+          render_mode: env.DEEP_AUDIT_BROWSER_RENDER_MODE || 'off',
+        },
       })
       .select('id')
       .single();
@@ -113,3 +116,4 @@ export async function ensureDeepAuditJobQueued(
 
   return { ok: true, duplicate: duplicateEvent };
 }
+

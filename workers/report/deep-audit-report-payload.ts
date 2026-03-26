@@ -16,6 +16,12 @@ export type CategoryScorePayload = {
   readonly checkCount: number;
 };
 
+export type TechnicalAppendixPayload = {
+  readonly robotsSummary?: string | null;
+  readonly schemaSummary?: string | null;
+  readonly headersSummary?: string | null;
+};
+
 export type DeepAuditReportPayload = {
   readonly version: 1;
   readonly scanId: string;
@@ -26,7 +32,10 @@ export type DeepAuditReportPayload = {
   readonly aggregateLetterGrade: string | null;
   /** Top highlighted issues (typically failed checks) for the executive summary. */
   readonly highlightedIssues: unknown;
+  /** Full deduplicated sitewide check set used for report breakdowns. */
+  readonly allIssues: unknown;
   readonly coverageSummary: unknown;
+  readonly technicalAppendix?: TechnicalAppendixPayload;
   readonly categoryScores?: readonly CategoryScorePayload[];
   readonly pages: readonly DeepAuditReportPagePayload[];
   readonly generatedAt: string;
@@ -50,6 +59,8 @@ export function buildDeepAuditReportPayload(input: {
   readonly pages: readonly PageRowInput[];
   readonly coverageSummary: unknown;
   readonly highlightedIssues: unknown;
+  readonly allIssues: unknown;
+  readonly technicalAppendix?: TechnicalAppendixPayload;
   readonly categoryScores?: readonly CategoryScorePayload[];
   readonly generatedAt?: string;
 }): DeepAuditReportPayload {
@@ -70,7 +81,9 @@ export function buildDeepAuditReportPayload(input: {
     aggregateScore: input.aggregateScore,
     aggregateLetterGrade: input.aggregateLetterGrade,
     highlightedIssues: input.highlightedIssues,
+    allIssues: input.allIssues,
     coverageSummary: input.coverageSummary,
+    technicalAppendix: input.technicalAppendix,
     categoryScores: input.categoryScores,
     pages,
     generatedAt: input.generatedAt ?? new Date().toISOString(),

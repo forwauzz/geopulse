@@ -25,6 +25,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   RECONCILE_SECRET: string;
   /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–120). */
   DEEP_AUDIT_DEFAULT_PAGE_LIMIT: string;
+  /** Plaintext var: off, auto, or force for optional Browser Rendering on paid deep audits. */
+  DEEP_AUDIT_BROWSER_RENDER_MODE: string;
 };
 
 /**
@@ -109,6 +111,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
+      DEEP_AUDIT_BROWSER_RENDER_MODE: pickEnvString(e, 'DEEP_AUDIT_BROWSER_RENDER_MODE'),
     };
   } catch {
     return {
@@ -122,6 +125,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
+      DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
     };
   }
 }
@@ -133,3 +137,5 @@ export function getClientIp(request: Request): string {
     'unknown'
   );
 }
+
+

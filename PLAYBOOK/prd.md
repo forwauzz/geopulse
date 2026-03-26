@@ -105,7 +105,7 @@ GOAL: RUN CLIENT AUDITS AND DELIVER BRANDED REPORTS
 6. Audit Engine — Functional Specification
 The audit engine runs inside a Cloudflare Worker. It fetches the target URL, parses the HTML using HTMLRewriter (streaming, no DOM), runs deterministic checks, calls Gemini Flash-Lite only for the two checks that require natural language reasoning (Q&A block detection, extractability), then computes a weighted score.
 
-SSRF PREVENTION  Before any fetch, the Worker must: (1) validate URL scheme is https, (2) resolve DNS and reject private/internal IPs (127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.169.254), (3) set redirect: manual and re-validate redirect targets. This is non-negotiable — user-submitted URLs are an SSRF vector.
+SSRF PREVENTION  Before any fetch, the Worker must: (1) validate the submitted URL against strict scheme / hostname / port rules, (2) reject private/internal hostname patterns and IP literals (127.x, 10.x, 172.16-31.x, 192.168.x, 169.254.169.254, localhost, metadata hosts), and (3) set `redirect: 'manual'` and re-validate redirect targets on every hop. Cloudflare Workers do not expose a native DNS resolution primitive in this implementation path, so the practical protection model is strict hostname validation plus manual redirect validation rather than general-purpose DNS lookups. This is non-negotiable — user-submitted URLs are an SSRF vector.
 
 Scoring Rubric — 100-Point Scale
 Check	Weight	What Is Measured	Pass Condition	Fail Fix
@@ -137,7 +137,7 @@ Gemini Flash-Lite (1,000 req/day free tier) is called for exactly two checks tha
 All other checks are deterministic — no AI required. Gemini is not called for scoring, not called for report generation, and not called for anything else in the MVP.
 
 Report Contents — Deep Audit ($29)
-•	Cover: domain, date, overall score, letter grade, benchmark percentile
+•	Cover: domain, date, overall score, letter grade
 •	Executive Summary: 3-sentence plain-English verdict
 •	Score Breakdown: all 15 checks, pass/fail, weight, finding per check
 •	Top 3 Critical Issues: expanded with exact fix instructions
@@ -222,9 +222,9 @@ NON-NEGOTIABLES  RLS on every table. SSRF validation on every fetch. Stripe webh
 The marketing system is a product decision — it runs without manual involvement after setup. The three growth loops below are embedded into the product, not bolted on as campaigns.
 
 Growth Loop 1 — Share Your Score
-The most powerful distribution mechanic in the product. Every scan produces a shareable OG image: score badge, letter grade, domain name, benchmark percentile. One-click share to X, LinkedIn, Instagram.
+The most powerful distribution mechanic in the product. Every scan produces a shareable OG image: score badge, letter grade, domain name. One-click share to X, LinkedIn, Instagram.
 •	Pre-populated tweet: "Just scanned [domain] on GEO-Pulse — AI Search Readiness Score: 58/100 (D). Found 3 things blocking AI search visibility. Free scan: geopulse.io 🔍"
-•	Include competitive framing: "You scored better than 72% of sites in your industry."
+•	Do not include percentile or peer-ranking claims until the benchmark pipeline is implemented and methodologically defensible.
 •	Design scoring so most sites land 45–65 — triggers both ego share and anxiety share.
 •	Results page shows score prominently before the email gate — they see the number first.
 

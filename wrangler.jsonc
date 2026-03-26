@@ -6,7 +6,7 @@
 
   // Local `wrangler deploy` / `wrangler dev`: runs before bundling. Git-connected Workers Builds does NOT use this — set dashboard Build to `npm run build:worker` or Deploy to `npm run deploy` (see PLAYBOOK/cloudflare-workers-builds.md).
   "build": {
-    "command": "npx opennextjs-cloudflare build"
+    "command": "node scripts/opennext-build.cjs"
   },
 
   "name": "geo-pulse",
@@ -41,7 +41,9 @@
     // Public R2.dev base for deep-audit PDF/MD links (not a secret). Override in .dev.vars locally if needed.
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
     // Default page cap for new paid deep audits (1–120); same ceiling as crawl Worker.
-    "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "10"
+    "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "10",
+    // Browser Rendering mode for paid deep audits: off | auto
+    "DEEP_AUDIT_BROWSER_RENDER_MODE": "off"
   },
 
   // R2 — deep-audit PDF + Markdown (DA-003). Bucket must exist; public URL must match DEEP_AUDIT_R2_PUBLIC_BASE.
@@ -61,6 +63,8 @@
   //   RESEND_API_KEY
   //   TURNSTILE_SECRET_KEY
   //   RECONCILE_SECRET (optional — admin reconcile endpoint)
+  //   BROWSER_RENDERING_API_TOKEN (required when DEEP_AUDIT_BROWSER_RENDER_MODE=auto)
+  //   CLOUDFLARE_ACCOUNT_ID (required when DEEP_AUDIT_BROWSER_RENDER_MODE=auto)
 
   // KV Namespaces
   "kv_namespaces": [

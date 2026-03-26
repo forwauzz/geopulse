@@ -1,5 +1,5 @@
 /**
- * Inserts one evaluation row using structural rubric + fixture markdown.
+ * Inserts one evaluation row using content-integrity rubric + fixture markdown.
  * Run: npm run eval:smoke
  * Requires: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { structuralReportScore } from '../lib/server/report-eval-structural';
 
-const RUBRIC_VERSION = 'structural-v1';
+const RUBRIC_VERSION = 'integrity-v2';
 const GENERATOR_VERSION = 'smoke-fixture';
 
 async function main(): Promise<void> {

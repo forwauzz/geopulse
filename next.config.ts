@@ -9,6 +9,23 @@ const scriptSrc = isDev
   ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com"
   : "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com";
 
+function publicOrigin(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+const reportAssetOrigin = publicOrigin(process.env['DEEP_AUDIT_R2_PUBLIC_BASE']);
+const connectSrc = [
+  "'self'",
+  'https://*.supabase.co',
+  'https://generativelanguage.googleapis.com',
+  ...(reportAssetOrigin ? [reportAssetOrigin] : []),
+].join(' ');
+
 const nextConfig: NextConfig = {
   // Required for @opennextjs/cloudflare
   // Do NOT set output: 'export' — OpenNext handles the build
@@ -35,7 +52,7 @@ const nextConfig: NextConfig = {
               "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: https:",
               "font-src 'self' https://fonts.gstatic.com",
-              "connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com",
+              `connect-src ${connectSrc}`,
               "frame-src https://challenges.cloudflare.com",
             ].join('; '),
           },

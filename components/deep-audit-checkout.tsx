@@ -77,7 +77,7 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
     <div className="flex flex-col gap-5 rounded-xl bg-on-background p-6 text-surface md:p-8">
       <h2 className="font-headline text-xl font-bold text-surface-container-lowest">Unlock the full picture</h2>
       <p className="font-body text-sm text-surface-container-low/80">
-        Get all 17 checks across up to 10 pages, with a prioritized action plan your developer can follow.
+        Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan.
         One-time purchase, no subscription.
       </p>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-surface-container-low/70">

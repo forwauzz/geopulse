@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import { getScanApiEnv } from '@/lib/server/cf-env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { requireAdminOrRedirect } from '@/lib/server/require-admin';
@@ -82,9 +83,8 @@ export default async function ReportEvalsAdminPage() {
 
   requireAdminOrRedirect(user.email);
 
-  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
-  const service = process.env['SUPABASE_SERVICE_ROLE_KEY'];
-  if (!url || !service) {
+  const env = await getScanApiEnv();
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-16">
         <p className="text-error">Server misconfigured: missing Supabase service role.</p>
@@ -92,7 +92,10 @@ export default async function ReportEvalsAdminPage() {
     );
   }
 
-  const adminDb = createServiceRoleClient(url, service);
+  const adminDb = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
   const { data: runs, error } = await adminDb
     .from('report_eval_runs')
     .select('id,rubric_version,generator_version,overall_score,created_at')
@@ -116,7 +119,7 @@ export default async function ReportEvalsAdminPage() {
           <p className="font-label text-sm font-semibold uppercase tracking-widest text-primary">Admin</p>
           <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Report quality evals</h1>
           <p className="mt-1 font-body text-sm text-on-surface-variant">
-            Structural rubric scores over time (offline smoke). Service-role writes only.
+            Integrity-rubric scores over time from the offline smoke harness. Service-role writes only.
           </p>
         </div>
         <Link

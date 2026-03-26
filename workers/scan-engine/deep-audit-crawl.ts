@@ -4,6 +4,13 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { LLMProvider } from '../lib/interfaces/providers';
+import {
+  createCloudflareBrowserRenderClient,
+  type BrowserRenderConfig,
+  hasBrowserRenderingCredentials,
+  renderedHtmlImprovesContent,
+  shouldUseBrowserRendering,
+} from './browser-rendering';
 import { fetchHtmlPage } from '../lib/fetch-gate';
 import { MAX_DEEP_AUDIT_PAGE_LIMIT } from '../../lib/server/deep-audit-page-limit';
 import { structuredLog } from '../../lib/server/structured-log';
@@ -72,6 +79,12 @@ export type CrawlPendingState = {
   readonly seed_norm: string;
   readonly robots_status: number;
   readonly sitemap_urls_considered: number;
+  readonly chunks_processed: number;
+  readonly started_at: string | null;
+  readonly browser_render_attempted: number;
+  readonly browser_render_succeeded: number;
+  readonly browser_render_failed: number;
+  readonly browser_render_browser_ms_used: number;
 };
 
 export type DeepAuditCrawlResult =
@@ -80,6 +93,13 @@ export type DeepAuditCrawlResult =
   | { ok: false; reason: string };
 
 type SeedFetchOk = { ok: true; html: string; finalUrl: string };
+
+type BrowserRenderStats = {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  browserMsUsed: number;
+};
 
 /** Parses crawl_pending; fills defaults for older partial states missing robots metadata. */
 export function parseCrawlPending(raw: unknown): CrawlPendingState | null {
@@ -103,6 +123,34 @@ export function parseCrawlPending(raw: unknown): CrawlPendingState | null {
     robots_status: typeof o['robots_status'] === 'number' ? (o['robots_status'] as number) : 200,
     sitemap_urls_considered:
       typeof o['sitemap_urls_considered'] === 'number' ? (o['sitemap_urls_considered'] as number) : 1,
+    chunks_processed:
+      typeof o['chunks_processed'] === 'number' && o['chunks_processed'] > 0 ? (o['chunks_processed'] as number) : 1,
+    started_at: typeof o['started_at'] === 'string' && o['started_at'].length > 0 ? (o['started_at'] as string) : null,
+    browser_render_attempted:
+      typeof o['browser_render_attempted'] === 'number' && o['browser_render_attempted'] >= 0
+        ? (o['browser_render_attempted'] as number)
+        : 0,
+    browser_render_succeeded:
+      typeof o['browser_render_succeeded'] === 'number' && o['browser_render_succeeded'] >= 0
+        ? (o['browser_render_succeeded'] as number)
+        : 0,
+    browser_render_failed:
+      typeof o['browser_render_failed'] === 'number' && o['browser_render_failed'] >= 0
+        ? (o['browser_render_failed'] as number)
+        : 0,
+    browser_render_browser_ms_used:
+      typeof o['browser_render_browser_ms_used'] === 'number' && o['browser_render_browser_ms_used'] >= 0
+        ? (o['browser_render_browser_ms_used'] as number)
+        : 0,
+  };
+}
+
+function mergeBrowserRenderStats(base: BrowserRenderStats, delta: BrowserRenderStats): BrowserRenderStats {
+  return {
+    attempted: base.attempted + delta.attempted,
+    succeeded: base.succeeded + delta.succeeded,
+    failed: base.failed + delta.failed,
+    browserMsUsed: base.browserMsUsed + delta.browserMsUsed,
   };
 }
 
@@ -129,9 +177,10 @@ export async function runDeepAuditCrawl(
     readonly seedUrl: string;
     readonly pageLimit: number;
     readonly chunkSize?: number;
+    readonly browserRender?: BrowserRenderConfig;
   }
 ): Promise<DeepAuditCrawlResult> {
-  const { runId, seedUrl, pageLimit, chunkSize: chunkSizeIn } = params;
+  const { runId, seedUrl, pageLimit, chunkSize: chunkSizeIn, browserRender } = params;
   const limit = Math.max(1, Math.min(pageLimit, MAX_DEEP_AUDIT_PAGE_LIMIT));
   const chunkSize = Math.max(
     1,
@@ -159,6 +208,7 @@ export async function runDeepAuditCrawl(
       pending: pendingParsed,
       limit,
       chunkSize,
+      browserRender,
     });
   }
 
@@ -167,6 +217,7 @@ export async function runDeepAuditCrawl(
     seedUrl,
     limit,
     chunkSize,
+    browserRender,
   });
 }
 
@@ -178,9 +229,10 @@ async function startChunkedCrawl(
     readonly seedUrl: string;
     readonly limit: number;
     readonly chunkSize: number;
+    readonly browserRender?: BrowserRenderConfig;
   }
 ): Promise<DeepAuditCrawlResult> {
-  const { runId, seedUrl, limit, chunkSize } = params;
+  const { runId, seedUrl, limit, chunkSize, browserRender } = params;
   const crawlWallStart = Date.now();
   let pagesErrored = 0;
   const started = new Date().toISOString();
@@ -331,6 +383,7 @@ async function startChunkedCrawl(
     seedNormFinal,
     seedFetchCached: { ok: true, html: seedFetch.html, finalUrl: seedFetch.finalUrl },
     robotsTxtContent: robotsRes.text,
+    browserRender,
   });
   pagesErrored += sliceRes.pagesErroredDelta;
 
@@ -346,6 +399,12 @@ async function startChunkedCrawl(
         seed_norm: seedNormFinal,
         robots_status: robotsRes.status,
         sitemap_urls_considered: smList.length,
+        chunks_processed: 1,
+        started_at: started,
+        browser_render_attempted: sliceRes.browserRenderStats.attempted,
+        browser_render_succeeded: sliceRes.browserRenderStats.succeeded,
+        browser_render_failed: sliceRes.browserRenderStats.failed,
+        browser_render_browser_ms_used: sliceRes.browserRenderStats.browserMsUsed,
       } satisfies CrawlPendingState,
     });
     const { error: cfgErr } = await supabase.from('scan_runs').update({ config: nextConfig }).eq('id', runId);
@@ -357,6 +416,8 @@ async function startChunkedCrawl(
       next_index: end,
       total: ordered.length,
       chunk_size: chunkSize,
+      chunks_processed: 1,
+      urls_remaining: Math.max(0, ordered.length - end),
     });
     return { ok: true, phase: 'partial' };
   }
@@ -370,6 +431,9 @@ async function startChunkedCrawl(
     limit,
     robotsStatus: robotsRes.status,
     sitemapCount: smList.length,
+    browserRenderStats: sliceRes.browserRenderStats,
+    browserRenderMode: browserRender?.mode ?? 'off',
+    browserRenderEnabled: !!browserRender && browserRender.mode !== 'off' && hasBrowserRenderingCredentials(browserRender),
   });
 }
 
@@ -382,22 +446,38 @@ async function continueChunkedCrawl(
     readonly pending: CrawlPendingState;
     readonly limit: number;
     readonly chunkSize: number;
+    readonly browserRender?: BrowserRenderConfig;
   }
 ): Promise<DeepAuditCrawlResult> {
-  const { runId, seedUrl, pending, limit, chunkSize } = params;
+  const { runId, seedUrl, pending, limit, chunkSize, browserRender } = params;
 
   const ordered = pending.ordered_urls.slice(0, limit);
   const sitemapNorms = new Set(pending.sitemap_norms);
   const seedNormFinal = pending.seed_norm;
   const crawlDelayMs = pending.crawl_delay_ms;
   const start = Math.max(0, pending.next_index);
+  const chunksProcessed = Math.max(1, pending.chunks_processed);
+  const maxChunks = Math.max(1, Math.ceil(limit / Math.max(1, chunkSize))) + 2;
+
+  if (chunksProcessed > maxChunks) {
+    await clearCrawlPending(supabase, runId);
+    structuredLog('deep_audit_crawl_pending_invalid', {
+      runId,
+      reason: 'chunks_processed_exceeded_limit',
+      chunks_processed: chunksProcessed,
+      max_chunks: maxChunks,
+      total: ordered.length,
+    });
+    return { ok: false, reason: 'crawl_pending_invalid_chunks_processed' };
+  }
+
   if (start >= ordered.length) {
     await clearCrawlPending(supabase, runId);
     return { ok: false, reason: 'crawl_pending_exhausted' };
   }
   const end = Math.min(start + chunkSize, ordered.length);
 
-  await processUrlSlice(supabase, llm, {
+  const continueSliceRes = await processUrlSlice(supabase, llm, {
     runId,
     seedUrl,
     ordered,
@@ -407,7 +487,17 @@ async function continueChunkedCrawl(
     sitemapNorms,
     seedNormFinal,
     seedFetchCached: undefined,
+    browserRender,
   });
+  const cumulativeBrowserRenderStats = mergeBrowserRenderStats(
+    {
+      attempted: pending.browser_render_attempted,
+      succeeded: pending.browser_render_succeeded,
+      failed: pending.browser_render_failed,
+      browserMsUsed: pending.browser_render_browser_ms_used,
+    },
+    continueSliceRes.browserRenderStats
+  );
 
   if (end < ordered.length) {
     const { data: cfgRow } = await supabase.from('scan_runs').select('config').eq('id', runId).maybeSingle();
@@ -421,6 +511,12 @@ async function continueChunkedCrawl(
         seed_norm: pending.seed_norm,
         robots_status: pending.robots_status,
         sitemap_urls_considered: pending.sitemap_urls_considered,
+        chunks_processed: chunksProcessed + 1,
+        started_at: pending.started_at,
+        browser_render_attempted: cumulativeBrowserRenderStats.attempted,
+        browser_render_succeeded: cumulativeBrowserRenderStats.succeeded,
+        browser_render_failed: cumulativeBrowserRenderStats.failed,
+        browser_render_browser_ms_used: cumulativeBrowserRenderStats.browserMsUsed,
       } satisfies CrawlPendingState,
     });
     const { error: cfgErr } = await supabase.from('scan_runs').update({ config: nextConfig }).eq('id', runId);
@@ -432,6 +528,8 @@ async function continueChunkedCrawl(
       next_index: end,
       total: ordered.length,
       chunk_size: chunkSize,
+      chunks_processed: chunksProcessed + 1,
+      urls_remaining: Math.max(0, ordered.length - end),
     });
     return { ok: true, phase: 'partial' };
   }
@@ -440,11 +538,15 @@ async function continueChunkedCrawl(
     runId,
     seedUrl,
     ordered,
-    crawlWallStart: Date.now(),
+    crawlWallStart: pending.started_at ? new Date(pending.started_at).getTime() : Date.now(),
     crawlDelayMs,
     limit,
     robotsStatus: pending.robots_status,
     sitemapCount: pending.sitemap_urls_considered,
+    chunksProcessed: chunksProcessed + 1,
+    browserRenderStats: cumulativeBrowserRenderStats,
+    browserRenderMode: browserRender?.mode ?? 'off',
+    browserRenderEnabled: !!browserRender && browserRender.mode !== 'off' && hasBrowserRenderingCredentials(browserRender),
   });
   if (fin.ok) {
     await clearCrawlPending(supabase, runId);
@@ -475,8 +577,9 @@ async function processUrlSlice(
     readonly seedNormFinal: string;
     readonly seedFetchCached?: SeedFetchOk;
     readonly robotsTxtContent?: string;
+    readonly browserRender?: BrowserRenderConfig;
   }
-): Promise<{ pagesErroredDelta: number }> {
+): Promise<{ pagesErroredDelta: number; browserRenderStats: BrowserRenderStats }> {
   const {
     runId,
     seedUrl,
@@ -488,9 +591,16 @@ async function processUrlSlice(
     seedNormFinal,
     seedFetchCached,
     robotsTxtContent,
+    browserRender,
   } = params;
 
   let pagesErroredDelta = 0;
+  const browserRenderStats: BrowserRenderStats = {
+    attempted: 0,
+    succeeded: 0,
+    failed: 0,
+    browserMsUsed: 0,
+  };
 
   const { count: fetchedBeforeChunk } = await supabase
     .from('scan_pages')
@@ -587,8 +697,32 @@ async function processUrlSlice(
     }
 
     const fetchMs = Date.now() - t0;
+    let auditHtml = html;
+
+    if (browserRender && shouldUseBrowserRendering(browserRender, html)) {
+      browserRenderStats.attempted += 1;
+      const client = createCloudflareBrowserRenderClient({
+        DEEP_AUDIT_BROWSER_RENDER_MODE: browserRender.mode,
+        CLOUDFLARE_ACCOUNT_ID: browserRender.accountId ?? undefined,
+        BROWSER_RENDERING_API_TOKEN: browserRender.apiToken ?? undefined,
+      });
+      const rendered = client ? await client.renderHtml(finalUrl) : { ok: false as const, reason: 'browser_rendering_not_configured' };
+      if (rendered.ok && renderedHtmlImprovesContent(html, rendered.html)) {
+        auditHtml = rendered.html;
+        browserRenderStats.succeeded += 1;
+        browserRenderStats.browserMsUsed += rendered.browserMsUsed ?? 0;
+      } else {
+        browserRenderStats.failed += 1;
+        structuredLog('deep_audit_browser_render_failed', {
+          runId,
+          url: finalUrl.slice(0, 160),
+          reason: rendered.ok ? 'rendered_html_not_materially_better' : rendered.reason.slice(0, 160),
+        });
+      }
+    }
+
     const useLlm = llmRemaining;
-    const output = await auditPageFromHtml(finalUrl, html, llm, {
+    const output = await auditPageFromHtml(finalUrl, auditHtml, llm, {
       useLlm,
       robotsTxtContent: robotsTxtContent ?? '',
     });
@@ -627,7 +761,7 @@ async function processUrlSlice(
     }
   }
 
-  return { pagesErroredDelta };
+  return { pagesErroredDelta, browserRenderStats };
 }
 
 async function finalizeDeepCrawl(
@@ -641,9 +775,26 @@ async function finalizeDeepCrawl(
     readonly limit: number;
     readonly robotsStatus: number;
     readonly sitemapCount: number;
+    readonly chunksProcessed?: number;
+    readonly browserRenderStats: BrowserRenderStats;
+    readonly browserRenderMode: string;
+    readonly browserRenderEnabled: boolean;
   }
 ): Promise<DeepAuditCrawlResult> {
-  const { runId, seedUrl, ordered, crawlWallStart, crawlDelayMs, limit, robotsStatus, sitemapCount } = params;
+  const {
+    runId,
+    seedUrl,
+    ordered,
+    crawlWallStart,
+    crawlDelayMs,
+    limit,
+    robotsStatus,
+    sitemapCount,
+    chunksProcessed,
+    browserRenderStats,
+    browserRenderMode,
+    browserRenderEnabled,
+  } = params;
 
   const { data: runMeta } = await supabase.from('scan_runs').select('started_at').eq('id', runId).maybeSingle();
   const startedMs = runMeta?.started_at ? new Date(runMeta.started_at).getTime() : crawlWallStart;
@@ -666,6 +817,10 @@ async function finalizeDeepCrawl(
 
   const pagesErrored = errCount ?? 0;
   const completed = new Date().toISOString();
+  const completedChunks = Math.max(
+    1,
+    chunksProcessed ?? Math.ceil(ordered.length / Math.max(1, Math.min(limit, MAX_CHUNK_SIZE)))
+  );
 
   const { error: doneErr } = await supabase
     .from('scan_runs')
@@ -682,6 +837,15 @@ async function finalizeDeepCrawl(
         sitemap_urls_considered: sitemapCount,
         urls_planned: ordered.length,
         chunked: true,
+        chunks_processed: completedChunks,
+        chunk_size: Math.min(limit, MAX_CHUNK_SIZE),
+        urls_remaining: 0,
+        browser_render_mode: browserRenderMode,
+        browser_render_enabled: browserRenderEnabled,
+        browser_render_attempted: browserRenderStats.attempted,
+        browser_render_succeeded: browserRenderStats.succeeded,
+        browser_render_failed: browserRenderStats.failed,
+        browser_render_browser_ms_used: browserRenderStats.browserMsUsed,
       },
     })
     .eq('id', runId);
@@ -697,6 +861,11 @@ async function finalizeDeepCrawl(
     pages_fetched: scores.length,
     pages_errored: pagesErrored,
     crawl_delay_ms: crawlDelayMs,
+    chunks_processed: completedChunks,
+    browser_render_mode: browserRenderMode,
+    browser_render_attempted: browserRenderStats.attempted,
+    browser_render_succeeded: browserRenderStats.succeeded,
+    browser_render_failed: browserRenderStats.failed,
   });
 
   const pagesOut: DeepCrawlPageSummary[] = [];

@@ -83,7 +83,24 @@ if (!validation.ok) {
 const res = await fetch(validation.safeUrl, { redirect: 'manual' });
 ```
 
-**Blocked ranges:**
+**Implemented protections:**
+- `validateUrl()` for user-facing scan entrypoints enforces `https:` only, blocks credentials, blocks non-standard ports, blocks private/internal hostname patterns, blocks IP literals, and blocks single-label hosts.
+- `validateEngineFetchUrl()` is used by deep-audit fetch paths and allows `http`/`https` on ports `80/443` only, with the same hostname / IP-literal restrictions.
+- `fetchGateText()` follows redirects manually and re-validates each hop before fetching the next location.
+- DA-005 browser rendering is deep-audit only, opt-in, and must start from a URL that has already passed the engine fetch gate. GEO-Pulse first validates and resolves the final page URL through the normal fetch gate, then optionally asks Cloudflare Browser Rendering to render that already-validated final URL.
+
+**Runtime limitation:**
+- Cloudflare Workers do **not** expose native DNS resolution for this codepath, so GEO-Pulse does **not** currently resolve arbitrary public hostnames to IPs before fetch.
+- The current protection model is hostname-pattern blocking + IP-literal rejection + manual redirect validation, not DNS-based allow/deny enforcement.
+- Browser Rendering does not remove this limitation. It is treated as a post-validation rendering step, not as a substitute for the fetch gate.
+
+**Browser Rendering guardrails (DA-005):**
+- Disabled by default unless `DEEP_AUDIT_BROWSER_RENDER_MODE` and Browser Rendering credentials are explicitly configured.
+- Paid deep-audit path only; the free scan path does not invoke Browser Rendering.
+- On render failure, GEO-Pulse falls back to the already-fetched raw HTML rather than widening retries or skipping SSRF validation.
+- Any future Browser Rendering `/crawl` integration must get a fresh Security review before being marked done.
+
+**Blocked ranges / host patterns:**
 - `127.0.0.0/8` — loopback
 - `10.0.0.0/8` — private class A
 - `172.16.0.0/12` — private class B
@@ -92,7 +109,7 @@ const res = await fetch(validation.safeUrl, { redirect: 'manual' });
 - IPv6 loopback, link-local, unique local
 - IP address literals (require domain names only)
 - Single-label hostnames
-- Non-HTTPS schemes
+- Non-HTTPS schemes on user-facing scan entrypoints
 
 **[AI PITFALL]** AI tools frequently skip the private IP blocklist or only check scheme. Always review fetch code that handles user-submitted URLs manually.
 

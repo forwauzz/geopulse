@@ -86,13 +86,18 @@ Supabase loop	Low (DB cost)	High (DB+function)	Manual retry (on fail)	DB locking
 Browser /crawl	Paid calls (beta)	Async (job-based)	Managed by Cloudflare; honors robots	Honors crawl-delay, robots, content signals	Low (external API)	When site needs JS rendering or very deep coverage
 
 Monitoring & Metrics
-Track: number of pages_discovered, pages_scanned, pages_skipped (by reason); Worker CPU time / memory usage per job; queue backlog length; PDF generation time; LLM calls cost. Alert if error rate >5% or queue length > threshold. Dashboard: per-site coverage %, average issues count, and site-score percentile.
+Track: number of pages_discovered, pages_scanned, pages_skipped (by reason); Worker CPU time / memory usage per job; queue backlog length; PDF generation time; LLM calls cost. Alert if error rate >5% or queue length > threshold. Dashboard: per-site coverage %, average issues count. Site-score percentile remains deferred until the benchmark pipeline in `PLAYBOOK/benchmark-percentile-design.md` exists.
 
 Acceptance Criteria
 Phase 0: Paid audit yields 2+ pages on a simple 10-page site. Deep scan rows present; free scan unchanged. PDF contains multi-page breakdown.
 Phase 1: Scans respect robots (disallowed pages marked). 10MB sitemap parses without OOM. All fetches go through SSRF gate. Errors are logged, coverage summary correct.
 Phase 2: 100-page demo site completes without manual restart. Concurrency limits enforced. Coverage ~100% of allowed pages. Workflows handle partial failures.
-Phase 3: A React SPA’s key URLs are captured via rendered mode. Content signals (e.g. ai-train=no) honored.
+Phase 3: A React SPA’s key URLs are captured via rendered mode. Content signals (e.g. ai-train=no) honored.
+
+Current repo implementation note (2026-03-26):
+- DA-005 is implemented as an optional deep-audit per-page render fallback using Cloudflare Browser Rendering `/content`, not a full Browser Rendering `/crawl` orchestration layer.
+- It is disabled by default and only runs when explicit Browser Rendering credentials + `DEEP_AUDIT_BROWSER_RENDER_MODE` are configured.
+- The normal fetch gate still validates the target and final URL first; rendered fetch is a post-validation fallback for SPA-like pages.
 Example SQL Schema
 sql
 Copy

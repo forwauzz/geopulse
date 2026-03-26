@@ -10,9 +10,9 @@
 
 **Implementation status (2026-03-25):** P4-002 + P4-005 **in repo**. **P4-001** ✅ — production Worker `https://geo-pulse.uzzielt.workers.dev` + **live Stripe checkout** (redirect `?checkout=success`, “Payment received.”) — see `COMPLETION_LOG.md` *Phase 4 — operator evidence*. **P2-008** ✅ — production paid path verified. **Still to close with evidence in log:** **P4-003** (SPF/DKIM/DMARC), **P4-004** (WAF CVE-2025-29927), **P4-006** (Security sign-off on five blockers). **Phase 4→Launch gate** (`agents/ORCHESTRATOR.md`) requires all five security blockers + production smoke — Orchestrator marks when P4-003/004/006 evidence is attached.
 
-**Operator note (2026-03-25):** Production checkout **`POST /api/checkout`** is rate-limited (**5 attempts per IP per hour**, `Retry-After: 3600` — see `lib/server/rate-limit-kv.ts` `checkCheckoutRateLimit`). Retesting paid checkout may require **waiting up to one hour** or using **another network/IP**. This is **not** a Stripe configuration failure by itself. **Sequencing:** **DA-001** ✅ · **DA-002** ✅ · **DA-003** ✅ · **DA-004** — **chunked queue continuation in repo** (`scan_runs.config.crawl_pending`, `runDeepAuditCrawl` → `phase: 'partial'` → `SCAN_QUEUE.send` same job); cap **120** pages (`MAX_DEEP_AUDIT_PAGE_LIMIT`), optional `chunk_size` in run config. **Still deferred:** Cloudflare Workflows for very long runs, **DA-005** (Browser Rendering / SPA). **Orchestrator:** close **Phase 4 — Launch** first (`agents/ORCHESTRATOR.md` § *Phase 4 first — defer remaining Deep Audit*). **Next (Phase 4):** paste **P4-003 / P4-004 / P4-006** evidence in `COMPLETION_LOG.md`; then **Phase 4→Launch gate**.
+**Operator note (2026-03-25):** Production checkout **`POST /api/checkout`** is rate-limited (**5 attempts per IP per hour**, `Retry-After: 3600` — see `lib/server/rate-limit-kv.ts` `checkCheckoutRateLimit`). Retesting paid checkout may require **waiting up to one hour** or using **another network/IP**. This is **not** a Stripe configuration failure by itself. **Sequencing:** **DA-001** ✅ · **DA-002** ✅ · **DA-003** ✅ · **DA-004** — **chunked queue continuation in repo** (`scan_runs.config.crawl_pending`, `runDeepAuditCrawl` → `phase: 'partial'` → `SCAN_QUEUE.send` same job); cap **120** pages (`MAX_DEEP_AUDIT_PAGE_LIMIT`), optional `chunk_size` in run config. **DA-005** ✅ — optional Browser Rendering SPA fallback for paid deep audits, disabled by default unless explicit operator config is provided. **Still deferred:** Cloudflare Workflows for very long runs. **Orchestrator:** close **Phase 4 — Launch** first (`agents/ORCHESTRATOR.md` § *Phase 4 first — defer remaining Deep Audit*). **Next (Phase 4):** paste **P4-003 / P4-004 / P4-006** evidence in `COMPLETION_LOG.md`; then **Phase 4→Launch gate**.
 
-**Deep Audit Upgrade (v2):** Tracked in Task Registry (**DA-001…DA-005**); spec `.cursor/plans/report_depth_and_formats_fa7e556e.plan.md`, narrative [`PLAYBOOK/audit-upgrade.md`](../../PLAYBOOK/audit-upgrade.md). **DA-001** ✅ **DONE** — `005_scan_runs_scan_pages.sql`, queue **v2**, `runDeepAuditCrawl`, multi-page PDF (operator-verified). **DA-002** ✅ **DONE** — `workers/lib/fetch-gate.ts`, `validateEngineFetchUrl`, `robots-and-sitemap.ts`, `crawl-url-utils.ts` (section-aware cap), migration `006_scan_pages_section.sql`; **Security** formal sign-off on fetch path still recommended per `agents/SECURITY_AGENT.md`. **DA-003** ✅ **DONE** — `DeepAuditReportPayload`, `build-deep-audit-markdown.ts`, R2 upload + `reports.pdf_url`, Resend attach vs link policy (`DEEP_AUDIT_ATTACH_MAX_BYTES`). **DA-004 (partial)** — robots `Crawl-delay` + crawl metrics (`COMPLETION_LOG` DA-004-inc) **+ chunked queue re-invocation** (`crawl_pending` in `scan_runs.config`, up to **120** pages). Workflows / 1000+ page orchestration still deferred. Independent of Phase 4 closure; Orchestrator sets parallel vs sequential execution.
+**Deep Audit Upgrade (v2):** Tracked in Task Registry (**DA-001…DA-005**); spec `.cursor/plans/report_depth_and_formats_fa7e556e.plan.md`, narrative [`PLAYBOOK/audit-upgrade.md`](../../PLAYBOOK/audit-upgrade.md). **DA-001** ✅ **DONE** — `005_scan_runs_scan_pages.sql`, queue **v2**, `runDeepAuditCrawl`, multi-page PDF (operator-verified). **DA-002** ✅ **DONE** — `workers/lib/fetch-gate.ts`, `validateEngineFetchUrl`, `robots-and-sitemap.ts`, `crawl-url-utils.ts` (section-aware cap), migration `006_scan_pages_section.sql`; **Security** formal sign-off on fetch path still recommended per `agents/SECURITY_AGENT.md`. **DA-003** ✅ **DONE** — `DeepAuditReportPayload`, `build-deep-audit-markdown.ts`, R2 upload + `reports.pdf_url`, Resend attach vs link policy (`DEEP_AUDIT_ATTACH_MAX_BYTES`). **DA-004 (partial)** — robots `Crawl-delay` + crawl metrics (`COMPLETION_LOG` DA-004-inc) **+ chunked queue re-invocation** (`crawl_pending` in `scan_runs.config`, up to **120** pages). **DA-005** ✅ **DONE** — optional Browser Rendering-backed SPA fallback for paid deep audits (`workers/scan-engine/browser-rendering.ts`, deep-audit crawl + queue wiring, env/docs updates). Workflows / 1000+ page orchestration still deferred. Independent of Phase 4 closure; Orchestrator sets parallel vs sequential execution.
 
 **How to close Phase 4:** Follow **`COMPLETION_LOG.md` → *Phase 4 — operator execution order*** — numbered steps + **Stripe Live checkpoint** (after production hostname is fixed). Paste deploy + DNS + WAF + smoke evidence there; Orchestrator marks tasks and Phase 4→Launch gate per `agents/ORCHESTRATOR.md`.
 
@@ -112,8 +112,8 @@
 | DA-001 | Phase 0: `scan_runs` / `scan_pages` + RLS; payment → deep crawl + cap; free scan unchanged | Backend + Database | ✅ DONE | COMPLETION_LOG DA-001 (✅ ACCEPTED); operator smoke: paid PDF for `https://techehealthservices.com/` — **Pages scanned** + per-page checklist (10 URLs, site aggregate score); migration `005_scan_runs_scan_pages.sql` |
 | DA-002 | Phase 1: Central fetch gate (extend `workers/lib/ssrf.ts`); robots + sitemap streaming; section-aware sampling | Backend + Security | ✅ DONE | `workers/lib/fetch-gate.ts`, `validateEngineFetchUrl`, `deep-audit-crawl` + robots/sitemap + `prioritizeUrlsBySection`; `006_scan_pages_section.sql`; `npm run test` 36 passed; COMPLETION_LOG DA-002 — **Security** review recommended |
 | DA-003 | Reporting: `DeepAuditReportPayload`; PDF/MD; R2 + email link policy | Backend | ✅ DONE | COMPLETION_LOG DA-003; `workers/report/*`, `report-queue-consumer.ts`, `wrangler.jsonc` `r2_buckets` + `DEEP_AUDIT_R2_PUBLIC_BASE`; CI runs `cf-typegen` |
-| DA-004 | Phase 2: Scale (Queues/Workflows), politeness, metrics | Backend | ⬜ IN_PROGRESS (partial) | **Done in repo:** Crawl-delay + metrics (COMPLETION_LOG DA-004-inc) **+ chunked crawl** (`deep-audit-crawl.ts` + `report-queue-consumer.ts` re-queue) **+ `DEEP_AUDIT_DEFAULT_PAGE_LIMIT` wrangler var** (`lib/server/deep-audit-page-limit.ts`, `ensure-deep-audit-job-queued.ts`). **Deferred:** Workflows for 1000+ pages / long wall-time orchestration |
-| DA-005 | Phase 3 (optional): Browser Rendering / SPA crawl | Backend | ⬜ DEFERRED | Tier-gated; evidence in COMPLETION_LOG |
+| DA-004 | Phase 2: Scale (Queues/Workflows), politeness, metrics | Backend | ⬜ IN_PROGRESS (partial) | **Done in repo:** Crawl-delay + metrics (COMPLETION_LOG DA-004-inc) **+ chunked crawl** (`deep-audit-crawl.ts` + `report-queue-consumer.ts` re-queue) **+ chunk-progress metrics / pending-state guardrails** (`deep-audit-crawl.ts`, report coverage summary) **+ `DEEP_AUDIT_DEFAULT_PAGE_LIMIT` wrangler var** (`lib/server/deep-audit-page-limit.ts`, `ensure-deep-audit-job-queued.ts`). **Deferred:** Workflows for 1000+ pages / long wall-time orchestration |
+| DA-005 | Phase 3 (optional): Browser Rendering / SPA crawl | Backend | ✅ DONE | `workers/scan-engine/browser-rendering.ts`, `deep-audit-crawl.ts`, queue/env wiring; COMPLETION_LOG DA-005 |
 
 ### Marketing Attribution Microservice (parallel with launch)
 > **PRD:** `PLAYBOOK/marketing-attribution-weekly-report.md` (runbook). **Runs in parallel** with Phase 4 / product launch — does not block or replace any Phase 4 tasks. Service code in `services/marketing-attribution/`. Schema in `analytics` (Supabase, service-role only — no anon access). Client-side UTM capture via `gp_anon_id` cookie (middleware) + `gp_utm` sessionStorage (`lib/client/attribution.ts`). Weekly email report on Monday cron via Resend (opt-in: set `MARKETING_REPORT_TO` secret).
@@ -140,7 +140,7 @@
 | EVAL-004 | `/dashboard/evals` admin UI | Frontend | ✅ DONE | `app/dashboard/evals/page.tsx` |
 
 ### v2 Enhancement Plan — Scoring Foundation + Check Expansion
-> **Plan:** `.cursor/plans/geopulse_v2_enhancement_audit_36a0ecee.plan.md`. **Tier 1** (Scoring Foundation) completes the v2 status enum, category mapping, per-category scores, UI, and report integration. **Tier 2** adds new checks. **Does not replace** Phase 4 or API deferral rules.
+> **Plan reference:** Task ledger only; prior `.cursor/plans/geopulse_v2_enhancement_audit_36a0ecee.plan.md` pointer is stale / not present in repo as of 2026-03-26. **Tier 1** (Scoring Foundation) completes the v2 status enum, category mapping, per-category scores, UI, and report integration. **Tier 2** adds new checks. **Does not replace** Phase 4 or API deferral rules.
 
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
@@ -149,14 +149,46 @@
 | T1-3 | Compute per-category 0-100 scores in `scoring.ts` | Backend | ✅ DONE | `computeCategoryScores`, `WeightedResult.category`; 96/96 tests |
 | T1-4 | Surface 5 category scores in results UI | Frontend | ✅ DONE | `score-display.tsx` — 5-pillar grid replaces 4-pillar; `results-view.tsx` threads `categoryScores` |
 | T1-5 | Category breakdown in PDF + Markdown reports | Backend | ✅ DONE | `build-deep-audit-markdown.ts`, `build-deep-audit-pdf.ts` — category table; `DeepAuditReportPayload.categoryScores` |
-| T2-1 | New check: Schema.org @type validation | Backend | ⬜ PENDING | — |
-| T2-2 | New check: Image alt text presence | Backend | ⬜ PENDING | — |
-| T2-3 | New check: Content freshness signals | Backend | ⬜ PENDING | — |
-| T2-4 | New check: External authority links | Backend | ⬜ PENDING | — |
-| T2-5 | New check: Security headers | Backend | ⬜ PENDING | — |
-| T2-6 | Surface LLM confidence in issue display | Frontend | ⬜ PENDING | — |
-| T3-6 | In-browser rendered markdown report view | Frontend | ⬜ PENDING | — |
-| T3-7 | Dynamic interactive report view | Frontend | ⬜ PENDING | — |
+| T2-1 | New check: Schema.org @type validation | Backend | ✅ DONE | `workers/scan-engine/checks/check-schema-types.ts`, `registry.ts` |
+| T2-2 | New check: Image alt text presence | Backend | ✅ DONE | `workers/scan-engine/checks/check-alt-text.ts`, `registry.ts` |
+| T2-3 | New check: Content freshness signals | Backend | ✅ DONE | `workers/scan-engine/checks/check-freshness.ts`, `registry.ts` |
+| T2-4 | New check: External authority links | Backend | ✅ DONE | `workers/scan-engine/checks/check-external-links.ts`, `registry.ts` |
+| T2-5 | New check: Security headers | Backend | ✅ DONE | `workers/scan-engine/checks/check-security-headers.ts`, `registry.ts` |
+| T2-6 | Surface LLM confidence in issue display | Frontend | ✅ DONE | `components/score-display.tsx`, `workers/scan-engine/run-scan.ts` |
+| T3-6 | In-browser rendered markdown report view | Frontend | ✅ DONE | `components/report-viewer.tsx`, `app/results/[id]/report/page.tsx` |
+| T3-7 | Dynamic interactive report view | Frontend | ✅ DONE | `components/report-viewer.tsx`; interactive summary + section chips + collapsible report sections; type-check + build |
+
+### Audit Closure — Report Integrity + Product Truth
+> **Source:** 2026-03-26 implementation audit. These tasks convert audit findings into explicit, bite-size follow-up work. They do **not** override Phase 4 launch sequencing; Orchestrator decides execution order.
+
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| AU-001 | Report payload: separate `highlightedIssues` from full evaluated sitewide issue set | Backend | ✅ DONE | COMPLETION_LOG AU-001 … AU-005 / AU-007 |
+| AU-002 | PDF + Markdown: render true full-check breakdown instead of top-issues-only | Backend | ✅ DONE | COMPLETION_LOG AU-001 … AU-005 / AU-007 |
+| AU-003 | Preserve v2 statuses (`PASS` / `FAIL` / `BLOCKED` / `NOT_EVALUATED` / `LOW_CONFIDENCE` / `WARNING`) in report UI/PDF/MD | Backend + Frontend | ✅ DONE | COMPLETION_LOG AU-001 … AU-005 / AU-007 |
+| AU-004 | Deep audit scan persistence: keep `categoryScores` and report payload metadata consistent in `full_results_json` | Backend | ✅ DONE | COMPLETION_LOG AU-001 … AU-005 / AU-007 |
+| AU-005 | Add coverage summary, blocked/error counts, and crawl notes to customer-facing report | Backend | ✅ DONE | COMPLETION_LOG AU-001 … AU-005 / AU-007 |
+| AU-006 | Add technical appendix section (robots, schema findings, headers) to Markdown/PDF | Backend | ✅ DONE | COMPLETION_LOG AU-006 / AU-008 |
+| AU-007 | Product truth pass: align landing/report/checkout copy with actual implemented checks and deliverables | Architect + Frontend | ✅ DONE | COMPLETION_LOG AU-001 … AU-005 / AU-007 |
+| AU-008 | Security/docs truth pass: reconcile SSRF documentation with actual runtime protections and limitations | Security + Architect | ✅ DONE | COMPLETION_LOG AU-006 / AU-008 |
+| AU-009 | Replace structural-only report eval with content-integrity assertions (check count, statuses, appendix, page mapping) | QA + Backend | ✅ DONE | COMPLETION_LOG AU-009 / AU-010 |
+| AU-010 | Add golden-report fixtures covering blocked, low-confidence, and multi-page cases | QA | ✅ DONE | COMPLETION_LOG AU-009 / AU-010 |
+
+### Retrieval / Evaluation Backlog
+> **Status:** Retrieval / eval foundation exists in repo (`RE-001` … `RE-007`), including deterministic retrieval simulation, a local `promptfoo` harness, and a documented `ragas` no-go decision. `ragas` runtime integration, benchmark engine, and prompt-cluster analysis are still not implemented as of 2026-03-26.
+
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| RE-001 | Define retrieval-eval scope: prompts, sampled pages, expected outputs, and non-goals for MVP vs v2 | Architect | ✅ DONE | `PLAYBOOK/retrieval-eval-foundation.md`; COMPLETION_LOG RE-001 / RE-002 |
+| RE-002 | Add retrieval-ready data model for eval runs, prompt sets, passages, and scored answers | Architect + Database | ✅ DONE | `supabase/migrations/010_retrieval_eval_foundation.sql`; COMPLETION_LOG RE-001 / RE-002 |
+| RE-003 | Build minimal retrieval simulation harness over scanned pages/passages (no external benchmark claims yet) | Backend | ✅ DONE | `lib/server/retrieval-eval.ts`, COMPLETION_LOG RE-003 |
+| RE-004 | Add benchmark-percentile computation design or explicitly remove percentile claims until implemented | Architect + Backend | ✅ DONE | `PLAYBOOK/benchmark-percentile-design.md`, doc/contract truth pass, COMPLETION_LOG RE-004 |
+| RE-005 | Add `promptfoo` harness skeleton for prompt regression tests against representative report/retrieval cases | QA + Backend | ✅ DONE | `eval/promptfoo/*`, `scripts/run-promptfoo.cjs`, `package.json`, COMPLETION_LOG RE-005 |
+| RE-006 | Add first `promptfoo` suites for executive summary quality, fix specificity, and status preservation | QA | ✅ DONE | `eval/promptfoo/promptfooconfig.report.yaml`, COMPLETION_LOG RE-006 |
+| RE-007 | Evaluate `ragas` fit for retrieval faithfulness / answer relevance; produce go/no-go note before implementation | Architect + QA | ✅ DONE | `PLAYBOOK/ragas-fit-evaluation.md`, COMPLETION_LOG RE-007 |
+| RE-008 | If approved, add `ragas`-based offline eval pipeline for retrieval runs and answer faithfulness | QA + Backend | ⬜ PENDING | — |
+| RE-009 | Add prompt-cluster / demand-layer research backlog item with clear dependency on retrieval foundation | Architect | ⬜ PENDING | — |
+| RE-010 | Add citation / share-of-voice benchmarking backlog item with external-source methodology and limits | Architect + Backend | ⬜ PENDING | — |
 
 ### API-as-a-Service Layer (deferred — start after Phase 4 launch readiness)
 > **Phase 3→4 gate** is satisfied (auth + dashboard in repo). **API-002 … API-007** remain deferred until **Orchestrator** clears **Phase 4 — Launch** (at minimum **P4-001** production deploy + security evidence per `ORCHESTRATOR.md` Phase 4→Launch gate). **API-001** remains complete.
@@ -175,7 +207,9 @@
 
 ## Active Blockers
 
-_None at this time._
+- `P4-003` SPF / DKIM / DMARC operator setup still pending
+- `P4-006` launch security sign-off still pending
+- `P4-004` WAF remains a launch-policy decision (`DEFERRED / mitigated` in repo, but not fully closed operationally)
 
 ---
 
@@ -217,6 +251,18 @@ _None at this time._
 | 2026-03-26 | **Admin & report eval (ADM-001 … EVAL-004) — implementation in repo.** `/admin/login` password for `ADMIN_EMAIL`, `report_eval_runs` + `reports.markdown_url`, `/dashboard/evals`, `npm run eval:smoke`. See Task Registry **Admin & report quality eval** + `COMPLETION_LOG.md`. **Phase 4** still blocked on P4-003 / P4-006 operator evidence per `ORCHESTRATOR.md`. |
 | 2026-03-26 | **P4-004 / P4-006 (tests):** Unit tests for CVE-2025-29927 middleware guard (`lib/server/middleware-cve.ts`, `middleware-cve.test.ts`) — supplements `middleware.ts` belt-and-suspenders check; paste Vitest output into `COMPLETION_LOG` for Security review. |
 | 2026-03-26 | **v2 Enhancement Plan — Tier 1 COMPLETE.** T1-1: `CheckStatus` 6-value enum + `CheckCategory` 5-value type in `audit.ts`. T1-2: 17 checks mapped to categories (ai_readiness, extractability, trust). T1-3: `computeCategoryScores` in `scoring.ts` with v2 weighting (BLOCKED/NOT_EVALUATED excluded; LOW_CONFIDENCE = 50%). T1-4: `score-display.tsx` 5-pillar category grid (replaces 4-pillar). T1-5: category breakdown table in Markdown + PDF reports. LLM checks now carry `confidence` + `status: LOW_CONFIDENCE` when confidence is low. Evidence: type-check 0 errors, 96/96 tests pass. |
+| 2026-03-26 | **Task ledger reconciliation:** v2 plan pointer in `PROJECT_STATE.md` marked stale (referenced `.cursor/plans/...` file not present in repo). Task statuses corrected for implemented checks/views: **T2-1…T2-6** and **T3-6** set to **DONE** based on shipped code. Added explicit bite-size backlog sections: **Audit Closure — Report Integrity + Product Truth** (**AU-001…AU-010**) and **Retrieval / Evaluation Backlog** (**RE-001…RE-010**) including `promptfoo` and `ragas` as backlog items only, not implemented features. |
+| 2026-03-26 | **AU-001 … AU-005 / AU-007 — COMPLETE (implementation).** Deep-audit reports now separate `highlightedIssues` from `allIssues`, render the full sitewide breakdown, preserve v2 statuses in Markdown/PDF, keep `full_results_json` aligned with `categoryScores` + report metadata, expose coverage summary in customer-facing report output, and remove inaccurate checkout copy about exact check count. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **AU-009 / AU-010 — COMPLETE (implementation).** Report eval moved from shallow structural checks to content-integrity assertions, and golden fixtures now cover multi-page output plus blocked / low-confidence / not-evaluated statuses. `scripts/report-eval-smoke.ts` now uses rubric version `integrity-v2`. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **RE-001 / RE-002 — COMPLETE (foundation).** Added retrieval-eval scope doc (`PLAYBOOK/retrieval-eval-foundation.md`) and schema scaffold (`010_retrieval_eval_foundation.sql`) for future retrieval simulation, `promptfoo`, and possible `ragas` adoption. No runtime retrieval harness implemented yet. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **AU-006 / AU-008 — COMPLETE (implementation).** Deep-audit reports now include a structured technical appendix in Markdown/PDF, and the SSRF/security docs were updated to match the implemented protection model and Cloudflare Workers runtime limitations. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **RE-003 — COMPLETE (foundation).** Added deterministic retrieval simulation helpers in `lib/server/retrieval-eval.ts` with passage extraction, lexical ranking, and prompt-level metrics. This is an offline harness only; no `promptfoo`, `ragas`, or live engine integration yet. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **RE-004 — COMPLETE (design / truth pass).** Added a benchmark-percentile design note and removed unsupported percentile claims from the current API contract, PRD report promise, OG-image guidance, and audit-upgrade metrics. Percentile output remains deferred until cohorting, snapshots, and guardrails exist. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **RE-005 — COMPLETE (implementation).** Added a repo-local `promptfoo` skeleton with report and retrieval suites, custom local providers, a repo-scoped runner to avoid user-profile writes, package scripts, and `.promptfoo/` ignore. This is a regression harness only; `ragas` remains pending. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **RE-006 / RE-007 — COMPLETE (implementation / evaluation).** Promptfoo report coverage now checks executive summary extraction, fix specificity, and status preservation. Added a formal `ragas` fit note with a current no-go decision until the retrieval dataset and answer-generation layer are mature enough to justify semantic scoring. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **DA-004 (incremental resume):** Added chunk-progress metrics and continuation guardrails to `crawl_pending` / `coverage_summary`, and surfaced chunk metrics in Markdown/PDF coverage output. `DA-004` remains partial; Cloudflare Workflows / 1000+ page orchestration are still deferred. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **T3-7 — COMPLETE (implementation).** `components/report-viewer.tsx` now renders an interactive report shell above the markdown artifact: score/category summary, top-issue snapshot, mobile section chips, and collapsible report sections split from markdown `##` headings. Route ownership remains in `app/results/[id]/report/page.tsx`; existing PDF + raw markdown delivery path is preserved. Evidence logged in `COMPLETION_LOG.md`. |
+| 2026-03-26 | **DA-005 — COMPLETE (implementation).** Added an optional Browser Rendering-backed SPA fallback for paid deep audits: Browser Rendering client + heuristics, deep-audit crawl metrics for render attempts/success/failure, queue/run-config wiring, and security/operator docs. Disabled by default; this is not a full `/crawl` orchestration layer. Evidence logged in `COMPLETION_LOG.md`. |
 
 ---
 

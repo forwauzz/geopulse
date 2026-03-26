@@ -11,6 +11,7 @@ import type { DeepAuditDownloadLinks } from '../report/resend-delivery';
 import { sendDeepAuditEmail } from '../report/resend-delivery';
 import { GeminiProvider } from '../providers/gemini';
 import { MAX_DEEP_AUDIT_PAGE_LIMIT } from '../../lib/server/deep-audit-page-limit';
+import { browserRenderConfigFromEnv } from '../scan-engine/browser-rendering';
 import { parseCrawlPending, runDeepAuditCrawl } from '../scan-engine/deep-audit-crawl';
 import { computeCategoryScores, letterGrade, type WeightedResult } from '../scan-engine/scoring';
 import { replayReportJobFromDlq } from './dlq-replay';
@@ -50,6 +51,12 @@ function extractChunkSize(config: unknown): number | undefined {
   const c = (config as Record<string, unknown>)['chunk_size'];
   if (typeof c === 'number' && c > 0) return Math.min(Math.floor(c), 40);
   return undefined;
+}
+
+function extractBrowserRenderMode(config: unknown): string {
+  if (!config || typeof config !== 'object') return 'off';
+  const mode = (config as Record<string, unknown>)['render_mode'];
+  return typeof mode === 'string' && mode.length > 0 ? mode : 'off';
 }
 
 function averageScores(scores: readonly number[]): number {
@@ -102,6 +109,94 @@ function topFailedIssuesFromPages(
     (a, b) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0)
   );
   return allFailed.slice(0, 3);
+}
+
+function statusRank(status: string | undefined): number {
+  switch (status) {
+    case 'FAIL':
+      return 5;
+    case 'BLOCKED':
+      return 4;
+    case 'LOW_CONFIDENCE':
+      return 3;
+    case 'WARNING':
+      return 2;
+    case 'PASS':
+      return 1;
+    case 'NOT_EVALUATED':
+      return 0;
+    default:
+      return 0;
+  }
+}
+
+function buildSitewideIssueSummaryFromPages(
+  pages: readonly { issues_json: unknown }[]
+): Record<string, unknown>[] {
+  const byCheck = new Map<string, Record<string, unknown>>();
+
+  for (const p of pages) {
+    if (!Array.isArray(p.issues_json)) continue;
+    for (const x of p.issues_json) {
+      if (x === null || typeof x !== 'object') continue;
+      const rec = x as Record<string, unknown>;
+      const key = String(rec['checkId'] ?? rec['check'] ?? '');
+      if (!key) continue;
+
+      const current = byCheck.get(key);
+      if (!current) {
+        byCheck.set(key, rec);
+        continue;
+      }
+
+      const nextRank = statusRank(
+        typeof rec['status'] === 'string'
+          ? (rec['status'] as string)
+          : rec['passed'] === true
+            ? 'PASS'
+            : 'FAIL'
+      );
+      const currentRank = statusRank(
+        typeof current['status'] === 'string'
+          ? (current['status'] as string)
+          : current['passed'] === true
+            ? 'PASS'
+            : 'FAIL'
+      );
+
+      const nextWeight = typeof rec['weight'] === 'number' ? rec['weight'] : 0;
+      const currentWeight = typeof current['weight'] === 'number' ? current['weight'] : 0;
+
+      if (nextRank > currentRank || (nextRank === currentRank && nextWeight > currentWeight)) {
+        byCheck.set(key, rec);
+      }
+    }
+  }
+
+  return [...byCheck.values()].sort(
+    (a, b) =>
+      statusRank(String(b['status'] ?? '')) - statusRank(String(a['status'] ?? '')) ||
+      (((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0))
+  );
+}
+
+function appendixSummaryForCheck(
+  issues: readonly Record<string, unknown>[],
+  checkIds: readonly string[]
+): string | null {
+  const matches = issues.filter((issue) => {
+    const id = String(issue['checkId'] ?? issue['check'] ?? '');
+    return checkIds.includes(id);
+  });
+  if (matches.length === 0) return null;
+  return matches
+    .map((issue) => {
+      const name = String(issue['check'] ?? issue['checkId'] ?? 'Check');
+      const status = String(issue['status'] ?? (issue['passed'] === true ? 'PASS' : 'FAIL'));
+      const finding = String(issue['finding'] ?? '').trim();
+      return finding ? `${name} [${status}]: ${finding}` : `${name} [${status}]`;
+    })
+    .join(' | ');
 }
 
 async function resolveScanRunId(
@@ -249,6 +344,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
 
   const pageLimit = extractPageLimit(runRow.config);
   const chunkSize = extractChunkSize(runRow.config);
+  const browserRenderMode = extractBrowserRenderMode(runRow.config);
 
   const crawlPending =
     runRow.config && typeof runRow.config === 'object'
@@ -275,6 +371,10 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       seedUrl: scan.url,
       pageLimit,
       chunkSize,
+      browserRender: browserRenderConfigFromEnv({
+        ...(env as unknown as Record<string, unknown>),
+        DEEP_AUDIT_BROWSER_RENDER_MODE: browserRenderMode,
+      }),
     });
     if (!crawl.ok) {
       throw new Error(crawl.reason);
@@ -308,6 +408,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   const aggLetter = letterGrade(aggregateScore);
 
   const issuesForScan = topFailedIssuesFromPages(pages);
+  const allIssuesForReport = buildSitewideIssueSummaryFromPages(pages);
 
   const { data: runCoverage } = await supabase
     .from('scan_runs')
@@ -339,6 +440,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     })),
     coverageSummary: runCoverage?.coverage_summary ?? null,
     highlightedIssues: issuesForScan,
+    allIssues: allIssuesForReport,
+    technicalAppendix: {
+      robotsSummary: appendixSummaryForCheck(allIssuesForReport, ['ai-crawler-access']),
+      schemaSummary: appendixSummaryForCheck(allIssuesForReport, ['jsonld', 'schema-types']),
+      headersSummary: appendixSummaryForCheck(allIssuesForReport, ['security-headers']),
+    },
     categoryScores: catScores,
   });
 
@@ -346,6 +453,10 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     deepAudit: true,
     reportPayloadVersion: 1 as const,
     payloadGeneratedAt: payload.generatedAt,
+    categoryScores: catScores,
+    highlightedIssues: issuesForScan,
+    allIssues: allIssuesForReport,
+    coverageSummary: runCoverage?.coverage_summary ?? null,
     pages: pages.map((p) => ({
       url: p.url,
       score: p.score,
@@ -394,8 +505,9 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     throw new Error('deep_audit_pdf_oversize_configure_r2_public_base');
   }
 
-  const allIssueRows = Array.isArray(issuesForScan) ? issuesForScan : [];
-  const failedForEmail = allIssueRows
+  const highlightedIssueRows = Array.isArray(issuesForScan) ? issuesForScan : [];
+  const allIssueRows = Array.isArray(allIssuesForReport) ? allIssuesForReport : [];
+  const failedForEmail = highlightedIssueRows
     .filter((r: Record<string, unknown>) => r['passed'] === false)
     .sort((a: Record<string, unknown>, b: Record<string, unknown>) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0))
     .slice(0, 3)
@@ -421,7 +533,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     topIssues: failedForEmail,
     appUrl: (env.NEXT_PUBLIC_APP_URL ?? '').trim() || undefined,
     totalChecks: allIssueRows.length,
-    passedChecks: allIssueRows.filter((r: Record<string, unknown>) => r['passed'] === true).length,
+    passedChecks: allIssueRows.filter((r: Record<string, unknown>) => String(r['status'] ?? '') === 'PASS').length,
     scanId: job.scanId,
   });
 
@@ -446,3 +558,4 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     throw new Error(repErr.message);
   }
 }
+

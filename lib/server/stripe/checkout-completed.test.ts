@@ -30,6 +30,7 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     NEXT_PUBLIC_APP_URL: '',
     RECONCILE_SECRET: '',
     DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '',
+    DEEP_AUDIT_BROWSER_RENDER_MODE: 'off',
   };
 }
 
@@ -192,3 +193,4 @@ describe('handleCheckoutSessionCompleted', () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+

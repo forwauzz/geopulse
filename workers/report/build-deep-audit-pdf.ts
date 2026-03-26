@@ -5,9 +5,12 @@ export type IssueRow = {
   check?: string;
   checkId?: string;
   passed?: boolean;
+  status?: string;
   finding?: string;
   fix?: string;
   weight?: number;
+  category?: string;
+  confidence?: string;
 };
 
 function parseIssues(raw: unknown): IssueRow[] {
@@ -44,6 +47,32 @@ function severityColor(sev: 'High' | 'Medium' | 'Low'): RGB {
   if (sev === 'High') return rgb(0.62, 0.25, 0.24);
   if (sev === 'Medium') return rgb(0.6, 0.45, 0.15);
   return rgb(0.34, 0.37, 0.45);
+}
+
+function issueStatusLabel(row: IssueRow): string {
+  return row.status ?? (row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—');
+}
+
+function issueStatusColor(status: string): RGB {
+  switch (status) {
+    case 'PASS':
+      return PASS_GREEN;
+    case 'WARNING':
+      return rgb(0.6, 0.45, 0.15);
+    case 'LOW_CONFIDENCE':
+      return rgb(0.42, 0.42, 0.42);
+    case 'BLOCKED':
+      return rgb(0.42, 0.31, 0.52);
+    case 'NOT_EVALUATED':
+      return MUTED;
+    default:
+      return FAIL_RED;
+  }
+}
+
+function parseCoverageSummary(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  return raw as Record<string, unknown>;
 }
 
 function scoreNarrative(score: number, grade: string, total: number, passed: number, topIssue: string): string {
@@ -224,8 +253,8 @@ class PdfBuilder {
       }
 
       const name = (row.check ?? row.checkId ?? 'Check').slice(0, 40);
-      const status = row.passed ? 'PASS' : 'FAIL';
-      const statusClr = row.passed ? PASS_GREEN : FAIL_RED;
+      const status = issueStatusLabel(row);
+      const statusClr = issueStatusColor(status);
       const weight = String(row.weight ?? 0);
       const finding = (row.finding ?? '').slice(0, 70);
 
@@ -268,6 +297,46 @@ class PdfBuilder {
     this.y -= 8;
   }
 
+  drawCoverageSummary(rawCoverage: unknown): void {
+    const coverage = parseCoverageSummary(rawCoverage);
+    if (!coverage) return;
+
+    this.drawSectionTitle('Coverage Summary');
+    const rows: Array<[string, string]> = [];
+    if (coverage['seed_url'] !== undefined) rows.push(['Seed URL', String(coverage['seed_url'])]);
+    if (coverage['urls_planned'] !== undefined) rows.push(['URLs planned', String(coverage['urls_planned'])]);
+    if (coverage['pages_fetched'] !== undefined) rows.push(['Pages fetched', String(coverage['pages_fetched'])]);
+    if (coverage['pages_errored'] !== undefined) rows.push(['Pages errored', String(coverage['pages_errored'])]);
+    if (coverage['robots_status'] !== undefined) rows.push(['robots.txt status', String(coverage['robots_status'])]);
+    if (coverage['crawl_delay_ms'] !== undefined) rows.push(['Crawl delay', `${String(coverage['crawl_delay_ms'])}ms`]);
+    if (coverage['chunk_size'] !== undefined) rows.push(['Chunk size', String(coverage['chunk_size'])]);
+    if (coverage['chunks_processed'] !== undefined) rows.push(['Chunks processed', String(coverage['chunks_processed'])]);
+    if (coverage['urls_remaining'] !== undefined) rows.push(['URLs remaining at completion', String(coverage['urls_remaining'])]);
+    if (coverage['browser_render_mode'] !== undefined) rows.push(['Browser rendering mode', String(coverage['browser_render_mode'])]);
+    if (coverage['browser_render_attempted'] !== undefined) rows.push(['Browser render attempts', String(coverage['browser_render_attempted'])]);
+    if (coverage['browser_render_succeeded'] !== undefined) rows.push(['Browser render successes', String(coverage['browser_render_succeeded'])]);
+    if (coverage['browser_render_failed'] !== undefined) rows.push(['Browser render fallbacks', String(coverage['browser_render_failed'])]);
+
+    for (const [label, value] of rows) {
+      this.drawText(`${label}: ${value}`, 9, false, INK);
+    }
+    this.y -= 8;
+  }
+
+  drawTechnicalAppendix(appendix: DeepAuditReportPayload['technicalAppendix'], rawCoverage: unknown): void {
+    const coverage = parseCoverageSummary(rawCoverage);
+    if (!appendix && !coverage) return;
+
+    this.drawSectionTitle('Technical Appendix');
+    if (appendix?.robotsSummary) this.drawText(`Robots / AI crawler access: ${appendix.robotsSummary}`, 9, false, INK);
+    if (appendix?.schemaSummary) this.drawText(`Schema findings: ${appendix.schemaSummary}`, 9, false, INK);
+    if (appendix?.headersSummary) this.drawText(`Security headers: ${appendix.headersSummary}`, 9, false, INK);
+    if (coverage) {
+      this.drawText(`Coverage payload: ${JSON.stringify(coverage)}`, 8, false, MUTED);
+    }
+    this.y -= 8;
+  }
+
   drawPageSummaries(pages: { url: string; score: number | null; grade: string | null; issues: IssueRow[] }[]): void {
     if (pages.length <= 1) return;
     this.drawSectionTitle('Per-Page Breakdown');
@@ -283,8 +352,8 @@ class PdfBuilder {
         this.drawText('No issues recorded for this page.', 8, false, MUTED, 12);
       } else {
         for (const row of pg.issues) {
-          const status = row.passed ? 'PASS' : 'FAIL';
-          const statusClr = row.passed ? PASS_GREEN : FAIL_RED;
+          const status = issueStatusLabel(row);
+          const statusClr = issueStatusColor(status);
           this.ensureSpace(14);
           this.page.drawText(`[${status}]`, { x: MARGIN + 12, y: this.y, size: 7, font: this.fontBold, color: statusClr });
           this.page.drawText((row.check ?? row.checkId ?? 'Check').slice(0, 50), { x: MARGIN + 50, y: this.y, size: 8, font: this.font, color: INK });
@@ -368,19 +437,25 @@ export async function buildDeepAuditPdf(input: {
   score: number | null;
   letterGrade: string | null;
   issuesJson: unknown;
+  highlightedIssues?: unknown;
   pageSummaries?: readonly DeepAuditPageSummaryInput[];
   categoryScores?: readonly CategoryScorePayload[];
+  coverageSummary?: unknown;
+  technicalAppendix?: DeepAuditReportPayload['technicalAppendix'];
   scanId?: string;
 }): Promise<Uint8Array> {
   const score = input.score ?? 0;
   const grade = input.letterGrade ?? '—';
   const issues = parseIssues(input.issuesJson);
   const allIssues = issues.length > 0 ? issues : (input.pageSummaries?.[0] ? parseIssues(input.pageSummaries[0].issuesJson) : []);
+  const highlightedIssues = parseIssues(input.highlightedIssues);
 
   const totalChecks = allIssues.length;
-  const passedChecks = allIssues.filter((i) => i.passed).length;
-  const failedSorted = allIssues.filter((i) => !i.passed).sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
-  const topFailed = failedSorted.slice(0, 5);
+  const passedChecks = allIssues.filter((i) => issueStatusLabel(i) === 'PASS').length;
+  const failedSorted = allIssues
+    .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const topFailed = (highlightedIssues.length > 0 ? highlightedIssues : failedSorted).slice(0, 5);
   const topIssueName = topFailed[0]?.check ?? topFailed[0]?.checkId ?? '';
 
   const now = new Date().toISOString().split('T')[0] ?? '';
@@ -399,6 +474,7 @@ export async function buildDeepAuditPdf(input: {
   if (input.categoryScores && input.categoryScores.length > 0) {
     pdf.drawCategoryBreakdown(input.categoryScores);
   }
+  pdf.drawCoverageSummary(input.coverageSummary);
   pdf.drawScoreBreakdown(allIssues);
   pdf.drawActionPlan(failedSorted);
 
@@ -414,6 +490,7 @@ export async function buildDeepAuditPdf(input: {
     );
   }
 
+  pdf.drawTechnicalAppendix(input.technicalAppendix, input.coverageSummary);
   pdf.drawDisclaimer();
   return pdf.save();
 }
@@ -429,9 +506,12 @@ export async function buildDeepAuditPdfFromPayload(
     domain: payload.domain,
     score: payload.aggregateScore,
     letterGrade: payload.aggregateLetterGrade,
-    issuesJson: payload.highlightedIssues,
+    issuesJson: payload.allIssues,
+    highlightedIssues: payload.highlightedIssues,
     scanId: payload.scanId,
     categoryScores: payload.categoryScores,
+    coverageSummary: payload.coverageSummary,
+    technicalAppendix: payload.technicalAppendix,
     pageSummaries: payload.pages.map((p) => ({
       url: p.url,
       score: p.score,
