@@ -93,6 +93,12 @@ export default async function DashboardPage() {
               >
                 Eval analytics
               </Link>
+              <Link
+                href="/dashboard/benchmarks"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Benchmarks
+              </Link>
             </>
           )}
           <form action={signOut}>

@@ -1,0 +1,46 @@
+{
+  "domain": {
+    "siteUrl": "https://www.example.com/",
+    "displayName": "Example",
+    "vertical": "saas",
+    "subvertical": "ai-visibility",
+    "geoRegion": "north-america",
+    "isCustomer": true,
+    "metadata": {
+      "source": "sample-fixture"
+    }
+  },
+  "querySet": {
+    "name": "brand-baseline",
+    "version": "v1",
+    "vertical": "saas",
+    "description": "Starter benchmark query set for brand and discovery prompts.",
+    "status": "active",
+    "metadata": {
+      "owner": "internal"
+    },
+    "queries": [
+      {
+        "queryKey": "brand-overview",
+        "queryText": "What is Example and what does it do?",
+        "intentType": "direct",
+        "topic": "brand",
+        "weight": 1
+      },
+      {
+        "queryKey": "ai-visibility-tools",
+        "queryText": "Which tools help teams improve AI visibility and citations?",
+        "intentType": "discovery",
+        "topic": "category",
+        "weight": 1
+      },
+      {
+        "queryKey": "example-vs-competitors",
+        "queryText": "How does Example compare with other AI visibility tools?",
+        "intentType": "comparative",
+        "topic": "competition",
+        "weight": 1.25
+      }
+    ]
+  }
+}

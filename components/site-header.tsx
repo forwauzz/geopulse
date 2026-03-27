@@ -43,12 +43,20 @@ export async function SiteHeader() {
                 Dashboard
               </Link>
               {isAdmin ? (
-                <Link
-                  href="/dashboard/evals"
-                  className="hidden text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background md:inline"
-                >
-                  Admin
-                </Link>
+                <div className="hidden items-center gap-4 md:flex">
+                  <Link
+                    href="/dashboard/evals"
+                    className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background"
+                  >
+                    Evals
+                  </Link>
+                  <Link
+                    href="/dashboard/benchmarks"
+                    className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background"
+                  >
+                    Benchmarks
+                  </Link>
+                </div>
               ) : null}
               <form action={signOut}>
                 <button

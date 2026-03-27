@@ -48,6 +48,12 @@ Recommended:
 - Qdrant: later, for retrieval simulation
 - Temporal or Prefect: later, only if benchmark orchestration outgrows the current queue model
 
+Provider-boundary reference:
+- `PLAYBOOK/litellm-integration-plan.md`
+
+Observability reference:
+- `PLAYBOOK/langfuse-integration-plan.md`
+
 Do not outsource:
 - benchmark methodology
 - query taxonomy
@@ -64,6 +70,21 @@ Do not outsource:
 - add LiteLLM wrapper
 - add Langfuse integration
 - run one internal benchmark lane on a small cohort
+
+Schema detail reference:
+- `PLAYBOOK/measurement-schema-v1.md`
+
+Runner detail reference:
+- `PLAYBOOK/benchmark-runner-v1.md`
+
+Citation/metrics reference:
+- `PLAYBOOK/citation-and-metrics-v1.md`
+
+Admin UI reference:
+- `PLAYBOOK/benchmark-admin-ui-v1.md`
+
+Scale path reference:
+- `PLAYBOOK/benchmark-scale-path.md`
 
 ### Phase B: internal benchmark MVP
 - 20 to 50 domains
@@ -90,6 +111,9 @@ Do not outsource:
 - DLQ / replay
 - cost accounting
 - vertical cohort management
+
+Operational scale reference:
+- `PLAYBOOK/benchmark-scale-path.md`
 
 ## First Schemas
 
@@ -128,6 +152,27 @@ The current repo supports the wedge well:
 - admin evals
 - retrieval foundations
 - Promptfoo-based regression tracking
+- benchmark schema foundation (`012_benchmark_foundation.sql`)
+- benchmark identity and repository seam (`lib/server/benchmark-domains.ts`, `lib/server/benchmark-repository.ts`)
+- benchmark seed path and runner input contract (`scripts/benchmark-seed.ts`, `lib/server/benchmark-runner-contract.ts`)
+- benchmark runner skeleton (`lib/server/benchmark-runner.ts`, `scripts/benchmark-runner.ts`)
+- benchmark execution adapter boundary (`lib/server/benchmark-execution.ts`)
+- benchmark citation extraction and `query_citations` write path (`lib/server/benchmark-citations.ts`)
+- benchmark metric helper (`lib/server/benchmark-metrics.ts`)
+- benchmark admin query layer (`lib/server/benchmark-admin-data.ts`)
+- benchmark admin overview page (`app/dashboard/benchmarks/page.tsx`)
+- benchmark run-group detail page (`app/dashboard/benchmarks/[runGroupId]/page.tsx`)
+- benchmark domain history page (`app/dashboard/benchmarks/domains/[domainId]/page.tsx`)
+- benchmark admin run trigger flow (`app/dashboard/benchmarks/actions.ts`, `components/benchmark-trigger-form.tsx`)
+- first opt-in live benchmark execution lane for Gemini (`lib/server/benchmark-execution.ts`, `BENCHMARK_EXECUTION_*`)
+- benchmark-domain onboarding from the admin UI (`components/benchmark-domain-form.tsx`, `app/dashboard/benchmarks/actions.ts`)
+- benchmark query-set onboarding from the admin UI (`components/benchmark-query-set-form.tsx`, `app/dashboard/benchmarks/actions.ts`)
+
+First live benchmark milestone achieved:
+- real customer domain run executed successfully on `gemini-2.5-flash-lite`
+- lightweight admin-authored query set executed end to end
+- 6 completed query runs, 4 extracted citations, non-zero query coverage / citation rate / share of voice
+- remaining reliability gap is temporary provider overload (`503 UNAVAILABLE`) and light retry/backoff handling, not missing benchmark scaffolding
 
 The current repo does not yet implement the benchmark platform:
 - no real multi-model query measurement pipeline

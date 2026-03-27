@@ -31,6 +31,1545 @@
 
 ## Log
 
+### BM-002 — first benchmark schema set defined (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** schema design document + task-ledger sync
+
+#### Evidence
+
+Added:
+
+- `PLAYBOOK/measurement-schema-v1.md`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`PLAYBOOK/measurement-schema-v1.md` now defines:
+
+- `benchmark_domains`
+- `benchmark_query_sets`
+- `benchmark_queries`
+- `benchmark_run_groups`
+- `query_runs`
+- `query_citations`
+- `benchmark_domain_metrics`
+
+It also freezes:
+
+- canonical domain identity rules
+- service-role-only RLS posture for v1
+- first metric semantics:
+  - `citation_rate`
+  - `query_coverage`
+  - `share_of_voice`
+  - `inference_probability`
+  - `drift_score`
+- migration sequencing recommendation
+- explicit out-of-scope items so the first migration does not sprawl
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-002 is accepted as a design/spec completion. No migration exists yet; implementation begins with the next benchmark task.
+
+---
+
+### BM-003 — LiteLLM integration plan and provider boundaries (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** integration design document + codebase boundary review
+
+#### Evidence
+
+Reviewed current provider seam:
+
+- `workers/lib/interfaces/providers.ts`
+- `workers/providers/gemini.ts`
+- `app/api/scan/route.ts`
+- `workers/queue/report-queue-consumer.ts`
+
+Added:
+
+- `PLAYBOOK/litellm-integration-plan.md`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`PLAYBOOK/litellm-integration-plan.md` now defines:
+
+- keep `LLMProvider` as the app-facing abstraction
+- add a new `LiteLLMProvider` instead of replacing the current interface
+- add a provider factory for runtime selection
+- separate future target-model vs auditor-model concepts
+- stage rollout so Gemini remains compatible during transition
+- new config concepts for provider/model selection and LiteLLM connectivity
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-003 is accepted as a design/spec completion. No LiteLLM code or env changes exist yet; this is the approved boundary plan for later implementation.
+
+---
+
+### BM-004 — Langfuse integration plan for benchmark observability (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** observability design document + codebase review
+
+#### Evidence
+
+Reviewed current observability/eval context:
+
+- `lib/server/structured-log.ts`
+- benchmark and eval planning docs
+- deterministic retrieval/eval foundation docs
+
+Added:
+
+- `PLAYBOOK/langfuse-integration-plan.md`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`PLAYBOOK/langfuse-integration-plan.md` now defines:
+
+- Langfuse as an optional benchmark-layer observability tool
+- Supabase remains the system of record for benchmark data
+- benchmark query runs should map to traces and spans
+- rollout should begin with benchmark-only instrumentation
+- Langfuse failures must never break primary benchmark persistence
+- Promptfoo remains the regression harness and RAGAS remains deferred
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-004 is accepted as a design/spec completion. No Langfuse integration code exists yet; the observability role is now explicitly scoped before implementation.
+
+---
+
+### BM-005 — internal benchmark runner v1 design (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** runner design document + existing eval-path review
+
+#### Evidence
+
+Reviewed current adjacent execution patterns:
+
+- `lib/server/retrieval-eval.ts`
+- `lib/server/retrieval-eval-writer.ts`
+- `scripts/retrieval-eval-write.ts`
+- `lib/server/promptfoo-results.ts`
+
+Added:
+
+- `PLAYBOOK/benchmark-runner-v1.md`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`PLAYBOOK/benchmark-runner-v1.md` now defines:
+
+- one-domain / one-query-set / one-model-lane scope for v1
+- run-group lifecycle
+- serial query execution first
+- raw response persistence before citation parsing
+- conservative citation extraction contract
+- first metric computation path
+- query-level failure handling and run-group completion rules
+- structured logging expectations
+- explicit non-goals to avoid premature orchestration complexity
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-005 is accepted as a design/spec completion. This is the approved first operational shape for implementation, pending BM-006 metric/citation contract refinement and any migration work.
+
+---
+
+### BM-006 — citation extraction v1 and metric computation v1 (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** metric/citation design document + repo conflict check
+
+#### Evidence
+
+Conflict review findings:
+
+- no existing shared citation-extraction service exists in the repo
+- current citation-related logic is limited to:
+  - retrieval-eval `cited_sources`
+  - Promptfoo retrieval fixture/provider outputs
+  - admin retrieval drilldown display
+
+Added:
+
+- `PLAYBOOK/citation-and-metrics-v1.md`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`PLAYBOOK/citation-and-metrics-v1.md` now defines:
+
+- accepted v1 citation classes:
+  - `explicit_url`
+  - `explicit_domain`
+  - `brand_mention`
+- citation priority order
+- dedupe rules
+- confidence guidance
+- rank-position guidance
+- first metric formulas for:
+  - `query_coverage`
+  - `citation_rate`
+  - `share_of_voice`
+- explicit v1 exclusions to avoid overstating benchmark rigor too early
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-006 is accepted as a design/spec completion. Citation and metric semantics are now explicit enough to support the first implementation without conflicting with current retrieval-eval helpers.
+
+---
+
+### BM-007 — benchmark admin UI v1 design (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** UI design document + admin-pattern review
+
+#### Evidence
+
+Reviewed current admin UI patterns:
+
+- `app/dashboard/evals/page.tsx`
+- `app/dashboard/evals/retrieval/[id]/page.tsx`
+- `app/dashboard/attribution/page.tsx`
+
+Added:
+
+- `PLAYBOOK/benchmark-admin-ui-v1.md`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`PLAYBOOK/benchmark-admin-ui-v1.md` now defines:
+
+- first benchmark admin pages:
+  - `/dashboard/benchmarks`
+  - `/dashboard/benchmarks/[runGroupId]`
+  - `/dashboard/benchmarks/domains/[domainId]`
+- first allowed controls
+- benchmark-vs-eval admin separation
+- explicit non-goals for v1
+- alignment with the repo’s existing server-rendered admin style
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-007 is accepted as a design/spec completion. The benchmark admin plan now has a UI shape before implementation work begins.
+
+---
+
+### BM-008 — benchmark scale path to 1000 domains with customer-flow isolation (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** staged ops design document + queue/runtime constraint review
+
+#### Evidence
+
+Reviewed current operational context:
+
+- `wrangler.jsonc`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `PLAYBOOK/stress test.md`
+- `PLAYBOOK/geo pulse playbook`
+- `agents/ORCHESTRATOR.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Added:
+
+- `PLAYBOOK/benchmark-scale-path.md`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`PLAYBOOK/benchmark-scale-path.md` now defines:
+
+- staged cohort growth:
+  - 20 to 50 domains
+  - 100 to 200 domains
+  - 250 to 500 domains
+  - 500 to 1000 domains
+- non-negotiable isolation rules so benchmark jobs never block customer scan/report flows
+- queue and worker isolation path from shared infra to dedicated benchmark lanes
+- concurrency, budget, replay, DLQ, and backpressure expectations by phase
+- decision rule for when the benchmark layer should become a separate deployable service
+- a conservative implementation order that preserves the current audit/report product
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-008 is accepted as a design/spec completion. The benchmark planning set now covers architecture, schema, provider boundaries, observability, runner shape, metrics, admin UI, and staged scale path before any implementation starts.
+
+---
+
+### BM-009 — benchmark foundation migration added (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** SQL migration + task-ledger sync
+
+#### Evidence
+
+Added:
+
+- `supabase/migrations/012_benchmark_foundation.sql`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+`012_benchmark_foundation.sql` adds:
+
+- `benchmark_domains`
+- `benchmark_query_sets`
+- `benchmark_queries`
+- `benchmark_run_groups`
+- `query_runs`
+- `query_citations`
+- `benchmark_domain_metrics`
+
+It also includes:
+
+- uniqueness and status/intention check constraints
+- indexes for the first benchmark access paths
+- RLS enabled on all benchmark tables with no anon/auth policies
+- one `updated_at` trigger for `benchmark_domains`
+- comments documenting the service-role-only posture
+
+This is intentionally schema only.
+No benchmark runner, citation parser, UI, or public benchmark claims were added in this step.
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-009 is accepted as the first concrete measurement-platform implementation slice. The repo now has a benchmark storage foundation without coupling benchmark execution to customer flows.
+
+---
+
+### BM-010 — benchmark-domain normalization helpers and first typed repository seam (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+
+- `lib/server/benchmark-domains.ts`
+- `lib/server/benchmark-repository.ts`
+- `lib/server/benchmark-domains.test.ts`
+- `lib/server/benchmark-repository.test.ts`
+
+Updated:
+
+- `lib/server/promptfoo-results.ts`
+- `lib/server/promptfoo-results.test.ts`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- centralized benchmark identity derivation:
+  - normalized domain
+  - canonical domain (`www.` stripped)
+  - preserved `siteUrl`
+- first typed benchmark repository methods:
+  - `deriveDomainIdentity`
+  - `getDomainByCanonicalDomain`
+  - `upsertDomain`
+  - `getActiveQuerySet`
+- existing eval grouping now reuses the shared canonical-domain helper to reduce identity drift between eval and benchmark layers
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  14 passed (14)
+   Start at  19:27:13
+   Duration  542ms (transform 507ms, setup 0ms, import 647ms, tests 42ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-010 is accepted. Benchmark identity logic is now centralized and the first repository seam exists for later runner and seeding work.
+
+---
+
+### BM-011 — first benchmark seeding path and runner input contract (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + fixture + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+
+- `lib/server/benchmark-runner-contract.ts`
+- `lib/server/benchmark-seed.ts`
+- `lib/server/benchmark-runner-contract.test.ts`
+- `lib/server/benchmark-seed.test.ts`
+- `scripts/benchmark-seed.ts`
+- `eval/fixtures/benchmark-seed-sample.json`
+
+Updated:
+
+- `lib/server/benchmark-repository.ts`
+- `package.json`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- validated runner input contract for:
+  - `domainId`
+  - `querySetId`
+  - `modelId`
+  - optional `auditorModelId`
+  - optional `runLabel`
+  - optional `notes`
+- benchmark seed fixture contract for one domain plus one query set and query list
+- repository now supports:
+  - `upsertQuerySet`
+  - `replaceQueries`
+  - `getQueriesForQuerySet`
+- new internal seed script:
+  - `npm run benchmark:seed`
+  - defaults to `eval/fixtures/benchmark-seed-sample.json`
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  10 passed (10)
+   Start at  19:35:59
+   Duration  491ms (transform 293ms, setup 0ms, import 499ms, tests 39ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-011 is accepted. The repo now has a real internal benchmark seed path and a validated runner input contract, which is the correct precursor to the first runner skeleton.
+
+---
+
+### BM-012 — first benchmark runner skeleton for one domain / one query set / one model lane (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `scripts/benchmark-runner.ts`
+
+Updated:
+
+- `lib/server/benchmark-repository.ts`
+- `package.json`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- first benchmark runner skeleton:
+  - validates runner input
+  - resolves benchmark domain
+  - resolves benchmark query set
+  - loads benchmark queries
+  - creates a `benchmark_run_groups` row
+  - creates placeholder `query_runs` rows as `skipped`
+  - writes starter `benchmark_domain_metrics`
+  - closes the run group as completed in `skeleton` mode
+- structured lifecycle logs:
+  - `benchmark_run_group_started`
+  - `benchmark_run_group_completed`
+- new internal script:
+  - `npm run benchmark:run`
+
+Current limitation is explicit in the code and state:
+
+- query rows are marked `skipped`
+- `error_message` is `model_execution_not_implemented`
+- no model provider call occurs yet
+- no citation parsing occurs yet
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  5 passed (5)
+      Tests  11 passed (11)
+   Start at  19:44:28
+   Duration  961ms (transform 720ms, setup 0ms, import 1.18s, tests 93ms, environment 2ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-012 is accepted. The repo now has the first benchmark run-group write path without overstating execution capability; model execution and citation parsing remain separate next steps.
+
+---
+
+### BM-013 — benchmark execution contract and stub adapter boundary (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+
+- `lib/server/benchmark-execution.ts`
+- `lib/server/benchmark-execution.test.ts`
+
+Updated:
+
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- benchmark-specific execution types:
+  - `BenchmarkExecutionStatus`
+  - `BenchmarkExecutionResult`
+  - `BenchmarkExecutionContext`
+  - `BenchmarkExecutionAdapter`
+- stub adapter and factory:
+  - `StubBenchmarkExecutionAdapter`
+  - `createBenchmarkExecutionAdapter()`
+- runner now depends on the benchmark execution adapter boundary instead of hardcoded placeholder row construction
+- current stub behavior is explicit:
+  - returns `status: not_implemented`
+  - returns normalized metadata for model/query context
+  - runner maps `not_implemented` to stored `query_runs.status = skipped`
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  7 passed (7)
+   Start at  19:48:51
+   Duration  867ms (transform 286ms, setup 0ms, import 477ms, tests 44ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-013 is accepted. The benchmark runner now has a dedicated execution seam that can later be backed by LiteLLM or another provider without changing the run-group orchestration path.
+
+---
+
+### BM-014 — benchmark citation extraction and `query_citations` write path (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Conflict review remained clean before implementation:
+
+- no existing shared citation-extraction service exists in the repo
+- existing citation-related logic is still limited to retrieval-eval and local eval helpers
+
+Added:
+
+- `lib/server/benchmark-citations.ts`
+- `lib/server/benchmark-citations.test.ts`
+
+Updated:
+
+- `lib/server/benchmark-repository.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- conservative benchmark citation parsing:
+  - explicit URL
+  - explicit domain
+  - brand mention only for the measured domain when mapping is clear
+- duplicate handling that keeps stronger URL citations from being duplicated as weaker domain citations
+- runner now writes `query_citations` rows for completed responses
+- runner now computes first real metrics from stored citation outcomes:
+  - `query_coverage`
+  - `citation_rate`
+  - `share_of_voice`
+
+Current truth remains explicit:
+
+- provider execution is still stubbed
+- citation extraction only runs when a completed response exists
+- no cohort-wide comparison service exists yet
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  11 passed (11)
+   Start at  20:42:04
+   Duration  1.02s (transform 827ms, setup 0ms, import 1.13s, tests 87ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-014 is accepted. The benchmark runner can now persist conservative citation outcomes from completed responses without overstating the maturity of the execution layer.
+
+---
+
+### BM-015 — benchmark metric helper extracted from runner orchestration (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+
+- `lib/server/benchmark-metrics.ts`
+- `lib/server/benchmark-metrics.test.ts`
+
+Updated:
+
+- `lib/server/benchmark-runner.ts`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- extracted benchmark metric computation into a reusable helper
+- helper now computes:
+  - `query_coverage`
+  - `citation_rate`
+  - `share_of_voice`
+  - `inclusion_rate`
+  - `scheduled_runs`
+  - `completed_runs`
+  - `skipped_runs`
+  - `failed_runs`
+  - citation-class counts for:
+    - `explicit_url`
+    - `explicit_domain`
+    - `brand_mention`
+- runner now uses the helper instead of computing benchmark metrics inline
+
+This keeps benchmark metrics reusable for later admin queries, reruns, and domain-history views instead of leaving metric logic buried in runner orchestration.
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  3 passed (3)
+      Tests  8 passed (8)
+   Start at  20:54:14
+   Duration  909ms (transform 543ms, setup 0ms, import 744ms, tests 69ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-015 is accepted. Benchmark metric semantics are now implemented as a reusable server helper rather than remaining embedded inside the runner.
+
+---
+
+### BM-016 — benchmark admin query layer for run groups, details, citations, and domain history (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+
+- `lib/server/benchmark-admin-data.ts`
+- `lib/server/benchmark-admin-data.test.ts`
+
+Updated:
+
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- server-side benchmark admin data module with:
+  - `getRunGroups(filters)`
+  - `getRunGroupDetail(runGroupId)`
+  - `getDomainHistory(domainId)`
+- run-group hydration includes:
+  - benchmark run metadata
+  - benchmark domain identity
+  - query-set name/version
+  - core metric columns
+- run-group detail hydration includes:
+  - query runs
+  - query text and keys
+  - citation counts per query run
+  - full citation rows for drilldown
+- domain history output provides the time-series shape needed for future benchmark admin pages
+
+This is intentionally a backend data layer only.
+No benchmark UI pages were added in this step.
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  21:07:58
+   Duration  653ms (transform 122ms, setup 0ms, import 160ms, tests 15ms, environment 0ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-016 is accepted. The benchmark initiative now has the backend query surface needed for `/dashboard/benchmarks` and later drilldown pages.
+
+---
+
+### BM-017 — benchmark admin overview page with filters and recent run groups (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + build
+
+#### Evidence
+
+Added:
+
+- `app/dashboard/benchmarks/page.tsx`
+
+Updated:
+
+- `app/dashboard/page.tsx`
+- `app/dashboard/attribution/page.tsx`
+- `components/site-header.tsx`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- first benchmark admin overview page at `/dashboard/benchmarks`
+- page uses the benchmark admin query layer instead of issuing ad hoc page-local joins
+- overview includes:
+  - summary cards
+  - filters for domain, query set, model, and status
+  - recent run-group table
+- admin navigation updated so benchmark UI is reachable from:
+  - account dashboard
+  - attribution page
+  - site header admin links
+
+Current truth remains explicit:
+
+- no run-group detail page yet
+- no domain history page yet
+- benchmark execution is still backed by the stub adapter unless a later provider implementation is added
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox build attempt:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+unhandledRejection [Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }
+```
+
+Escalated retry:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+Using secrets defined in .dev.vars
+   ▲ Next.js 15.5.14
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+ ✓ Compiled successfully in 21.8s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/10) ...
+   Generating static pages (2/10) 
+   Generating static pages (4/10) 
+   Generating static pages (7/10) 
+ ✓ Generating static pages (10/10)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ƒ /                                    1.53 kB         109 kB
+├ ƒ /_not-found                            995 B         103 kB
+├ ƒ /admin/login                         3.17 kB         109 kB
+├ ƒ /api/admin/reconcile-deep-audit        143 B         102 kB
+├ ƒ /api/checkout                          143 B         102 kB
+├ ƒ /api/internal/marketing/events         143 B         102 kB
+├ ƒ /api/leads                             143 B         102 kB
+├ ƒ /api/scan                              143 B         102 kB
+├ ƒ /api/scans/[id]                        143 B         102 kB
+├ ƒ /api/webhooks/stripe                   143 B         102 kB
+├ ƒ /auth/callback                         143 B         102 kB
+├ ƒ /dashboard                             173 B         106 kB
+├ ƒ /dashboard/attribution                 173 B         106 kB
+├ ƒ /dashboard/benchmarks                  173 B         106 kB
+├ ƒ /dashboard/evals                       173 B         106 kB
+├ ƒ /dashboard/evals/retrieval/[id]        173 B         106 kB
+├ ƒ /login                               3.02 kB         109 kB
+├ ƒ /results/[id]                        6.61 kB         114 kB
+├ ƒ /results/[id]/opengraph-image          143 B         102 kB
+└ ƒ /results/[id]/report                 49.1 kB         155 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/493-e61740f684b4ba13.js         46 kB
+  ├ chunks/4bd1b696-c023c6e3521b1417.js  54.2 kB
+  └ other shared chunks (total)          1.99 kB
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-017 is accepted. The benchmark initiative now has its first admin UI surface and the page builds cleanly.
+
+---
+
+### BM-018 — benchmark run-group detail page and overview drilldown links (2026-03-26)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-26  
+**Evidence type:** code changes + type check + build
+
+#### Evidence
+
+Added:
+
+- `app/dashboard/benchmarks/[runGroupId]/page.tsx`
+
+Updated:
+
+- `app/dashboard/benchmarks/page.tsx`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- new benchmark run-group detail page at `/dashboard/benchmarks/[runGroupId]`
+- detail page shows:
+  - run metadata
+  - core metric cards
+  - query-run table
+  - extracted citation table
+- overview table now links each benchmark row to its run-group detail page
+- detail page includes navigation back to benchmarks and a domain-filtered benchmark history entry point
+
+Current truth remains explicit:
+
+- benchmark execution is still stubbed unless a later adapter is implemented
+- no dedicated benchmark domain-history page exists yet
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox build attempt:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+unhandledRejection [Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }
+```
+
+Escalated retry:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+Using secrets defined in .dev.vars
+   ▲ Next.js 15.5.14
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+ ✓ Compiled successfully in 17.2s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/10) ...
+   Generating static pages (2/10) 
+   Generating static pages (4/10) 
+   Generating static pages (7/10) 
+ ✓ Generating static pages (10/10)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ƒ /                                    1.53 kB         109 kB
+├ ƒ /_not-found                            995 B         103 kB
+├ ƒ /admin/login                         3.17 kB         109 kB
+├ ƒ /api/admin/reconcile-deep-audit        143 B         102 kB
+├ ƒ /api/checkout                          143 B         102 kB
+├ ƒ /api/internal/marketing/events         143 B         102 kB
+├ ƒ /api/leads                             143 B         102 kB
+├ ƒ /api/scan                              143 B         102 kB
+├ ƒ /api/scans/[id]                        143 B         102 kB
+├ ƒ /api/webhooks/stripe                   143 B         102 kB
+├ ƒ /auth/callback                         143 B         102 kB
+├ ƒ /dashboard                             175 B         106 kB
+├ ƒ /dashboard/attribution                 175 B         106 kB
+├ ƒ /dashboard/benchmarks                  175 B         106 kB
+├ ƒ /dashboard/benchmarks/[runGroupId]     175 B         106 kB
+├ ƒ /dashboard/evals                       175 B         106 kB
+├ ƒ /dashboard/evals/retrieval/[id]        175 B         106 kB
+├ ƒ /login                               3.02 kB         109 kB
+├ ƒ /results/[id]                        6.61 kB         114 kB
+├ ƒ /results/[id]/opengraph-image          143 B         102 kB
+└ ƒ /results/[id]/report                 49.1 kB         155 kB
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-26  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-018 is accepted. The benchmark admin flow now supports row-level drilldown for one run group.
+
+---
+
+### BM-019 — benchmark domain history page and cross-page history links (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + build
+
+#### Evidence
+
+Added:
+
+- `app/dashboard/benchmarks/domains/[domainId]/page.tsx`
+
+Updated:
+
+- `app/dashboard/benchmarks/page.tsx`
+- `app/dashboard/benchmarks/[runGroupId]/page.tsx`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- new benchmark domain history page at `/dashboard/benchmarks/domains/[domainId]`
+- page shows:
+  - summary cards for latest benchmark state
+  - coverage trend
+  - citation-rate trend
+  - share-of-voice trend
+  - historical run table with drilldown links
+- overview page now links directly to domain history
+- run-group detail page now links directly to domain history instead of only applying an overview filter
+
+This closes the first planned benchmark admin flow:
+
+- `/dashboard/benchmarks`
+- `/dashboard/benchmarks/[runGroupId]`
+- `/dashboard/benchmarks/domains/[domainId]`
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox build attempt:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+unhandledRejection [Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }
+```
+
+Escalated retry:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+Using secrets defined in .dev.vars
+   ▲ Next.js 15.5.14
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+ ✓ Compiled successfully in 15.0s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/10) ...
+   Generating static pages (2/10) 
+   Generating static pages (4/10) 
+   Generating static pages (7/10) 
+ ✓ Generating static pages (10/10)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                      Size  First Load JS
+┌ ƒ /                                         1.53 kB         109 kB
+├ ƒ /_not-found                                 995 B         103 kB
+├ ƒ /admin/login                              3.17 kB         109 kB
+├ ƒ /api/admin/reconcile-deep-audit             143 B         102 kB
+├ ƒ /api/checkout                               143 B         102 kB
+├ ƒ /api/internal/marketing/events              143 B         102 kB
+├ ƒ /api/leads                                  143 B         102 kB
+├ ƒ /api/scan                                   143 B         102 kB
+├ ƒ /api/scans/[id]                             143 B         102 kB
+├ ƒ /api/webhooks/stripe                        143 B         102 kB
+├ ƒ /auth/callback                              143 B         102 kB
+├ ƒ /dashboard                                  178 B         106 kB
+├ ƒ /dashboard/attribution                      178 B         106 kB
+├ ƒ /dashboard/benchmarks                       178 B         106 kB
+├ ƒ /dashboard/benchmarks/[runGroupId]          178 B         106 kB
+├ ƒ /dashboard/benchmarks/domains/[domainId]    178 B         106 kB
+├ ƒ /dashboard/evals                            178 B         106 kB
+├ ƒ /dashboard/evals/retrieval/[id]             178 B         106 kB
+├ ƒ /login                                    3.02 kB         109 kB
+├ ƒ /results/[id]                             6.61 kB         114 kB
+├ ƒ /results/[id]/opengraph-image               143 B         102 kB
+└ ƒ /results/[id]/report                      49.1 kB         155 kB
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-019 is accepted. The first benchmark admin UI flow is now complete for overview, run-group drilldown, and domain history.
+
+---
+
+### BM-020 — admin benchmark run trigger flow from the benchmark overview UI (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest + build
+
+#### Evidence
+
+Added:
+
+- `app/dashboard/benchmarks/actions.ts`
+- `components/benchmark-trigger-form.tsx`
+
+Updated:
+
+- `lib/server/benchmark-admin-data.ts`
+- `lib/server/benchmark-admin-data.test.ts`
+- `app/dashboard/benchmarks/page.tsx`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- benchmark overview page now includes a validated admin trigger form
+- admin can choose:
+  - one benchmark domain
+  - one query set
+  - one model lane
+  - optional run label
+  - optional notes
+- server action validates admin session and form input
+- action launches the existing benchmark runner skeleton and redirects to the new run-group detail page
+- benchmark admin data layer now exposes:
+  - `getDomainOptions()`
+  - `getQuerySetOptions()`
+
+Current truth remains explicit:
+
+- this trigger launches the current skeleton runner
+- execution is still backed by the stub adapter unless a later provider path is added
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated retry:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  00:07:24
+   Duration  292ms (transform 63ms, setup 0ms, import 84ms, tests 8ms, environment 0ms)
+```
+
+Initial sandbox build attempt:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+unhandledRejection [Error: spawn EPERM] { errno: -4048, code: 'EPERM', syscall: 'spawn' }
+```
+
+Escalated retry:
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+Using secrets defined in .dev.vars
+   ▲ Next.js 15.5.14
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+Using secrets defined in .dev.vars
+ ✓ Compiled successfully in 13.6s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/10) ...
+   Generating static pages (2/10) 
+   Generating static pages (4/10) 
+   Generating static pages (7/10) 
+ ✓ Generating static pages (10/10)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                      Size  First Load JS
+┌ ƒ /                                         1.53 kB         109 kB
+├ ƒ /_not-found                                 995 B         103 kB
+├ ƒ /admin/login                              3.17 kB         109 kB
+├ ƒ /api/admin/reconcile-deep-audit             143 B         102 kB
+├ ƒ /api/checkout                               143 B         102 kB
+├ ƒ /api/internal/marketing/events              143 B         102 kB
+├ ƒ /api/leads                                  143 B         102 kB
+├ ƒ /api/scan                                   143 B         102 kB
+├ ƒ /api/scans/[id]                             143 B         102 kB
+├ ƒ /api/webhooks/stripe                        143 B         102 kB
+├ ƒ /auth/callback                              143 B         102 kB
+├ ƒ /dashboard                                  175 B         106 kB
+├ ƒ /dashboard/attribution                      175 B         106 kB
+├ ƒ /dashboard/benchmarks                     1.29 kB         107 kB
+├ ƒ /dashboard/benchmarks/[runGroupId]          175 B         106 kB
+├ ƒ /dashboard/benchmarks/domains/[domainId]    175 B         106 kB
+├ ƒ /dashboard/evals                            175 B         106 kB
+├ ƒ /dashboard/evals/retrieval/[id]             175 B         106 kB
+├ ƒ /login                                    3.02 kB         109 kB
+├ ƒ /results/[id]                             6.61 kB         114 kB
+├ ƒ /results/[id]/opengraph-image               143 B         102 kB
+└ ƒ /results/[id]/report                      49.1 kB         155 kB
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-020 is accepted. The benchmark admin UI now has a real launch path for one run, even though execution still routes through the skeleton adapter boundary.
+
+---
+
+### BM-021 — first non-stub benchmark execution adapter path for a single configured model lane (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added or updated:
+- `lib/server/benchmark-execution.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `lib/server/benchmark-runner.ts`
+- `app/dashboard/benchmarks/actions.ts`
+- `scripts/benchmark-runner.ts`
+- `lib/server/cf-env.ts`
+- `.dev.vars.example`
+- `docs/06-environment-and-secrets.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- benchmark execution factory is now env-driven instead of always returning the stub adapter
+- first live execution lane is Gemini only, gated by `BENCHMARK_EXECUTION_PROVIDER=gemini`
+- only one configured model lane is considered live at a time via `BENCHMARK_EXECUTION_MODEL`
+- if the requested admin/UI model lane does not match the configured benchmark lane, the run is stored as `skipped`
+- if Gemini is enabled but misconfigured, the run records `failed` instead of pretending execution happened
+- benchmark UI trigger and CLI runner now both use the same env-backed adapter factory
+- default behavior is unchanged and remains safe: no benchmark env means stub adapter
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npx.cmd vitest run lib/server/benchmark-execution.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+RUN  v4.1.1  C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+  ✓ lib/server/benchmark-execution.test.ts
+  ✓ lib/server/benchmark-runner.test.ts
+
+Test Files  2 passed
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-021 is accepted. The benchmark platform now has one real, opt-in execution lane without changing the default stub-safe posture for the rest of the product.
+
+---
+
+### BM-022 — benchmark-domain onboarding from the admin UI and live-lane-aligned trigger defaults (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + build
+
+#### Evidence
+
+Added or updated:
+- `components/benchmark-domain-form.tsx`
+- `app/dashboard/benchmarks/actions.ts`
+- `app/dashboard/benchmarks/page.tsx`
+- `components/benchmark-trigger-form.tsx`
+- `agents/memory/PROJECT_STATE.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+
+Behavior implemented:
+
+- benchmark domains can now be added directly from `/dashboard/benchmarks`
+- new domain creation upserts into `benchmark_domains` with `is_customer=true`
+- the benchmark trigger form now shows the currently configured live execution lane
+- the default model lane now follows the configured benchmark execution model instead of the old OpenAI placeholder
+- this reduces false `skipped` runs when the first live lane is Gemini
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npm.cmd run build`
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+Compiled successfully
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-022 is accepted. Admin benchmark testing can now move from sample-only seeded domains to real manually added domains without direct database edits.
+
+---
+
+### BM-023 — benchmark query-set onboarding from the admin UI for lightweight real-domain testing (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + build
+
+#### Evidence
+
+Added or updated:
+- `components/benchmark-query-set-form.tsx`
+- `app/dashboard/benchmarks/actions.ts`
+- `app/dashboard/benchmarks/page.tsx`
+- `agents/memory/PROJECT_STATE.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+
+Behavior implemented:
+
+- admins can now create a lightweight active benchmark query set directly from `/dashboard/benchmarks`
+- query sets are created with name, version, optional metadata, and one query per line
+- each line is stored as a v1 direct-intent query with stable generated keys
+- this removes the last major sample-fixture bottleneck for first real benchmark verification from the UI
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npm.cmd run build`
+
+```text
+> geo-pulse@0.1.0 build
+> next build
+
+Compiled successfully
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-023 is accepted. The benchmark admin UI can now onboard both domains and lightweight query sets without relying on seeded sample data alone.
+
+---
+
+### BM-021 follow-up — preserve Gemini error bodies and fail all-failed benchmark run groups truthfully (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added or updated:
+- `lib/server/benchmark-execution.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+- Gemini benchmark adapter now stores the raw HTTP error body in `response_metadata.response_body`
+- benchmark run groups now resolve to `failed` when all query runs fail and none complete or skip
+- failed and completed query counts are now stored in run-group metadata
+- this turns benchmark provider debugging into a visible admin signal instead of a generic `benchmark_gemini_http_400`
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npx.cmd vitest run lib/server/benchmark-execution.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+Test Files  2 passed
+Tests       12 passed
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** The benchmark provider debug path is materially improved. The next rerun should show the exact Gemini 400 body in the run detail metadata and mark all-failed runs accurately.
+
+---
+
 ### UX-002 … UX-006 — audit journey clarity + state-driven report status (2026-03-26)
 **Agent:** Codex / implementation assistant  
 **Claimed complete:** 2026-03-26  
@@ -1704,3 +3243,61 @@ Once the card issue is resolved and the domain can be purchased / configured:
 _Agents whose claimed completions were challenged will be logged here for pattern tracking._
 
 _No rejections yet._
+
+---
+
+### Benchmark milestone — first live benchmark verified on a real domain (2026-03-27)
+**Agent:** Founder + Codex / verification record  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** operator run evidence + admin UI verification
+
+#### Evidence
+
+Real benchmark run verified in admin against a real customer domain:
+
+```text
+Domain: techehealthservices.com
+Display name: Teche Consulting
+Model lane: gemini-2.5-flash-lite
+Completed queries: 6
+Failed queries: 2
+Citation rows: 4
+Query coverage: 75%
+Citation rate: 67%
+Share of voice: 100%
+```
+
+Observed query-level truth:
+
+```text
+- completed responses persisted and displayed in benchmark run detail
+- citations were extracted from successful responses
+- temporary Gemini overload surfaced as `benchmark_gemini_http_503`
+- provider error body rendered in the run detail UI for failed queries
+```
+
+What this milestone proves:
+
+```text
+- benchmark domain onboarding works
+- benchmark query-set onboarding works
+- live model execution works
+- raw responses are persisted
+- citations are extracted
+- metrics are computed and displayed
+- benchmark admin inspection flow is operational
+```
+
+What it does not claim yet:
+
+```text
+- multi-model benchmark coverage
+- competitor cohort benchmarking
+- public benchmark methodology maturity
+- retry/backoff hardening for transient provider overload
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED milestone  
+**Notes:** This closes the “first live benchmark verified” milestone. Next benchmark implementation step is light retry/backoff handling for temporary `503 UNAVAILABLE` provider responses (`BM-024`).
