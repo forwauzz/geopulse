@@ -1,3 +1,5 @@
+import { toCanonicalBenchmarkDomain } from './benchmark-domains';
+
 export type PromptfooFramework = 'promptfoo_report' | 'promptfoo_retrieval';
 
 type PromptfooResultRow = {
@@ -39,15 +41,7 @@ export function normalizeEvalDomain(
   siteUrl: string | null | undefined,
   fallbackDomain?: string | null | undefined
 ): string | null {
-  const fallback = fallbackDomain?.trim().toLowerCase();
-  if (fallback) return fallback;
-  const raw = siteUrl?.trim();
-  if (!raw) return null;
-  try {
-    return new URL(raw).hostname.toLowerCase();
-  } catch {
-    return raw.replace(/^https?:\/\//i, '').split('/')[0]?.toLowerCase() ?? null;
-  }
+  return toCanonicalBenchmarkDomain(fallbackDomain ?? siteUrl);
 }
 
 export function summarizePromptfooResults(

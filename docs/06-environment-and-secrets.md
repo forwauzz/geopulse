@@ -24,6 +24,9 @@ Required:
 - `DEEP_AUDIT_BROWSER_RENDER_MODE`
 - `GEMINI_MODEL`
 - `GEMINI_ENDPOINT`
+- `BENCHMARK_EXECUTION_PROVIDER`
+- `BENCHMARK_EXECUTION_MODEL`
+- `BENCHMARK_EXECUTION_ENDPOINT`
 - `ADMIN_EMAIL`
 
 Source of truth:
@@ -40,6 +43,7 @@ Core app secrets:
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `GEMINI_API_KEY`
+- `BENCHMARK_EXECUTION_API_KEY`
 - `RESEND_API_KEY`
 - `TURNSTILE_SECRET_KEY`
 
@@ -118,6 +122,13 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 
 ### Admin evals
 - Supabase URL
+
+### Internal benchmarks
+- Supabase URL + service role key
+- `BENCHMARK_EXECUTION_PROVIDER=gemini` only if you want live benchmark execution
+- `BENCHMARK_EXECUTION_MODEL` must match the model lane you enter in the admin trigger form
+- `BENCHMARK_EXECUTION_API_KEY` can be set explicitly, or the benchmark lane can fall back to `GEMINI_API_KEY`
+- if benchmark execution vars are unset, the admin benchmark runner safely falls back to the stub adapter
 - service role key
 - admin user email in auth/db
 - optional local write tooling:

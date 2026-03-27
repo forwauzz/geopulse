@@ -3,7 +3,7 @@ import { normalizeEvalDomain, summarizePromptfooResults } from './promptfoo-resu
 
 describe('normalizeEvalDomain', () => {
   it('prefers explicit fallback domain', () => {
-    expect(normalizeEvalDomain('https://Example.com/path', 'acme.test')).toBe('acme.test');
+    expect(normalizeEvalDomain('https://Example.com/path', 'WWW.Acme.test')).toBe('acme.test');
   });
 
   it('extracts hostname from site url', () => {
@@ -12,6 +12,10 @@ describe('normalizeEvalDomain', () => {
 
   it('handles host-like input without protocol', () => {
     expect(normalizeEvalDomain('Example.com/products')).toBe('example.com');
+  });
+
+  it('canonicalizes www domains for stable grouping', () => {
+    expect(normalizeEvalDomain('https://www.Example.com/path')).toBe('example.com');
   });
 });
 

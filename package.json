@@ -20,7 +20,9 @@
     "eval:promptfoo:retrieval": "node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.retrieval.yaml --no-progress-bar",
     "eval:promptfoo:write:report": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/promptfoo-eval-write.ts --framework promptfoo_report",
     "eval:promptfoo:write:retrieval": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/promptfoo-eval-write.ts --framework promptfoo_retrieval",
-    "eval:retrieval:write": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/retrieval-eval-write.ts"
+    "eval:retrieval:write": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/retrieval-eval-write.ts",
+    "benchmark:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed.ts",
+    "benchmark:run": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-runner.ts"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.1.0",

@@ -35,6 +35,12 @@ RECONCILE_SECRET=
 # Get key: https://ai.google.dev/
 GEMINI_API_KEY=your-gemini-api-key-here
 
+# Optional: internal benchmark execution lane. Defaults to stub unless enabled.
+# BENCHMARK_EXECUTION_PROVIDER=gemini
+# BENCHMARK_EXECUTION_API_KEY=your-benchmark-api-key-here
+# BENCHMARK_EXECUTION_MODEL=gemini-2.0-flash
+# BENCHMARK_EXECUTION_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/models
+
 # Resend — transactional email
 # Get key: https://resend.com/api-keys
 RESEND_API_KEY=re_your_resend_api_key

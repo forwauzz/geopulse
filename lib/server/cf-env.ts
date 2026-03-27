@@ -11,6 +11,10 @@ export type ScanApiEnv = {
   GEMINI_API_KEY: string;
   GEMINI_MODEL: string;
   GEMINI_ENDPOINT: string;
+  BENCHMARK_EXECUTION_PROVIDER: string;
+  BENCHMARK_EXECUTION_API_KEY: string;
+  BENCHMARK_EXECUTION_MODEL: string;
+  BENCHMARK_EXECUTION_ENDPOINT: string;
 };
 
 export type PaymentApiEnv = ScanApiEnv & {
@@ -73,6 +77,10 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     GEMINI_ENDPOINT: String(
       e['GEMINI_ENDPOINT'] ?? 'https://generativelanguage.googleapis.com/v1beta/models'
     ),
+    BENCHMARK_EXECUTION_PROVIDER: String(e['BENCHMARK_EXECUTION_PROVIDER'] ?? ''),
+    BENCHMARK_EXECUTION_API_KEY: String(e['BENCHMARK_EXECUTION_API_KEY'] ?? ''),
+    BENCHMARK_EXECUTION_MODEL: String(e['BENCHMARK_EXECUTION_MODEL'] ?? ''),
+    BENCHMARK_EXECUTION_ENDPOINT: String(e['BENCHMARK_EXECUTION_ENDPOINT'] ?? ''),
   };
 }
 
@@ -91,6 +99,10 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       GEMINI_ENDPOINT:
         process.env['GEMINI_ENDPOINT'] ??
         'https://generativelanguage.googleapis.com/v1beta/models',
+      BENCHMARK_EXECUTION_PROVIDER: process.env['BENCHMARK_EXECUTION_PROVIDER'] ?? '',
+      BENCHMARK_EXECUTION_API_KEY: process.env['BENCHMARK_EXECUTION_API_KEY'] ?? '',
+      BENCHMARK_EXECUTION_MODEL: process.env['BENCHMARK_EXECUTION_MODEL'] ?? '',
+      BENCHMARK_EXECUTION_ENDPOINT: process.env['BENCHMARK_EXECUTION_ENDPOINT'] ?? '',
     };
   }
 }
