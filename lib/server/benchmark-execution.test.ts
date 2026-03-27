@@ -148,6 +148,71 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
     expect(result.errorMessage).toBe('benchmark_gemini_http_400');
     expect(result.responseMetadata['response_body']).toContain('Model not found');
   });
+
+  it('retries transient 503 responses and eventually succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: async () => '{"error":{"message":"Try again later"}}',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Example is a healthcare technology consulting firm.' }],
+              },
+            },
+          ],
+        }),
+      });
+
+    const adapter = new GeminiBenchmarkExecutionAdapter(
+      {
+        provider: 'gemini',
+        apiKey: 'benchmark-key',
+        model: 'gemini-2.0-flash',
+        endpoint: 'https://example.test/models',
+      },
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, sampleContext);
+
+    expect(result.status).toBe('completed');
+    expect(result.responseText).toContain('healthcare technology consulting');
+    expect(result.responseMetadata['attempts']).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries transient 503 responses and then fails after exhausting attempts', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: async () => '{"error":{"message":"High demand"}}',
+    });
+
+    const adapter = new GeminiBenchmarkExecutionAdapter(
+      {
+        provider: 'gemini',
+        apiKey: 'benchmark-key',
+        model: 'gemini-2.0-flash',
+        endpoint: 'https://example.test/models',
+      },
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, sampleContext);
+
+    expect(result.status).toBe('failed');
+    expect(result.errorMessage).toBe('benchmark_gemini_http_503');
+    expect(result.responseMetadata['attempts']).toBe(3);
+    expect(result.responseMetadata['retryable']).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe('createBenchmarkExecutionAdapter', () => {

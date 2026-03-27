@@ -3301,3 +3301,87 @@ What it does not claim yet:
 **Date:** 2026-03-27  
 **Decision:** ✅ ACCEPTED milestone  
 **Notes:** This closes the “first live benchmark verified” milestone. Next benchmark implementation step is light retry/backoff handling for temporary `503 UNAVAILABLE` provider responses (`BM-024`).
+
+---
+
+### BM-025 — grounded benchmark v2 methodology note (2026-03-27)
+**Agent:** Codex / design assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** design doc + sequencing update
+
+#### Evidence
+
+Added:
+- `PLAYBOOK/benchmark-grounding-v2.md`
+
+What it defines:
+
+```text
+- separate benchmark modes for:
+  1. ungrounded brand inference
+  2. grounded site-based interpretation
+  3. citation/correctness inspection
+- business-type misclassification as a real internal benchmark signal
+- future protocol evolution without widening scope prematurely
+- explicit sequencing: BM-024 retry/backoff first, grounded benchmark mode later
+```
+
+Why this was added:
+
+```text
+Founder validation showed a meaningful gap between:
+- benchmark v1 answers from the raw API path
+- Gemini chat’s more grounded business interpretation
+
+The right response is methodology refinement, not benchmark sprawl.
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** This locks the next benchmark-methodology direction without drifting from the immediate implementation priority. `BM-024` remains the next code task.
+
+---
+
+### BM-024 — retry/backoff for transient benchmark-provider overload (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-execution.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- Gemini benchmark execution now retries only transient provider failures (`429`, `503`)
+- retries are bounded to 3 attempts total with small backoff delays
+- successful retry attempts are recorded in `response_metadata.attempts`
+- exhausted retries still fail truthfully and retain the final provider response body
+- non-retryable hard failures (invalid key, unsupported model, 400-class request issues) are not retried
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npx.cmd vitest run lib/server/benchmark-execution.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+Test Files  2 passed
+Tests       14 passed
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-024 is accepted. The benchmark execution path is now materially more reliable under temporary provider overload without widening the benchmark scope.

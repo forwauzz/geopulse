@@ -49,6 +49,10 @@ export type BenchmarkExecutionConfig = {
   readonly endpoint: string;
 };
 
+const GEMINI_TRANSIENT_STATUSES = new Set([429, 503]);
+const GEMINI_MAX_ATTEMPTS = 3;
+const GEMINI_RETRY_DELAYS_MS = [400, 1200];
+
 export class StubBenchmarkExecutionAdapter implements BenchmarkExecutionAdapter {
   async executeQuery(
     query: BenchmarkQueryRow,
@@ -115,6 +119,10 @@ function buildBenchmarkPrompt(query: BenchmarkQueryRow, context: BenchmarkExecut
   ].join('\n');
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapter {
   constructor(
     private readonly config: BenchmarkExecutionConfig,
@@ -171,16 +179,84 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
       },
     };
 
-    try {
-      const response = await this.fetchImpl(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(25_000),
-      });
+    for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        const response = await this.fetchImpl(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(25_000),
+        });
 
-      if (!response.ok) {
-        const responseBody = await readResponseTextSafely(response);
+        if (!response.ok) {
+          const responseBody = await readResponseTextSafely(response);
+          const retryable = GEMINI_TRANSIENT_STATUSES.has(response.status);
+          const hasRetry = attempt < GEMINI_MAX_ATTEMPTS;
+          if (retryable && hasRetry) {
+            const delayMs = GEMINI_RETRY_DELAYS_MS[attempt - 1] ?? 1200;
+            await sleep(delayMs);
+            continue;
+          }
+
+          return {
+            status: 'failed',
+            responseText: null,
+            responseMetadata: {
+              provider: 'gemini',
+              configured_model: this.config.model,
+              requested_model: context.modelId,
+              query_key: query.query_key,
+              http_status: response.status,
+              response_body: responseBody,
+              attempts: attempt,
+              retryable,
+            },
+            errorMessage: `benchmark_gemini_http_${String(response.status)}`,
+            executedAt,
+          };
+        }
+
+        const data = (await response.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[];
+        };
+        const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+        if (!responseText) {
+          return {
+            status: 'failed',
+            responseText: null,
+            responseMetadata: {
+              provider: 'gemini',
+              configured_model: this.config.model,
+              requested_model: context.modelId,
+              query_key: query.query_key,
+              attempts: attempt,
+            },
+            errorMessage: 'benchmark_gemini_empty_response',
+            executedAt,
+          };
+        }
+
+        return {
+          status: 'completed',
+          responseText,
+          responseMetadata: {
+            provider: 'gemini',
+            configured_model: this.config.model,
+            requested_model: context.modelId,
+            query_key: query.query_key,
+            attempts: attempt,
+          },
+          errorMessage: null,
+          executedAt,
+        };
+      } catch (error) {
+        const hasRetry = attempt < GEMINI_MAX_ATTEMPTS;
+        if (hasRetry) {
+          const delayMs = GEMINI_RETRY_DELAYS_MS[attempt - 1] ?? 1200;
+          await sleep(delayMs);
+          continue;
+        }
+
         return {
           status: 'failed',
           responseText: null,
@@ -189,59 +265,27 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
             configured_model: this.config.model,
             requested_model: context.modelId,
             query_key: query.query_key,
-            http_status: response.status,
-            response_body: responseBody,
+            attempts: attempt,
           },
-          errorMessage: `benchmark_gemini_http_${String(response.status)}`,
+          errorMessage: error instanceof Error ? error.message : 'benchmark_gemini_error',
           executedAt,
         };
       }
-
-      const data = (await response.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-      if (!responseText) {
-        return {
-          status: 'failed',
-          responseText: null,
-          responseMetadata: {
-            provider: 'gemini',
-            configured_model: this.config.model,
-            requested_model: context.modelId,
-            query_key: query.query_key,
-          },
-          errorMessage: 'benchmark_gemini_empty_response',
-          executedAt,
-        };
-      }
-
-      return {
-        status: 'completed',
-        responseText,
-        responseMetadata: {
-          provider: 'gemini',
-          configured_model: this.config.model,
-          requested_model: context.modelId,
-          query_key: query.query_key,
-        },
-        errorMessage: null,
-        executedAt,
-      };
-    } catch (error) {
-      return {
-        status: 'failed',
-        responseText: null,
-        responseMetadata: {
-          provider: 'gemini',
-          configured_model: this.config.model,
-          requested_model: context.modelId,
-          query_key: query.query_key,
-        },
-        errorMessage: error instanceof Error ? error.message : 'benchmark_gemini_error',
-        executedAt,
-      };
     }
+
+    return {
+      status: 'failed',
+      responseText: null,
+      responseMetadata: {
+        provider: 'gemini',
+        configured_model: this.config.model,
+        requested_model: context.modelId,
+        query_key: query.query_key,
+        attempts: GEMINI_MAX_ATTEMPTS,
+      },
+      errorMessage: 'benchmark_gemini_retry_exhausted',
+      executedAt,
+    };
   }
 }
 

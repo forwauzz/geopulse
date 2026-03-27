@@ -80,6 +80,9 @@ Runner detail reference:
 Citation/metrics reference:
 - `PLAYBOOK/citation-and-metrics-v1.md`
 
+Grounding-evolution reference:
+- `PLAYBOOK/benchmark-grounding-v2.md`
+
 Admin UI reference:
 - `PLAYBOOK/benchmark-admin-ui-v1.md`
 
@@ -173,6 +176,7 @@ First live benchmark milestone achieved:
 - lightweight admin-authored query set executed end to end
 - 6 completed query runs, 4 extracted citations, non-zero query coverage / citation rate / share of voice
 - remaining reliability gap is temporary provider overload (`503 UNAVAILABLE`) and light retry/backoff handling, not missing benchmark scaffolding
+- next methodology gap is grounding quality: benchmark v1 should evolve toward explicit `ungrounded_inference` vs `grounded_site` modes, but only after `BM-024`
 
 The current repo does not yet implement the benchmark platform:
 - no real multi-model query measurement pipeline
