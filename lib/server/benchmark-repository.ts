@@ -89,6 +89,9 @@ export type QueryCitationRow = {
   readonly query_run_id: string;
   readonly cited_domain: string | null;
   readonly cited_url: string | null;
+  readonly grounding_evidence_id: string | null;
+  readonly grounding_page_url: string | null;
+  readonly grounding_page_type: string | null;
   readonly rank_position: number | null;
   readonly citation_type: 'explicit_url' | 'explicit_domain' | 'brand_mention' | 'paraphrased_reference';
   readonly sentiment: string | null;
@@ -412,6 +415,9 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
         readonly queryRunId: string;
         readonly citedDomain?: string | null;
         readonly citedUrl?: string | null;
+        readonly groundingEvidenceId?: string | null;
+        readonly groundingPageUrl?: string | null;
+        readonly groundingPageType?: string | null;
         readonly rankPosition?: number | null;
         readonly citationType: 'explicit_url' | 'explicit_domain' | 'brand_mention' | 'paraphrased_reference';
         readonly sentiment?: string | null;
@@ -428,6 +434,9 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
             query_run_id: citation.queryRunId,
             cited_domain: citation.citedDomain ?? null,
             cited_url: citation.citedUrl ?? null,
+            grounding_evidence_id: citation.groundingEvidenceId ?? null,
+            grounding_page_url: citation.groundingPageUrl ?? null,
+            grounding_page_type: citation.groundingPageType ?? null,
             rank_position: citation.rankPosition ?? null,
             citation_type: citation.citationType,
             sentiment: citation.sentiment ?? null,
@@ -436,7 +445,7 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
           }))
         )
         .select(
-          'id,query_run_id,cited_domain,cited_url,rank_position,citation_type,sentiment,confidence,metadata,created_at'
+          'id,query_run_id,cited_domain,cited_url,grounding_evidence_id,grounding_page_url,grounding_page_type,rank_position,citation_type,sentiment,confidence,metadata,created_at'
         );
 
       if (error) throw error;

@@ -1,6 +1,6 @@
 # Measurement Platform Roadmap
 
-Last updated: 2026-03-27
+Last updated: 2026-03-28
 
 ## Purpose
 
@@ -175,9 +175,25 @@ The current repo supports the wedge well:
   - backward-compatible evidence normalization (`lib/server/benchmark-grounding.ts`)
   - run-time grounding snapshot persisted in run-group metadata (`lib/server/benchmark-runner.ts`)
   - grounding evidence visible on benchmark run detail (`app/dashboard/benchmarks/[runGroupId]/page.tsx`)
+- first exact-url citation-to-grounding provenance slice for grounded runs:
+  - deterministic grounding `evidence_id` on evidence snapshots (`lib/server/benchmark-grounding.ts`)
+  - citation rows preserve matched grounded page fields only when the cited URL exactly matches grounded evidence (`lib/server/benchmark-citations.ts`, `lib/server/benchmark-runner.ts`)
+  - benchmark run detail shows whether a citation matched a grounded source page or remained unresolved (`components/benchmark-run-detail-view.tsx`)
+- second conservative provenance matcher for grounded runs:
+  - citations can also match by normalized page equivalence when the page is clearly the same despite weak URL-shape differences
+  - different paths and domain-only mentions still remain unresolved
+- internal claim-to-evidence overlap metadata for grounded runs:
+  - matched grounded citations now carry a lightweight overlap signal between the chosen claim sentence and the matched evidence excerpt
+  - this is for internal inspection only and does not create a customer-facing metric or semantic fact-check score
+- first exact-page citation-quality metric slice:
+  - `exact_page_quality_rate` now measures completed runs where the measured-domain citation both matches a grounded page and has a `supported_overlap` claim/evidence signal
+  - this remains separate from citation presence and share-of-voice, and is still an internal benchmark-quality signal
+- richer grounding-page metadata on evidence snapshots:
+  - `fetch_order`, `selection_reason`, explicit page title, and fetch status are persisted in run metadata
+  - this supports later provenance work without adding a new benchmark route shape or customer-facing score
 - first minimal grounding-context builder for grounded runs:
   - homepage fetch via existing validated fetch gate
-  - likely about/services page discovery from homepage links
+  - bounded ranked same-origin candidate discovery from homepage links, with strong preference for about/services/product-style pages
   - bounded excerpt extraction into grounded benchmark evidence
 
 First live benchmark milestone achieved:
@@ -185,18 +201,31 @@ First live benchmark milestone achieved:
 - lightweight admin-authored query set executed end to end
 - 6 completed query runs, 4 extracted citations, non-zero query coverage / citation rate / share of voice
 - remaining reliability gap is temporary provider overload (`503 UNAVAILABLE`) and light retry/backoff handling, not missing benchmark scaffolding
-- benchmark v1 now has an explicit `ungrounded_inference` vs `grounded_site` seam, but grounded evidence is still not exact-page provenance
-- next methodology gap is page-level grounding provenance: the benchmark should evolve from domain-level grounded evidence toward structured evidence with source-page URLs and excerpts before any stronger citation-correctness claims are made
+- benchmark v1 now has an explicit `ungrounded_inference` vs `grounded_site` seam, and the first exact-page provenance slice exists for exact URL matches only
+- next methodology gap is richer citation-grounding provenance: move from exact URL equivalence toward stronger page selection and citation-quality checks without guessing unresolved mentions
 - the first provenance-inspection slice now exists, but evidence is still curated metadata rather than a live grounding-context builder
 - the first live grounding-context builder now exists, but it is intentionally small and heuristic rather than a full crawl or best-page selection system
 
 The current repo does not yet implement the benchmark platform:
 - no real multi-model query measurement pipeline
 - no persistent query → response → citation graph
-- no live grounding-context builder that derives exact-page provenance automatically yet
+- no live grounding-context builder that derives broad exact-page provenance automatically across a ranked page set yet
 - no broad or ranked grounding-context builder over multiple candidate pages yet
 - no exact-page citation-quality scoring for grounded benchmark evidence yet
 - no competitor benchmark corpus
 - no 1000-site benchmark operations
 
 That is why this roadmap is staged and tracked separately from launch closure.
+
+Current backlog translation:
+- these gaps are now tracked explicitly in `agents/memory/PROJECT_STATE.md` as `BM-033` ... `BM-046`
+- the intended order is methodology discipline first, then grounding/provenance quality, then comparison/history, then cohorting, then scale
+- do not collapse this into one large benchmark rewrite; future implementation should preserve the existing seams in `lib/server/benchmark-grounding.ts`, `lib/server/benchmark-citations.ts`, `lib/server/benchmark-runner.ts`, and `lib/server/benchmark-admin-data.ts`
+
+Grounded-provenance sequence frozen by `BM-033`:
+- first improve page selection (`BM-034`) and inspectable metadata (`BM-035`)
+- only then widen provenance matching (`BM-036`) and excerpt-level evidence checks (`BM-037`)
+- only after that define an exact-page citation-quality metric (`BM-038`)
+- the first comparison UI slice (`BM-039`) is now complete on the benchmark domain history page, pairing latest grounded and ungrounded runs for the same query set and model
+- cohorting (`BM-041` / `BM-042`) and scale work (`BM-045` / `BM-046`) stay downstream of that methodology path
+- this sequencing is intentionally designed to protect the current architecture and avoid a single large benchmark rewrite

@@ -42,18 +42,28 @@ describe('resolveBenchmarkGroundingContext', () => {
       mode: 'grounded_site',
       evidence: [
         {
+          evidenceId: expect.stringMatching(/^ge-[0-9a-f]{8}$/),
           sourceLabel: 'homepage',
           excerpt: 'Example provides healthcare technology consulting.',
           pageUrl: null,
           pageType: null,
           evidenceLabel: null,
+          pageTitle: null,
+          fetchStatus: null,
+          fetchOrder: null,
+          selectionReason: null,
         },
         {
+          evidenceId: expect.stringMatching(/^ge-[0-9a-f]{8}$/),
           sourceLabel: 'services',
           excerpt: 'Its services include implementation support.',
           pageUrl: null,
           pageType: null,
           evidenceLabel: null,
+          pageTitle: null,
+          fetchStatus: null,
+          fetchOrder: null,
+          selectionReason: null,
         },
       ],
     });
@@ -82,11 +92,16 @@ describe('resolveBenchmarkGroundingContext', () => {
       mode: 'grounded_site',
       evidence: [
         {
+          evidenceId: expect.stringMatching(/^ge-[0-9a-f]{8}$/),
           sourceLabel: 'About page',
           excerpt: 'Example helps healthcare organizations modernize operations.',
           pageUrl: 'https://example.com/about',
           pageType: 'about',
           evidenceLabel: 'About page',
+          pageTitle: null,
+          fetchStatus: null,
+          fetchOrder: null,
+          selectionReason: null,
         },
       ],
     });
@@ -184,7 +199,140 @@ describe('resolveBenchmarkGroundingContextForRun', () => {
     expect(resolution.context?.evidence[1]).toMatchObject({
       pageUrl: 'https://example.com/about',
       evidenceLabel: 'About Example',
+      pageTitle: 'About Example',
+      fetchStatus: 'ok',
+      fetchOrder: 1,
+      selectionReason: 'about_path_priority',
     });
+  });
+
+  it('prefers stronger same-origin grounding candidates over low-signal links', async () => {
+    const fetchPage = async (url: string) => {
+      if (url === 'https://example.com/') {
+        return {
+          ok: true as const,
+          finalUrl: 'https://example.com/',
+          html: `
+            <html>
+              <head><title>Example</title></head>
+              <body>
+                <p>${'Example helps healthcare organizations modernize workflows. '.repeat(12)}</p>
+                <a href="/blog/launch">Launch blog</a>
+                <a href="/contact">Contact</a>
+                <a href="/platform">Platform</a>
+                <a href="/about">About</a>
+                <a href="/services">Services</a>
+              </body>
+            </html>
+          `,
+        };
+      }
+
+      if (url === 'https://example.com/about') {
+        return {
+          ok: true as const,
+          finalUrl: url,
+          html: `<html><head><title>About Example</title></head><body><p>${'About copy. '.repeat(30)}</p></body></html>`,
+        };
+      }
+
+      if (url === 'https://example.com/services') {
+        return {
+          ok: true as const,
+          finalUrl: url,
+          html: `<html><head><title>Services</title></head><body><p>${'Services copy. '.repeat(30)}</p></body></html>`,
+        };
+      }
+
+      if (url === 'https://example.com/platform') {
+        return {
+          ok: true as const,
+          finalUrl: url,
+          html: `<html><head><title>Platform</title></head><body><p>${'Platform copy. '.repeat(30)}</p></body></html>`,
+        };
+      }
+
+      return { ok: false as const, reason: 'unexpected_url' };
+    };
+
+    const resolution = await resolveBenchmarkGroundingContextForRun(
+      {
+        canonical_domain: 'example.com',
+        site_url: 'https://example.com/',
+        metadata: {},
+      } as any,
+      'grounded_site',
+      fetchPage as any
+    );
+
+    expect(resolution.context?.evidence.map((item) => item.pageType)).toEqual([
+      'homepage',
+      'about',
+      'services',
+      'product',
+    ]);
+    expect(resolution.context?.evidence[0]).toMatchObject({
+      fetchOrder: 0,
+      selectionReason: 'homepage_seed',
+      fetchStatus: 'ok',
+      pageTitle: 'Example',
+    });
+  });
+
+  it('falls back to other high-signal pages when about/services links are absent', async () => {
+    const fetchPage = async (url: string) => {
+      if (url === 'https://example.com/') {
+        return {
+          ok: true as const,
+          finalUrl: 'https://example.com/',
+          html: `
+            <html>
+              <head><title>Example</title></head>
+              <body>
+                <p>${'Example helps healthcare organizations modernize workflows. '.repeat(12)}</p>
+                <a href="/platform">Platform</a>
+                <a href="/industries/healthcare">Healthcare</a>
+                <a href="/privacy">Privacy</a>
+              </body>
+            </html>
+          `,
+        };
+      }
+
+      if (url === 'https://example.com/platform') {
+        return {
+          ok: true as const,
+          finalUrl: url,
+          html: `<html><head><title>Platform</title></head><body><p>${'Platform copy. '.repeat(30)}</p></body></html>`,
+        };
+      }
+
+      if (url === 'https://example.com/industries/healthcare') {
+        return {
+          ok: true as const,
+          finalUrl: url,
+          html: `<html><head><title>Healthcare</title></head><body><p>${'Healthcare copy. '.repeat(30)}</p></body></html>`,
+        };
+      }
+
+      return { ok: false as const, reason: 'unexpected_url' };
+    };
+
+    const resolution = await resolveBenchmarkGroundingContextForRun(
+      {
+        canonical_domain: 'example.com',
+        site_url: 'https://example.com/',
+        metadata: {},
+      } as any,
+      'grounded_site',
+      fetchPage as any
+    );
+
+    expect(resolution.context?.evidence.map((item) => item.pageType)).toEqual([
+      'homepage',
+      'product',
+      'other',
+    ]);
   });
 
   it('returns a grounding error when the site builder cannot fetch the homepage', async () => {
@@ -242,11 +390,16 @@ describe('buildBenchmarkPrompt', () => {
         mode: 'grounded_site',
         evidence: [
           {
+            evidenceId: 'ge-home',
             sourceLabel: 'homepage',
             excerpt: 'Example is a healthcare technology consulting firm.',
             pageUrl: null,
             pageType: null,
             evidenceLabel: null,
+            pageTitle: null,
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
           },
         ],
       },
@@ -276,11 +429,16 @@ describe('buildBenchmarkPrompt', () => {
         mode: 'grounded_site',
         evidence: [
           {
+            evidenceId: 'ge-about',
             sourceLabel: 'About page',
             excerpt: 'Example helps healthcare organizations modernize operations.',
             pageUrl: 'https://example.com/about',
             pageType: 'about',
             evidenceLabel: 'About page',
+            pageTitle: 'About page',
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
           },
         ],
       },
@@ -299,20 +457,30 @@ describe('serializeGroundingEvidenceSnapshot', () => {
         mode: 'grounded_site',
         evidence: [
           {
+            evidenceId: 'ge-about',
             sourceLabel: 'About page',
             excerpt: 'Example helps healthcare organizations modernize operations.',
             pageUrl: 'https://example.com/about',
             pageType: 'about',
             evidenceLabel: 'About page',
+            pageTitle: 'About page',
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
           },
         ],
       })
     ).toEqual([
       {
+        evidence_id: 'ge-about',
         source_label: 'About page',
         page_type: 'about',
         page_url: 'https://example.com/about',
         evidence_label: 'About page',
+        page_title: 'About page',
+        fetch_status: null,
+        fetch_order: null,
+        selection_reason: null,
         excerpt: 'Example helps healthcare organizations modernize operations.',
       },
     ]);

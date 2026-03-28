@@ -52,6 +52,9 @@ export type BenchmarkRunGroupDetail = {
     readonly query_run_id: string;
     readonly cited_domain: string | null;
     readonly cited_url: string | null;
+    readonly grounding_evidence_id: string | null;
+    readonly grounding_page_url: string | null;
+    readonly grounding_page_type: string | null;
     readonly rank_position: number | null;
     readonly citation_type: string;
     readonly confidence: number | null;
@@ -64,11 +67,16 @@ export type BenchmarkDomainHistoryPoint = {
   readonly runGroupId: string;
   readonly label: string;
   readonly modelId: string;
+  readonly querySetId: string;
+  readonly querySetName: string;
+  readonly querySetVersion: string;
+  readonly runMode: string | null;
   readonly status: string;
   readonly createdAt: string;
   readonly queryCoverage: number | null;
   readonly citationRate: number | null;
   readonly shareOfVoice: number | null;
+  readonly exactPageQualityRate: number | null;
 };
 
 export type BenchmarkOption = {
@@ -246,7 +254,7 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
           ? supabase
               .from('query_citations')
               .select(
-                'id,query_run_id,cited_domain,cited_url,rank_position,citation_type,confidence,metadata,created_at'
+                'id,query_run_id,cited_domain,cited_url,grounding_evidence_id,grounding_page_url,grounding_page_type,rank_position,citation_type,confidence,metadata,created_at'
               )
               .in(
                 'query_run_id',
@@ -266,6 +274,9 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
         query_run_id: string;
         cited_domain: string | null;
         cited_url: string | null;
+        grounding_evidence_id: string | null;
+        grounding_page_url: string | null;
+        grounding_page_type: string | null;
         rank_position: number | null;
         citation_type: string;
         confidence: number | null;
@@ -305,11 +316,20 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
         runGroupId: row.id,
         label: row.label,
         modelId: row.model_set_version,
+        querySetId: row.query_set_id,
+        querySetName: row.query_set_name,
+        querySetVersion: row.query_set_version,
+        runMode:
+          typeof row.metadata['run_mode'] === 'string' ? String(row.metadata['run_mode']) : null,
         status: row.status,
         createdAt: row.created_at,
         queryCoverage: row.query_coverage,
         citationRate: row.citation_rate,
         shareOfVoice: row.share_of_voice,
+        exactPageQualityRate:
+          typeof row.metadata['exact_page_quality_rate'] === 'number'
+            ? (row.metadata['exact_page_quality_rate'] as number)
+            : null,
       }));
     },
 

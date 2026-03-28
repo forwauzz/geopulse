@@ -3,7 +3,11 @@ import {
   resolveBenchmarkGroundingContextForRun,
   serializeGroundingEvidenceSnapshot,
 } from './benchmark-grounding';
-import { parseBenchmarkCitations } from './benchmark-citations';
+import {
+  assessCitationClaimEvidenceMatch,
+  matchCitationToGroundingEvidence,
+  parseBenchmarkCitations,
+} from './benchmark-citations';
 import {
   createBenchmarkExecutionAdapter,
   getBenchmarkExecutionAdapterMode,
@@ -139,18 +143,53 @@ export async function runBenchmarkGroupSkeleton(
   const queryRunIdByQueryId = new Map(queryRuns.map((row) => [row.query_id, row.id] as const));
   const citationRows = executionResults.flatMap(({ query, execution }) => {
     if (execution.status !== 'completed' || !execution.responseText) return [];
+    const responseText = execution.responseText;
     const queryRunId = queryRunIdByQueryId.get(query.id);
     if (!queryRunId) return [];
 
-    return parseBenchmarkCitations(execution.responseText, domain).map((citation) => ({
-      queryRunId,
-      citedDomain: citation.citedDomain,
-      citedUrl: citation.citedUrl,
-      rankPosition: citation.rankPosition,
-      citationType: citation.citationType,
-      confidence: citation.confidence,
-      metadata: citation.metadata,
-    }));
+    return parseBenchmarkCitations(responseText, domain).map((citation) => {
+      const groundingMatch = matchCitationToGroundingEvidence(citation, groundingContext);
+      const claimEvidenceMatch = assessCitationClaimEvidenceMatch({
+        citation,
+        responseText,
+        groundingContext,
+        groundingMatch,
+      });
+
+      return {
+        queryRunId,
+        citedDomain: citation.citedDomain,
+        citedUrl: citation.citedUrl,
+        groundingEvidenceId: groundingMatch?.groundingEvidenceId ?? null,
+        groundingPageUrl: groundingMatch?.groundingPageUrl ?? null,
+        groundingPageType: groundingMatch?.groundingPageType ?? null,
+        rankPosition: citation.rankPosition,
+        citationType: citation.citationType,
+        confidence: citation.confidence,
+        metadata: {
+          ...(citation.metadata ?? {}),
+          grounding_provenance:
+            groundingMatch === null
+              ? {
+                  status: 'unresolved',
+                }
+              : {
+                status: 'matched',
+                match_method: groundingMatch.provenanceMatchMethod,
+                confidence: groundingMatch.provenanceConfidence,
+                grounding_evidence_id: groundingMatch.groundingEvidenceId,
+              },
+          grounding_claim_match: {
+            status: claimEvidenceMatch.status,
+            claim_text: claimEvidenceMatch.claimText,
+            overlap_token_count: claimEvidenceMatch.overlapTokenCount,
+            claim_token_count: claimEvidenceMatch.claimTokenCount,
+            evidence_token_count: claimEvidenceMatch.evidenceTokenCount,
+            overlap_ratio: claimEvidenceMatch.overlapRatio,
+          },
+        },
+      };
+    });
   });
 
   const storedCitations = await repo.insertQueryCitations(citationRows);
@@ -202,6 +241,9 @@ export async function runBenchmarkGroupSkeleton(
       failed_query_count: failedQueryCount,
       skipped_query_count: skippedQueryCount,
       citation_count: storedCitations.length,
+      exact_page_quality_rate: computedMetrics.exactPageQualityRate,
+      exact_page_matched_runs: computedMetrics.metrics.exact_page_matched_runs,
+      exact_page_supported_runs: computedMetrics.metrics.exact_page_supported_runs,
     },
   });
 

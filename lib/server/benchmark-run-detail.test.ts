@@ -20,10 +20,15 @@ describe('benchmark run detail helpers', () => {
       readBenchmarkGroundingEvidence({
         grounding_evidence: [
           {
+            evidence_id: 'ge-home',
             source_label: 'homepage',
             page_type: 'home',
             page_url: 'https://example.com/',
             evidence_label: 'Homepage',
+            page_title: 'Homepage',
+            fetch_status: 'ok',
+            fetch_order: 0,
+            selection_reason: 'homepage_seed',
             excerpt: 'Example provides healthcare technology consulting.',
           },
           {
@@ -39,10 +44,15 @@ describe('benchmark run detail helpers', () => {
       })
     ).toEqual([
       {
+        evidence_id: 'ge-home',
         source_label: 'homepage',
         page_type: 'home',
         page_url: 'https://example.com/',
         evidence_label: 'Homepage',
+        page_title: 'Homepage',
+        fetch_status: 'ok',
+        fetch_order: 0,
+        selection_reason: 'homepage_seed',
         excerpt: 'Example provides healthcare technology consulting.',
       },
     ]);

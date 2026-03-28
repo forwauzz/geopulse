@@ -278,6 +278,9 @@ describe('createBenchmarkAdminData', () => {
                       query_run_id: 'query-run-1',
                       cited_domain: 'geopulse.ai',
                       cited_url: 'https://geopulse.ai/',
+                      grounding_evidence_id: 'ge-home',
+                      grounding_page_url: 'https://geopulse.ai/',
+                      grounding_page_type: 'homepage',
                       rank_position: 1,
                       citation_type: 'explicit_url',
                       confidence: 1,
@@ -305,6 +308,7 @@ describe('createBenchmarkAdminData', () => {
     expect(detail?.queryRuns[0]?.query_key).toBe('brand-overview');
     expect(detail?.queryRuns[0]?.citation_count).toBe(1);
     expect(detail?.citations).toHaveLength(1);
+    expect(detail?.citations[0]?.grounding_page_type).toBe('homepage');
   });
 
   it('builds domain history from hydrated run groups', async () => {
@@ -323,7 +327,10 @@ describe('createBenchmarkAdminData', () => {
         model_set_version: 'openai/gpt-4.1-mini',
         status: 'completed',
         notes: null,
-        metadata: {},
+        metadata: {
+          run_mode: 'grounded_site',
+          exact_page_quality_rate: 0.4,
+        },
         started_at: null,
         completed_at: null,
         created_at: '2026-03-26T00:00:00.000Z',
@@ -346,11 +353,16 @@ describe('createBenchmarkAdminData', () => {
         runGroupId: 'run-1',
         label: 'baseline',
         modelId: 'openai/gpt-4.1-mini',
+        querySetId: 'set-1',
+        querySetName: 'brand-baseline',
+        querySetVersion: 'v1',
+        runMode: 'grounded_site',
         status: 'completed',
         createdAt: '2026-03-26T00:00:00.000Z',
         queryCoverage: 1,
         citationRate: 0.5,
         shareOfVoice: 0.25,
+        exactPageQualityRate: 0.4,
       },
     ]);
   });

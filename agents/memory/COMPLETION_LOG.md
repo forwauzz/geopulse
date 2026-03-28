@@ -5,6 +5,46 @@
 
 ---
 
+## 2026-03-28 — BM-039 grounded vs ungrounded comparison view
+
+Implemented the first internal benchmark comparison surface for methodology inspection without adding a new route or broad benchmark rewrite.
+
+Files changed:
+- `app/dashboard/benchmarks/domains/[domainId]/page.tsx`
+- `lib/server/benchmark-admin-data.ts`
+- `lib/server/benchmark-admin-data.test.ts`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Extended benchmark domain history rows with query-set identity, run mode, and exact-page quality metadata.
+- Added a grounded-vs-ungrounded comparison table on the existing benchmark domain history page, pairing the latest runs for the same query set and model.
+- Added run-history columns for mode, query set, and exact-page quality so comparisons remain inspectable in the existing admin flow.
+- Updated benchmark methodology docs and task registry to mark `BM-039` complete and keep the follow-up sequence explicit.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-admin-data.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  1 passed (1)
+     Tests  5 passed (5)
+  Start at  02:55:51
+  Duration  805ms (transform 176ms, setup 0ms, import 228ms, tests 28ms, environment 0ms)
+```
+
 ## How to write an entry
 
 ```markdown
@@ -4526,3 +4566,437 @@ Runtime scope for AH-007:
 **Date:** 2026-03-28  
 **Decision:** ✅ ACCEPTED  
 **Notes:** AH-007 is accepted as a design completion. The current founder-stage admin model remains truthful in code, and the next-step auth maturity path is now documented clearly enough for future handoff without implying a runtime auth upgrade has already shipped.
+### BM-032 — exact-url grounded citation provenance slice (2026-03-28)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** migration + code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+- `supabase/migrations/014_benchmark_citation_grounding_provenance.sql`
+
+Updated:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-citations.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-repository.ts`
+- `lib/server/benchmark-admin-data.ts`
+- `lib/server/benchmark-run-detail.ts`
+- `components/benchmark-run-detail-view.tsx`
+- `lib/server/benchmark-grounding.test.ts`
+- `lib/server/benchmark-citations.test.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `lib/server/benchmark-run-detail.test.ts`
+- `lib/server/benchmark-admin-data.test.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `lib/server/benchmark-metrics.test.ts`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- grounded evidence snapshots now carry a deterministic `evidence_id` so run-time evidence items can be referenced stably
+- query_citations now persist grounded provenance fields (`grounding_evidence_id`, `grounding_page_url`, `grounding_page_type`) through a narrow follow-up migration
+- citation provenance matching is intentionally conservative: a citation is matched only when the parsed citation URL exactly matches a grounded evidence page URL after normalization
+- domain-only mentions and ambiguous references remain unresolved instead of being guessed onto a page
+- benchmark run detail now shows whether each citation matched a grounded source page or remained unresolved
+- methodology docs now state the new boundary explicitly: first exact-url provenance slice exists, but excerpt-level matching and exact-page citation scoring are still future work
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+Startup Error
+Error: Build failed with 1 error:
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-grounding.test.ts lib/server/benchmark-citations.test.ts lib/server/benchmark-runner.test.ts lib/server/benchmark-run-detail.test.ts lib/server/benchmark-admin-data.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  5 passed (5)
+     Tests  32 passed (32)
+  Start at  01:16:12
+  Duration  2.24s (transform 2.05s, setup 0ms, import 3.01s, tests 358ms, environment 2ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-032 is accepted as the first citation-to-grounding provenance slice. Grounded benchmark runs can now preserve exact source-page attribution when the model cites the same page URL as the grounded evidence, while staying honest that broader provenance inference and citation-quality scoring are still future work.
+
+---
+### BM-033 — grounded-provenance sequence freeze (2026-03-28)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** design doc updates + task-ledger sync
+
+#### Evidence
+
+Updated:
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- froze the next grounded-provenance implementation order after BM-032 so follow-up work remains staged rather than collapsing into a broad benchmark rewrite
+- made the sequence explicit: bounded page selection and metadata first, then richer provenance matching, then excerpt-level evidence checks, then exact-page citation-quality metrics, then comparison UI
+- recorded explicit non-goals: no guessed provenance on weak evidence, no customer-facing score claims from this sequence, and no replacement of the existing benchmark seams
+- left BM-034 and later tasks pending so the design decision does not overstate implementation progress
+```
+
+Verification:
+
+```text
+Docs-only design slice. No code-path changes or runtime verification required.
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-033 is accepted as the sequencing/design checkpoint for the next benchmark-methodology work. The benchmark backlog is now explicit about what should happen next and what should not happen yet.
+
+---
+### BM-034 — bounded ranked grounding candidate selector (2026-03-28)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-grounding.test.ts`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- replaced the earlier homepage/about/services-only grounding page picker with a bounded ranked same-origin candidate selector
+- the builder still fetches only a small number of pages, but now prefers stronger paths like about, services, and product/platform pages over lower-signal sections like blog, legal, or contact when stronger options exist
+- the selector remains heuristic and bounded; it does not claim site-wide crawling or semantic best-page selection
+- added tests proving the builder prefers stronger candidates and can fall back to other higher-signal pages when about/services links are absent
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+Startup Error
+Error: Build failed with 1 error:
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-grounding.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  1 passed (1)
+     Tests  13 passed (13)
+  Start at  02:00:04
+  Duration  1.22s (transform 396ms, setup 0ms, import 519ms, tests 54ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-034 is accepted as the first grounding-page selection improvement slice. The builder now chooses a stronger bounded page set without widening into a broad crawl or changing the benchmark’s current architecture.
+
+---
+### BM-035 — richer grounding-page metadata in evidence snapshots (2026-03-28)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-grounding.test.ts`
+- `lib/server/benchmark-run-detail.ts`
+- `lib/server/benchmark-run-detail.test.ts`
+- `components/benchmark-run-detail-view.tsx`
+- `lib/server/benchmark-citations.test.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- grounded evidence items now preserve richer page metadata: `page_title`, `fetch_status`, `fetch_order`, and `selection_reason`
+- site-builder evidence now records homepage seed vs ranked path-selection reasons while keeping the current bounded grounding flow intact
+- grounding snapshots serialize this metadata into run-group metadata and the run-detail helper parses it back safely
+- benchmark run detail now exposes the extra metadata in the existing grounding evidence cards without changing the route shape or introducing a new benchmark surface
+- this remains internal inspection metadata only and does not add a customer-facing score or new schema table
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+Startup Error
+Error: Build failed with 1 error:
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-grounding.test.ts lib/server/benchmark-run-detail.test.ts lib/server/benchmark-citations.test.ts lib/server/benchmark-execution.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  4 passed (4)
+     Tests  36 passed (36)
+  Start at  02:13:16
+  Duration  3.18s (transform 1.19s, setup 0ms, import 1.54s, tests 2.16s, environment 3ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-035 is accepted as the metadata-enrichment slice for grounded evidence. Later provenance work now has better inspectable inputs without widening the benchmark architecture or changing the current admin-flow shape.
+
+---
+### BM-036 — normalized page-equivalence provenance matcher (2026-03-28)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-citations.ts`
+- `lib/server/benchmark-citations.test.ts`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- added a second conservative citation-to-grounding matcher beyond exact URL string equality
+- page URLs can now match by normalized page equivalence when weak URL-shape differences are the only difference: `www`, trailing slash, fragment, default port, and tracking params are ignored
+- the matcher still refuses to guess across different paths, different pages on the same domain, or domain-only mentions
+- matched provenance now records either `exact_url` or `normalized_page`, keeping the benchmark methodology explicit rather than collapsing all matches into one bucket
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+Startup Error
+Error: Build failed with 1 error:
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-citations.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  2 passed (2)
+     Tests  15 passed (15)
+  Start at  02:26:38
+  Duration  2.70s (transform 1.29s, setup 0ms, import 1.70s, tests 245ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-036 is accepted as the second conservative provenance matcher. The benchmark can now preserve more real page-equivalent citations without widening into semantic or guessed provenance.
+
+---
+### BM-037 — internal claim-to-evidence overlap metadata (2026-03-28)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-citations.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-citations.test.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- matched grounded citations now carry a lightweight claim-to-evidence overlap signal in metadata
+- the runner selects a best claim sentence from the response, compares token overlap against the matched evidence excerpt, and stores a conservative status such as `supported_overlap`, `weak_overlap`, `no_overlap`, or `unavailable`
+- this layer is metadata only: it does not create a new benchmark score, does not claim semantic fact checking, and does not widen the schema
+- sentence selection now prefers substantive claim sentences over boilerplate `Source:` lines so the overlap signal is more useful for internal inspection
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+Startup Error
+Error: Build failed with 1 error:
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-citations.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  2 passed (2)
+     Tests  17 passed (17)
+  Start at  02:40:32
+  Duration  1.57s (transform 733ms, setup 0ms, import 1.15s, tests 188ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-037 is accepted as the first claim-to-evidence metadata slice. Grounded benchmark runs now preserve a conservative overlap signal for internal inspection without overstating it as a benchmark score or semantic verifier.
+
+---
+### BM-038 — first exact-page citation-quality metric slice (2026-03-28)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-metrics.ts`
+- `lib/server/benchmark-metrics.test.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `components/benchmark-run-detail-view.tsx`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- added the first exact-page citation-quality metric as an internal benchmark signal: `exact_page_quality_rate`
+- the metric counts completed runs where the measured-domain citation both matches a grounded page and has a `supported_overlap` claim/evidence signal
+- this metric is explicitly separate from citation presence and share-of-voice
+- the runner now stores the quality rate and supporting matched/supported run counts in run metadata so the existing run-detail view can inspect them without widening the benchmark UI surface
+- this remains an internal benchmark-quality metric only, not a customer-facing score
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+Startup Error
+Error: Build failed with 1 error:
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-metrics.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  2 passed (2)
+     Tests  8 passed (8)
+  Start at  02:48:14
+  Duration  1.45s (transform 710ms, setup 0ms, import 1.00s, tests 160ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-038 is accepted as the first exact-page citation-quality metric slice. The benchmark now has a narrow internal quality metric that is clearly separated from citation presence and share-of-voice.
+
+---
