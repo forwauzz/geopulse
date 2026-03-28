@@ -3246,6 +3246,550 @@ _No rejections yet._
 
 ---
 
+### BM-030 — structured grounding provenance snapshot + benchmark run detail inspection (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-grounding.test.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `app/dashboard/benchmarks/[runGroupId]/page.tsx`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- grounded evidence now normalizes both legacy blobs (`sourceLabel` + `text`) and structured provenance records (`page_url`, `page_type`, `excerpt`, optional label) into one internal shape
+- grounded prompts now include page provenance in the evidence line when it exists, while staying backward compatible with older evidence records
+- benchmark run groups now persist a safe `grounding_evidence` snapshot plus `grounding_evidence_count` in metadata
+- benchmark run detail now shows the grounding evidence used for the run, including page URL, page type, label, and excerpt when available
+- this is the first inspectable provenance slice only; it does not build site evidence automatically and does not score exact-page citation quality yet
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-grounding.test.ts lib/server/benchmark-runner.test.ts lib/server/benchmark-execution.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  3 passed (3)
+     Tests  25 passed (25)
+  Start at  16:42:15
+  Duration  2.54s (transform 322ms, setup 0ms, import 530ms, tests 2.07s, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-030 is accepted as the first structured provenance implementation slice. Grounded runs are now inspectable at the source-page evidence level without changing the benchmark truth that live grounding-context building and exact-page citation scoring are still future work.
+
+---
+
+### BM-031 — first minimal site-derived grounding-context builder (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-grounding.test.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `app/dashboard/benchmarks/[runGroupId]/page.tsx`
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- grounded runs now prefer manual `grounding_context.evidence` when present, but can fall back to a first minimal site-derived grounding builder when manual evidence is absent
+- the builder uses the existing validated fetch path (`workers/lib/fetch-gate.ts`) rather than introducing a separate benchmark-only fetch path
+- it fetches the homepage first, then discovers likely about/services pages from homepage links and derives bounded excerpts from those pages when available
+- grounded run metadata now records whether grounding came from `metadata`, `site_builder`, or `none`, plus any grounding builder error string
+- benchmark run detail now surfaces the grounding source and grounding error alongside the evidence snapshot
+- this is intentionally narrow: it does not claim full crawl coverage, ranked page selection, or exact-page citation-quality scoring
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npx.cmd vitest run lib/server/benchmark-grounding.test.ts lib/server/benchmark-runner.test.ts lib/server/benchmark-execution.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  3 passed (3)
+     Tests  29 passed (29)
+  Start at  16:56:44
+  Duration  3.24s (transform 948ms, setup 0ms, import 1.40s, tests 2.25s, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** BM-031 is accepted as the first live grounding-context builder slice. The benchmark can now derive bounded grounded evidence from the site itself when manual evidence is missing, while remaining honest that richer page selection and citation-quality scoring are still future work.
+
+---
+
+### AH-001 / AH-002 / AH-003 / AH-004 — architecture hardening backlog, persistent structured logs, admin logs page, and Playwright readiness (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** docs + migration + code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `supabase/migrations/013_app_logs.sql`
+- `lib/server/admin-logs-data.ts`
+- `lib/server/admin-logs-data.test.ts`
+- `lib/server/structured-log.test.ts`
+- `app/dashboard/logs/page.tsx`
+
+Updated:
+- `lib/server/structured-log.ts`
+- `workers/cloudflare-entry.ts`
+- `app/dashboard/page.tsx`
+- `agents/ORCHESTRATOR.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- added an explicit architecture hardening backlog covering lean-code discipline, observability, thin-route cleanup, large-module decomposition, admin-auth maturity, and Playwright readiness
+- added `app_logs` as a service-role-only internal log table for structured application logs
+- `structuredLog` now keeps console output and also persists logs best-effort to `app_logs`
+- structured log payloads are sanitized before persistence:
+  - sensitive keys are redacted
+  - long strings are truncated
+  - log persistence failures never break the caller
+- added `/dashboard/logs` as an admin-only page for recent structured logs
+- added a dashboard link to the new logs page
+- Cloudflare scheduled-task failures now use the shared structured logging path instead of raw `console.error(JSON.stringify(...))`
+- Playwright readiness is now explicitly tracked in the backlog with first candidate flows and selector/testability rules
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/structured-log.test.ts lib/server/admin-logs-data.test.ts lib/server/benchmark-grounding.test.ts lib/server/benchmark-runner.test.ts lib/server/benchmark-execution.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  5 passed (5)
+     Tests  31 passed (31)
+  Start at  19:57:52
+  Duration  3.47s (transform 1.75s, setup 0ms, import 2.83s, tests 2.29s, environment 2ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-001 through AH-004 are accepted as the first architecture-hardening bundle. This work improves internal observability and future test readiness while keeping launch truth unchanged: Phase 4 is still blocked on `P4-003`, `P4-004`, and `P4-006`.
+
+---
+
+### AH-005 — first thin-route cleanup slice via shared admin runtime helper (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+- `lib/server/admin-runtime.ts`
+
+Updated:
+- `app/dashboard/attribution/page.tsx`
+- `app/dashboard/benchmarks/page.tsx`
+- `app/dashboard/benchmarks/[runGroupId]/page.tsx`
+- `app/dashboard/benchmarks/domains/[domainId]/page.tsx`
+- `app/dashboard/evals/page.tsx`
+- `app/dashboard/evals/retrieval/[id]/page.tsx`
+- `app/dashboard/logs/page.tsx`
+- `app/dashboard/benchmarks/actions.ts`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- extracted a small shared admin runtime helper for repeated admin page and admin server-action setup
+- the helper now owns:
+  - admin session lookup
+  - admin authorization check
+  - env loading
+  - service-role client creation
+- updated the main admin pages and benchmark server actions to use that helper instead of repeating the same setup sequence inline
+- this is a narrow cleanup only; it does not introduce a broad app-wide request-context abstraction
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/structured-log.test.ts lib/server/admin-logs-data.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  3 passed (3)
+     Tests  7 passed (7)
+  Start at  20:16:24
+  Duration  764ms (transform 463ms, setup 0ms, import 756ms, tests 79ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-005 is accepted as the first thin-route cleanup slice. The admin surfaces now share a narrower setup seam while keeping the codebase honest about future cleanup still needed in larger modules and non-admin routes.
+
+---
+
+### AH-006 — first large-module decomposition slice for benchmark run detail (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+- `components/benchmark-run-detail-view.tsx`
+- `lib/server/benchmark-run-detail.test.ts`
+
+Updated:
+- `app/dashboard/benchmarks/[runGroupId]/page.tsx`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- reduced the benchmark run-detail route to a thin page shell that only:
+  - loads admin context
+  - fetches the run-group detail
+  - renders the shared detail view
+- moved the heavy benchmark run-detail rendering into a dedicated component module
+- reused the existing `lib/server/benchmark-run-detail.ts` helper seam for:
+  - timestamp formatting
+  - percent/count formatting
+  - response-body extraction
+  - grounding-evidence parsing
+- added targeted tests for the extracted run-detail helpers so this decomposition is behavior-verified rather than cosmetic
+- preserved the current benchmark detail behavior and UI surface; no benchmark methodology or metric semantics changed
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-run-detail.test.ts lib/server/benchmark-runner.test.ts lib/server/structured-log.test.ts lib/server/admin-logs-data.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  4 passed (4)
+     Tests  10 passed (10)
+  Start at  20:30:55
+  Duration  2.32s (transform 1.78s, setup 0ms, import 2.58s, tests 223ms, environment 3ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-006 is accepted as the first large-module decomposition slice. The benchmark run-detail route is now easier to debug and maintain without turning this into a broad benchmark UI rewrite.
+
+---
+
+### AH-008 — first open-source Playwright browser smoke-test foundation (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** dependency + config/spec changes + type check + local Playwright run
+
+#### Evidence
+
+Added:
+- `playwright.config.ts`
+- `tests/e2e/smoke.spec.ts`
+
+Updated:
+- `package.json`
+- `.gitignore`
+- `.github/workflows/ci.yml`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- installed the open-source Playwright runner via `@playwright/test`
+- added repo-local Playwright scripts:
+  - `npm run test:e2e`
+  - `npm run test:e2e:headed`
+- added a repo-local Playwright config that starts the Next dev server with placeholder env for browser smoke tests
+- added the first Chromium smoke coverage for:
+  - landing page render + scan entry points
+  - scan form submit blocked when Turnstile verification is missing
+  - scan form happy path with mocked scan APIs through submit, redirect, and results render
+  - results-page checkout return messaging before payment confirmation
+  - customer login page render
+  - admin login page render
+  - unauthenticated benchmark page redirect to login with preserved `next` path
+  - authenticated admin dashboard render after E2E session setup
+  - authenticated benchmark overview render after E2E admin-data setup
+- added a non-production-only E2E Turnstile bypass env so browser tests can exercise the scan submit path without weakening production behavior
+- added a non-production-only E2E auth-session seam so browser tests can exercise the first authenticated admin case without changing production auth behavior
+- added a non-production-only E2E admin-data seam for benchmark tables so browser tests can exercise the first authenticated benchmark admin page without changing production service-role behavior
+- added Playwright output ignores for `playwright-report/` and `test-results/`
+- wired the smoke suite into GitHub Actions CI
+- this uses open-source Playwright only; no paid Playwright-hosted product is part of the setup
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Playwright attempt:
+
+```text
+> geo-pulse@0.1.0 test:e2e
+> playwright test
+
+Error: spawn EPERM
+```
+
+Escalated local Playwright run after browser install:
+
+`npm.cmd run test:e2e`
+
+```text
+> geo-pulse@0.1.0 test:e2e
+> playwright test
+
+Running 9 tests using 4 workers
+
+  ✓  home page renders the core scan entry points
+  ✓  scan form blocks submit until verification is complete
+  ✓  scan form submits and renders results with mocked scan APIs
+  ✓  results page shows checkout return messaging before payment confirmation
+  ✓  customer login page renders the magic-link flow
+  ✓  admin login page renders the operator password flow
+  ✓  unauthenticated benchmark page redirects to login with next path
+  ✓  authenticated admin session renders dashboard admin actions
+  ✓  authenticated admin session renders benchmark overview
+
+  9 passed (1.5m)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-008 is accepted as the first real browser-level regression slice. GEO-Pulse now has an open-source Playwright safety net for public entry flows, while launch truth remains unchanged and broader E2E coverage stays as follow-on work.
+
+---
+
+### AH-009 — second large-module decomposition slice for report viewer (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest + Playwright
+
+#### Evidence
+
+Added:
+- `lib/client/report-viewer.ts`
+- `lib/client/report-viewer.test.ts`
+- `components/report-viewer-sections.tsx`
+
+Updated:
+- `components/report-viewer.tsx`
+- `tests/e2e/smoke.spec.ts`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- reduced `components/report-viewer.tsx` to a state/fetch shell
+- moved pure report-viewer helper logic into `lib/client/report-viewer.ts`
+  - markdown toc extraction
+  - markdown section splitting
+  - score clamping
+  - category severity/tone helpers
+  - issue severity helpers
+  - score narrative helper
+- moved heavy report-viewer render sections into `components/report-viewer-sections.tsx`
+  - toc sidebar
+  - report summary
+  - section chips
+  - collapsible report sections
+- added targeted helper tests for the extracted report-viewer logic
+- added a Playwright browser proof for the report page using mocked scan + markdown content
+- preserved the existing report-viewer UX surface while making the module easier to debug and maintain
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/client/report-viewer.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  1 passed (1)
+     Tests  4 passed (4)
+```
+
+Initial sandbox Playwright attempt:
+
+```text
+> geo-pulse@0.1.0 test:e2e
+> playwright test
+
+Error: spawn EPERM
+```
+
+Escalated Playwright:
+
+`npm.cmd run test:e2e`
+
+```text
+> geo-pulse@0.1.0 test:e2e
+> playwright test
+
+Running 10 tests using 4 workers
+
+  10 passed (1.5m)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-009 is accepted as the second large-module decomposition slice. The report viewer now has cleaner boundaries, helper-level tests, and a browser proof on the report route while launch truth remains unchanged.
+
+---
+
 ### Benchmark milestone — first live benchmark verified on a real domain (2026-03-27)
 **Agent:** Founder + Codex / verification record  
 **Claimed complete:** 2026-03-27  
@@ -3385,3 +3929,600 @@ Tests       14 passed
 **Date:** 2026-03-27  
 **Decision:** ✅ ACCEPTED  
 **Notes:** BM-024 is accepted. The benchmark execution path is now materially more reliable under temporary provider overload without widening the benchmark scope.
+
+---
+
+### BM-026 â€” first grounded benchmark foundation slice (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest + sandbox note
+
+#### Evidence
+
+Added:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-grounding.test.ts`
+
+Updated:
+- `lib/server/benchmark-runner-contract.ts`
+- `lib/server/benchmark-runner-contract.test.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-runner.test.ts`
+- `lib/server/benchmark-execution.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `app/dashboard/benchmarks/actions.ts`
+- `components/benchmark-trigger-form.tsx`
+- `scripts/benchmark-runner.ts`
+- `app/dashboard/benchmarks/[runGroupId]/page.tsx`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- benchmark runs now carry an explicit `runMode` contract:
+  - `ungrounded_inference`
+  - `grounded_site`
+- all existing entry points default safely to `ungrounded_inference`
+- benchmark-domain metadata can now supply `grounding_context.evidence` for grounded runs
+- the execution adapter now builds mode-aware prompts instead of one hardcoded prompt shape
+- grounded runs fail truthfully with `benchmark_grounded_context_missing` when evidence is absent
+- the current live ungrounded benchmark flow remains the default path and was not replaced
+- admin trigger UI, CLI runner, run-group metadata, and detail view now surface run mode
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  25 passed (25)
+   Start at  14:38:17
+   Duration  2.89s (transform 621ms, setup 0ms, import 1.31s, tests 2.14s, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-026 is accepted as the smallest safe grounded-mode implementation slice. The repo now has an explicit grounded benchmark seam without changing the default ungrounded live benchmark behavior or implying grounded methodology is fully mature.
+
+---
+
+### BM-027 â€” grounded citation recovery prompt + alias citation coverage (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-grounding.test.ts`
+- `lib/server/benchmark-citations.test.ts`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- grounded-site prompts now instruct the model to mention the exact target domain at least once when the evidence supports the target company
+- this is intended to preserve the grounded business interpretation improvement while giving the conservative citation extractor an explicit domain mention to recover
+- alias-based citation parsing remains supported and now has an explicit test covering configured aliases with spaces
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npx.cmd vitest run lib/server/benchmark-grounding.test.ts lib/server/benchmark-citations.test.ts lib/server/benchmark-execution.test.ts`
+
+```text
+ RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  3 passed (3)
+      Tests  23 passed (23)
+   Start at  15:22:29
+   Duration  2.94s (transform 523ms, setup 0ms, import 763ms, tests 2.13s, environment 4ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-027 is accepted as a narrow grounded-mode follow-up. This should improve citation recovery for grounded runs without widening the benchmark surface or changing the ungrounded default path.
+
+---
+
+### BM-028 â€” page-level grounding provenance design note (2026-03-27)
+**Agent:** Codex / design assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** playbook update + roadmap/state sync
+
+#### Evidence
+
+Updated:
+- `PLAYBOOK/benchmark-grounding-v2.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What is now explicit:
+
+```text
+- the current grounded route is useful but does not yet prove exact-page sourcing
+- the next grounded-methodology step is structured page-level provenance, not a vague future aspiration
+- future grounded evidence should carry:
+  - `page_url`
+  - `page_type`
+  - `excerpt`
+  - optional `evidence_label`
+- future benchmark analysis should separate:
+  1. domain attribution
+  2. page provenance
+  3. page citation quality
+```
+
+Why this matters:
+
+```text
+Founder review surfaced an important product-truth distinction:
+- “the model answered from site evidence”
+is not the same as
+- “the model cited the exact page that supported the answer”
+
+The roadmap now records that distinction explicitly so future implementation and handoff decisions do not blur it.
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-028 is accepted as a design/roadmap clarification. This keeps benchmark methodology truth aligned across playbooks and the project ledger before the next implementation slice begins.
+
+---
+
+### BM-029 â€” grounded-site production prompt adopted from cross-model prompt research (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Updated:
+- `lib/server/benchmark-grounding.ts`
+- `lib/server/benchmark-grounding.test.ts`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- replaced the previous grounded prompt with the synthesized production prompt based on Claude + Perplexity + Gemini review
+- grounded prompt now explicitly says:
+  - do not use outside knowledge
+  - say so explicitly rather than inferring
+  - paraphrase instead of copying long phrases
+  - avoid marketing adjectives unless clearly supported
+  - mention the target domain naturally at least once
+- output instruction is now tighter and cleaner:
+  - 3 to 5 sentences
+  - plain text
+  - brief ambiguity/incompleteness flag when needed
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+`npx.cmd vitest run lib/server/benchmark-grounding.test.ts lib/server/benchmark-execution.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  2 passed (2)
+     Tests  18 passed (18)
+  Start at  16:23:20
+  Duration  2.92s (transform 230ms, setup 0ms, import 446ms, tests 2.08s, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** âœ… ACCEPTED  
+**Notes:** BM-029 is accepted. The repo now uses the researched grounded-site prompt as the production benchmark prompt for the next live comparison run.
+---
+
+### AH-010 — third large-module decomposition slice for benchmark overview + Playwright smoke-lane stabilization (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest + Playwright
+
+#### Evidence
+
+Added:
+- `components/benchmark-overview-view.tsx`
+- `lib/server/benchmark-overview.ts`
+- `lib/server/benchmark-overview.test.ts`
+
+Updated:
+- `app/dashboard/benchmarks/page.tsx`
+- `playwright.config.ts`
+- `tests/e2e/smoke.spec.ts`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- reduced `app/dashboard/benchmarks/page.tsx` to a thin admin/data-loading shell
+- moved benchmark overview rendering into `components/benchmark-overview-view.tsx`
+- moved pure overview formatting and href helpers into `lib/server/benchmark-overview.ts`
+- preserved the existing benchmark overview behavior and reused the existing authenticated benchmark overview Playwright case as the browser proof for this route
+- hardened the Playwright smoke suite so it verifies behavior instead of brittle copy where appropriate:
+  - scan-form blocked submit now proves `/api/scan` is not called without verification
+  - checkout-return and report-page assertions now wait on stable UI states
+- serialized the Playwright lane (`workers: 1`, `fullyParallel: false`) because that is the stable dev-server setting for the current repo and is preferable to a flaky parallel smoke lane
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-overview.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  1 passed (1)
+     Tests  2 passed (2)
+  Start at  22:52:20
+  Duration  552ms (transform 96ms, setup 0ms, import 140ms, tests 13ms, environment 0ms)
+```
+
+Initial sandbox Playwright attempt:
+
+```text
+> geo-pulse@0.1.0 test:e2e
+> playwright test
+
+Error: spawn EPERM
+```
+
+Escalated stabilized Playwright run:
+
+`npm.cmd run test:e2e`
+
+```text
+> geo-pulse@0.1.0 test:e2e
+> playwright test
+
+Running 10 tests using 1 worker
+
+  ✓  home page renders the core scan entry points
+  ✓  scan form blocks submit until verification is complete
+  ✓  scan form submits and renders results with mocked scan APIs
+  ✓  results page shows checkout return messaging before payment confirmation
+  ✓  report page renders interactive summary from mocked report content
+  ✓  customer login page renders the magic-link flow
+  ✓  admin login page renders the operator password flow
+  ✓  unauthenticated benchmark page redirects to login with next path
+  ✓  authenticated admin session renders dashboard admin actions
+  ✓  authenticated admin session renders benchmark overview
+
+  10 passed (2.1m)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-010 is accepted. The benchmark overview route now has cleaner boundaries without changing behavior, and the Playwright lane is intentionally serialized because that is the stable, maintainable smoke-test setting for the current dev-server path.
+
+---
+
+### AH-011 — fourth large-module decomposition slice for deep-audit report helpers (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+- `workers/report/deep-audit-report-helpers.ts`
+- `workers/report/deep-audit-report-helpers.test.ts`
+
+Updated:
+- `workers/report/build-deep-audit-pdf.ts`
+- `workers/report/build-deep-audit-markdown.ts`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- extracted shared deep-audit report preparation helpers into `workers/report/deep-audit-report-helpers.ts`
+  - issue-row parsing
+  - severity labeling
+  - status labeling
+  - coverage-payload parsing
+  - executive-summary narrative generation
+- updated the PDF builder to reuse the shared parsing/narrative helpers instead of owning all preparation logic itself
+- updated the markdown exporter to reuse the shared executive-summary narrative helper and shared issue type instead of coupling that shape to the PDF module
+- kept rendering behavior unchanged; this slice only reduced duplicated worker-side preparation logic
+- because no customer/admin route behavior changed, no additional Playwright or manual UI route check was required for this slice
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run workers/report/build-deep-audit-pdf.test.ts workers/report/deep-audit-report-helpers.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  2 passed (2)
+     Tests  4 passed (4)
+  Start at  23:33:45
+  Duration  1.76s (transform 297ms, setup 0ms, import 1.17s, tests 194ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-011 is accepted. This keeps the deep-audit report generation path leaner without touching customer routes, so no additional UI testing is needed from the founder for this slice.
+
+---
+
+### AH-012 — fifth large-module decomposition slice for deep-audit crawl state helpers (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+- `workers/scan-engine/deep-audit-crawl-state.ts`
+- `workers/scan-engine/deep-audit-crawl-state.test.ts`
+
+Updated:
+- `workers/scan-engine/deep-audit-crawl.ts`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- extracted pure crawl-pending state logic out of `workers/scan-engine/deep-audit-crawl.ts` into `workers/scan-engine/deep-audit-crawl-state.ts`
+  - pending-state parsing
+  - browser-render stat merging
+  - config merging
+  - continuation-window planning
+- updated `deep-audit-crawl.ts` to reuse the shared state helpers while keeping fetch, audit, and persistence behavior in place
+- added targeted state-helper tests for legacy pending-state parsing, continuation planning, and browser-render stat accumulation
+- kept this slice worker-only; no customer/admin route behavior changed, so no new Playwright or manual UI route verification was required
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run workers/scan-engine/deep-audit-crawl.test.ts workers/scan-engine/deep-audit-crawl-state.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  2 passed (2)
+     Tests  10 passed (10)
+  Start at  23:45:19
+  Duration  1.63s (transform 528ms, setup 0ms, import 839ms, tests 53ms, environment 1ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-012 is accepted. The crawl engine now has a cleaner pure-state seam without widening risk into fetch or UI behavior, so no founder-side route test is needed for this slice.
+
+---
+
+### AH-013 — sixth large-module decomposition slice for resend-delivery helpers (2026-03-27)
+**Agent:** Codex / implementation assistant  
+**Claimed complete:** 2026-03-27  
+**Evidence type:** code changes + type check + targeted Vitest
+
+#### Evidence
+
+Added:
+- `workers/report/resend-delivery-helpers.ts`
+- `workers/report/resend-delivery-helpers.test.ts`
+
+Updated:
+- `workers/report/resend-delivery.ts`
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+Behavior implemented:
+
+```text
+- extracted pure resend-delivery composition helpers into `workers/report/resend-delivery-helpers.ts`
+  - HTML escaping
+  - base64 encoding
+  - severity/grade color helpers
+  - delivery CTA selection
+- updated `workers/report/resend-delivery.ts` to reuse the shared helpers while keeping the actual Resend request path in place
+- re-exported the shared download-link and email-issue types from `resend-delivery.ts` so existing callers like the queue consumer did not need broader churn
+- kept this slice worker-only; no customer/admin route behavior changed, so no new Playwright or manual UI route verification was required
+```
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run workers/report/resend-delivery-helpers.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  1 passed (1)
+     Tests  3 passed (3)
+  Start at  23:55:02
+  Duration  915ms (transform 166ms, setup 0ms, import 224ms, tests 17ms, environment 0ms)
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-27  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-013 is accepted. The email-delivery path is leaner without touching route behavior, so no founder-side UI testing is needed for this slice.
+
+---
+
+### AH-007 — admin auth maturity plan (2026-03-28)
+**Agent:** Codex / design assistant  
+**Claimed complete:** 2026-03-28  
+**Evidence type:** code-path review + backlog/state sync
+
+#### Evidence
+
+Reviewed current admin auth implementation:
+
+- `lib/server/require-admin.ts`
+- `app/admin/login/actions.ts`
+
+Current repo truth confirmed:
+
+```text
+- admin authorization currently depends on exact email match against `ADMIN_EMAIL`
+- admin login currently uses Supabase password auth, then signs the user back out if the authenticated email does not match the admin identity
+- this is fail-closed and acceptable for the founder-led internal stage, but not the long-term admin model
+```
+
+Documented the next-stage maturity plan in:
+
+- `PLAYBOOK/architecture-hardening-backlog.md`
+- `agents/memory/PROJECT_STATE.md`
+
+The documented future path now explicitly says:
+
+```text
+- move from env-only admin authorization to a table-driven allowlist such as `admin_users`
+- keep provisioning operator-controlled; do not add self-service admin grants
+- support only a small explicit role set when needed
+- preserve generic auth errors and fail-closed behavior
+- log admin access denials and admin membership changes through the shared structured log path
+- defer full RBAC, customer-facing admin management UI, and multi-tenant org role complexity
+```
+
+Runtime scope for AH-007:
+
+```text
+- no auth code path changed
+- no UI route changed
+- no new test run was required because this was a documentation/design completion slice only
+```
+
+#### Orchestrator Decision
+**Date:** 2026-03-28  
+**Decision:** ✅ ACCEPTED  
+**Notes:** AH-007 is accepted as a design completion. The current founder-stage admin model remains truthful in code, and the next-step auth maturity path is now documented clearly enough for future handoff without implying a runtime auth upgrade has already shipped.

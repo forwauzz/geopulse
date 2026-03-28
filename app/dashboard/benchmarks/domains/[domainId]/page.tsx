@@ -1,10 +1,6 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getScanApiEnv } from '@/lib/server/cf-env';
+import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createBenchmarkAdminData } from '@/lib/server/benchmark-admin-data';
-import { requireAdminOrRedirect } from '@/lib/server/require-admin';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,31 +67,16 @@ function TrendSvg(values: number[], ariaLabel: string) {
 
 export default async function BenchmarkDomainHistoryPage({ params }: Props) {
   const { domainId } = await params;
-  const supabaseSession = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabaseSession.auth.getUser();
-
-  if (!user) {
-    redirect(`/login?next=/dashboard/benchmarks/domains/${domainId}`);
-  }
-
-  requireAdminOrRedirect(user.email);
-
-  const env = await getScanApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+  const adminContext = await loadAdminPageContext(`/dashboard/benchmarks/domains/${domainId}`);
+  if (!adminContext.ok) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-16">
-        <p className="text-error">Server misconfigured: missing Supabase service role.</p>
+        <p className="text-error">{adminContext.message}</p>
       </main>
     );
   }
 
-  const adminDb = createServiceRoleClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
-  );
-  const benchmarkData = createBenchmarkAdminData(adminDb);
+  const benchmarkData = createBenchmarkAdminData(adminContext.adminDb);
 
   let runGroups;
   let history;

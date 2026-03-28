@@ -101,6 +101,22 @@ export function BenchmarkTriggerForm({
           />
         </label>
 
+        <label className="flex flex-col gap-2 text-sm text-on-background">
+          <span className="font-medium">Benchmark mode</span>
+          <select
+            name="runMode"
+            defaultValue="ungrounded_inference"
+            className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-sm text-on-background"
+          >
+            <option value="ungrounded_inference">Ungrounded inference</option>
+            <option value="grounded_site">Grounded site</option>
+          </select>
+          <span className="text-xs text-on-surface-variant">
+            Grounded site mode only runs when benchmark-domain metadata already includes grounding
+            evidence.
+          </span>
+        </label>
+
         <label className="md:col-span-2 flex flex-col gap-2 text-sm text-on-background">
           <span className="font-medium">Notes</span>
           <textarea

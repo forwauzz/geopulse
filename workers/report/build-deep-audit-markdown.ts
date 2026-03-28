@@ -1,5 +1,8 @@
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
-import type { IssueRow } from './build-deep-audit-pdf';
+import {
+  scoreNarrative,
+  type IssueRow,
+} from './deep-audit-report-helpers';
 
 const CATEGORY_LABELS: Record<string, string> = {
   ai_readiness: 'AI Readiness',
@@ -60,9 +63,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   const topIssueName = failedSorted[0]?.check ?? failedSorted[0]?.checkId ?? '';
   const score = payload.aggregateScore ?? 0;
   const grade = payload.aggregateLetterGrade ?? '—';
-  lines.push(
-    `Your site scored ${String(score)}/100 (${grade}). ${String(passedChecks)} of ${String(totalChecks)} checks passed. ${topIssueName ? `The most critical gap is: ${topIssueName}.` : 'No critical issues detected.'}`
-  );
+  lines.push(scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName));
   lines.push('');
 
   const cats = payload.categoryScores;

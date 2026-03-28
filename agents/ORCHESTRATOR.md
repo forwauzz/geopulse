@@ -115,6 +115,8 @@ If Phase 4 is blocked by an **external operator dependency** (for example domain
 
 If Phase 4 is blocked by an **external operator dependency**, the team may also continue **measurement-platform planning and internal foundation work** for the future benchmark layer, as long as it is explicitly tracked in `PROJECT_STATE.md`, documented in `PLAYBOOK/`, and does not replace launch-closure truth. The audit/report product remains the current wedge; the measurement layer is a staged internal platform, not a claim of launched capability.
 
+If Phase 4 is blocked by an **external operator dependency**, the team may also continue **architecture hardening and internal observability work** that keeps the codebase lean, debuggable, secure, and easier to test. This work must be explicitly tracked in `PROJECT_STATE.md`, documented in `PLAYBOOK/`, and must not be presented as launch closure. Prefer narrow improvements such as log visibility, simpler route boundaries, and test-readiness over broad framework churn.
+
 ### Phase 4 first — defer remaining Deep Audit until Launch gate (Orchestrator)
 
 **Effective:** 2026-03-25  

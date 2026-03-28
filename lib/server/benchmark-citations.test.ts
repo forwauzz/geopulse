@@ -64,4 +64,16 @@ describe('parseBenchmarkCitations', () => {
     expect(citations[0]?.citationType).toBe('brand_mention');
     expect(citations[0]?.citedDomain).toBe('geopulse.ai');
   });
+
+  it('maps configured brand aliases back to the measured domain', () => {
+    const citations = parseBenchmarkCitations(
+      'Geo Pulse helps teams measure AI visibility.',
+      domain
+    );
+
+    expect(citations).toHaveLength(1);
+    expect(citations[0]?.citationType).toBe('brand_mention');
+    expect(citations[0]?.citedDomain).toBe('geopulse.ai');
+    expect(citations[0]?.metadata).toMatchObject({ alias: 'Geo Pulse' });
+  });
 });

@@ -1,10 +1,6 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { getScanApiEnv } from '@/lib/server/cf-env';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createServiceRoleClient } from '@/lib/supabase/service-role';
-import { requireAdminOrRedirect } from '@/lib/server/require-admin';
+import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 
 export const dynamic = 'force-dynamic';
 
@@ -201,30 +197,16 @@ export default async function ReportEvalsAdminPage({ searchParams }: Props) {
   const selectedSite = sp.site ?? 'all';
   const selectedFramework = sp.framework ?? 'all';
 
-  const supabaseSession = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabaseSession.auth.getUser();
-
-  if (!user) {
-    redirect('/login?next=/dashboard/evals');
-  }
-
-  requireAdminOrRedirect(user.email);
-
-  const env = await getScanApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+  const adminContext = await loadAdminPageContext('/dashboard/evals');
+  if (!adminContext.ok) {
     return (
       <main className="mx-auto max-w-6xl px-6 py-16">
-        <p className="text-error">Server misconfigured: missing Supabase service role.</p>
+        <p className="text-error">{adminContext.message}</p>
       </main>
     );
   }
 
-  const adminDb = createServiceRoleClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const adminDb = adminContext.adminDb;
 
   const [{ data: reportRuns, error: reportError }, { data: retrievalRuns, error: retrievalError }] =
     await Promise.all([

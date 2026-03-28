@@ -25,6 +25,8 @@ const sampleContext = {
   modelId: 'gemini-2.0-flash',
   auditorModelId: null,
   runGroupId: 'run-group-1',
+  runMode: 'ungrounded_inference',
+  groundingContext: null,
 } as const;
 
 describe('resolveBenchmarkExecutionConfig', () => {
@@ -62,6 +64,7 @@ describe('StubBenchmarkExecutionAdapter', () => {
     expect(result.status).toBe('not_implemented');
     expect(result.errorMessage).toBe('benchmark_execution_adapter_not_implemented');
     expect(result.responseMetadata['query_key']).toBe('brand-overview');
+    expect(result.responseMetadata['run_mode']).toBe('ungrounded_inference');
   });
 });
 
@@ -123,6 +126,84 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
     expect(result.status).toBe('completed');
     expect(result.responseText).toContain('AI visibility measurement');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails clearly when grounded mode is requested without grounding context', async () => {
+    const fetchMock = vi.fn();
+    const adapter = new GeminiBenchmarkExecutionAdapter(
+      {
+        provider: 'gemini',
+        apiKey: 'benchmark-key',
+        model: 'gemini-2.0-flash',
+        endpoint: 'https://example.test/models',
+      },
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, {
+      ...sampleContext,
+      runMode: 'grounded_site',
+      groundingContext: null,
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.errorMessage).toBe('benchmark_grounded_context_missing');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('builds a grounded prompt when site evidence is available', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Example is a healthcare technology consulting firm.' }],
+            },
+          },
+        ],
+      }),
+    });
+
+    const adapter = new GeminiBenchmarkExecutionAdapter(
+      {
+        provider: 'gemini',
+        apiKey: 'benchmark-key',
+        model: 'gemini-2.0-flash',
+        endpoint: 'https://example.test/models',
+      },
+      fetchMock as unknown as typeof fetch
+    );
+
+    await adapter.executeQuery(sampleQuery, {
+      ...sampleContext,
+      runMode: 'grounded_site',
+      groundingContext: {
+        mode: 'grounded_site',
+        evidence: [
+          {
+            sourceLabel: 'homepage',
+            excerpt: 'Example is a healthcare technology consulting firm.',
+            pageUrl: null,
+            pageType: null,
+            evidenceLabel: null,
+          },
+        ],
+      },
+    });
+
+    const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as {
+      contents: Array<{ parts: Array<{ text: string }> }>;
+    };
+    expect(body.contents[0]?.parts[0]?.text).toContain(
+      'You are answering a question about a company using only the evidence excerpts below, drawn from example.com. Do not use outside knowledge.'
+    );
+    expect(body.contents[0]?.parts[0]?.text).toContain(
+      'Evidence 1 (homepage): Example is a healthcare technology consulting firm.'
+    );
+    expect(body.contents[0]?.parts[0]?.text).toContain(
+      'Answer in 3 to 5 sentences in plain text. Mention example.com naturally at least once when the evidence supports the target company. If the evidence is ambiguous or incomplete, flag that briefly.'
+    );
   });
 
   it('stores the response body when gemini returns an http error', async () => {

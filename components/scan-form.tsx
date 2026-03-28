@@ -2,7 +2,7 @@
 
 import { Turnstile } from '@marsidev/react-turnstile';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { scanLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
@@ -11,6 +11,20 @@ type ScanFormProps = {
   siteKey: string;
   defaultUrl?: string;
 };
+
+const E2E_BYPASS_TURNSTILE =
+  process.env['NEXT_PUBLIC_E2E_BYPASS_TURNSTILE'] === '1' &&
+  process.env.NODE_ENV !== 'production';
+
+function isTurnstileBypassEnabled(): boolean {
+  if (!E2E_BYPASS_TURNSTILE) return false;
+  if (typeof window === 'undefined') return true;
+
+  const maybeWindow = window as typeof window & {
+    __GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__?: boolean;
+  };
+  return maybeWindow.__GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__ !== true;
+}
 
 function messageFromScanError(data: unknown): string {
   if (!data || typeof data !== 'object' || !('error' in data)) return 'Scan failed';
@@ -28,10 +42,22 @@ function messageFromScanError(data: unknown): string {
 export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
   const router = useRouter();
   const [url, setUrl] = useState(defaultUrl ?? '');
-  const [token, setToken] = useState<string | null>(null);
+  const bypassTurnstile = isTurnstileBypassEnabled();
+  const [token, setToken] = useState<string | null>(
+    bypassTurnstile ? 'e2e-bypass-token' : null
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   useLongWaitEffect(loading, scanLoadingJourney);
+
+  useEffect(() => {
+    setToken((current) => {
+      if (bypassTurnstile) {
+        return current ?? 'e2e-bypass-token';
+      }
+      return current === 'e2e-bypass-token' ? null : current;
+    });
+  }, [bypassTurnstile]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,9 +125,11 @@ export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
           ) : 'Run diagnostic'}
         </button>
       </div>
-      <div className="min-h-[65px] flex justify-center">
-        <Turnstile siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(null)} />
-      </div>
+      {bypassTurnstile ? null : (
+        <div className="min-h-[65px] flex justify-center">
+          <Turnstile siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(null)} />
+        </div>
+      )}
       {error ? <p className="text-center text-sm text-error">{error}</p> : null}
     </form>
   );

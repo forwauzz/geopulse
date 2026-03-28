@@ -61,6 +61,30 @@ Purpose:
 
 This is the next methodology layer that should be built.
 
+Current repo truth:
+- grounded runs now support a first minimal grounding-context builder
+- if manual `grounding_context.evidence` is absent, the runner can fetch the homepage and likely about/services pages to derive a small curated evidence set
+- this is intentionally narrow and bounded; it is not a general crawl or retrieval system
+
+### Mode B2: grounded site interpretation with page provenance
+
+Prompt asks the model the same question from curated site evidence, but the evidence is no longer one loose text blob.
+
+Each evidence item should carry:
+- `page_url`
+- `page_type`
+  - `homepage`
+  - `about`
+  - `services`
+  - `other`
+- `excerpt`
+- optional `evidence_label`
+
+Purpose:
+- preserve the grounded-interpretation gain from Mode B
+- make it possible to inspect which exact page supported the answer
+- separate "the site helped" from "this exact page supported the claim"
+
 ### Mode C: citation/correctness check
 
 Prompt asks the model to answer normally, then measure:
@@ -99,6 +123,20 @@ Definition:
 
 This should remain manual or semi-manual before becoming a hard automated metric.
 
+### 4. page-level provenance
+
+Definition:
+- whether the answer can be traced back to one or more specific site pages used as evidence
+
+This is stronger than domain citation alone.
+
+### 5. page citation quality
+
+Definition:
+- whether the answer cites the exact page URL when appropriate, not just the root domain
+
+This should be treated as a later benchmark-quality signal, not an immediate customer-facing score.
+
 ## What should change in implementation later
 
 Not in `BM-024`.
@@ -110,6 +148,7 @@ Future implementation shape:
    - homepage text
    - about-page text if available
    - optional services text
+   - status: first minimal implementation now exists in repo; future work is breadth and quality, not reintroducing the seam
 
 2. add benchmark prompt modes
    - `ungrounded_inference`
@@ -119,9 +158,47 @@ Future implementation shape:
 
 4. compare the same domain/query set across the two modes
 
+5. evolve grounded evidence into structured page-level records
+   - `page_url`
+   - `page_type`
+   - `excerpt`
+   - optional `evidence_label`
+
+6. update grounded prompts so the model can cite the exact supporting page when the evidence clearly maps to a page
+
+7. inspect page-level provenance separately from domain-level citation presence
+
+Current implementation gap after the first builder slice:
+- the builder is heuristic and homepage-led
+- it fetches a very small bounded page set, not a site-wide crawl
+- it does not yet rank multiple candidate pages or prove best-page selection
+- it does not yet score whether the model cited the exact supporting page
+
 This allows GEO-Pulse to say internally:
 - “the brand is ambiguous in open inference”
 - “the site itself is or is not clarifying the business when grounded”
+- “the answer was or was not supported by a specific page on the site”
+
+## Provenance-first design note
+
+The current grounded route is useful but limited:
+- it measures whether the model answers better when given site evidence
+- it does not yet prove exact-page sourcing
+
+The next design step should therefore prefer:
+- structured evidence records over one freeform evidence blob
+- page provenance over domain-only attribution
+- inspectable source-page references over implicit grounding
+
+The benchmark should eventually support two related but distinct checks:
+
+1. domain attribution
+- did the answer explicitly mention the measured domain?
+
+2. page provenance
+- can the answer be tied back to the exact page or excerpt that supported it?
+
+Those should not be collapsed into one metric.
 
 ## What should not happen yet
 
@@ -143,6 +220,8 @@ The correct order is:
 
 3. implementation of grounded context builder
 
+4. implementation of structured page-level provenance over grounded evidence
+
 So this document is intentionally downstream of the next benchmark implementation step.
 
 ## Why this matters strategically
@@ -161,3 +240,4 @@ This note is complete when:
 - grounded vs ungrounded benchmark modes are separated
 - entity/business-type misclassification is recognized as a real benchmark signal
 - sequencing remains anchored to `BM-024` first
+- the future path to exact-page provenance is explicit so grounded evidence is not mistaken for full live-site retrieval

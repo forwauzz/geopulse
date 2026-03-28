@@ -1,6 +1,6 @@
 # Measurement Platform Roadmap
 
-Last updated: 2026-03-26
+Last updated: 2026-03-27
 
 ## Purpose
 
@@ -170,17 +170,32 @@ The current repo supports the wedge well:
 - first opt-in live benchmark execution lane for Gemini (`lib/server/benchmark-execution.ts`, `BENCHMARK_EXECUTION_*`)
 - benchmark-domain onboarding from the admin UI (`components/benchmark-domain-form.tsx`, `app/dashboard/benchmarks/actions.ts`)
 - benchmark query-set onboarding from the admin UI (`components/benchmark-query-set-form.tsx`, `app/dashboard/benchmarks/actions.ts`)
+- first grounded-mode benchmark seam (`lib/server/benchmark-grounding.ts`, `lib/server/benchmark-runner.ts`, `lib/server/benchmark-execution.ts`)
+- first structured grounding-provenance seam for grounded runs:
+  - backward-compatible evidence normalization (`lib/server/benchmark-grounding.ts`)
+  - run-time grounding snapshot persisted in run-group metadata (`lib/server/benchmark-runner.ts`)
+  - grounding evidence visible on benchmark run detail (`app/dashboard/benchmarks/[runGroupId]/page.tsx`)
+- first minimal grounding-context builder for grounded runs:
+  - homepage fetch via existing validated fetch gate
+  - likely about/services page discovery from homepage links
+  - bounded excerpt extraction into grounded benchmark evidence
 
 First live benchmark milestone achieved:
 - real customer domain run executed successfully on `gemini-2.5-flash-lite`
 - lightweight admin-authored query set executed end to end
 - 6 completed query runs, 4 extracted citations, non-zero query coverage / citation rate / share of voice
 - remaining reliability gap is temporary provider overload (`503 UNAVAILABLE`) and light retry/backoff handling, not missing benchmark scaffolding
-- next methodology gap is grounding quality: benchmark v1 should evolve toward explicit `ungrounded_inference` vs `grounded_site` modes, but only after `BM-024`
+- benchmark v1 now has an explicit `ungrounded_inference` vs `grounded_site` seam, but grounded evidence is still not exact-page provenance
+- next methodology gap is page-level grounding provenance: the benchmark should evolve from domain-level grounded evidence toward structured evidence with source-page URLs and excerpts before any stronger citation-correctness claims are made
+- the first provenance-inspection slice now exists, but evidence is still curated metadata rather than a live grounding-context builder
+- the first live grounding-context builder now exists, but it is intentionally small and heuristic rather than a full crawl or best-page selection system
 
 The current repo does not yet implement the benchmark platform:
 - no real multi-model query measurement pipeline
 - no persistent query → response → citation graph
+- no live grounding-context builder that derives exact-page provenance automatically yet
+- no broad or ranked grounding-context builder over multiple candidate pages yet
+- no exact-page citation-quality scoring for grounded benchmark evidence yet
 - no competitor benchmark corpus
 - no 1000-site benchmark operations
 

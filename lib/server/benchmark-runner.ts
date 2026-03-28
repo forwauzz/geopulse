@@ -1,3 +1,8 @@
+import {
+  DEFAULT_BENCHMARK_RUN_MODE,
+  resolveBenchmarkGroundingContextForRun,
+  serializeGroundingEvidenceSnapshot,
+} from './benchmark-grounding';
 import { parseBenchmarkCitations } from './benchmark-citations';
 import {
   createBenchmarkExecutionAdapter,
@@ -19,7 +24,7 @@ type BenchmarkRunnerResult = {
 };
 
 function buildDefaultRunLabel(input: BenchmarkRunnerInput): string {
-  return `benchmark-${input.modelId}-${new Date().toISOString()}`;
+  return `benchmark-${input.runMode ?? DEFAULT_BENCHMARK_RUN_MODE}-${input.modelId}-${new Date().toISOString()}`;
 }
 
 export async function runBenchmarkGroupSkeleton(
@@ -52,12 +57,17 @@ export async function runBenchmarkGroupSkeleton(
   const startedAt = new Date().toISOString();
   const runLabel = input.runLabel?.trim() || buildDefaultRunLabel(input);
   const executionMode = getBenchmarkExecutionAdapterMode(adapter);
+  const runMode = input.runMode ?? DEFAULT_BENCHMARK_RUN_MODE;
+  const groundingResolution = await resolveBenchmarkGroundingContextForRun(domain, runMode);
+  const groundingContext = groundingResolution.context;
+  const groundingEvidenceSnapshot = serializeGroundingEvidenceSnapshot(groundingContext);
 
   structuredLog('benchmark_run_group_started', {
     domain_id: input.domainId,
     query_set_id: input.querySetId,
     query_count: queries.length,
     model_id: input.modelId,
+    run_mode: runMode,
   });
 
   const runGroup = await repo.createRunGroup({
@@ -70,6 +80,12 @@ export async function runBenchmarkGroupSkeleton(
     startedAt,
     metadata: {
       execution_mode: executionMode,
+      run_mode: runMode,
+      grounding_context_available: groundingContext !== null,
+      grounding_context_source: groundingResolution.source,
+      grounding_context_error: groundingResolution.error,
+      grounding_evidence_count: groundingEvidenceSnapshot.length,
+      grounding_evidence: groundingEvidenceSnapshot,
       model_id: input.modelId,
       auditor_model_id: input.auditorModelId ?? null,
       domain_id: input.domainId,
@@ -83,6 +99,8 @@ export async function runBenchmarkGroupSkeleton(
     modelId: input.modelId,
     auditorModelId: input.auditorModelId ?? null,
     runGroupId: runGroup.id,
+    runMode,
+    groundingContext,
   };
 
   const executionResults = await Promise.all(
@@ -154,6 +172,7 @@ export async function runBenchmarkGroupSkeleton(
     inferenceProbability: null,
     metrics: {
       execution_mode: executionMode,
+      run_mode: runMode,
       total_queries: queries.length,
       ...computedMetrics.metrics,
     },
@@ -172,6 +191,12 @@ export async function runBenchmarkGroupSkeleton(
     metadata: {
       ...(runGroup.metadata ?? {}),
       execution_mode: executionMode,
+      run_mode: runMode,
+      grounding_context_available: groundingContext !== null,
+      grounding_context_source: groundingResolution.source,
+      grounding_context_error: groundingResolution.error,
+      grounding_evidence_count: groundingEvidenceSnapshot.length,
+      grounding_evidence: groundingEvidenceSnapshot,
       query_run_count: queryRuns.length,
       completed_query_count: completedQueryCount,
       failed_query_count: failedQueryCount,
@@ -187,6 +212,7 @@ export async function runBenchmarkGroupSkeleton(
     skipped_query_count: skippedQueryCount,
     citation_count: storedCitations.length,
     model_id: input.modelId,
+    run_mode: runMode,
   });
 
   return {
