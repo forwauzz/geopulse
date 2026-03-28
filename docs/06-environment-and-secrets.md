@@ -129,6 +129,12 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - `BENCHMARK_EXECUTION_MODEL` must match the model lane you enter in the admin trigger form
 - `BENCHMARK_EXECUTION_API_KEY` can be set explicitly, or the benchmark lane can fall back to `GEMINI_API_KEY`
 - if benchmark execution vars are unset, the admin benchmark runner safely falls back to the stub adapter
+- `BENCHMARK_SCHEDULE_ENABLED=true` only if you want the Worker cron to run recurring internal benchmark sweeps
+- `BENCHMARK_SCHEDULE_QUERY_SET_ID` must point at the active benchmark query set used for the recurring lane
+- `BENCHMARK_SCHEDULE_MODEL_ID` freezes the recurring model lane label so benchmark history stays comparable over time
+- `BENCHMARK_SCHEDULE_RUN_MODES` optionally narrows the recurring sweep to `ungrounded_inference`, `grounded_site`, or both
+- `BENCHMARK_SCHEDULE_DOMAIN_LIMIT` keeps the recurring sweep bounded while the benchmark lane is still in the small-cohort stage
+- `BENCHMARK_SCHEDULE_VERSION` gives the recurring lane an explicit operator version tag in run metadata
 - service role key
 - admin user email in auth/db
 - optional local write tooling:

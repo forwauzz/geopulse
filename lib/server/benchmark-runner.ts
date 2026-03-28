@@ -78,11 +78,12 @@ export async function runBenchmarkGroupSkeleton(
     querySetId: querySet.id,
     label: runLabel,
     modelSetVersion: input.modelId,
-    runScope: 'internal_benchmark',
+    runScope: input.runScope ?? 'internal_benchmark',
     notes: input.notes ?? null,
     status: 'running',
     startedAt,
     metadata: {
+      ...(input.runMetadata ?? {}),
       execution_mode: executionMode,
       run_mode: runMode,
       grounding_context_available: groundingContext !== null,
@@ -229,6 +230,7 @@ export async function runBenchmarkGroupSkeleton(
     notes: input.notes ?? null,
     metadata: {
       ...(runGroup.metadata ?? {}),
+      ...(input.runMetadata ?? {}),
       execution_mode: executionMode,
       run_mode: runMode,
       grounding_context_available: groundingContext !== null,
