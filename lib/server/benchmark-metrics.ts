@@ -4,6 +4,7 @@ export type BenchmarkMetricComputation = {
   readonly queryCoverage: number;
   readonly citationRate: number;
   readonly shareOfVoice: number;
+  readonly exactPageQualityRate: number;
   readonly metrics: {
     readonly scheduled_runs: number;
     readonly completed_runs: number;
@@ -16,8 +17,29 @@ export type BenchmarkMetricComputation = {
     readonly explicit_url_citation_count: number;
     readonly explicit_domain_citation_count: number;
     readonly brand_mention_citation_count: number;
+    readonly exact_page_matched_runs: number;
+    readonly exact_page_supported_runs: number;
+    readonly exact_page_quality_rate: number;
   };
 };
+
+function hasMatchedGroundedPage(metadata: Record<string, unknown>): boolean {
+  const provenance = metadata['grounding_provenance'];
+  return (
+    !!provenance &&
+    typeof provenance === 'object' &&
+    (provenance as Record<string, unknown>)['status'] === 'matched'
+  );
+}
+
+function hasSupportedGroundedClaim(metadata: Record<string, unknown>): boolean {
+  const claimMatch = metadata['grounding_claim_match'];
+  return (
+    !!claimMatch &&
+    typeof claimMatch === 'object' &&
+    (claimMatch as Record<string, unknown>)['status'] === 'supported_overlap'
+  );
+}
 
 export function computeBenchmarkMetrics(input: {
   readonly scheduledRuns: number;
@@ -48,6 +70,28 @@ export function computeBenchmarkMetrics(input: {
   const brandMentionCitationCount = input.citations.filter(
     (citation) => citation.citation_type === 'brand_mention'
   ).length;
+  const measuredCitations = input.citations.filter(
+    (citation) => citation.cited_domain === input.measuredCanonicalDomain
+  );
+  const exactPageMatchedRunIds = new Set(
+    measuredCitations
+      .filter(
+        (citation) =>
+          completedRunIds.has(citation.query_run_id) &&
+          hasMatchedGroundedPage(citation.metadata ?? {})
+      )
+      .map((citation) => citation.query_run_id)
+  );
+  const exactPageSupportedRunIds = new Set(
+    measuredCitations
+      .filter(
+        (citation) =>
+          completedRunIds.has(citation.query_run_id) &&
+          hasMatchedGroundedPage(citation.metadata ?? {}) &&
+          hasSupportedGroundedClaim(citation.metadata ?? {})
+      )
+      .map((citation) => citation.query_run_id)
+  );
 
   const queryCoverage =
     input.scheduledRuns > 0 ? completedRuns.length / input.scheduledRuns : 0;
@@ -57,11 +101,14 @@ export function computeBenchmarkMetrics(input: {
     poolCitationCount > 0 ? domainCitationCount / poolCitationCount : 0;
   const inclusionRate =
     completedRuns.length > 0 ? citedRunIds.size / completedRuns.length : 0;
+  const exactPageQualityRate =
+    completedRuns.length > 0 ? exactPageSupportedRunIds.size / completedRuns.length : 0;
 
   return {
     queryCoverage,
     citationRate,
     shareOfVoice,
+    exactPageQualityRate,
     metrics: {
       scheduled_runs: input.scheduledRuns,
       completed_runs: completedRuns.length,
@@ -74,6 +121,9 @@ export function computeBenchmarkMetrics(input: {
       explicit_url_citation_count: explicitUrlCitationCount,
       explicit_domain_citation_count: explicitDomainCitationCount,
       brand_mention_citation_count: brandMentionCitationCount,
+      exact_page_matched_runs: exactPageMatchedRunIds.size,
+      exact_page_supported_runs: exactPageSupportedRunIds.size,
+      exact_page_quality_rate: exactPageQualityRate,
     },
   };
 }

@@ -30,7 +30,7 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
             Benchmark run detail
           </h1>
           <p className="mt-2 font-body text-sm text-on-surface-variant">
-            {runGroup.display_name ?? runGroup.canonical_domain} · {runGroup.query_set_name} ·{' '}
+            {runGroup.display_name ?? runGroup.canonical_domain} | {runGroup.query_set_name} |{' '}
             {runGroup.model_set_version}
           </p>
           <p className="mt-1 font-body text-sm text-on-surface-variant">
@@ -71,7 +71,7 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
             value={
               typeof metricDetail['run_mode'] === 'string'
                 ? String(metricDetail['run_mode'])
-                : '—'
+                : '-'
             }
           />
           <MetadataItem
@@ -79,11 +79,19 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
             value={
               typeof metricDetail['grounding_context_source'] === 'string'
                 ? String(metricDetail['grounding_context_source'])
-                : '—'
+                : '-'
             }
           />
-          <MetadataItem label="Site URL" value={runGroup.site_url ?? '—'} />
-          <MetadataItem label="Notes" value={runGroup.notes ?? '—'} />
+          <MetadataItem
+            label="Exact-page quality"
+            value={formatBenchmarkPercent(
+              typeof metricDetail['exact_page_quality_rate'] === 'number'
+                ? metricDetail['exact_page_quality_rate']
+                : null
+            )}
+          />
+          <MetadataItem label="Site URL" value={runGroup.site_url ?? '-'} />
+          <MetadataItem label="Notes" value={runGroup.notes ?? '-'} />
           <MetadataItem
             label="Started at"
             value={formatBenchmarkRunTimestamp(runGroup.started_at)}
@@ -104,6 +112,14 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
             label="Failed queries"
             value={formatBenchmarkCount(metricDetail['failed_query_count'])}
           />
+          <MetadataItem
+            label="Exact-page matches"
+            value={formatBenchmarkCount(metricDetail['exact_page_matched_runs'])}
+          />
+          <MetadataItem
+            label="Supported page matches"
+            value={formatBenchmarkCount(metricDetail['exact_page_supported_runs'])}
+          />
           <MetadataItem label="Citation rows" value={String(citations.length)} />
           <MetadataItem
             label="Grounding error"
@@ -111,7 +127,7 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
               typeof metricDetail['grounding_context_error'] === 'string' &&
               metricDetail['grounding_context_error'].trim().length > 0
                 ? String(metricDetail['grounding_context_error'])
-                : '—'
+                : '-'
             }
           />
         </div>
@@ -141,6 +157,10 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs uppercase tracking-widest text-on-surface-variant">
                   <span>{item.evidence_label ?? item.source_label}</span>
                   {item.page_type ? <span>{item.page_type}</span> : null}
+                  {typeof item.fetch_order === 'number' ? (
+                    <span>fetch {item.fetch_order}</span>
+                  ) : null}
+                  {item.fetch_status ? <span>{item.fetch_status}</span> : null}
                   {item.page_url ? (
                     <a
                       href={item.page_url}
@@ -152,6 +172,13 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
                     </a>
                   ) : null}
                 </div>
+                {(item.selection_reason || item.page_title) && (
+                  <p className="mt-2 text-xs text-on-surface-variant">
+                    {item.selection_reason ? `Selection: ${item.selection_reason}` : null}
+                    {item.selection_reason && item.page_title ? ' | ' : null}
+                    {item.page_title ? `Title: ${item.page_title}` : null}
+                  </p>
+                )}
                 <p className="mt-3 whitespace-pre-wrap text-sm text-on-background">
                   {item.excerpt}
                 </p>
@@ -202,7 +229,7 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
                         ) : (
                           <div className="max-w-md space-y-2">
                             <div className="text-on-surface-variant">
-                              {row.error_message ?? '—'}
+                              {row.error_message ?? '-'}
                             </div>
                             {responseBody ? (
                               <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-surface-container-low px-3 py-2 text-xs text-on-background">
@@ -227,13 +254,14 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
       <section className="mt-8">
         <h2 className="font-headline text-xl font-bold text-on-background">Extracted citations</h2>
         <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
-          <table className="min-w-[960px] w-full border-collapse text-left font-body text-sm">
+          <table className="min-w-[1120px] w-full border-collapse text-left font-body text-sm">
             <thead className="bg-surface-container-low">
               <tr className="text-on-surface-variant">
                 <th className="px-4 py-3">Query run</th>
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Domain</th>
                 <th className="px-4 py-3">URL</th>
+                <th className="px-4 py-3">Grounded source</th>
                 <th className="px-4 py-3 text-right">Rank</th>
                 <th className="px-4 py-3 text-right">Confidence</th>
               </tr>
@@ -241,7 +269,7 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
             <tbody>
               {citations.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-on-surface-variant" colSpan={6}>
+                  <td className="px-4 py-6 text-on-surface-variant" colSpan={7}>
                     No citations were extracted for this run group.
                   </td>
                 </tr>
@@ -250,15 +278,32 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
                   <tr key={citation.id} className="border-t border-outline-variant/10">
                     <td className="px-4 py-3">{citation.query_run_id}</td>
                     <td className="px-4 py-3">{citation.citation_type}</td>
-                    <td className="px-4 py-3">{citation.cited_domain ?? '—'}</td>
-                    <td className="px-4 py-3 break-all">{citation.cited_url ?? '—'}</td>
-                    <td className="px-4 py-3 text-right">
-                      {citation.rank_position ?? '—'}
+                    <td className="px-4 py-3">{citation.cited_domain ?? '-'}</td>
+                    <td className="px-4 py-3 break-all">{citation.cited_url ?? '-'}</td>
+                    <td className="px-4 py-3">
+                      {citation.grounding_page_url ? (
+                        <div className="space-y-1">
+                          <a
+                            href={citation.grounding_page_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="break-all text-primary underline-offset-2 hover:underline"
+                          >
+                            {citation.grounding_page_url}
+                          </a>
+                          <div className="text-xs text-on-surface-variant">
+                            {citation.grounding_page_type ?? 'page'} | matched grounded page
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-on-surface-variant">Unresolved</span>
+                      )}
                     </td>
+                    <td className="px-4 py-3 text-right">{citation.rank_position ?? '-'}</td>
                     <td className="px-4 py-3 text-right">
                       {typeof citation.confidence === 'number'
                         ? citation.confidence.toFixed(2)
-                        : '—'}
+                        : '-'}
                     </td>
                   </tr>
                 ))

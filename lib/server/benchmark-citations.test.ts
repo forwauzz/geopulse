@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseBenchmarkCitations } from './benchmark-citations';
+import {
+  assessCitationClaimEvidenceMatch,
+  matchCitationToGroundingEvidence,
+  parseBenchmarkCitations,
+} from './benchmark-citations';
 import type { BenchmarkDomainRow } from './benchmark-repository';
 
 const domain: BenchmarkDomainRow = {
@@ -75,5 +79,178 @@ describe('parseBenchmarkCitations', () => {
     expect(citations[0]?.citationType).toBe('brand_mention');
     expect(citations[0]?.citedDomain).toBe('geopulse.ai');
     expect(citations[0]?.metadata).toMatchObject({ alias: 'Geo Pulse' });
+  });
+
+  it('matches explicit citation URLs back to grounded evidence pages', () => {
+    const citation = parseBenchmarkCitations(
+      'Sources: https://www.geopulse.ai/pricing and https://docs.example.com/setup.',
+      domain
+    )[0];
+
+    expect(
+      matchCitationToGroundingEvidence(citation!, {
+        mode: 'grounded_site',
+        evidence: [
+          {
+            evidenceId: 'ge-pricing',
+            sourceLabel: 'Pricing',
+            excerpt: 'GeoPulse pricing details.',
+            pageUrl: 'https://www.geopulse.ai/pricing',
+            pageType: 'services',
+            evidenceLabel: 'Pricing',
+            pageTitle: 'Pricing',
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
+          },
+        ],
+      })
+    ).toEqual({
+      groundingEvidenceId: 'ge-pricing',
+      groundingPageUrl: 'https://www.geopulse.ai/pricing',
+      groundingPageType: 'services',
+      provenanceMatchMethod: 'exact_url',
+      provenanceConfidence: 1,
+    });
+  });
+
+  it('matches normalized page-equivalent urls back to grounded evidence pages', () => {
+    const citation = parseBenchmarkCitations(
+      'Source: https://geopulse.ai/pricing/?utm_source=newsletter#plans',
+      domain
+    )[0];
+
+    expect(
+      matchCitationToGroundingEvidence(citation!, {
+        mode: 'grounded_site',
+        evidence: [
+          {
+            evidenceId: 'ge-pricing',
+            sourceLabel: 'Pricing',
+            excerpt: 'GeoPulse pricing details.',
+            pageUrl: 'https://www.geopulse.ai/pricing',
+            pageType: 'services',
+            evidenceLabel: 'Pricing',
+            pageTitle: 'Pricing',
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
+          },
+        ],
+      })
+    ).toEqual({
+      groundingEvidenceId: 'ge-pricing',
+      groundingPageUrl: 'https://www.geopulse.ai/pricing',
+      groundingPageType: 'services',
+      provenanceMatchMethod: 'normalized_page',
+      provenanceConfidence: 0.9,
+    });
+  });
+
+  it('does not match different pages on the same domain', () => {
+    const citation = parseBenchmarkCitations('Source: https://geopulse.ai/about', domain)[0];
+
+    expect(
+      matchCitationToGroundingEvidence(citation!, {
+        mode: 'grounded_site',
+        evidence: [
+          {
+            evidenceId: 'ge-pricing',
+            sourceLabel: 'Pricing',
+            excerpt: 'GeoPulse pricing details.',
+            pageUrl: 'https://www.geopulse.ai/pricing',
+            pageType: 'services',
+            evidenceLabel: 'Pricing',
+            pageTitle: 'Pricing',
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
+          },
+        ],
+      })
+    ).toBeNull();
+  });
+
+  it('leaves domain-only mentions unresolved for grounded provenance', () => {
+    const citation = parseBenchmarkCitations('GeoPulse is often mentioned in AI visibility.', domain)[0];
+
+    expect(
+      matchCitationToGroundingEvidence(citation!, {
+        mode: 'grounded_site',
+        evidence: [
+          {
+            evidenceId: 'ge-home',
+            sourceLabel: 'homepage',
+            excerpt: 'GeoPulse measures AI visibility.',
+            pageUrl: 'https://www.geopulse.ai/',
+            pageType: 'homepage',
+            evidenceLabel: 'Homepage',
+            pageTitle: 'Homepage',
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
+          },
+        ],
+      })
+    ).toBeNull();
+  });
+
+  it('records supported overlap when the selected claim sentence matches evidence wording', () => {
+    const citation = parseBenchmarkCitations(
+      'GeoPulse pricing explains AI visibility measurement for enterprise teams. Source: https://www.geopulse.ai/pricing',
+      domain
+    )[0];
+    const groundingContext = {
+      mode: 'grounded_site' as const,
+      evidence: [
+        {
+          evidenceId: 'ge-pricing',
+          sourceLabel: 'Pricing',
+          excerpt: 'GeoPulse pricing covers AI visibility measurement for enterprise teams.',
+          pageUrl: 'https://www.geopulse.ai/pricing',
+          pageType: 'services',
+          evidenceLabel: 'Pricing',
+          pageTitle: 'Pricing',
+          fetchStatus: null,
+          fetchOrder: null,
+          selectionReason: null,
+        },
+      ],
+    };
+    const groundingMatch = matchCitationToGroundingEvidence(citation!, groundingContext);
+
+    expect(
+      assessCitationClaimEvidenceMatch({
+        citation: citation!,
+        responseText:
+          'GeoPulse pricing explains AI visibility measurement for enterprise teams. Source: https://www.geopulse.ai/pricing',
+        groundingContext,
+        groundingMatch,
+      })
+    ).toMatchObject({
+      status: 'supported_overlap',
+      overlapTokenCount: 6,
+      claimText: 'GeoPulse pricing explains AI visibility measurement for enterprise teams.',
+    });
+  });
+
+  it('returns unavailable when no grounded provenance match exists', () => {
+    const citation = parseBenchmarkCitations('GeoPulse is often mentioned in AI visibility.', domain)[0];
+
+    expect(
+      assessCitationClaimEvidenceMatch({
+        citation: citation!,
+        responseText: 'GeoPulse is often mentioned in AI visibility.',
+        groundingContext: null,
+        groundingMatch: null,
+      })
+    ).toEqual({
+      status: 'unavailable',
+      claimText: null,
+      overlapTokenCount: 0,
+      claimTokenCount: 0,
+      evidenceTokenCount: 0,
+      overlapRatio: 0,
+    });
   });
 });

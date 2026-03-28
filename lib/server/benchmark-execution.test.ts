@@ -182,11 +182,16 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
         mode: 'grounded_site',
         evidence: [
           {
+            evidenceId: 'ge-home',
             sourceLabel: 'homepage',
             excerpt: 'Example is a healthcare technology consulting firm.',
             pageUrl: null,
             pageType: null,
             evidenceLabel: null,
+            pageTitle: null,
+            fetchStatus: null,
+            fetchOrder: null,
+            selectionReason: null,
           },
         ],
       },

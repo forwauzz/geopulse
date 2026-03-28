@@ -8,6 +8,28 @@ type Props = {
   params: Promise<{ domainId: string }>;
 };
 
+type ModeComparisonRow = {
+  readonly querySetId: string;
+  readonly querySetLabel: string;
+  readonly modelId: string;
+  grounded: {
+    readonly runGroupId: string;
+    readonly createdAt: string;
+    readonly queryCoverage: number | null;
+    readonly citationRate: number | null;
+    readonly shareOfVoice: number | null;
+    readonly exactPageQualityRate: number | null;
+  } | null;
+  ungrounded: {
+    readonly runGroupId: string;
+    readonly createdAt: string;
+    readonly queryCoverage: number | null;
+    readonly citationRate: number | null;
+    readonly shareOfVoice: number | null;
+    readonly exactPageQualityRate: number | null;
+  } | null;
+};
+
 function formatTs(iso: string): string {
   return new Date(iso).toLocaleString('en-US', {
     month: 'short',
@@ -21,6 +43,20 @@ function formatTs(iso: string): string {
 function toPercent(value: number | null | undefined): string {
   if (typeof value !== 'number' || Number.isNaN(value)) return '\u2014';
   return `${Math.round(value * 100)}%`;
+}
+
+function toDelta(next: number | null | undefined, previous: number | null | undefined): string {
+  if (
+    typeof next !== 'number' ||
+    Number.isNaN(next) ||
+    typeof previous !== 'number' ||
+    Number.isNaN(previous)
+  ) {
+    return '\u2014';
+  }
+  const delta = Math.round((next - previous) * 100);
+  if (delta === 0) return '0 pts';
+  return `${delta > 0 ? '+' : ''}${String(delta)} pts`;
 }
 
 function TrendSvg(values: number[], ariaLabel: string) {
@@ -63,6 +99,56 @@ function TrendSvg(values: number[], ariaLabel: string) {
       />
     </svg>
   );
+}
+
+function buildModeComparisons(
+  history: Array<{
+    readonly runGroupId: string;
+    readonly modelId: string;
+    readonly querySetId: string;
+    readonly querySetName: string;
+    readonly querySetVersion: string;
+    readonly runMode: string | null;
+    readonly createdAt: string;
+    readonly queryCoverage: number | null;
+    readonly citationRate: number | null;
+    readonly shareOfVoice: number | null;
+    readonly exactPageQualityRate: number | null;
+  }>
+): ModeComparisonRow[] {
+  const byPair = new Map<string, ModeComparisonRow>();
+
+  for (const row of history) {
+    const key = `${row.querySetId}:${row.modelId}`;
+    if (!byPair.has(key)) {
+      byPair.set(key, {
+        querySetId: row.querySetId,
+        querySetLabel: `${row.querySetName} | ${row.querySetVersion}`,
+        modelId: row.modelId,
+        grounded: null,
+        ungrounded: null,
+      });
+    }
+
+    const current = byPair.get(key)!;
+    const snapshot = {
+      runGroupId: row.runGroupId,
+      createdAt: row.createdAt,
+      queryCoverage: row.queryCoverage,
+      citationRate: row.citationRate,
+      shareOfVoice: row.shareOfVoice,
+      exactPageQualityRate: row.exactPageQualityRate,
+    };
+
+    if (row.runMode === 'grounded_site' && current.grounded === null) {
+      current.grounded = snapshot;
+    }
+    if (row.runMode === 'ungrounded_inference' && current.ungrounded === null) {
+      current.ungrounded = snapshot;
+    }
+  }
+
+  return [...byPair.values()].filter((row) => row.grounded !== null || row.ungrounded !== null);
 }
 
 export default async function BenchmarkDomainHistoryPage({ params }: Props) {
@@ -127,6 +213,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
     .filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
 
   const latest = history[0] ?? null;
+  const modeComparisons = buildModeComparisons(history);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16">
@@ -211,6 +298,97 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
       </section>
 
       <section className="mt-8">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-headline text-xl font-bold text-on-background">
+              Grounded vs ungrounded
+            </h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Latest paired runs for the same query set and model, so methodology gains are visible
+              without changing the benchmark surface.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
+          <table className="min-w-[1240px] w-full border-collapse text-left font-body text-sm">
+            <thead className="bg-surface-container-low">
+              <tr className="text-on-surface-variant">
+                <th className="px-4 py-3">Query set</th>
+                <th className="px-4 py-3">Model</th>
+                <th className="px-4 py-3">Ungrounded</th>
+                <th className="px-4 py-3">Grounded</th>
+                <th className="px-4 py-3 text-right">Coverage delta</th>
+                <th className="px-4 py-3 text-right">Citation delta</th>
+                <th className="px-4 py-3 text-right">SOV delta</th>
+                <th className="px-4 py-3 text-right">Page quality</th>
+              </tr>
+            </thead>
+            <tbody>
+              {modeComparisons.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-on-surface-variant" colSpan={8}>
+                    No grounded/ungrounded comparisons exist for this domain yet.
+                  </td>
+                </tr>
+              ) : (
+                modeComparisons.map((row) => (
+                  <tr
+                    key={`${row.querySetId}-${row.modelId}`}
+                    className="border-t border-outline-variant/10 align-top"
+                  >
+                    <td className="px-4 py-3 font-medium text-on-background">
+                      {row.querySetLabel}
+                    </td>
+                    <td className="px-4 py-3">{row.modelId}</td>
+                    <td className="px-4 py-3">
+                      {row.ungrounded ? (
+                        <div className="space-y-1">
+                          <div>{formatTs(row.ungrounded.createdAt)}</div>
+                          <div className="text-xs text-on-surface-variant">
+                            {toPercent(row.ungrounded.queryCoverage)} coverage |{' '}
+                            {toPercent(row.ungrounded.citationRate)} citation |{' '}
+                            {toPercent(row.ungrounded.shareOfVoice)} sov
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-on-surface-variant">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.grounded ? (
+                        <div className="space-y-1">
+                          <div>{formatTs(row.grounded.createdAt)}</div>
+                          <div className="text-xs text-on-surface-variant">
+                            {toPercent(row.grounded.queryCoverage)} coverage |{' '}
+                            {toPercent(row.grounded.citationRate)} citation |{' '}
+                            {toPercent(row.grounded.shareOfVoice)} sov
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-on-surface-variant">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {toDelta(row.grounded?.queryCoverage, row.ungrounded?.queryCoverage)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {toDelta(row.grounded?.citationRate, row.ungrounded?.citationRate)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {toDelta(row.grounded?.shareOfVoice, row.ungrounded?.shareOfVoice)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {toPercent(row.grounded?.exactPageQualityRate)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mt-8">
         <h2 className="font-headline text-xl font-bold text-on-background">Run history</h2>
         <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
           <table className="min-w-[920px] w-full border-collapse text-left font-body text-sm">
@@ -218,18 +396,21 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
               <tr className="text-on-surface-variant">
                 <th className="px-4 py-3">Created</th>
                 <th className="px-4 py-3">Run label</th>
+                <th className="px-4 py-3">Mode</th>
+                <th className="px-4 py-3">Query set</th>
                 <th className="px-4 py-3">Model</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Coverage</th>
                 <th className="px-4 py-3 text-right">Citation rate</th>
                 <th className="px-4 py-3 text-right">Share of voice</th>
+                <th className="px-4 py-3 text-right">Page quality</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {history.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-on-surface-variant" colSpan={8}>
+                  <td className="px-4 py-6 text-on-surface-variant" colSpan={10}>
                     No benchmark history exists for this domain.
                   </td>
                 </tr>
@@ -238,11 +419,18 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                   <tr key={row.runGroupId} className="border-t border-outline-variant/10">
                     <td className="px-4 py-3">{formatTs(row.createdAt)}</td>
                     <td className="px-4 py-3 font-medium text-on-background">{row.label}</td>
+                    <td className="px-4 py-3">{row.runMode ?? 'unknown'}</td>
+                    <td className="px-4 py-3">
+                      {row.querySetName} | {row.querySetVersion}
+                    </td>
                     <td className="px-4 py-3">{row.modelId}</td>
                     <td className="px-4 py-3 capitalize">{row.status}</td>
                     <td className="px-4 py-3 text-right">{toPercent(row.queryCoverage)}</td>
                     <td className="px-4 py-3 text-right">{toPercent(row.citationRate)}</td>
                     <td className="px-4 py-3 text-right">{toPercent(row.shareOfVoice)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {toPercent(row.exactPageQualityRate)}
+                    </td>
                     <td className="px-4 py-3">
                       <Link
                         href={`/dashboard/benchmarks/${row.runGroupId}`}

@@ -1,6 +1,6 @@
 # Benchmark Grounding v2
 
-Last updated: 2026-03-27
+Last updated: 2026-03-28
 
 ## Purpose
 
@@ -65,6 +65,7 @@ Current repo truth:
 - grounded runs now support a first minimal grounding-context builder
 - if manual `grounding_context.evidence` is absent, the runner can fetch the homepage and likely about/services pages to derive a small curated evidence set
 - this is intentionally narrow and bounded; it is not a general crawl or retrieval system
+- exact citation-to-grounding provenance now exists only for conservative exact URL matches; domain-only mentions remain unresolved
 
 ### Mode B2: grounded site interpretation with page provenance
 
@@ -169,10 +170,83 @@ Future implementation shape:
 7. inspect page-level provenance separately from domain-level citation presence
 
 Current implementation gap after the first builder slice:
-- the builder is heuristic and homepage-led
+- the builder is still heuristic and bounded, even though it now ranks a small same-origin candidate set instead of hard-coding only homepage/about/services
 - it fetches a very small bounded page set, not a site-wide crawl
-- it does not yet rank multiple candidate pages or prove best-page selection
-- it does not yet score whether the model cited the exact supporting page
+- it does not yet prove best-page selection
+- exact URL matches are now preserved on citation rows, but the benchmark does not yet score whether the model cited the best supporting page
+- it does not yet perform excerpt-level or semantic matching between answer claims and grounded evidence
+
+Documented follow-up sequence in `PROJECT_STATE.md`:
+- `BM-033`: freeze the next grounded-provenance sequence and keep slices separate
+- `BM-034` ... `BM-035`: improve grounding-page selection and metadata before widening matching logic
+- `BM-036` ... `BM-038`: add richer provenance matching and exact-page citation-quality evaluation in narrow internal slices
+- `BM-039`: add grounded vs ungrounded comparison views for methodology inspection
+
+Current grounded metadata truth after `BM-035`:
+- evidence snapshots now carry `fetch_order`, `selection_reason`, explicit page title, and fetch status
+- this metadata is for internal inspection and later provenance work, not a score
+
+Current provenance truth after `BM-036`:
+- citation-to-grounding matching now supports two conservative cases:
+  - exact URL equivalence
+  - normalized page equivalence (`www`, trailing slash, fragment, default port, and tracking-param differences ignored)
+- the matcher still does not infer provenance across different paths, different pages on the same site, or domain-only mentions
+
+Current claim-evidence truth after `BM-037`:
+- grounded citation metadata now carries a lightweight claim-to-evidence overlap signal based on the best matching response sentence and the matched evidence excerpt
+- this is internal inspection metadata only and must not be presented as semantic factuality or a customer-facing benchmark score
+
+Current exact-page quality truth after `BM-038`:
+- the first exact-page citation-quality metric now exists as an internal run-quality signal
+- it counts completed runs where the measured-domain citation both:
+  - matches a grounded page
+  - has a `supported_overlap` claim/evidence signal
+- this is intentionally separate from citation presence and share-of-voice
+
+Current comparison truth after `BM-039`:
+- the benchmark domain history page now shows the latest grounded vs ungrounded pair for the same query set and model
+- comparisons stay internal and inspectable only: they show mode, timing, metric deltas, and grounded exact-page quality without creating a customer-facing benchmark claim
+- this remains a read-only admin slice layered onto the existing benchmark history surface, not a new benchmark architecture
+
+## BM-033 grounded-provenance sequence
+
+`BM-033` freezes the next implementation order so benchmark work improves methodology without turning into a broad rewrite.
+
+Execution order after `BM-032`:
+
+1. `BM-034` grounded candidate selection
+   - improve how the benchmark chooses a small bounded set of same-origin pages
+   - goal: better evidence inputs, not new scoring claims
+
+2. `BM-035` richer grounding metadata
+   - persist why a page was selected and basic fetch/title facts
+   - goal: make later provenance work inspectable, not customer-facing
+
+3. `BM-036` provenance matching beyond exact URL equality
+   - add one conservative matcher layer beyond the current exact-string match
+   - unresolved cases must remain unresolved
+
+4. `BM-037` excerpt-level claim-to-evidence checks
+   - add internal evidence compatibility metadata only
+   - do not collapse this into a shipped score yet
+
+5. `BM-038` exact-page citation-quality metric
+   - only after the earlier provenance inputs and matching are stable
+   - must remain separate from citation presence and share-of-voice
+
+6. `BM-039` grounded vs ungrounded comparison UI
+   - expose methodology deltas for internal inspection after the data is credible enough
+   - status: complete as a narrow admin history comparison table
+
+## BM-033 non-goals
+
+`BM-033` explicitly does not authorize:
+- a benchmark-wide refactor across unrelated modules
+- customer-facing benchmark claims or customer-facing provenance scores
+- semantic provenance inference that guesses on weak evidence
+- broad competitor/cohort benchmark implementation before methodology is frozen
+- multi-model or large-scale ops work before the provenance path is stronger
+- replacing the current seams in `benchmark-grounding`, `benchmark-citations`, `benchmark-runner`, or `benchmark-admin-data`
 
 This allows GEO-Pulse to say internally:
 - “the brand is ambiguous in open inference”
@@ -183,7 +257,8 @@ This allows GEO-Pulse to say internally:
 
 The current grounded route is useful but limited:
 - it measures whether the model answers better when given site evidence
-- it does not yet prove exact-page sourcing
+- it now proves exact-page sourcing only when the model cites the same page URL as the grounded evidence
+- it still does not infer provenance for domain-only mentions or ambiguous references
 
 The next design step should therefore prefer:
 - structured evidence records over one freeform evidence blob
