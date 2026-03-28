@@ -19,8 +19,19 @@ function removeIfExists(targetPath) {
     }
   }
 
+  // renameSync can also throw EPERM on Windows when files inside .open-next
+  // are still locked by a previous process. Catch that too and warn rather
+  // than aborting — OpenNext will overwrite the output directory anyway.
   const renamedPath = path.join(projectRoot, `.open-next-stale-${Date.now()}`);
-  fs.renameSync(targetPath, renamedPath);
+  try {
+    fs.renameSync(targetPath, renamedPath);
+  } catch (renameError) {
+    console.warn(
+      `[opennext-build] Could not remove or rename stale .open-next (${renameError.message}). ` +
+        `Proceeding — OpenNext will overwrite the output directory.`
+    );
+    return;
+  }
 
   try {
     fs.rmSync(renamedPath, { recursive: true, force: true });
