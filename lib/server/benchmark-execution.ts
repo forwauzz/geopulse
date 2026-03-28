@@ -40,7 +40,6 @@ export interface BenchmarkExecutionAdapter {
 export type BenchmarkExecutionProvider = 'stub' | 'gemini';
 
 export type BenchmarkExecutionEnvLike = {
-  readonly [key: string]: string | undefined;
   readonly BENCHMARK_EXECUTION_PROVIDER?: string;
   readonly BENCHMARK_EXECUTION_API_KEY?: string;
   readonly BENCHMARK_EXECUTION_MODEL?: string;
