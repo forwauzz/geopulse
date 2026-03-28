@@ -45,6 +45,62 @@ Test Files  1 passed (1)
   Duration  805ms (transform 176ms, setup 0ms, import 228ms, tests 28ms, environment 0ms)
 ```
 
+## 2026-03-28 — BM-040 recurring internal benchmark scheduling
+
+Implemented the first recurring internal benchmark scheduling slice without creating a second benchmark execution path.
+
+Files changed:
+- `lib/server/benchmark-schedule.ts`
+- `lib/server/benchmark-schedule.test.ts`
+- `lib/server/benchmark-runner-contract.ts`
+- `lib/server/benchmark-runner.ts`
+- `lib/server/benchmark-repository.ts`
+- `workers/cloudflare-entry.ts`
+- `types/geo-pulse-env.d.ts`
+- `.dev.vars.example`
+- `docs/06-environment-and-secrets.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added an env-configured recurring benchmark sweep service that reuses the existing benchmark runner and execution adapter.
+- Reused the existing Worker cron entrypoint to launch bounded daily internal benchmark sweeps for customer benchmark domains.
+- Added deterministic schedule run keys, run scope, run labels, and schedule metadata so recurring history is comparable and duplicate daily runs are skipped.
+- Documented the new schedule env contract and marked `BM-040` complete in the roadmap and task ledger.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+Startup Error
+Error: Build failed with 1 error:
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-schedule.test.ts lib/server/benchmark-runner.test.ts`
+
+```text
+RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+Test Files  2 passed (2)
+     Tests  9 passed (9)
+  Start at  03:13:58
+  Duration  3.31s (transform 2.91s, setup 0ms, import 3.73s, tests 272ms, environment 1ms)
+```
+
 ## How to write an entry
 
 ```markdown

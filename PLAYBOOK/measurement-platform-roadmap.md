@@ -227,5 +227,9 @@ Grounded-provenance sequence frozen by `BM-033`:
 - only then widen provenance matching (`BM-036`) and excerpt-level evidence checks (`BM-037`)
 - only after that define an exact-page citation-quality metric (`BM-038`)
 - the first comparison UI slice (`BM-039`) is now complete on the benchmark domain history page, pairing latest grounded and ungrounded runs for the same query set and model
+- the first recurring internal benchmark scheduling slice (`BM-040`) now exists on the Worker cron path:
+  - the recurring lane is env-configured, bounded, and idempotent by UTC day
+  - it reuses the existing benchmark runner instead of creating a second benchmark execution path
+  - scheduled runs now carry explicit run scope and schedule metadata so history stays comparable over time
 - cohorting (`BM-041` / `BM-042`) and scale work (`BM-045` / `BM-046`) stay downstream of that methodology path
 - this sequencing is intentionally designed to protect the current architecture and avoid a single large benchmark rewrite

@@ -8,6 +8,8 @@ import { dispatchQueueBatch, type ReportQueueBatch } from './queue/report-queue-
 import { sendWeeklyReport } from '../services/marketing-attribution/weekly-report';
 import { createClient } from '@supabase/supabase-js';
 import { structuredError } from '../lib/server/structured-log';
+import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
+import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -67,6 +69,23 @@ export default {
         }
       } catch (err) {
         structuredError('weekly_report_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+    }
+
+    if (supaUrl && supaKey) {
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        await runScheduledBenchmarkSweep({
+          supabase,
+          env,
+          adapter: createBenchmarkExecutionAdapter(env),
+        });
+      } catch (err) {
+        structuredError('benchmark_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

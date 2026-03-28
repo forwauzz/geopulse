@@ -11,7 +11,9 @@ export const benchmarkRunnerInputSchema = z.object({
   auditorModelId: z.string().min(1).optional(),
   runMode: benchmarkRunModeSchema.default(DEFAULT_BENCHMARK_RUN_MODE),
   runLabel: z.string().min(1).max(160).optional(),
+  runScope: z.string().min(1).max(80).optional(),
   notes: z.string().max(2000).optional(),
+  runMetadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type BenchmarkRunnerInput = z.infer<typeof benchmarkRunnerInputSchema>;

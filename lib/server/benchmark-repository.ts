@@ -149,6 +149,23 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
       return data ?? null;
     },
 
+    async listCustomerDomainsForBenchmarkScheduling(
+      limit = 20
+    ): Promise<BenchmarkDomainRow[]> {
+      const { data, error } = await supabase
+        .from('benchmark_domains')
+        .select(
+          'id,domain,canonical_domain,site_url,display_name,vertical,subvertical,geo_region,is_customer,is_competitor,metadata,created_at,updated_at'
+        )
+        .eq('is_customer', true)
+        .eq('is_competitor', false)
+        .order('created_at', { ascending: true })
+        .limit(limit);
+
+      if (error) throw error;
+      return ((data ?? []) as BenchmarkDomainRow[]).filter((row) => !!row.site_url);
+    },
+
     async upsertDomain(input: BenchmarkDomainUpsertInput): Promise<BenchmarkDomainRow> {
       const identity = deriveBenchmarkDomainIdentity(input.siteUrl, input.domain);
       if (!identity.domain || !identity.canonicalDomain) {
@@ -315,6 +332,23 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
 
       if (error) throw error;
       return data;
+    },
+
+    async getRunGroupByScheduleKey(
+      scheduleRunKey: string
+    ): Promise<BenchmarkRunGroupRow | null> {
+      const { data, error } = await supabase
+        .from('benchmark_run_groups')
+        .select(
+          'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,started_at,completed_at,created_at'
+        )
+        .contains('metadata', { schedule_run_key: scheduleRunKey })
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle<BenchmarkRunGroupRow>();
+
+      if (error) throw error;
+      return data ?? null;
     },
 
     async updateRunGroup(
