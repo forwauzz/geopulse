@@ -1,4 +1,4 @@
-import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
+import { createBenchmarkExecutionAdapter, type BenchmarkExecutionEnvLike } from '../lib/server/benchmark-execution';
 import { createServiceRoleClient } from '../lib/supabase/service-role';
 import { runBenchmarkGroupSkeleton } from '../lib/server/benchmark-runner';
 
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   }
 
   const supabase = createServiceRoleClient(url, key);
-  const adapter = createBenchmarkExecutionAdapter(process.env);
+  const adapter = createBenchmarkExecutionAdapter(process.env as BenchmarkExecutionEnvLike);
   const result = await runBenchmarkGroupSkeleton(supabase, {
     domainId: args.domainId,
     querySetId: args.querySetId,
