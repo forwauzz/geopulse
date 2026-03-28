@@ -1,4 +1,9 @@
 import type { BenchmarkQueryRow } from './benchmark-repository';
+import {
+  buildBenchmarkPrompt,
+  type BenchmarkGroundingContext,
+  type BenchmarkRunMode,
+} from './benchmark-grounding';
 
 export type BenchmarkExecutionStatus =
   | 'completed'
@@ -21,6 +26,8 @@ export type BenchmarkExecutionContext = {
   readonly modelId: string;
   readonly auditorModelId: string | null;
   readonly runGroupId: string;
+  readonly runMode: BenchmarkRunMode;
+  readonly groundingContext: BenchmarkGroundingContext | null;
 };
 
 export interface BenchmarkExecutionAdapter {
@@ -66,6 +73,7 @@ export class StubBenchmarkExecutionAdapter implements BenchmarkExecutionAdapter 
         query_key: query.query_key,
         model_id: context.modelId,
         auditor_model_id: context.auditorModelId,
+        run_mode: context.runMode,
       },
       errorMessage: 'benchmark_execution_adapter_not_implemented',
       executedAt: null,
@@ -107,18 +115,6 @@ export function resolveBenchmarkExecutionConfig(
   };
 }
 
-function buildBenchmarkPrompt(query: BenchmarkQueryRow, context: BenchmarkExecutionContext): string {
-  return [
-    'You are participating in an AI visibility benchmark.',
-    `Target domain: ${context.canonicalDomain}`,
-    `Target site URL: ${context.siteUrl ?? `https://${context.canonicalDomain}/`}`,
-    `User query: ${query.query_text}`,
-    'Answer the user query naturally in 3 to 6 sentences.',
-    'Do not return JSON.',
-    'If you mention the target brand or website, use the exact domain when appropriate.',
-  ].join('\n');
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -144,6 +140,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
           configured_model: this.config.model,
           requested_model: context.modelId,
           query_key: query.query_key,
+          run_mode: context.runMode,
         },
         errorMessage: 'benchmark_model_lane_not_enabled',
         executedAt,
@@ -159,6 +156,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
           configured_model: this.config.model,
           requested_model: context.modelId,
           query_key: query.query_key,
+          run_mode: context.runMode,
         },
         errorMessage: 'benchmark_gemini_api_key_missing',
         executedAt,
@@ -167,10 +165,35 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
 
     const base = this.config.endpoint.replace(/\/$/, '');
     const url = `${base}/${this.config.model}:generateContent?key=${encodeURIComponent(this.config.apiKey)}`;
+    let promptText: string;
+    try {
+      promptText = buildBenchmarkPrompt({
+        queryText: query.query_text,
+        canonicalDomain: context.canonicalDomain,
+        siteUrl: context.siteUrl,
+        runMode: context.runMode,
+        groundingContext: context.groundingContext,
+      });
+    } catch (error) {
+      return {
+        status: 'failed',
+        responseText: null,
+        responseMetadata: {
+          provider: 'gemini',
+          configured_model: this.config.model,
+          requested_model: context.modelId,
+          query_key: query.query_key,
+          run_mode: context.runMode,
+        },
+        errorMessage: error instanceof Error ? error.message : 'benchmark_prompt_build_failed',
+        executedAt,
+      };
+    }
+
     const body = {
       contents: [
         {
-          parts: [{ text: buildBenchmarkPrompt(query, context) }],
+          parts: [{ text: promptText }],
         },
       ],
       generationConfig: {
@@ -206,6 +229,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
               configured_model: this.config.model,
               requested_model: context.modelId,
               query_key: query.query_key,
+              run_mode: context.runMode,
               http_status: response.status,
               response_body: responseBody,
               attempts: attempt,
@@ -229,6 +253,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
               configured_model: this.config.model,
               requested_model: context.modelId,
               query_key: query.query_key,
+              run_mode: context.runMode,
               attempts: attempt,
             },
             errorMessage: 'benchmark_gemini_empty_response',
@@ -244,6 +269,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
             configured_model: this.config.model,
             requested_model: context.modelId,
             query_key: query.query_key,
+            run_mode: context.runMode,
             attempts: attempt,
           },
           errorMessage: null,
@@ -265,6 +291,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
             configured_model: this.config.model,
             requested_model: context.modelId,
             query_key: query.query_key,
+            run_mode: context.runMode,
             attempts: attempt,
           },
           errorMessage: error instanceof Error ? error.message : 'benchmark_gemini_error',
@@ -281,6 +308,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
         configured_model: this.config.model,
         requested_model: context.modelId,
         query_key: query.query_key,
+        run_mode: context.runMode,
         attempts: GEMINI_MAX_ATTEMPTS,
       },
       errorMessage: 'benchmark_gemini_retry_exhausted',

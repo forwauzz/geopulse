@@ -1,22 +1,12 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
-
-export type IssueRow = {
-  check?: string;
-  checkId?: string;
-  passed?: boolean;
-  status?: string;
-  finding?: string;
-  fix?: string;
-  weight?: number;
-  category?: string;
-  confidence?: string;
-};
-
-function parseIssues(raw: unknown): IssueRow[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((x): x is IssueRow => x !== null && typeof x === 'object');
-}
+import {
+  parseCoverageSummary,
+  parseIssues,
+  scoreNarrative,
+  severityLabel,
+  type IssueRow,
+} from './deep-audit-report-helpers';
 
 function wrapLine(text: string, maxChars: number): string[] {
   const words = text.split(/\s+/);
@@ -34,13 +24,6 @@ function wrapLine(text: string, maxChars: number): string[] {
   }
   if (cur) lines.push(cur);
   return lines;
-}
-
-function severityLabel(weight: number | undefined): 'High' | 'Medium' | 'Low' {
-  if (!weight) return 'Low';
-  if (weight >= 8) return 'High';
-  if (weight >= 5) return 'Medium';
-  return 'Low';
 }
 
 function severityColor(sev: 'High' | 'Medium' | 'Low'): RGB {
@@ -68,15 +51,6 @@ function issueStatusColor(status: string): RGB {
     default:
       return FAIL_RED;
   }
-}
-
-function parseCoverageSummary(raw: unknown): Record<string, unknown> | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  return raw as Record<string, unknown>;
-}
-
-function scoreNarrative(score: number, grade: string, total: number, passed: number, topIssue: string): string {
-  return `Your site scored ${String(score)}/100 (${grade}). ${String(passed)} of ${String(total)} checks passed. ${topIssue ? `The most critical gap is: ${topIssue}.` : 'No critical issues detected.'}`;
 }
 
 const INK = rgb(0.17, 0.2, 0.21);

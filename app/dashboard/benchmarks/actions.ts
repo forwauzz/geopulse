@@ -2,17 +2,19 @@
 
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
-import { getScanApiEnv } from '@/lib/server/cf-env';
+import {
+  benchmarkRunModeSchema,
+  DEFAULT_BENCHMARK_RUN_MODE,
+} from '@/lib/server/benchmark-grounding';
+import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { createBenchmarkExecutionAdapter } from '@/lib/server/benchmark-execution';
-import { isAdminEmail } from '@/lib/server/require-admin';
 import { runBenchmarkGroupSkeleton } from '@/lib/server/benchmark-runner';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const triggerSchema = z.object({
   domainId: z.string().uuid('Choose a valid domain.'),
   querySetId: z.string().uuid('Choose a valid query set.'),
   modelId: z.string().min(1, 'Enter a model lane.').max(160, 'Model lane is too long.'),
+  runMode: benchmarkRunModeSchema.default(DEFAULT_BENCHMARK_RUN_MODE),
   runLabel: z.string().max(160, 'Run label is too long.').optional(),
   notes: z.string().max(2000, 'Notes are too long.').optional(),
 });
@@ -48,22 +50,6 @@ function normalizeText(raw: FormDataEntryValue | null): string | undefined {
   return value.length > 0 ? value : undefined;
 }
 
-async function requireAdminForBenchmarkAction(): Promise<
-  | { ok: true }
-  | { ok: false; message: string }
-> {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user || !isAdminEmail(user.email)) {
-    return { ok: false, message: 'Admin access required.' };
-  }
-
-  return { ok: true };
-}
-
 function parseQueryLines(raw: string): Array<{
   queryKey: string;
   queryText: string;
@@ -93,8 +79,8 @@ export async function createBenchmarkDomain(
   _prev: BenchmarkDomainState | null,
   formData: FormData
 ): Promise<BenchmarkDomainState> {
-  const auth = await requireAdminForBenchmarkAction();
-  if (!auth.ok) return auth;
+  const context = await loadAdminActionContext();
+  if (!context.ok) return context;
 
   const parsed = domainSchema.safeParse({
     siteUrl: normalizeText(formData.get('siteUrl')),
@@ -110,16 +96,8 @@ export async function createBenchmarkDomain(
     return { ok: false, message: msg };
   }
 
-  const env = await getScanApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, message: 'Server misconfigured for benchmark writes.' };
-  }
-
   try {
-    const adminDb = createServiceRoleClient(
-      env.NEXT_PUBLIC_SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const { adminDb } = context;
     const { createBenchmarkRepository } = await import('@/lib/server/benchmark-repository');
     const repo = createBenchmarkRepository(adminDb);
     const domain = await repo.upsertDomain({
@@ -142,8 +120,8 @@ export async function createBenchmarkQuerySet(
   _prev: BenchmarkQuerySetState | null,
   formData: FormData
 ): Promise<BenchmarkQuerySetState> {
-  const auth = await requireAdminForBenchmarkAction();
-  if (!auth.ok) return auth;
+  const context = await loadAdminActionContext();
+  if (!context.ok) return context;
 
   const parsed = querySetSchema.safeParse({
     name: normalizeText(formData.get('name')),
@@ -165,16 +143,8 @@ export async function createBenchmarkQuerySet(
     return { ok: false, message: msg };
   }
 
-  const env = await getScanApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, message: 'Server misconfigured for benchmark writes.' };
-  }
-
   try {
-    const adminDb = createServiceRoleClient(
-      env.NEXT_PUBLIC_SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const { adminDb } = context;
     const { createBenchmarkRepository } = await import('@/lib/server/benchmark-repository');
     const repo = createBenchmarkRepository(adminDb);
     const querySet = await repo.upsertQuerySet({
@@ -199,13 +169,14 @@ export async function triggerBenchmarkRun(
   _prev: BenchmarkTriggerState | null,
   formData: FormData
 ): Promise<BenchmarkTriggerState> {
-  const auth = await requireAdminForBenchmarkAction();
-  if (!auth.ok) return auth;
+  const context = await loadAdminActionContext();
+  if (!context.ok) return context;
 
   const parsed = triggerSchema.safeParse({
     domainId: formData.get('domainId'),
     querySetId: formData.get('querySetId'),
     modelId: normalizeText(formData.get('modelId')),
+    runMode: normalizeText(formData.get('runMode')) ?? DEFAULT_BENCHMARK_RUN_MODE,
     runLabel: normalizeText(formData.get('runLabel')),
     notes: normalizeText(formData.get('notes')),
   });
@@ -216,22 +187,15 @@ export async function triggerBenchmarkRun(
       first['domainId']?.[0] ??
       first['querySetId']?.[0] ??
       first['modelId']?.[0] ??
+      first['runMode']?.[0] ??
       first['runLabel']?.[0] ??
       first['notes']?.[0] ??
       'Check the benchmark form values.';
     return { ok: false, message: msg };
   }
 
-  const env = await getScanApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, message: 'Server misconfigured for benchmark writes.' };
-  }
-
   try {
-    const adminDb = createServiceRoleClient(
-      env.NEXT_PUBLIC_SUPABASE_URL,
-      env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const { adminDb, env } = context;
     const adapter = createBenchmarkExecutionAdapter(env);
     const result = await runBenchmarkGroupSkeleton(adminDb, parsed.data, adapter);
     redirect(`/dashboard/benchmarks/${result.runGroupId}`);

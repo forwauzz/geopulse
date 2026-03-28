@@ -244,10 +244,11 @@ describe('runBenchmarkGroupSkeleton', () => {
     const result = await runBenchmarkGroupSkeleton(
       supabase,
       {
-      domainId: '11111111-1111-4111-8111-111111111111',
-      querySetId: '22222222-2222-4222-8222-222222222222',
-      modelId: 'openai/gpt-4.1-mini',
-      runLabel: 'baseline',
+        domainId: '11111111-1111-4111-8111-111111111111',
+        querySetId: '22222222-2222-4222-8222-222222222222',
+        modelId: 'openai/gpt-4.1-mini',
+        runMode: 'ungrounded_inference',
+        runLabel: 'baseline',
       },
       adapter
     );
@@ -267,7 +268,9 @@ describe('runBenchmarkGroupSkeleton', () => {
         (call) =>
           call.table === 'benchmark_run_groups' &&
           call.op === 'update' &&
-          (call.payload as Record<string, unknown>).status === 'completed'
+          (call.payload as Record<string, unknown>).status === 'completed' &&
+          ((call.payload as Record<string, unknown>).metadata as Record<string, unknown>)['run_mode'] ===
+            'ungrounded_inference'
       )
     ).toBe(true);
   });
@@ -478,6 +481,7 @@ describe('runBenchmarkGroupSkeleton', () => {
         domainId: '11111111-1111-4111-8111-111111111111',
         querySetId: '22222222-2222-4222-8222-222222222222',
         modelId: 'openai/gpt-4.1-mini',
+        runMode: 'ungrounded_inference',
         runLabel: 'baseline',
       },
       adapter
@@ -701,6 +705,7 @@ describe('runBenchmarkGroupSkeleton', () => {
         domainId: '11111111-1111-4111-8111-111111111111',
         querySetId: '22222222-2222-4222-8222-222222222222',
         modelId: 'gemini-2.0-flash',
+        runMode: 'ungrounded_inference',
         runLabel: 'baseline',
       },
       adapter
@@ -714,5 +719,515 @@ describe('runBenchmarkGroupSkeleton', () => {
           (call.payload as Record<string, unknown>).status === 'failed'
       )
     ).toBe(true);
+  });
+
+  it('records grounded mode and grounding availability when grounded context exists', async () => {
+    const calls: Array<{ table: string; op: string; payload?: unknown }> = [];
+
+    const supabase = {
+      from(table: string) {
+        return {
+          select() {
+            return this;
+          },
+          eq(column: string, value: unknown) {
+            if (table === 'benchmark_domains' && column === 'id') {
+              return {
+                maybeSingle() {
+                  return Promise.resolve({
+                    data: {
+                      id: String(value),
+                      domain: 'www.example.com',
+                      canonical_domain: 'example.com',
+                      site_url: 'https://www.example.com/',
+                      display_name: 'Example',
+                      vertical: 'saas',
+                      subvertical: null,
+                      geo_region: null,
+                      is_customer: true,
+                      is_competitor: false,
+                      metadata: {
+                        grounding_context: {
+                          evidence: [
+                            {
+                              page_url: 'https://www.example.com/about',
+                              page_type: 'about',
+                              evidence_label: 'About page',
+                              excerpt: 'Example is a healthcare technology consulting firm.',
+                            },
+                          ],
+                        },
+                      },
+                      created_at: '2026-03-26T00:00:00.000Z',
+                      updated_at: '2026-03-26T00:00:00.000Z',
+                    },
+                    error: null,
+                  });
+                },
+              };
+            }
+
+            if (table === 'benchmark_query_sets' && column === 'id') {
+              return {
+                maybeSingle() {
+                  return Promise.resolve({
+                    data: {
+                      id: String(value),
+                      name: 'brand-baseline',
+                      vertical: 'saas',
+                      version: 'v1',
+                      description: null,
+                      status: 'active',
+                      metadata: {},
+                      created_at: '2026-03-26T00:00:00.000Z',
+                    },
+                    error: null,
+                  });
+                },
+              };
+            }
+
+            if (table === 'benchmark_queries' && column === 'query_set_id') {
+              return {
+                order() {
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 'query-1',
+                        query_set_id: String(value),
+                        query_key: 'brand-overview',
+                        query_text: 'What is Example?',
+                        intent_type: 'direct',
+                        topic: 'brand',
+                        weight: 1,
+                        metadata: {},
+                        created_at: '2026-03-26T00:00:00.000Z',
+                      },
+                    ],
+                    error: null,
+                  });
+                },
+              };
+            }
+
+            return this;
+          },
+          insert(payload: unknown) {
+            calls.push({ table, op: 'insert', payload });
+            return {
+              select() {
+                if (table === 'benchmark_run_groups') {
+                  const record = payload as Record<string, unknown>;
+                  return {
+                    single() {
+                      return Promise.resolve({
+                        data: {
+                          id: 'run-group-1',
+                          query_set_id: record.query_set_id,
+                          label: record.label,
+                          run_scope: record.run_scope,
+                          model_set_version: record.model_set_version,
+                          status: record.status,
+                          notes: record.notes ?? null,
+                          metadata: record.metadata ?? {},
+                          started_at: record.started_at ?? null,
+                          completed_at: null,
+                          created_at: '2026-03-26T00:00:00.000Z',
+                        },
+                        error: null,
+                      });
+                    },
+                  };
+                }
+
+                if (table === 'query_runs') {
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 'query-run-1',
+                        run_group_id: 'run-group-1',
+                        domain_id: '11111111-1111-4111-8111-111111111111',
+                        query_id: 'query-1',
+                        model_id: 'gemini-2.0-flash',
+                        auditor_model_id: null,
+                        status: 'completed',
+                        response_text: 'Example is a healthcare technology consulting firm.',
+                        response_metadata: { mode: 'custom' },
+                        error_message: null,
+                        executed_at: '2026-03-26T00:00:30.000Z',
+                        created_at: '2026-03-26T00:00:00.000Z',
+                      },
+                    ],
+                    error: null,
+                  });
+                }
+
+                if (table === 'query_citations') {
+                  return Promise.resolve({ data: [], error: null });
+                }
+
+                return Promise.resolve({ data: null, error: null });
+              },
+            };
+          },
+          update(payload: unknown) {
+            calls.push({ table, op: 'update', payload });
+            return {
+              eq() {
+                return {
+                  select() {
+                    return {
+                      single() {
+                        return Promise.resolve({
+                          data: {
+                            id: 'run-group-1',
+                            query_set_id: 'query-set-1',
+                            label: 'grounded',
+                            run_scope: 'internal_benchmark',
+                            model_set_version: 'gemini-2.0-flash',
+                            status: (payload as Record<string, unknown>).status,
+                            notes: (payload as Record<string, unknown>).notes ?? null,
+                            metadata: (payload as Record<string, unknown>).metadata ?? {},
+                            started_at: '2026-03-26T00:00:00.000Z',
+                            completed_at:
+                              (payload as Record<string, unknown>).completed_at ?? null,
+                            created_at: '2026-03-26T00:00:00.000Z',
+                          },
+                          error: null,
+                        });
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    } as any;
+
+    const adapter: BenchmarkExecutionAdapter = {
+      async executeQuery(_query, context) {
+        expect(context.runMode).toBe('grounded_site');
+        expect(context.groundingContext?.evidence).toHaveLength(1);
+        return {
+          status: 'completed',
+          responseText: 'Example is a healthcare technology consulting firm.',
+          responseMetadata: { mode: 'custom', run_mode: context.runMode },
+          errorMessage: null,
+          executedAt: '2026-03-26T00:00:30.000Z',
+        };
+      },
+    };
+
+    await runBenchmarkGroupSkeleton(
+      supabase,
+      {
+        domainId: '11111111-1111-4111-8111-111111111111',
+        querySetId: '22222222-2222-4222-8222-222222222222',
+        modelId: 'gemini-2.0-flash',
+        runMode: 'grounded_site',
+        runLabel: 'grounded',
+      },
+      adapter
+    );
+
+    const runGroupInsert = calls.find(
+      (call) => call.table === 'benchmark_run_groups' && call.op === 'insert'
+    );
+    expect(runGroupInsert?.payload).toMatchObject({
+      metadata: {
+        run_mode: 'grounded_site',
+        grounding_context_available: true,
+        grounding_context_source: 'metadata',
+        grounding_context_error: null,
+        grounding_evidence_count: 1,
+        grounding_evidence: [
+          {
+            source_label: 'About page',
+            page_type: 'about',
+            page_url: 'https://www.example.com/about',
+            evidence_label: 'About page',
+            excerpt: 'Example is a healthcare technology consulting firm.',
+          },
+        ],
+      },
+    });
+
+    const metricInsert = calls.find(
+      (call) => call.table === 'benchmark_domain_metrics' && call.op === 'insert'
+    );
+    expect(metricInsert?.payload).toMatchObject({
+      metrics: {
+        run_mode: 'grounded_site',
+      },
+    });
+
+    const runGroupUpdate = calls.find(
+      (call) => call.table === 'benchmark_run_groups' && call.op === 'update'
+    );
+    expect(runGroupUpdate?.payload).toMatchObject({
+      metadata: {
+        grounding_context_source: 'metadata',
+        grounding_evidence_count: 1,
+      },
+    });
+  });
+
+  it('builds grounded evidence from the site when metadata evidence is absent', async () => {
+    const calls: Array<{ table: string; op: string; payload?: unknown }> = [];
+
+    const supabase = {
+      from(table: string) {
+        return {
+          select() {
+            return this;
+          },
+          eq(column: string, value: unknown) {
+            if (table === 'benchmark_domains' && column === 'id') {
+              return {
+                maybeSingle() {
+                  return Promise.resolve({
+                    data: {
+                      id: String(value),
+                      domain: 'www.example.com',
+                      canonical_domain: 'example.com',
+                      site_url: 'https://example.com/',
+                      display_name: 'Example',
+                      vertical: 'saas',
+                      subvertical: null,
+                      geo_region: null,
+                      is_customer: true,
+                      is_competitor: false,
+                      metadata: {},
+                      created_at: '2026-03-26T00:00:00.000Z',
+                      updated_at: '2026-03-26T00:00:00.000Z',
+                    },
+                    error: null,
+                  });
+                },
+              };
+            }
+
+            if (table === 'benchmark_query_sets' && column === 'id') {
+              return {
+                maybeSingle() {
+                  return Promise.resolve({
+                    data: {
+                      id: String(value),
+                      name: 'brand-baseline',
+                      vertical: 'saas',
+                      version: 'v1',
+                      description: null,
+                      status: 'active',
+                      metadata: {},
+                      created_at: '2026-03-26T00:00:00.000Z',
+                    },
+                    error: null,
+                  });
+                },
+              };
+            }
+
+            if (table === 'benchmark_queries' && column === 'query_set_id') {
+              return {
+                order() {
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 'query-1',
+                        query_set_id: String(value),
+                        query_key: 'brand-overview',
+                        query_text: 'What is Example?',
+                        intent_type: 'direct',
+                        topic: 'brand',
+                        weight: 1,
+                        metadata: {},
+                        created_at: '2026-03-26T00:00:00.000Z',
+                      },
+                    ],
+                    error: null,
+                  });
+                },
+              };
+            }
+
+            return this;
+          },
+          insert(payload: unknown) {
+            calls.push({ table, op: 'insert', payload });
+            return {
+              select() {
+                if (table === 'benchmark_run_groups') {
+                  const record = payload as Record<string, unknown>;
+                  return {
+                    single() {
+                      return Promise.resolve({
+                        data: {
+                          id: 'run-group-1',
+                          query_set_id: record.query_set_id,
+                          label: record.label,
+                          run_scope: record.run_scope,
+                          model_set_version: record.model_set_version,
+                          status: record.status,
+                          notes: record.notes ?? null,
+                          metadata: record.metadata ?? {},
+                          started_at: record.started_at ?? null,
+                          completed_at: null,
+                          created_at: '2026-03-26T00:00:00.000Z',
+                        },
+                        error: null,
+                      });
+                    },
+                  };
+                }
+
+                if (table === 'query_runs') {
+                  return Promise.resolve({
+                    data: [
+                      {
+                        id: 'query-run-1',
+                        run_group_id: 'run-group-1',
+                        domain_id: '11111111-1111-4111-8111-111111111111',
+                        query_id: 'query-1',
+                        model_id: 'gemini-2.0-flash',
+                        auditor_model_id: null,
+                        status: 'completed',
+                        response_text: 'Example is a healthcare technology consulting firm.',
+                        response_metadata: { mode: 'custom' },
+                        error_message: null,
+                        executed_at: '2026-03-26T00:00:30.000Z',
+                        created_at: '2026-03-26T00:00:00.000Z',
+                      },
+                    ],
+                    error: null,
+                  });
+                }
+
+                if (table === 'query_citations') {
+                  return Promise.resolve({ data: [], error: null });
+                }
+
+                return Promise.resolve({ data: null, error: null });
+              },
+            };
+          },
+          update(payload: unknown) {
+            calls.push({ table, op: 'update', payload });
+            return {
+              eq() {
+                return {
+                  select() {
+                    return {
+                      single() {
+                        return Promise.resolve({
+                          data: {
+                            id: 'run-group-1',
+                            query_set_id: 'query-set-1',
+                            label: 'grounded',
+                            run_scope: 'internal_benchmark',
+                            model_set_version: 'gemini-2.0-flash',
+                            status: (payload as Record<string, unknown>).status,
+                            notes: (payload as Record<string, unknown>).notes ?? null,
+                            metadata: (payload as Record<string, unknown>).metadata ?? {},
+                            started_at: '2026-03-26T00:00:00.000Z',
+                            completed_at:
+                              (payload as Record<string, unknown>).completed_at ?? null,
+                            created_at: '2026-03-26T00:00:00.000Z',
+                          },
+                          error: null,
+                        });
+                      },
+                    };
+                  },
+                };
+              },
+            };
+          },
+        };
+      },
+    } as any;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url === 'https://example.com/') {
+        return new Response(
+          `
+            <html>
+              <head><title>Example</title></head>
+              <body>
+                <p>${'Example helps healthcare organizations modernize workflows. '.repeat(12)}</p>
+                <a href="/about">About</a>
+              </body>
+            </html>
+          `,
+          { status: 200, headers: { 'Content-Type': 'text/html' } }
+        );
+      }
+
+      if (url === 'https://example.com/about') {
+        return new Response(
+          `
+            <html>
+              <head><title>About Example</title></head>
+              <body><p>${'Example is a healthcare technology consulting firm. '.repeat(12)}</p></body>
+            </html>
+          `,
+          { status: 200, headers: { 'Content-Type': 'text/html' } }
+        );
+      }
+
+      return new Response('not found', { status: 404, headers: { 'Content-Type': 'text/html' } });
+    }) as typeof fetch;
+
+    const adapter: BenchmarkExecutionAdapter = {
+      async executeQuery(_query, context) {
+        expect(context.groundingContext?.evidence.length).toBeGreaterThanOrEqual(1);
+        expect(context.groundingContext?.evidence[0]?.pageType).toBe('homepage');
+        return {
+          status: 'completed',
+          responseText: 'Example is a healthcare technology consulting firm.',
+          responseMetadata: { mode: 'custom', run_mode: context.runMode },
+          errorMessage: null,
+          executedAt: '2026-03-26T00:00:30.000Z',
+        };
+      },
+    };
+
+    try {
+      await runBenchmarkGroupSkeleton(
+        supabase,
+        {
+          domainId: '11111111-1111-4111-8111-111111111111',
+          querySetId: '22222222-2222-4222-8222-222222222222',
+          modelId: 'gemini-2.0-flash',
+          runMode: 'grounded_site',
+          runLabel: 'grounded',
+        },
+        adapter
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    const runGroupInsert = calls.find(
+      (call) => call.table === 'benchmark_run_groups' && call.op === 'insert'
+    );
+    expect(runGroupInsert?.payload).toMatchObject({
+      metadata: {
+        grounding_context_available: true,
+        grounding_context_source: 'site_builder',
+      },
+    });
+
+    const groundingEvidence = ((runGroupInsert?.payload as Record<string, unknown>)['metadata'] as Record<
+      string,
+      unknown
+    >)['grounding_evidence'] as Array<Record<string, unknown>>;
+    expect(groundingEvidence[0]).toMatchObject({
+      page_type: 'homepage',
+      page_url: 'https://example.com/',
+    });
   });
 });

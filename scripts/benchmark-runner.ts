@@ -7,6 +7,7 @@ type CliArgs = {
   querySetId: string | null;
   modelId: string | null;
   auditorModelId: string | null;
+  runMode: string | null;
   runLabel: string | null;
   notes: string | null;
 };
@@ -27,6 +28,7 @@ function parseArgs(argv: string[]): CliArgs {
     querySetId: values.get('query-set-id') ?? null,
     modelId: values.get('model-id') ?? null,
     auditorModelId: values.get('auditor-model-id') ?? null,
+    runMode: values.get('run-mode') ?? null,
     runLabel: values.get('run-label') ?? null,
     notes: values.get('notes') ?? null,
   };
@@ -53,6 +55,7 @@ async function main(): Promise<void> {
     querySetId: args.querySetId,
     modelId: args.modelId,
     auditorModelId: args.auditorModelId ?? undefined,
+    runMode: args.runMode ?? undefined,
     runLabel: args.runLabel ?? undefined,
     notes: args.notes ?? undefined,
   }, adapter);

@@ -53,6 +53,8 @@ cloudflare-env.d.ts
 # Testing
 coverage/
 .promptfoo/
+playwright-report/
+test-results/
 
 # IDE
 .idea/
