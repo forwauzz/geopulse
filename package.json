@@ -14,10 +14,17 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "eval:smoke": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/report-eval-smoke.ts",
     "eval:promptfoo": "npm run eval:promptfoo:report && npm run eval:promptfoo:retrieval",
     "eval:promptfoo:report": "node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.report.yaml --no-progress-bar",
-    "eval:promptfoo:retrieval": "node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.retrieval.yaml --no-progress-bar"
+    "eval:promptfoo:retrieval": "node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.retrieval.yaml --no-progress-bar",
+    "eval:promptfoo:write:report": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/promptfoo-eval-write.ts --framework promptfoo_report",
+    "eval:promptfoo:write:retrieval": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/promptfoo-eval-write.ts --framework promptfoo_retrieval",
+    "eval:retrieval:write": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/retrieval-eval-write.ts",
+    "benchmark:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed.ts",
+    "benchmark:run": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-runner.ts"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.1.0",
@@ -38,6 +45,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250409.0",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -54,6 +62,7 @@
     "node": ">=20.0.0"
   },
   "overrides": {
-    "esbuild": "0.27.4"
+    "esbuild": "0.27.4",
+    "cloudflare": "4.4.1"
   }
 }

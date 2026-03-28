@@ -1,6 +1,8 @@
 'use client';
 
 import { useActionState } from 'react';
+import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { loginLoadingJourney } from '@/lib/client/loading-journeys';
 import { sendMagicLink, type LoginActionState } from './actions';
 
 type Props = {
@@ -9,6 +11,7 @@ type Props = {
 
 export function LoginForm({ nextPath }: Props) {
   const [state, formAction, pending] = useActionState(sendMagicLink, null);
+  useLongWaitEffect(pending, loginLoadingJourney);
 
   return (
     <form action={formAction} className="mt-8 flex max-w-md flex-col gap-4">

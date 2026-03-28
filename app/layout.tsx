@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Newsreader } from 'next/font/google';
 import './globals.css';
 import { AttributionInit } from '@/components/attribution-init';
+import { LongWaitProvider } from '@/components/long-wait-provider';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
 
@@ -37,10 +38,12 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${newsreader.variable} flex min-h-screen flex-col bg-surface font-body text-on-surface antialiased`}
       >
-        <AttributionInit />
-        <SiteHeader />
-        <div className="flex-1">{children}</div>
-        <SiteFooter />
+        <LongWaitProvider>
+          <AttributionInit />
+          <SiteHeader />
+          <div className="flex-1">{children}</div>
+          <SiteFooter />
+        </LongWaitProvider>
       </body>
     </html>
   );

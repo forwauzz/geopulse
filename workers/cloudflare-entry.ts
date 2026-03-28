@@ -7,6 +7,9 @@ import openNextWorker from '../.open-next/worker.js';
 import { dispatchQueueBatch, type ReportQueueBatch } from './queue/report-queue-consumer';
 import { sendWeeklyReport } from '../services/marketing-attribution/weekly-report';
 import { createClient } from '@supabase/supabase-js';
+import { structuredError } from '../lib/server/structured-log';
+import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
+import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -25,9 +28,7 @@ async function pingSupabaseKeepAlive(env: CloudflareEnv): Promise<void> {
     },
   });
   if (!res.ok) {
-    console.error(
-      JSON.stringify({ event: 'supabase_keepalive_failed', status: res.status })
-    );
+    structuredError('supabase_keepalive_failed', { status: res.status });
   }
 }
 
@@ -42,7 +43,7 @@ export default {
     try {
       await pingSupabaseKeepAlive(env);
     } catch {
-      console.error(JSON.stringify({ event: 'supabase_keepalive_error' }));
+      structuredError('supabase_keepalive_error', {});
     }
 
     const isMonday = new Date().getUTCDay() === 1;
@@ -64,10 +65,29 @@ export default {
           to: reportTo,
         });
         if (!result.ok) {
-          console.error(JSON.stringify({ event: 'weekly_report_failed', reason: result.reason }));
+          structuredError('weekly_report_failed', { reason: result.reason });
         }
       } catch (err) {
-        console.error(JSON.stringify({ event: 'weekly_report_error', error: err instanceof Error ? err.message : 'unknown' }));
+        structuredError('weekly_report_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+    }
+
+    if (supaUrl && supaKey) {
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        await runScheduledBenchmarkSweep({
+          supabase,
+          env,
+          adapter: createBenchmarkExecutionAdapter(env),
+        });
+      } catch (err) {
+        structuredError('benchmark_schedule_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
       }
     }
   },

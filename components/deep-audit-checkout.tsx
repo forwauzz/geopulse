@@ -2,6 +2,8 @@
 
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { useRef, useState } from 'react';
+import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { checkoutLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
 
 type Props = {
@@ -22,6 +24,7 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
   const [loading, setLoading] = useState(false);
   const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
   const submittingRef = useRef(false);
+  useLongWaitEffect(loading, checkoutLoadingJourney);
 
   function resetTurnstile(): void {
     setToken(null);
@@ -78,7 +81,7 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
       <h2 className="font-headline text-xl font-bold text-surface-container-lowest">Unlock the full picture</h2>
       <p className="font-body text-sm text-surface-container-low/80">
         Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan.
-        One-time purchase, no subscription.
+        One-time purchase, no subscription. After payment, we send the finished report to the email collected in Stripe checkout.
       </p>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-surface-container-low/70">
         <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">language</span> Multi-page crawl</li>
@@ -99,7 +102,7 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
         disabled={loading}
         className="rounded-xl bg-surface-container-lowest px-6 py-3.5 text-sm font-semibold text-on-background transition hover:bg-surface disabled:opacity-50"
       >
-        {loading ? 'Redirecting…' : 'Get my full report \u2014 $29'}
+        {loading ? 'Redirecting…' : 'Continue to full audit — $29'}
       </button>
     </div>
   );

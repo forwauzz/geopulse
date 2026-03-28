@@ -1,0 +1,40 @@
+{
+  "siteUrl": "https://example.com/",
+  "pages": [
+    {
+      "url": "https://example.com/security",
+      "section": "security",
+      "content": "Security headers are missing on key pages. Content-Security-Policy and X-Frame-Options are absent from the response headers."
+    },
+    {
+      "url": "https://example.com/docs",
+      "section": "docs",
+      "content": "The docs page explains how to add FAQPage schema and improve extractability with direct answers and concise heading structure."
+    },
+    {
+      "url": "https://example.com/about",
+      "section": "about",
+      "content": "GEO-Pulse audits AI visibility signals across marketing sites and provides a prioritized action plan."
+    }
+  ],
+  "prompts": [
+    {
+      "promptKey": "security_headers",
+      "promptText": "What security headers are missing?",
+      "expectedSources": ["https://example.com/security"],
+      "expectedFacts": ["Content-Security-Policy"]
+    },
+    {
+      "promptKey": "schema_coverage",
+      "promptText": "How do I improve schema coverage for FAQ answers?",
+      "expectedSources": ["https://example.com/docs"],
+      "expectedFacts": ["FAQPage schema"]
+    },
+    {
+      "promptKey": "refund_policy",
+      "promptText": "What is the refund policy?",
+      "expectedSources": ["https://example.com/refunds"],
+      "expectedFacts": ["30-day refund policy"]
+    }
+  ]
+}

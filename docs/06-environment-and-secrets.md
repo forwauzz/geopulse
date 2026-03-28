@@ -24,6 +24,10 @@ Required:
 - `DEEP_AUDIT_BROWSER_RENDER_MODE`
 - `GEMINI_MODEL`
 - `GEMINI_ENDPOINT`
+- `BENCHMARK_EXECUTION_PROVIDER`
+- `BENCHMARK_EXECUTION_MODEL`
+- `BENCHMARK_EXECUTION_ENDPOINT`
+- `ADMIN_EMAIL`
 
 Source of truth:
 - `wrangler.jsonc`
@@ -39,6 +43,7 @@ Core app secrets:
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
 - `GEMINI_API_KEY`
+- `BENCHMARK_EXECUTION_API_KEY`
 - `RESEND_API_KEY`
 - `TURNSTILE_SECRET_KEY`
 
@@ -46,6 +51,7 @@ Conditional secrets:
 - `RECONCILE_SECRET`
 - `BROWSER_RENDERING_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
+- `MARKETING_REPORT_TO`
 
 Browser Rendering note:
 - `BROWSER_RENDERING_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are only required when `DEEP_AUDIT_BROWSER_RENDER_MODE=auto`.
@@ -116,8 +122,26 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 
 ### Admin evals
 - Supabase URL
+
+### Internal benchmarks
+- Supabase URL + service role key
+- `BENCHMARK_EXECUTION_PROVIDER=gemini` only if you want live benchmark execution
+- `BENCHMARK_EXECUTION_MODEL` must match the model lane you enter in the admin trigger form
+- `BENCHMARK_EXECUTION_API_KEY` can be set explicitly, or the benchmark lane can fall back to `GEMINI_API_KEY`
+- if benchmark execution vars are unset, the admin benchmark runner safely falls back to the stub adapter
+- `BENCHMARK_SCHEDULE_ENABLED=true` only if you want the Worker cron to run recurring internal benchmark sweeps
+- `BENCHMARK_SCHEDULE_QUERY_SET_ID` must point at the active benchmark query set used for the recurring lane
+- `BENCHMARK_SCHEDULE_MODEL_ID` freezes the recurring model lane label so benchmark history stays comparable over time
+- `BENCHMARK_SCHEDULE_RUN_MODES` optionally narrows the recurring sweep to `ungrounded_inference`, `grounded_site`, or both
+- `BENCHMARK_SCHEDULE_DOMAIN_LIMIT` keeps the recurring sweep bounded while the benchmark lane is still in the small-cohort stage
+- `BENCHMARK_SCHEDULE_VERSION` gives the recurring lane an explicit operator version tag in run metadata
 - service role key
 - admin user email in auth/db
+- optional local write tooling:
+  - `npm run eval:smoke`
+  - `npm run eval:promptfoo:write:report -- --site-url https://example.com`
+  - `npm run eval:promptfoo:write:retrieval -- --site-url https://example.com`
+  - `npm run eval:retrieval:write -- --site-url https://example.com`
 
 ## Sanity checks
 
@@ -126,4 +150,5 @@ Before handing off to another team, verify:
 2. `npm run build`
 3. `npm run eval:smoke`
 4. admin eval page shows inserted row
-5. report page can fetch markdown and PDF without CSP errors
+5. retrieval drilldown opens when retrieval rows exist
+6. report page can fetch markdown and PDF without CSP errors
