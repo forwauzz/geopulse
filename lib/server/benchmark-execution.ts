@@ -43,6 +43,7 @@ export type BenchmarkExecutionEnvLike = {
   readonly BENCHMARK_EXECUTION_PROVIDER?: string;
   readonly BENCHMARK_EXECUTION_API_KEY?: string;
   readonly BENCHMARK_EXECUTION_MODEL?: string;
+  readonly BENCHMARK_EXECUTION_ENABLED_MODELS?: string;
   readonly BENCHMARK_EXECUTION_ENDPOINT?: string;
   readonly GEMINI_API_KEY?: string;
   readonly GEMINI_MODEL?: string;
@@ -53,6 +54,7 @@ export type BenchmarkExecutionConfig = {
   readonly provider: BenchmarkExecutionProvider;
   readonly apiKey: string;
   readonly model: string;
+  readonly enabledModels: readonly string[];
   readonly endpoint: string;
 };
 
@@ -101,13 +103,31 @@ function normalizeProvider(raw: string | undefined): BenchmarkExecutionProvider 
   return 'stub';
 }
 
+function parseEnabledModels(
+  raw: string | undefined,
+  fallbackModel: string
+): readonly string[] {
+  const parsed = (raw ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  const ordered = parsed.length > 0 ? parsed : [fallbackModel];
+  return Array.from(new Set(ordered));
+}
+
 export function resolveBenchmarkExecutionConfig(
   env: BenchmarkExecutionEnvLike | undefined
 ): BenchmarkExecutionConfig {
+  const fallbackModel =
+    env?.BENCHMARK_EXECUTION_MODEL?.trim() || env?.GEMINI_MODEL?.trim() || 'gemini-2.0-flash';
+  const enabledModels = parseEnabledModels(env?.BENCHMARK_EXECUTION_ENABLED_MODELS, fallbackModel);
+
   return {
     provider: normalizeProvider(env?.BENCHMARK_EXECUTION_PROVIDER),
     apiKey: env?.BENCHMARK_EXECUTION_API_KEY?.trim() || env?.GEMINI_API_KEY?.trim() || '',
-    model: env?.BENCHMARK_EXECUTION_MODEL?.trim() || env?.GEMINI_MODEL?.trim() || 'gemini-2.0-flash',
+    model: enabledModels[0] ?? fallbackModel,
+    enabledModels,
     endpoint:
       env?.BENCHMARK_EXECUTION_ENDPOINT?.trim() ||
       env?.GEMINI_ENDPOINT?.trim() ||
@@ -130,14 +150,16 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
     context: BenchmarkExecutionContext
   ): Promise<BenchmarkExecutionResult> {
     const executedAt = new Date().toISOString();
+    const enabledModels = new Set(this.config.enabledModels);
 
-    if (context.modelId !== this.config.model) {
+    if (!enabledModels.has(context.modelId)) {
       return {
         status: 'skipped',
         responseText: null,
         responseMetadata: {
           provider: 'gemini',
           configured_model: this.config.model,
+          enabled_models: this.config.enabledModels,
           requested_model: context.modelId,
           query_key: query.query_key,
           run_mode: context.runMode,
@@ -154,6 +176,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
         responseMetadata: {
           provider: 'gemini',
           configured_model: this.config.model,
+          enabled_models: this.config.enabledModels,
           requested_model: context.modelId,
           query_key: query.query_key,
           run_mode: context.runMode,
@@ -164,7 +187,8 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
     }
 
     const base = this.config.endpoint.replace(/\/$/, '');
-    const url = `${base}/${this.config.model}:generateContent?key=${encodeURIComponent(this.config.apiKey)}`;
+    const requestedModel = context.modelId;
+    const url = `${base}/${requestedModel}:generateContent?key=${encodeURIComponent(this.config.apiKey)}`;
     let promptText: string;
     try {
       promptText = buildBenchmarkPrompt({
@@ -181,6 +205,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
         responseMetadata: {
           provider: 'gemini',
           configured_model: this.config.model,
+          enabled_models: this.config.enabledModels,
           requested_model: context.modelId,
           query_key: query.query_key,
           run_mode: context.runMode,
@@ -227,6 +252,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
             responseMetadata: {
               provider: 'gemini',
               configured_model: this.config.model,
+              enabled_models: this.config.enabledModels,
               requested_model: context.modelId,
               query_key: query.query_key,
               run_mode: context.runMode,
@@ -251,6 +277,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
             responseMetadata: {
               provider: 'gemini',
               configured_model: this.config.model,
+              enabled_models: this.config.enabledModels,
               requested_model: context.modelId,
               query_key: query.query_key,
               run_mode: context.runMode,
@@ -267,6 +294,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
           responseMetadata: {
             provider: 'gemini',
             configured_model: this.config.model,
+            enabled_models: this.config.enabledModels,
             requested_model: context.modelId,
             query_key: query.query_key,
             run_mode: context.runMode,
@@ -289,6 +317,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
           responseMetadata: {
             provider: 'gemini',
             configured_model: this.config.model,
+            enabled_models: this.config.enabledModels,
             requested_model: context.modelId,
             query_key: query.query_key,
             run_mode: context.runMode,
@@ -306,6 +335,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
       responseMetadata: {
         provider: 'gemini',
         configured_model: this.config.model,
+        enabled_models: this.config.enabledModels,
         requested_model: context.modelId,
         query_key: query.query_key,
         run_mode: context.runMode,

@@ -4,7 +4,9 @@ import {
   formatBenchmarkCount,
   formatBenchmarkPercent,
   formatBenchmarkRunTimestamp,
+  readBenchmarkGroundingClaimMatch,
   readBenchmarkGroundingEvidence,
+  readBenchmarkGroundingProvenance,
   readBenchmarkResponseBody,
 } from '@/lib/server/benchmark-run-detail';
 
@@ -18,6 +20,13 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
   const groundingEvidence = readBenchmarkGroundingEvidence(metricDetail);
   const completedRuns = queryRuns.filter((row) => row.status === 'completed').length;
   const failedRuns = queryRuns.filter((row) => row.status === 'failed').length;
+  const citationsByQueryRunId = new Map<string, typeof citations>();
+
+  for (const citation of citations) {
+    const existing = citationsByQueryRunId.get(citation.query_run_id) ?? [];
+    existing.push(citation);
+    citationsByQueryRunId.set(citation.query_run_id, existing);
+  }
 
   return (
     <>
@@ -189,6 +198,195 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
       ) : null}
 
       <section className="mt-8">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-headline text-xl font-bold text-on-background">Query lineage</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Inspect each query as one chain: prompt, model response, extracted citations, and
+              grounded evidence status.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 space-y-4">
+          {queryRuns.length === 0 ? (
+            <div className="rounded-xl bg-surface-container-lowest p-6 text-sm text-on-surface-variant shadow-float">
+              No query runs were found for this run group.
+            </div>
+          ) : (
+            queryRuns.map((row) => {
+              const queryCitations = citationsByQueryRunId.get(row.id) ?? [];
+              const responseBody = readBenchmarkResponseBody(row.response_metadata);
+
+              return (
+                <article
+                  key={`lineage-${row.id}`}
+                  className="rounded-xl bg-surface-container-lowest p-6 shadow-float"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-label text-xs uppercase tracking-widest text-primary">
+                        {row.query_key}
+                      </p>
+                      <h3 className="mt-2 font-headline text-lg font-semibold text-on-background">
+                        {row.query_text}
+                      </h3>
+                    </div>
+                    <div className="text-right text-sm text-on-surface-variant">
+                      <div className="capitalize">{row.status}</div>
+                      <div>{formatBenchmarkRunTimestamp(row.executed_at)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.8fr)]">
+                    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
+                      <p className="text-xs uppercase tracking-widest text-on-surface-variant">
+                        Prompt
+                      </p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-on-background">
+                        {row.query_text}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-4">
+                      <p className="text-xs uppercase tracking-widest text-on-surface-variant">
+                        Response
+                      </p>
+                      {row.response_text ? (
+                        <p className="mt-2 whitespace-pre-wrap break-words text-sm text-on-background">
+                          {row.response_text}
+                        </p>
+                      ) : (
+                        <div className="mt-2 space-y-2 text-sm">
+                          <p className="text-on-background">{row.error_message ?? '-'}</p>
+                          {responseBody ? (
+                            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-surface-container-lowest px-3 py-2 text-xs text-on-background">
+                              {responseBody}
+                            </pre>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs uppercase tracking-widest text-on-surface-variant">
+                        Extracted citations
+                      </p>
+                      <p className="text-xs text-on-surface-variant">
+                        {queryCitations.length} citation{queryCitations.length === 1 ? '' : 's'}
+                      </p>
+                    </div>
+                    {queryCitations.length === 0 ? (
+                      <div className="mt-3 rounded-xl border border-dashed border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
+                        No citations were extracted for this response.
+                      </div>
+                    ) : (
+                      <div className="mt-3 space-y-3">
+                        {queryCitations.map((citation) => {
+                          const provenance = readBenchmarkGroundingProvenance(citation.metadata);
+                          const claimMatch = readBenchmarkGroundingClaimMatch(citation.metadata);
+
+                          return (
+                            <div
+                              key={citation.id}
+                              className="rounded-xl border border-outline-variant/10 bg-surface-container-low p-4"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium text-on-background">
+                                    {citation.cited_domain ?? 'Unresolved domain'}
+                                  </p>
+                                  <p className="text-xs uppercase tracking-widest text-on-surface-variant">
+                                    {citation.citation_type}
+                                    {citation.rank_position ? ` | rank ${citation.rank_position}` : ''}
+                                    {typeof citation.confidence === 'number'
+                                      ? ` | confidence ${citation.confidence.toFixed(2)}`
+                                      : ''}
+                                  </p>
+                                  <p className="break-all text-sm text-on-surface-variant">
+                                    {citation.cited_url ?? 'No URL captured'}
+                                  </p>
+                                </div>
+                                <div className="text-right text-xs text-on-surface-variant">
+                                  <div>
+                                    Provenance: {provenance.status === 'matched' ? 'matched' : 'unresolved'}
+                                  </div>
+                                  <div>
+                                    Claim check: {formatClaimMatchLabel(claimMatch.status)}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                <div className="rounded-lg bg-surface-container-lowest p-3">
+                                  <p className="text-xs uppercase tracking-widest text-on-surface-variant">
+                                    Grounded source link
+                                  </p>
+                                  {citation.grounding_page_url ? (
+                                    <div className="mt-2 space-y-1">
+                                      <a
+                                        href={citation.grounding_page_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="break-all text-sm text-primary underline-offset-2 hover:underline"
+                                      >
+                                        {citation.grounding_page_url}
+                                      </a>
+                                      <p className="text-xs text-on-surface-variant">
+                                        {citation.grounding_page_type ?? 'page'}
+                                        {provenance.matchMethod
+                                          ? ` | ${formatProvenanceMethodLabel(provenance.matchMethod)}`
+                                          : ''}
+                                        {typeof provenance.confidence === 'number'
+                                          ? ` | confidence ${provenance.confidence.toFixed(2)}`
+                                          : ''}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <p className="mt-2 text-sm text-on-surface-variant">
+                                      Unresolved against current grounding evidence.
+                                    </p>
+                                  )}
+                                </div>
+
+                                <div className="rounded-lg bg-surface-container-lowest p-3">
+                                  <p className="text-xs uppercase tracking-widest text-on-surface-variant">
+                                    Claim overlap
+                                  </p>
+                                  <p className="mt-2 text-sm text-on-background">
+                                    {formatClaimMatchLabel(claimMatch.status)}
+                                  </p>
+                                  <p className="mt-1 text-xs text-on-surface-variant">
+                                    Tokens {claimMatch.overlapTokenCount}/{claimMatch.claimTokenCount}
+                                    {claimMatch.evidenceTokenCount > 0
+                                      ? ` against evidence ${claimMatch.evidenceTokenCount}`
+                                      : ''}
+                                    {claimMatch.overlapRatio > 0
+                                      ? ` | ratio ${claimMatch.overlapRatio.toFixed(3)}`
+                                      : ''}
+                                  </p>
+                                  {claimMatch.claimText ? (
+                                    <p className="mt-2 whitespace-pre-wrap text-sm text-on-surface-variant">
+                                      {claimMatch.claimText}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <section className="mt-8">
         <h2 className="font-headline text-xl font-bold text-on-background">Query runs</h2>
         <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
           <table className="min-w-[1040px] w-full border-collapse text-left font-body text-sm">
@@ -325,6 +523,25 @@ function MetricCard({ label, value }: { readonly label: string; readonly value: 
       <p className="mt-2 font-headline text-3xl font-bold text-on-background">{value}</p>
     </div>
   );
+}
+
+function formatProvenanceMethodLabel(method: 'exact_url' | 'normalized_page') {
+  return method === 'exact_url' ? 'exact URL match' : 'normalized page match';
+}
+
+function formatClaimMatchLabel(
+  status: 'supported_overlap' | 'weak_overlap' | 'no_overlap' | 'unavailable'
+) {
+  switch (status) {
+    case 'supported_overlap':
+      return 'supported overlap';
+    case 'weak_overlap':
+      return 'weak overlap';
+    case 'no_overlap':
+      return 'no overlap';
+    default:
+      return 'unavailable';
+  }
 }
 
 function MetadataItem({

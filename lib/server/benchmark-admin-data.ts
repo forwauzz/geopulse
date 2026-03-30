@@ -84,6 +84,31 @@ export type BenchmarkOption = {
   readonly label: string;
 };
 
+export type BenchmarkCohortSnapshot = {
+  readonly cohortId: string;
+  readonly cohortName: string;
+  readonly querySetId: string;
+  readonly querySetName: string;
+  readonly querySetVersion: string;
+  readonly modelId: string;
+  readonly runMode: string;
+  readonly benchmarkWindowLabel: string | null;
+  readonly description: string | null;
+  readonly members: Array<{
+    readonly domainId: string;
+    readonly displayName: string;
+    readonly canonicalDomain: string;
+    readonly role: string;
+    readonly latestRunGroupId: string | null;
+    readonly latestRunCreatedAt: string | null;
+    readonly queryCoverage: number | null;
+    readonly citationRate: number | null;
+    readonly shareOfVoice: number | null;
+    readonly exactPageQualityRate: number | null;
+    readonly status: string | null;
+  }>;
+};
+
 function toMap<T extends { id: string }>(rows: readonly T[]): Map<string, T> {
   return new Map(rows.map((row) => [row.id, row] as const));
 }
@@ -331,6 +356,163 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
             ? (row.metadata['exact_page_quality_rate'] as number)
             : null,
       }));
+    },
+
+    async getCohortsForDomain(domainId: string): Promise<BenchmarkCohortSnapshot[]> {
+      const { data: memberships, error: membershipError } = await supabase
+        .from('benchmark_cohort_members')
+        .select('cohort_id,domain_id,role')
+        .eq('domain_id', domainId);
+
+      if (membershipError) throw membershipError;
+
+      const cohortIds = Array.from(
+        new Set(
+          ((memberships ?? []) as Array<{ cohort_id: string }>).map((row) => row.cohort_id)
+        )
+      );
+
+      if (cohortIds.length === 0) return [];
+
+      const { data: cohorts, error: cohortError } = await supabase
+        .from('benchmark_cohorts')
+        .select(
+          'id,name,query_set_id,model_id,run_mode,benchmark_window_label,description,status'
+        )
+        .in('id', cohortIds)
+        .eq('status', 'active');
+
+      if (cohortError) throw cohortError;
+
+      const activeCohorts =
+        ((cohorts ?? []) as Array<{
+          id: string;
+          name: string;
+          query_set_id: string;
+          model_id: string;
+          run_mode: string;
+          benchmark_window_label: string | null;
+          description: string | null;
+          status: string;
+        }>) ?? [];
+
+      if (activeCohorts.length === 0) return [];
+
+      const { data: allMemberships, error: allMembershipError } = await supabase
+        .from('benchmark_cohort_members')
+        .select('cohort_id,domain_id,role')
+        .in(
+          'cohort_id',
+          activeCohorts.map((row) => row.id)
+        );
+
+      if (allMembershipError) throw allMembershipError;
+
+      const memberDomainIds = Array.from(
+        new Set(
+          ((allMemberships ?? []) as Array<{ domain_id: string }>).map((row) => row.domain_id)
+        )
+      );
+
+      const [{ data: domains, error: domainError }, { data: querySets, error: querySetError }] =
+        await Promise.all([
+          memberDomainIds.length > 0
+            ? supabase
+                .from('benchmark_domains')
+                .select('id,display_name,canonical_domain')
+                .in('id', memberDomainIds)
+            : Promise.resolve({ data: [], error: null }),
+          supabase
+            .from('benchmark_query_sets')
+            .select('id,name,version')
+            .in(
+              'id',
+              Array.from(new Set(activeCohorts.map((row) => row.query_set_id)))
+            ),
+        ]);
+
+      if (domainError || querySetError) throw domainError ?? querySetError;
+
+      const domainMap = toMap(
+        ((domains ?? []) as Array<{
+          id: string;
+          display_name: string | null;
+          canonical_domain: string;
+        }>) ?? []
+      );
+      const querySetMap = toMap(
+        ((querySets ?? []) as Array<{ id: string; name: string; version: string }>) ?? []
+      );
+
+      const snapshots = await Promise.all(
+        activeCohorts.map(async (cohort) => {
+          const cohortMembers = ((allMemberships ?? []) as Array<{
+            cohort_id: string;
+            domain_id: string;
+            role: string;
+          }>).filter((row) => row.cohort_id === cohort.id);
+
+          const comparableRuns = (
+            await this.getRunGroups({
+              querySetId: cohort.query_set_id,
+              modelId: cohort.model_id,
+            })
+          ).filter((row) => {
+            const runMode =
+              typeof row.metadata['run_mode'] === 'string' ? String(row.metadata['run_mode']) : null;
+            return runMode === cohort.run_mode;
+          });
+
+          const latestRunByDomain = new Map<string, BenchmarkRunListRow>();
+          for (const run of comparableRuns) {
+            if (!latestRunByDomain.has(run.domain_id)) {
+              latestRunByDomain.set(run.domain_id, run);
+            }
+          }
+
+          return {
+            cohortId: cohort.id,
+            cohortName: cohort.name,
+            querySetId: cohort.query_set_id,
+            querySetName: querySetMap.get(cohort.query_set_id)?.name ?? 'unknown',
+            querySetVersion: querySetMap.get(cohort.query_set_id)?.version ?? 'unknown',
+            modelId: cohort.model_id,
+            runMode: cohort.run_mode,
+            benchmarkWindowLabel: cohort.benchmark_window_label,
+            description: cohort.description,
+            members: cohortMembers
+              .map((member) => {
+                const domain = domainMap.get(member.domain_id);
+                if (!domain) return null;
+                const latestRun = latestRunByDomain.get(member.domain_id) ?? null;
+
+                return {
+                  domainId: member.domain_id,
+                  displayName: domain.display_name ?? domain.canonical_domain,
+                  canonicalDomain: domain.canonical_domain,
+                  role: member.role,
+                  latestRunGroupId: latestRun?.id ?? null,
+                  latestRunCreatedAt: latestRun?.created_at ?? null,
+                  queryCoverage: latestRun?.query_coverage ?? null,
+                  citationRate: latestRun?.citation_rate ?? null,
+                  shareOfVoice: latestRun?.share_of_voice ?? null,
+                  exactPageQualityRate:
+                    typeof latestRun?.metadata['exact_page_quality_rate'] === 'number'
+                      ? (latestRun.metadata['exact_page_quality_rate'] as number)
+                      : null,
+                  status: latestRun?.status ?? null,
+                };
+              })
+              .filter(
+                (
+                  member
+                ): member is BenchmarkCohortSnapshot['members'][number] => member !== null
+              ),
+          } satisfies BenchmarkCohortSnapshot;
+        })
+      );
+
+      return snapshots;
     },
 
     async getDomainOptions(): Promise<BenchmarkOption[]> {

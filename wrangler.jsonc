@@ -115,9 +115,9 @@
     ]
   },
 
-  // Daily ping — keeps Supabase free-tier project from pausing after 7 days idle (see agents/DATABASE.md)
+  // Twice-daily ping keeps Supabase warm and drives the bounded internal benchmark lane when enabled.
   "triggers": {
-    "crons": ["0 12 * * *"]
+    "crons": ["0 0,12 * * *"]
   },
 
   // Observability

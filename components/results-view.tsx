@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { DeepAuditCheckout } from '@/components/deep-audit-checkout';
 import { EmailGate } from '@/components/email-gate';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
@@ -26,6 +27,19 @@ type ScanData = {
 };
 
 type Props = { scanId: string; turnstileSiteKey: string; checkoutState?: string | null };
+type LoadError = 'not_found' | 'expired' | 'forbidden' | 'load_failed' | 'network' | null;
+type ResultsActionCard = {
+  eyebrow: string;
+  title: string;
+  body: string;
+  primaryLabel: string;
+  primaryHref?: string;
+  primaryTargetId?: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+  secondaryTargetId?: string;
+  note?: string;
+};
 
 function domainFromUrl(url: string): string {
   try {
@@ -36,21 +50,76 @@ function domainFromUrl(url: string): string {
   }
 }
 
+function buildActionCard(input: {
+  host: string;
+  reportStatus: ReportStatus;
+  hasPaidReport: boolean;
+  hasDirectReportAccess: boolean;
+  scanId: string;
+  pdfUrl: string | null;
+  markdownUrl: string | null;
+}): ResultsActionCard {
+  if (input.reportStatus === 'delivered') {
+    return {
+      eyebrow: 'Step 4',
+      title: 'Your report is ready',
+      body: input.hasDirectReportAccess
+        ? 'Open the interactive report, download the PDF, or sign in with the checkout email if you want it saved in your dashboard.'
+        : 'Your report was delivered to the Stripe checkout email. Sign in with that same email if you want to recover it in your dashboard later.',
+      primaryLabel: input.markdownUrl ? 'Open report now' : input.pdfUrl ? 'Download PDF' : 'Open dashboard',
+      primaryHref: input.markdownUrl ? `/results/${input.scanId}/report` : input.pdfUrl ?? '/dashboard',
+      secondaryLabel: 'Sign in to dashboard',
+      secondaryHref: '/login?next=/dashboard',
+      note: 'Delivery email remains the source of truth for the paid report, but the same checkout email can also unlock dashboard recovery.',
+    };
+  }
+
+  if (input.reportStatus === 'generating') {
+    return {
+      eyebrow: 'Step 3',
+      title: 'Your full audit is being prepared',
+      body: `We are building the longer report for ${input.host}. Stay on this page if you want to watch for delivery, or come back from your email and dashboard later.`,
+      primaryLabel: 'Refresh status',
+      primaryHref: `/results/${input.scanId}`,
+      secondaryLabel: 'Open dashboard sign-in',
+      secondaryHref: '/login?next=/dashboard',
+      note: 'The finished report goes to the Stripe checkout email. This page also polls for delivery for a short window.',
+    };
+  }
+
+  return {
+    eyebrow: input.hasPaidReport ? 'Step 2' : 'Step 2',
+    title: 'Choose what to do next',
+    body: `Start with the preview for ${input.host}, then either continue to the full audit or save this preview for later. The paid path is the main next step.`,
+    primaryLabel: 'Continue to full audit',
+    primaryTargetId: 'full-audit-checkout',
+    secondaryLabel: 'Save preview instead',
+    secondaryTargetId: 'preview-save',
+    note: 'Use the full audit if you want the complete report and action plan. Use save preview only if you are not ready to buy yet.',
+  };
+}
+
 const POLL_INTERVAL_MS = 10_000;
 const POLL_MAX_MS = 120_000;
 
 export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoadError>(null);
   const [data, setData] = useState<ScanData | null>(null);
+  const [shareState, setShareState] = useState<{ label: string; helper: string } | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollStart = useRef<number>(0);
   useLongWaitEffect(loading, resultsLoadingJourney);
   useLongWaitEffect(data?.reportStatus === 'generating', reportLoadingJourney);
 
-  const fetchScan = useCallback(async (): Promise<ScanData | null> => {
+  const fetchScan = useCallback(async (): Promise<{ data: ScanData | null; error: LoadError }> => {
     const res = await fetch(`/api/scans/${scanId}`, { cache: 'no-store' });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (res.status === 404) return { data: null, error: 'not_found' };
+      if (res.status === 403) return { data: null, error: 'forbidden' };
+      if (res.status === 410) return { data: null, error: 'expired' };
+      return { data: null, error: 'load_failed' };
+    }
     const j = (await res.json()) as {
       scanId: string;
       url: string;
@@ -64,16 +133,19 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       markdownUrl?: string | null;
     };
     return {
-      scanId: j.scanId,
-      url: j.url,
-      score: j.score ?? 0,
-      letterGrade: j.letterGrade ?? '\u2014',
-      topIssues: Array.isArray(j.topIssues) ? j.topIssues : [],
-      categoryScores: Array.isArray(j.categoryScores) ? j.categoryScores : [],
-      hasPaidReport: j.hasPaidReport ?? false,
-      reportStatus: j.reportStatus ?? 'none',
-      pdfUrl: j.pdfUrl ?? null,
-      markdownUrl: j.markdownUrl ?? null,
+      data: {
+        scanId: j.scanId,
+        url: j.url,
+        score: j.score ?? 0,
+        letterGrade: j.letterGrade ?? '\u2014',
+        topIssues: Array.isArray(j.topIssues) ? j.topIssues : [],
+        categoryScores: Array.isArray(j.categoryScores) ? j.categoryScores : [],
+        hasPaidReport: j.hasPaidReport ?? false,
+        reportStatus: j.reportStatus ?? 'none',
+        pdfUrl: j.pdfUrl ?? null,
+        markdownUrl: j.markdownUrl ?? null,
+      },
+      error: null,
     };
   }, [scanId]);
 
@@ -83,11 +155,12 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       try {
         const result = await fetchScan();
         if (cancelled) return;
-        if (!result) {
-          setError('load_failed');
+        if (!result.data) {
+          setError(result.error ?? 'load_failed');
           return;
         }
-        setData(result);
+        setError(null);
+        setData(result.data);
       } catch {
         if (!cancelled) setError('network');
       } finally {
@@ -104,8 +177,13 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     const poll = async () => {
       if (Date.now() - pollStart.current > POLL_MAX_MS) return;
       const fresh = await fetchScan();
-      if (fresh) setData(fresh);
-      if (fresh?.reportStatus === 'generating') {
+      if (fresh.data) {
+        setError(null);
+        setData(fresh.data);
+      } else if (fresh.error) {
+        setError(fresh.error);
+      }
+      if (fresh.data?.reportStatus === 'generating') {
         pollTimer.current = setTimeout(poll, POLL_INTERVAL_MS);
       }
     };
@@ -131,6 +209,26 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       </div>
     );
   }
+  if (error === 'expired') {
+    return (
+      <div className="rounded-xl bg-surface-container-low px-6 py-16">
+        <h1 className="font-headline text-2xl font-bold text-on-background">This shared scan has expired</h1>
+        <p className="mt-2 font-body text-on-surface-variant">
+          Public scan links stay open for a limited window. Run a new scan to generate a fresh results page.
+        </p>
+      </div>
+    );
+  }
+  if (error === 'forbidden') {
+    return (
+      <div className="rounded-xl bg-surface-container-low px-6 py-16">
+        <h1 className="font-headline text-2xl font-bold text-on-background">This scan is private</h1>
+        <p className="mt-2 font-body text-on-surface-variant">
+          Sign in with the purchase email to access private scans and reports from your dashboard.
+        </p>
+      </div>
+    );
+  }
   if (error || !data) {
     return (
       <div className="rounded-xl bg-surface-container-low px-6 py-16">
@@ -141,6 +239,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
   }
 
   const host = domainFromUrl(data.url);
+  const hasDirectReportAccess = !!(data.pdfUrl || data.markdownUrl);
   const showCheckout = !data.hasPaidReport && turnstileSiteKey;
   const showEmailGate = !data.hasPaidReport && turnstileSiteKey;
   const journey = buildResultsJourneyModel({
@@ -148,7 +247,45 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     hasPaidReport: data.hasPaidReport,
     reportStatus: data.reportStatus,
     checkoutState,
+    hasDirectReportAccess,
   });
+  const snapshotHref = `/results/${data.scanId}/opengraph-image`;
+
+  async function handleShareSnapshot(): Promise<void> {
+    const shareUrl = window.location.href;
+    const shareData = {
+      title: `GEO-Pulse results for ${host}`,
+      text: `AI Search Readiness snapshot for ${host}`,
+      url: shareUrl,
+    };
+
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        await navigator.share(shareData);
+        setShareState({
+          label: 'Snapshot ready to share',
+          helper: 'The results link includes the branded preview image for social and chat link previews.',
+        });
+        return;
+      }
+
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareState({
+          label: 'Link copied',
+          helper: 'Paste it anywhere to share this score snapshot. Link previews use the public score image.',
+        });
+        return;
+      }
+    } catch {
+      // fall through to manual copy guidance
+    }
+
+    setShareState({
+      label: 'Copy the page URL',
+      helper: 'This browser blocked direct sharing. Copy the current page URL from the address bar to share the snapshot.',
+    });
+  }
 
   const statusClasses =
     journey.statusTone === 'success'
@@ -220,7 +357,100 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         </ol>
       </section>
 
-      <ScoreDisplay score={data.score} letterGrade={data.letterGrade} issues={data.topIssues} categoryScores={data.categoryScores} />
+      {(() => {
+        const actionCard = buildActionCard({
+          host,
+          reportStatus: data.reportStatus,
+          hasPaidReport: data.hasPaidReport,
+          hasDirectReportAccess,
+          scanId: data.scanId,
+          pdfUrl: data.pdfUrl,
+          markdownUrl: data.markdownUrl,
+        });
+
+        return (
+          <section className="mb-8 rounded-[28px] border border-outline-variant/20 bg-on-background px-6 py-6 text-surface md:px-8">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-2xl">
+                <p className="font-label text-xs uppercase tracking-[0.22em] text-surface/70">
+                  {actionCard.eyebrow}
+                </p>
+                <h2 className="mt-2 font-headline text-2xl font-bold text-surface-container-lowest">
+                  {actionCard.title}
+                </h2>
+                <p className="mt-3 font-body text-sm leading-6 text-surface/75">{actionCard.body}</p>
+                {actionCard.note ? (
+                  <p className="mt-3 font-body text-xs leading-5 text-surface/60">{actionCard.note}</p>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-3">
+                {actionCard.primaryHref ? (
+                  <Link
+                    href={actionCard.primaryHref}
+                    className="inline-flex items-center gap-2 rounded-xl bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface"
+                  >
+                    <span className="material-symbols-outlined text-base">
+                      {data.reportStatus === 'delivered' ? 'description' : data.reportStatus === 'generating' ? 'refresh' : 'arrow_downward'}
+                    </span>
+                    {actionCard.primaryLabel}
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = actionCard.primaryTargetId
+                        ? document.getElementById(actionCard.primaryTargetId)
+                        : null;
+                      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface"
+                  >
+                    <span className="material-symbols-outlined text-base">arrow_downward</span>
+                    {actionCard.primaryLabel}
+                  </button>
+                )}
+                {actionCard.secondaryLabel ? (
+                  actionCard.secondaryHref ? (
+                    <Link
+                      href={actionCard.secondaryHref}
+                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-white/5"
+                    >
+                      <span className="material-symbols-outlined text-base">
+                        {data.reportStatus === 'delivered' ? 'login' : data.reportStatus === 'generating' ? 'login' : 'bookmark'}
+                      </span>
+                      {actionCard.secondaryLabel}
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = actionCard.secondaryTargetId
+                          ? document.getElementById(actionCard.secondaryTargetId)
+                          : null;
+                        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-white/5"
+                    >
+                      <span className="material-symbols-outlined text-base">bookmark</span>
+                      {actionCard.secondaryLabel}
+                    </button>
+                  )
+                ) : null}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
+      <ScoreDisplay
+        score={data.score}
+        letterGrade={data.letterGrade}
+        issues={data.topIssues}
+        categoryScores={data.categoryScores}
+        snapshotAction={handleShareSnapshot}
+        snapshotHref={snapshotHref}
+        snapshotState={shareState}
+      />
 
       <div className="mt-10 space-y-8">
         {data.reportStatus === 'delivered' && (
@@ -232,7 +462,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
                   Your full report has been delivered
                 </p>
                 <p className="mt-1 font-body text-sm text-on-surface-variant">
-                  Check your Stripe checkout email for the detailed PDF and prioritized action plan.
+                  {hasDirectReportAccess
+                    ? 'Your report is in your checkout email, and the same assets are unlocked below.'
+                    : 'Check your Stripe checkout email for the detailed PDF and prioritized action plan.'}
                 </p>
               </div>
             </div>
@@ -260,11 +492,35 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
                 )}
               </div>
             )}
+            <div className="mt-4 rounded-xl bg-surface-container-low px-4 py-4">
+              <p className="font-body text-sm font-semibold text-on-background">
+                Want this report in your dashboard too?
+              </p>
+              <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">
+                Sign in with the same email you used in Stripe checkout. GEO-Pulse links paid reports to that email so you can recover them later from your dashboard.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Link
+                  href={`/login?next=/dashboard`}
+                  className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-high"
+                >
+                  <span className="material-symbols-outlined text-base">login</span>
+                  Sign in to dashboard
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-2 rounded-xl px-4 py-3 font-body text-sm font-semibold text-primary transition hover:underline"
+                >
+                  <span className="material-symbols-outlined text-base">dashboard</span>
+                  Open dashboard
+                </Link>
+              </div>
+            </div>
           </div>
         )}
 
         {showCheckout ? (
-          <section className="rounded-[28px] border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
+          <section id="full-audit-checkout" className="rounded-[28px] border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
             <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">
               Step 2
             </p>
@@ -281,7 +537,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         ) : null}
 
         {showEmailGate ? (
-          <section className="mx-auto max-w-3xl">
+          <section id="preview-save" className="mx-auto max-w-3xl">
             <EmailGate
               siteKey={turnstileSiteKey}
               scanId={data.scanId}

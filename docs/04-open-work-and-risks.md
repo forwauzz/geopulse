@@ -35,6 +35,7 @@ Still pending:
 ### Audit journey UX clarity
 Still open:
 - adjust any copy or edge-case states found during future live-user observation
+- keep validating the top-of-page results action band against real founder/customer usage so the primary next step stays obvious
 
 ### Retrieval eval detail UX
 Still open:
@@ -45,15 +46,30 @@ Still deferred until launch closure.
 
 ### Measurement platform initiative
 Planned, not implemented:
-- internal benchmark domain/query/citation graph
-- multi-model query measurement pipeline
-- competitor and cohort benchmark layers
 - 1000-site benchmark operations
 
 Current guidance:
 - keep the current audit/report product intact
 - add the benchmark layer as a staged internal platform
 - do not market benchmark capabilities as shipped before the underlying pipeline exists
+- start recurring benchmark collection slowly:
+  - one vertical at a time
+  - one frozen query set version
+  - one frozen model lane
+  - twice-daily windows only after explicit schedule opt-in on imported seed domains
+- use the current run-detail lineage view for inspection before widening cohort claims
+- keep competitor/cohort work narrow and internal even though the first stored cohort frame now exists
+- keep multi-model support narrow too: multiple enabled lanes on the current execution seam, not a new orchestration surface
+- keep benchmark scale hardening on the current cron/log path until real workload pressure justifies queue or service splits
+- the current decision is still "do not split yet"; 500 to 1000-site ops remain downstream of real operator evidence
+- for the first live `law_firms` lane on `gemini-2.5-flash-lite`, treat grounded citation-rate deltas as the current internal signal and do not over-read `exact_page_quality_rate` yet:
+  - the first window completed cleanly
+  - diagnostic outliers showed mostly domain-level grounded citations rather than page URLs
+  - that means `0%` exact-page quality is currently a lane-behavior truth, not enough evidence by itself to justify a provenance-matcher rewrite
+- after two comparable windows on the same frame, keep the decision conservative:
+  - continue collecting this lane as a domain-level grounded attribution lane
+  - do not widen scale or change methodology yet
+  - do not prioritize provenance-matcher work for this lane unless new evidence shows page URLs that should have matched
 
 ## Risks
 
@@ -75,7 +91,7 @@ The new `docs/` set should be kept aligned with:
 - `PLAYBOOK/`
 
 ### Product truth risk in the audit journey
-The repo now uses state-driven report status on the results page, but this should still be manually tested against real checkout return, webhook timing, and delivered-report states before broader onboarding.
+The repo now uses state-driven report status on the results page, a real share-snapshot action, a PDF-only report fallback, and explicit paid-report recovery guidance. It should still be manually tested against real checkout return, webhook timing, and delivered-report states before broader onboarding.
 
 ### Eval identity drift risk
 The new admin eval history depends on stable site identity.
@@ -83,6 +99,12 @@ If operators vary `--site-url`, `--domain`, prompt-set names, or rubric versions
 
 ### Benchmark-methodology risk
 The v3 direction depends on credible methodology, not just more infrastructure. If the team scales query-running before freezing query taxonomy, citation parsing, and cohort rules, GEO-Pulse could create noisy benchmark claims that are hard to defend later.
+
+### Benchmark metric interpretation risk
+The first live `law_firms` window shows meaningful grounded-vs-ungrounded citation deltas alongside `0%` exact-page quality. If operators interpret that as a simple matcher bug without evidence, the team could waste time on provenance rewrites instead of collecting disciplined comparable windows and documenting the real current behavior: domain-level grounded attribution.
+
+### Benchmark premature-optimization risk
+After two clean windows, the riskiest move would be reacting to the `0%` exact-page metric with heavier provenance engineering before the lane shows page-level citation behavior at all. That would add maintenance cost without clear evidence that the current bottleneck is in matching rather than in model output shape.
 
 ## Recommended Next Order
 

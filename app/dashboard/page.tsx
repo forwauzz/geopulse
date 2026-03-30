@@ -146,7 +146,7 @@ export default async function DashboardPage() {
             <Link href="/" className="font-medium text-tertiary hover:underline">
               home page
             </Link>
-            .
+            . If you already bought a report, make sure you signed in with the same email you used at Stripe checkout.
           </li>
         ) : (
           scanList.map((s) => {

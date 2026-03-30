@@ -11,6 +11,22 @@ export type GroundingEvidenceSnapshot = {
   readonly excerpt: string;
 };
 
+export type GroundingProvenanceSnapshot = {
+  readonly status: 'matched' | 'unresolved';
+  readonly matchMethod: 'exact_url' | 'normalized_page' | null;
+  readonly confidence: number | null;
+  readonly groundingEvidenceId: string | null;
+};
+
+export type GroundingClaimMatchSnapshot = {
+  readonly status: 'supported_overlap' | 'weak_overlap' | 'no_overlap' | 'unavailable';
+  readonly claimText: string | null;
+  readonly overlapTokenCount: number;
+  readonly claimTokenCount: number;
+  readonly evidenceTokenCount: number;
+  readonly overlapRatio: number;
+};
+
 export function formatBenchmarkRunTimestamp(iso: string | null): string {
   if (!iso) return '\u2014';
   return new Date(iso).toLocaleString('en-US', {
@@ -92,4 +108,90 @@ export function readBenchmarkGroundingEvidence(
       } satisfies GroundingEvidenceSnapshot;
     })
     .filter((item): item is GroundingEvidenceSnapshot => item !== null);
+}
+
+export function readBenchmarkGroundingProvenance(
+  metadata: Record<string, unknown>
+): GroundingProvenanceSnapshot {
+  const value = metadata['grounding_provenance'];
+  if (!value || typeof value !== 'object') {
+    return {
+      status: 'unresolved',
+      matchMethod: null,
+      confidence: null,
+      groundingEvidenceId: null,
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+  const status = record['status'] === 'matched' ? 'matched' : 'unresolved';
+
+  return {
+    status,
+    matchMethod:
+      record['match_method'] === 'exact_url' || record['match_method'] === 'normalized_page'
+        ? record['match_method']
+        : null,
+    confidence:
+      typeof record['confidence'] === 'number' && Number.isFinite(record['confidence'])
+        ? record['confidence']
+        : null,
+    groundingEvidenceId:
+      typeof record['grounding_evidence_id'] === 'string' &&
+      record['grounding_evidence_id'].trim().length > 0
+        ? record['grounding_evidence_id']
+        : null,
+  };
+}
+
+export function readBenchmarkGroundingClaimMatch(
+  metadata: Record<string, unknown>
+): GroundingClaimMatchSnapshot {
+  const value = metadata['grounding_claim_match'];
+  if (!value || typeof value !== 'object') {
+    return {
+      status: 'unavailable',
+      claimText: null,
+      overlapTokenCount: 0,
+      claimTokenCount: 0,
+      evidenceTokenCount: 0,
+      overlapRatio: 0,
+    };
+  }
+
+  const record = value as Record<string, unknown>;
+  const status =
+    record['status'] === 'supported_overlap' ||
+    record['status'] === 'weak_overlap' ||
+    record['status'] === 'no_overlap' ||
+    record['status'] === 'unavailable'
+      ? record['status']
+      : 'unavailable';
+
+  return {
+    status,
+    claimText:
+      typeof record['claim_text'] === 'string' && record['claim_text'].trim().length > 0
+        ? record['claim_text']
+        : null,
+    overlapTokenCount:
+      typeof record['overlap_token_count'] === 'number' &&
+      Number.isFinite(record['overlap_token_count'])
+        ? record['overlap_token_count']
+        : 0,
+    claimTokenCount:
+      typeof record['claim_token_count'] === 'number' &&
+      Number.isFinite(record['claim_token_count'])
+        ? record['claim_token_count']
+        : 0,
+    evidenceTokenCount:
+      typeof record['evidence_token_count'] === 'number' &&
+      Number.isFinite(record['evidence_token_count'])
+        ? record['evidence_token_count']
+        : 0,
+    overlapRatio:
+      typeof record['overlap_ratio'] === 'number' && Number.isFinite(record['overlap_ratio'])
+        ? record['overlap_ratio']
+        : 0,
+  };
 }

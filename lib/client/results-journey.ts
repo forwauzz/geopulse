@@ -19,6 +19,7 @@ type BuildResultsJourneyInput = {
   hasPaidReport: boolean;
   reportStatus: ResultsJourneyStatus;
   checkoutState?: string | null;
+  hasDirectReportAccess?: boolean;
 };
 
 export function buildResultsJourneyModel({
@@ -26,6 +27,7 @@ export function buildResultsJourneyModel({
   hasPaidReport,
   reportStatus,
   checkoutState,
+  hasDirectReportAccess = false,
 }: BuildResultsJourneyInput): ResultsJourneyModel {
   let activeStepIndex = 1;
   if (reportStatus === 'delivered') activeStepIndex = 4;
@@ -75,8 +77,9 @@ export function buildResultsJourneyModel({
       'Payment is confirmed. We are expanding the preview into the full audit now and will email the finished report to your Stripe checkout address.';
   } else if (reportStatus === 'delivered') {
     statusTitle = 'Report delivered';
-    statusBody =
-      'Your full audit is ready. We emailed the report to your Stripe checkout address and also unlocked direct access below.';
+    statusBody = hasDirectReportAccess
+      ? 'Your full audit is ready. We emailed the report to your Stripe checkout address and also unlocked direct access below.'
+      : 'Your full audit is ready. We emailed the report to your Stripe checkout address.';
     statusTone = 'success';
   }
 

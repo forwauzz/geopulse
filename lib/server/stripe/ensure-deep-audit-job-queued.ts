@@ -3,6 +3,7 @@ import type Stripe from 'stripe';
 import type { ReportQueueMessageV2 } from '@/lib/queue/report-job';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
 import { resolveDefaultDeepAuditPageLimit } from '@/lib/server/deep-audit-page-limit';
+import { structuredError, structuredLog } from '@/lib/server/structured-log';
 
 export type PaymentRow = { id: string; scan_id: string | null };
 
@@ -42,6 +43,11 @@ export async function ensureDeepAuditJobQueued(
     .maybeSingle();
 
   if (report?.id) {
+    structuredLog('deep_audit_queue_skipped_existing_report', {
+      scanId: payment.scan_id,
+      paymentId: payment.id,
+      duplicateEvent,
+    }, 'info');
     return { ok: true, duplicate: true };
   }
 
@@ -111,8 +117,21 @@ export async function ensureDeepAuditJobQueued(
   try {
     await env.SCAN_QUEUE.send(JSON.stringify(payload));
   } catch {
+    structuredError('deep_audit_queue_send_failed', {
+      scanId: payment.scan_id,
+      paymentId: payment.id,
+      scanRunId,
+      duplicateEvent,
+    });
     return { ok: false, reason: 'queue_send_failed', status: 500 };
   }
+
+  structuredLog('deep_audit_queue_enqueued', {
+    scanId: payment.scan_id,
+    paymentId: payment.id,
+    scanRunId,
+    duplicateEvent,
+  }, 'info');
 
   return { ok: true, duplicate: duplicateEvent };
 }
