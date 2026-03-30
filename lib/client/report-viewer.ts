@@ -31,7 +31,7 @@ export type ScanResponse = {
 
 export type ViewState =
   | { phase: 'loading' }
-  | { phase: 'error'; message: string }
+  | { phase: 'error'; message: string; pdfUrl: string | null }
   | {
       phase: 'ready';
       markdown: string;

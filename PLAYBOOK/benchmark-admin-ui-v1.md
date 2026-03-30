@@ -77,6 +77,7 @@ Sections:
 - domain metadata
 - model lane metadata
 - summary metric cards
+- query lineage inspection
 - query run table
 - citation table or citation summary
 
@@ -99,15 +100,27 @@ Optional detail block:
 - expandable raw response preview
 - extracted citations preview
 
+Lineage inspection requirement:
+- the detail page should let an operator inspect one query as a chain:
+  - prompt
+  - response
+  - extracted citations
+  - grounded evidence/provenance status where available
+
+This should remain read-only and internal.
+It is an inspectability surface, not a new benchmark orchestration layer.
+
 ### 3. `/dashboard/benchmarks/domains/[domainId]`
 
 Purpose:
 - show benchmark history for one domain across run groups
+- show any stored narrow cohort frames that include the domain
 
 Sections:
 - domain summary
 - metric trend cards
 - trend line(s)
+- cohort-frame comparison panel
 - run history table
 
 Trend metrics:
@@ -116,6 +129,15 @@ Trend metrics:
 - share of voice over time
 
 This page becomes important once repeated runs exist.
+
+Cohort-frame panel:
+- read-only internal comparison only
+- one stored cohort frame at a time:
+  - one query set version
+  - one model lane
+  - one run mode
+- show the current domain beside a few named competitor domains
+- link back to each domain history and any latest comparable run detail
 
 ## First controls to allow
 

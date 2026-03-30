@@ -4,6 +4,8 @@ import {
   buildScheduledBenchmarkRunLabel,
   executeBenchmarkScheduleSweep,
   parseBenchmarkScheduleConfig,
+  previewBenchmarkScheduleSweep,
+  toBenchmarkScheduleWindowDate,
 } from './benchmark-schedule';
 
 describe('benchmark schedule helpers', () => {
@@ -13,7 +15,12 @@ describe('benchmark schedule helpers', () => {
       BENCHMARK_SCHEDULE_QUERY_SET_ID: 'set-1',
       BENCHMARK_SCHEDULE_MODEL_ID: 'gemini-2.5-flash-lite',
       BENCHMARK_SCHEDULE_RUN_MODES: 'ungrounded_inference,grounded_site,invalid',
+      BENCHMARK_SCHEDULE_VERTICAL: 'law_firms',
+      BENCHMARK_SCHEDULE_SEED_PRIORITIES: '1,2,invalid',
       BENCHMARK_SCHEDULE_DOMAIN_LIMIT: '15',
+      BENCHMARK_SCHEDULE_MAX_RUNS: '30',
+      BENCHMARK_SCHEDULE_MAX_FAILURES: '4',
+      BENCHMARK_SCHEDULE_WINDOW_HOURS: '12',
       BENCHMARK_SCHEDULE_VERSION: 'daily-v1',
     });
 
@@ -22,9 +29,23 @@ describe('benchmark schedule helpers', () => {
       querySetId: 'set-1',
       modelId: 'gemini-2.5-flash-lite',
       runModes: ['ungrounded_inference', 'grounded_site'],
+      vertical: 'law_firms',
+      seedPriorities: [1, 2],
       domainLimit: 15,
+      maxRuns: 30,
+      maxFailures: 4,
+      windowHours: 12,
       scheduleVersion: 'daily-v1',
     });
+  });
+
+  it('uses half-day schedule window keys when window hours are reduced', () => {
+    expect(toBenchmarkScheduleWindowDate(new Date('2026-03-28T02:00:00.000Z'), 12)).toBe(
+      '2026-03-28T00'
+    );
+    expect(toBenchmarkScheduleWindowDate(new Date('2026-03-28T18:00:00.000Z'), 12)).toBe(
+      '2026-03-28T12'
+    );
   });
 
   it('builds deterministic scheduled run labels and schedule keys', () => {
@@ -93,7 +114,7 @@ describe('benchmark schedule helpers', () => {
         metadata: {},
         created_at: '2026-03-28T00:00:00.000Z',
       }),
-      listCustomerDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
         {
           id: 'domain-1',
           domain: 'www.geopulse.ai',
@@ -126,7 +147,12 @@ describe('benchmark schedule helpers', () => {
         querySetId: 'set-1',
         modelId: 'gemini-2.5-flash-lite',
         runModes: ['ungrounded_inference', 'grounded_site'],
+        vertical: 'law_firms',
+        seedPriorities: [1],
         domainLimit: 10,
+        maxRuns: 10,
+        maxFailures: 3,
+        windowHours: 12,
         scheduleVersion: 'v1',
       },
       now: new Date('2026-03-28T12:00:00.000Z'),
@@ -137,27 +163,258 @@ describe('benchmark schedule helpers', () => {
       querySetId: 'set-1',
       modelId: 'gemini-2.5-flash-lite',
       scheduleVersion: 'v1',
-      windowDate: '2026-03-28',
+      windowDate: '2026-03-28T12',
       domainCount: 1,
       launchedRuns: 1,
       skippedExistingRuns: 1,
+      failedRuns: 0,
+      stoppedEarly: false,
     });
     expect(runBenchmarkGroup).toHaveBeenCalledTimes(1);
-    expect(runBenchmarkGroup).toHaveBeenCalledWith(
-      {},
-      expect.objectContaining({
-        domainId: 'domain-1',
+    expect(repo.listDomainsForBenchmarkScheduling).toHaveBeenCalledWith({
+      limit: 10,
+      vertical: 'law_firms',
+      seedPriorities: [1],
+      requireScheduleEnabled: true,
+    });
+  });
+
+  it('previews the configured schedule window and selected domains without launching runs', async () => {
+    const repo = {
+      getQuerySetById: vi.fn().mockResolvedValue({
+        id: 'set-1',
+        name: 'law-firms-p1-core',
+        vertical: 'law_firms',
+        version: 'v1',
+        description: null,
+        status: 'active',
+        metadata: {},
+        created_at: '2026-03-28T00:00:00.000Z',
+      }),
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+        {
+          id: 'domain-1',
+          domain: 'www.lw.com',
+          canonical_domain: 'lw.com',
+          site_url: 'https://www.lw.com/',
+          display_name: 'Latham & Watkins',
+          vertical: 'law_firms',
+          subvertical: null,
+          geo_region: null,
+          is_customer: false,
+          is_competitor: false,
+          metadata: { schedule_enabled: true, seed_priority: 1 },
+          created_at: '2026-03-28T00:00:00.000Z',
+          updated_at: '2026-03-28T00:00:00.000Z',
+        },
+      ]),
+    };
+
+    const preview = await previewBenchmarkScheduleSweep({
+      repo: repo as any,
+      config: {
+        enabled: true,
         querySetId: 'set-1',
         modelId: 'gemini-2.5-flash-lite',
-        runMode: 'ungrounded_inference',
-        runScope: 'scheduled_internal_benchmark',
-        runMetadata: expect.objectContaining({
-          trigger_source: 'worker_cron',
-          schedule_version: 'v1',
-          schedule_window_utc: '2026-03-28',
-        }),
+        runModes: ['ungrounded_inference', 'grounded_site'],
+        vertical: 'law_firms',
+        seedPriorities: [1],
+        domainLimit: 21,
+        maxRuns: 42,
+        maxFailures: 5,
+        windowHours: 12,
+        scheduleVersion: 'law-firms-p1-v1',
+      },
+      now: new Date('2026-03-28T12:00:00.000Z'),
+    });
+
+    expect(preview).toEqual({
+      enabled: true,
+      querySetId: 'set-1',
+      querySetName: 'law-firms-p1-core',
+      querySetVersion: 'v1',
+      modelId: 'gemini-2.5-flash-lite',
+      scheduleVersion: 'law-firms-p1-v1',
+      windowDate: '2026-03-28T12',
+      vertical: 'law_firms',
+      seedPriorities: [1],
+      runModes: ['ungrounded_inference', 'grounded_site'],
+      domainLimit: 21,
+      maxRuns: 42,
+      maxFailures: 5,
+      windowHours: 12,
+      domains: [
+        {
+          id: 'domain-1',
+          canonical_domain: 'lw.com',
+          site_url: 'https://www.lw.com/',
+          vertical: 'law_firms',
+        },
+      ],
+    });
+  });
+
+  it('continues after one failed scheduled run and records failure visibility', async () => {
+    const runBenchmarkGroup = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('provider unavailable'))
+      .mockResolvedValueOnce({
+        runGroupId: 'run-2',
+        queryRunCount: 6,
+        skippedQueryCount: 0,
+      });
+    const repo = {
+      getQuerySetById: vi.fn().mockResolvedValue({
+        id: 'set-1',
+        name: 'brand-baseline',
+        vertical: null,
+        version: 'v1',
+        description: null,
+        status: 'active',
+        metadata: {},
+        created_at: '2026-03-28T00:00:00.000Z',
       }),
-      {}
-    );
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+        {
+          id: 'domain-1',
+          domain: 'www.geopulse.ai',
+          canonical_domain: 'geopulse.ai',
+          site_url: 'https://www.geopulse.ai/',
+          display_name: 'GeoPulse',
+          vertical: null,
+          subvertical: null,
+          geo_region: null,
+          is_customer: true,
+          is_competitor: false,
+          metadata: {},
+          created_at: '2026-03-28T00:00:00.000Z',
+          updated_at: '2026-03-28T00:00:00.000Z',
+        },
+      ]),
+      getRunGroupByScheduleKey: vi.fn().mockResolvedValue(null),
+    };
+
+    const summary = await executeBenchmarkScheduleSweep({
+      repo,
+      runBenchmarkGroup: runBenchmarkGroup as any,
+      supabase: {},
+      adapter: {} as any,
+      config: {
+        enabled: true,
+        querySetId: 'set-1',
+        modelId: 'gemini-2.5-flash-lite',
+        runModes: ['ungrounded_inference', 'grounded_site'],
+        vertical: 'law_firms',
+        seedPriorities: [1],
+        domainLimit: 10,
+        maxRuns: 10,
+        maxFailures: 3,
+        windowHours: 12,
+        scheduleVersion: 'v1',
+      },
+      now: new Date('2026-03-28T12:00:00.000Z'),
+    });
+
+    expect(summary).toEqual({
+      enabled: true,
+      querySetId: 'set-1',
+      modelId: 'gemini-2.5-flash-lite',
+      scheduleVersion: 'v1',
+      windowDate: '2026-03-28T12',
+      domainCount: 1,
+      launchedRuns: 1,
+      skippedExistingRuns: 0,
+      failedRuns: 1,
+      stoppedEarly: false,
+    });
+    expect(runBenchmarkGroup).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops early when the run cap is reached', async () => {
+    const runBenchmarkGroup = vi.fn().mockResolvedValue({
+      runGroupId: 'run-1',
+      queryRunCount: 6,
+      skippedQueryCount: 0,
+    });
+    const repo = {
+      getQuerySetById: vi.fn().mockResolvedValue({
+        id: 'set-1',
+        name: 'brand-baseline',
+        vertical: null,
+        version: 'v1',
+        description: null,
+        status: 'active',
+        metadata: {},
+        created_at: '2026-03-28T00:00:00.000Z',
+      }),
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+        {
+          id: 'domain-1',
+          domain: 'www.geopulse.ai',
+          canonical_domain: 'geopulse.ai',
+          site_url: 'https://www.geopulse.ai/',
+          display_name: 'GeoPulse',
+          vertical: null,
+          subvertical: null,
+          geo_region: null,
+          is_customer: true,
+          is_competitor: false,
+          metadata: {},
+          created_at: '2026-03-28T00:00:00.000Z',
+          updated_at: '2026-03-28T00:00:00.000Z',
+        },
+        {
+          id: 'domain-2',
+          domain: 'www.example.com',
+          canonical_domain: 'example.com',
+          site_url: 'https://www.example.com/',
+          display_name: 'Example',
+          vertical: null,
+          subvertical: null,
+          geo_region: null,
+          is_customer: true,
+          is_competitor: false,
+          metadata: {},
+          created_at: '2026-03-28T00:00:00.000Z',
+          updated_at: '2026-03-28T00:00:00.000Z',
+        },
+      ]),
+      getRunGroupByScheduleKey: vi.fn().mockResolvedValue(null),
+    };
+
+    const summary = await executeBenchmarkScheduleSweep({
+      repo,
+      runBenchmarkGroup: runBenchmarkGroup as any,
+      supabase: {},
+      adapter: {} as any,
+      config: {
+        enabled: true,
+        querySetId: 'set-1',
+        modelId: 'gemini-2.5-flash-lite',
+        runModes: ['ungrounded_inference', 'grounded_site'],
+        vertical: 'law_firms',
+        seedPriorities: [1],
+        domainLimit: 10,
+        maxRuns: 1,
+        maxFailures: 3,
+        windowHours: 12,
+        scheduleVersion: 'v1',
+      },
+      now: new Date('2026-03-28T12:00:00.000Z'),
+    });
+
+    expect(summary).toEqual({
+      enabled: true,
+      querySetId: 'set-1',
+      modelId: 'gemini-2.5-flash-lite',
+      scheduleVersion: 'v1',
+      windowDate: '2026-03-28T12',
+      domainCount: 2,
+      launchedRuns: 1,
+      skippedExistingRuns: 0,
+      failedRuns: 0,
+      stoppedEarly: true,
+    });
+    expect(runBenchmarkGroup).toHaveBeenCalledTimes(1);
   });
 });

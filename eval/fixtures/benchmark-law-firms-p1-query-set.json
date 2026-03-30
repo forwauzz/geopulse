@@ -1,0 +1,95 @@
+{
+  "name": "law-firms-p1-core",
+  "version": "v1",
+  "vertical": "law_firms",
+  "description": "First frozen law-firms benchmark frame for the priority-1 twice-daily collection lane.",
+  "status": "active",
+  "metadata": {
+    "owner": "internal",
+    "source": "benchmark_collection_operations_v1",
+    "seed_industry": "law_firms",
+    "seed_priorities": [1]
+  },
+  "queries": [
+    {
+      "queryKey": "best-law-firm-for-injury",
+      "queryText": "Which law firms are best for personal injury cases?",
+      "intentType": "discovery",
+      "topic": "personal_injury",
+      "weight": 1.25,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "find-divorce-lawyer",
+      "queryText": "How do I find a good divorce lawyer near me?",
+      "intentType": "discovery",
+      "topic": "family_law",
+      "weight": 1.1,
+      "metadata": {
+        "frame": "local_service_selection"
+      }
+    },
+    {
+      "queryKey": "immigration-law-help",
+      "queryText": "Which law firms are recommended for immigration help?",
+      "intentType": "discovery",
+      "topic": "immigration",
+      "weight": 1.1,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "business-law-firm-comparison",
+      "queryText": "What should a business look for when choosing a corporate law firm?",
+      "intentType": "comparative",
+      "topic": "corporate_law",
+      "weight": 1,
+      "metadata": {
+        "frame": "selection_criteria"
+      }
+    },
+    {
+      "queryKey": "estate-planning-lawyers",
+      "queryText": "Who are the best law firms for estate planning and trusts?",
+      "intentType": "discovery",
+      "topic": "estate_planning",
+      "weight": 1,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "workers-comp-lawyers",
+      "queryText": "Which law firms are known for workers compensation cases?",
+      "intentType": "discovery",
+      "topic": "workers_comp",
+      "weight": 1,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "criminal-defense-selection",
+      "queryText": "What makes a criminal defense law firm trustworthy?",
+      "intentType": "direct",
+      "topic": "criminal_defense",
+      "weight": 0.9,
+      "metadata": {
+        "frame": "trust_signal"
+      }
+    },
+    {
+      "queryKey": "employment-law-firm",
+      "queryText": "Which law firms help with workplace discrimination or employment disputes?",
+      "intentType": "discovery",
+      "topic": "employment_law",
+      "weight": 1,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    }
+  ]
+}

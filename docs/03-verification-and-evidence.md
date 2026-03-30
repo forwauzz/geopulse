@@ -18,6 +18,16 @@ Start at  16:53:05
 Duration  839ms
 ```
 
+### Results/report action targeted verification
+```text
+Type check passes, the updated results-journey Vitest slice passes, and Playwright smoke now covers checkout-return messaging, share snapshot copy fallback, interactive report render, and PDF-only report fallback.
+```
+
+### Benchmark admin targeted verification
+```text
+Type check passes and targeted benchmark admin Vitest plus Playwright smoke coverage are used for the benchmark admin routes that changed.
+```
+
 ### Phase 4 security targeted Vitest
 ```text
 RUN  v4.1.1 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
@@ -70,6 +80,7 @@ Important implemented evidence entries:
 - Phase 4 launch bundle
 - UX-001
 - UX-002 ... UX-007
+- UX-008
 - AU-001 to AU-010
 - RE-001 to RE-007
 - RE-011 to RE-018
@@ -77,6 +88,12 @@ Important implemented evidence entries:
 - DA-004 completion entry
 - T3-7
 - DA-005
+- BM-041
+- BM-042
+- BM-043
+- BM-044
+- BM-045
+- BM-046
 
 ## Security Truths
 

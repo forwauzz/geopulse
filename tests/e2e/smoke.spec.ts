@@ -128,6 +128,148 @@ test.describe('public smoke flows', () => {
     ).toBeVisible();
     await expect(page.getByText(/you are back from checkout/i)).toBeVisible();
     await expect(page.getByText(/continue from preview to the full audit/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /choose what to do next/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /continue to full audit/i }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /save preview instead/i }).first()).toBeVisible();
+  });
+
+  test('results page surfaces the in-progress action band while the full audit is generating', async ({
+    page,
+  }) => {
+    await page.route('**/api/scans/e2e-generating*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          scanId: 'e2e-generating',
+          url: 'https://example.com',
+          score: 72,
+          letterGrade: 'B',
+          topIssues: [],
+          categoryScores: [
+            { category: 'ai_readiness', score: 72, letterGrade: 'B', checkCount: 4 },
+          ],
+          hasPaidReport: true,
+          reportStatus: 'generating',
+          pdfUrl: null,
+          markdownUrl: null,
+        }),
+      });
+    });
+
+    await page.goto('/results/e2e-generating');
+
+    await expect(page.getByText(/your full audit is being prepared/i)).toBeVisible();
+    await expect(page.getByRole('link', { name: /refresh status/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /open dashboard sign-in/i })).toBeVisible();
+  });
+
+  test('delivered results page explains dashboard recovery with the checkout email', async ({
+    page,
+  }) => {
+    await page.route('**/api/scans/e2e-delivered*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          scanId: 'e2e-delivered',
+          url: 'https://example.com',
+          score: 84,
+          letterGrade: 'A-',
+          topIssues: [],
+          categoryScores: [
+            { category: 'ai_readiness', score: 84, letterGrade: 'A-', checkCount: 4 },
+          ],
+          hasPaidReport: true,
+          reportStatus: 'delivered',
+          pdfUrl: 'https://example.com/report.pdf',
+          markdownUrl: '/__e2e/delivered-report.md',
+        }),
+      });
+    });
+
+    await page.goto('/results/e2e-delivered');
+
+    await expect(page.getByText(/want this report in your dashboard too/i)).toBeVisible();
+    await expect(page.getByText(/same email you used in stripe checkout/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /your report is ready/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /sign in to dashboard/i }).first()).toBeVisible();
+  });
+
+  test('results page share snapshot action copies the results link', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, 'share', {
+        configurable: true,
+        value: undefined,
+      });
+      Object.defineProperty(window.navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText: async (value: string) => {
+            (window as Window & { __geoPulseCopiedText?: string }).__geoPulseCopiedText = value;
+          },
+        },
+      });
+    });
+
+    await page.route('**/api/scans/e2e-share*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          scanId: 'e2e-share',
+          url: 'https://example.com',
+          score: 72,
+          letterGrade: 'B',
+          topIssues: [],
+          categoryScores: [
+            { category: 'ai_readiness', score: 72, letterGrade: 'B', checkCount: 4 },
+          ],
+          hasPaidReport: false,
+          reportStatus: 'none',
+          pdfUrl: null,
+          markdownUrl: null,
+        }),
+      });
+    });
+
+    await page.goto('/results/e2e-share');
+    await page.getByRole('button', { name: /share snapshot/i }).click();
+
+    await expect(page.getByText(/link copied/i)).toBeVisible();
+    const copiedText = await page.evaluate(
+      () => (window as Window & { __geoPulseCopiedText?: string }).__geoPulseCopiedText
+    );
+    expect(copiedText).toContain('/results/e2e-share');
+  });
+
+  test('report page falls back to a PDF download when no web report is available', async ({
+    page,
+  }) => {
+    await page.route('**/api/scans/e2e-pdf-only*', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          scanId: 'e2e-pdf-only',
+          url: 'https://example.com',
+          domain: 'example.com',
+          score: 81,
+          letterGrade: 'A-',
+          topIssues: [],
+          categoryScores: [
+            { category: 'ai_readiness', score: 81, letterGrade: 'A-', checkCount: 4 },
+          ],
+          pdfUrl: 'https://example.com/report.pdf',
+          markdownUrl: null,
+        }),
+      });
+    });
+
+    await page.goto('/results/e2e-pdf-only/report', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByText(/available as a pdf download only/i)).toBeVisible();
+    await expect(page.getByRole('link', { name: /download pdf/i })).toBeVisible();
   });
 
   test('report page renders interactive summary from mocked report content', async ({
@@ -247,5 +389,28 @@ test.describe('public smoke flows', () => {
     await expect(page.getByText(/run groups/i).first()).toBeVisible();
     await expect(page.getByRole('link', { name: /example co/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /brand-baseline/i })).toBeVisible();
+  });
+
+  test('authenticated admin session renders benchmark cohort frame on domain history', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.context().addCookies([
+      {
+        name: 'gp_e2e_auth',
+        value: 'admin',
+        url: page.url(),
+      },
+    ]);
+
+    await page.goto('/dashboard/benchmarks/domains/e2e-domain-1', {
+      waitUntil: 'domcontentloaded',
+    });
+
+    await expect(page.getByRole('heading', { name: /benchmark domain history/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /cohort frames/i })).toBeVisible();
+    await expect(page.getByText(/example healthcare cohort/i)).toBeVisible();
+    await expect(page.getByText(/measured customer/i)).toBeVisible();
+    await expect(page.getByText(/competitor example/i)).toBeVisible();
   });
 });

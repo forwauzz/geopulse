@@ -170,6 +170,23 @@ The current repo supports the wedge well:
 - first opt-in live benchmark execution lane for Gemini (`lib/server/benchmark-execution.ts`, `BENCHMARK_EXECUTION_*`)
 - benchmark-domain onboarding from the admin UI (`components/benchmark-domain-form.tsx`, `app/dashboard/benchmarks/actions.ts`)
 - benchmark query-set onboarding from the admin UI (`components/benchmark-query-set-form.tsx`, `app/dashboard/benchmarks/actions.ts`)
+- first benchmark query lineage inspection on the existing run-detail page:
+  - prompt -> response -> extracted citations -> grounded evidence status
+  - implemented by extending the current run-detail surface rather than adding a new benchmark route
+- first narrow competitor/cohort storage and admin slice:
+  - explicit `benchmark_cohorts` and `benchmark_cohort_members` storage
+  - read-only cohort-frame comparison panel on the existing domain history page
+- first multi-model live benchmark lane support on the existing execution boundary:
+  - one provider/key/endpoint
+  - multiple enabled model ids via env allowlist
+  - no new benchmark orchestration surface
+- first benchmark schedule hardening for 100 to 200-domain internal sweeps:
+  - capped launches per sweep
+  - early stop after repeated failures
+  - structured failure visibility on the existing log path
+- first benchmark-operations decision freeze after schedule hardening:
+  - keep the current repo/runtime for now
+  - document explicit triggers for any future service split
 - first grounded-mode benchmark seam (`lib/server/benchmark-grounding.ts`, `lib/server/benchmark-runner.ts`, `lib/server/benchmark-execution.ts`)
 - first structured grounding-provenance seam for grounded runs:
   - backward-compatible evidence normalization (`lib/server/benchmark-grounding.ts`)
@@ -231,5 +248,16 @@ Grounded-provenance sequence frozen by `BM-033`:
   - the recurring lane is env-configured, bounded, and idempotent by UTC day
   - it reuses the existing benchmark runner instead of creating a second benchmark execution path
   - scheduled runs now carry explicit run scope and schedule metadata so history stays comparable over time
-- cohorting (`BM-041` / `BM-042`) and scale work (`BM-045` / `BM-046`) stay downstream of that methodology path
+- competitor/cohort methodology is now frozen by `BM-041` in `PLAYBOOK/benchmark-competitor-cohort-methodology-v1.md`
+- the first run-level lineage inspection slice (`BM-043`) now exists on `/dashboard/benchmarks/[runGroupId]`
+- the first comparative cohort implementation slice (`BM-042`) now exists as explicit cohort storage plus a read-only domain-history comparison panel
+- the cohort slice builds on the lineage path instead of replacing it, so comparative inspection still resolves back to run-level evidence
+- the first multi-model execution slice (`BM-044`) now exists by extending the existing execution adapter/config seam rather than adding provider-specific benchmark routing
+- the first benchmark-scale hardening slice (`BM-045`) now exists on the current cron/schedule path rather than a separate benchmark service
+- the 500 to 1000-site decision slice (`BM-046`) is now frozen in `PLAYBOOK/benchmark-operations-decision-v1.md`: do not split into a separate benchmark service yet without real operating evidence
+- the first recurring collection operating slice now exists in `PLAYBOOK/benchmark-collection-operations-v1.md`:
+  - start with `law_firms` priority `1`
+  - keep one query set and one model lane fixed
+  - use explicit seed import plus a twice-daily 12-hour schedule window
+- deeper scale implementation work stays downstream of that decision
 - this sequencing is intentionally designed to protect the current architecture and avoid a single large benchmark rewrite

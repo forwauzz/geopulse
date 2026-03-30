@@ -120,11 +120,26 @@ Responsibilities:
 - admin auth
 - site-centric eval history display
 - retrieval drilldown display
+- benchmark run-detail lineage inspection
+- narrow benchmark cohort-frame inspection on domain history
 - smoke eval insertion
 - promptfoo result normalization + persistence
 - deterministic retrieval eval persistence
 - prompt regression suites
 - golden report assertions
+
+### 6b. Benchmark execution boundary
+Key files:
+- `lib/server/benchmark-execution.ts`
+- `lib/server/benchmark-runner.ts`
+- `app/dashboard/benchmarks/page.tsx`
+- `components/benchmark-trigger-form.tsx`
+
+Responsibilities:
+- resolve live benchmark execution config from shared env helpers
+- keep one provider boundary for stub vs live execution
+- allow multiple enabled model lanes without widening the admin trigger flow
+- cap scheduled benchmark launches and stop early after repeated failures
 
 ### 7. Marketing attribution
 Key files:

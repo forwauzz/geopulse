@@ -5,6 +5,478 @@
 
 ---
 
+## 2026-03-29 - two-window benchmark decision freeze
+
+Froze the operator decision after two comparable `law_firms-p1-v1` windows on `gemini-2.5-flash-lite`.
+
+Files changed:
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Recorded that two comparable windows now show the same high-level pattern:
+  - clean paired collection
+  - meaningful grounded-vs-ungrounded citation-rate deltas
+  - `0%` exact-page quality across the lane
+  - domain-level grounded attribution in targeted diagnostics
+- Froze the lane interpretation as `domain-level grounded attribution` for now.
+- Froze the near-term operator rule:
+  - keep collecting comparable windows
+  - keep `exact_page_quality_rate` visible but non-gating
+  - do not prioritize provenance-matcher work for this lane
+  - do not widen scale or change methodology yet
+
+Verification:
+- This was a docs-only decision freeze based on already verified run evidence and diagnostics.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - first live benchmark window interpretation slice
+
+Froze the operator interpretation of the first live `law_firms` scheduled benchmark window after preview, immediate run, summary, outlier selection, and targeted run diagnostics.
+
+Files changed:
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Recorded that the first live `law_firms-p1-v1` window on `gemini-2.5-flash-lite` completed cleanly across all 21 paired domains.
+- Recorded that grounded-vs-ungrounded citation-rate deltas are now usable internal directional signal for this lane.
+- Recorded that exact-page quality stayed at `0%` across the first window.
+- Recorded that targeted winner/loser diagnostics showed mostly domain-level grounded citations rather than page URLs, so the current `0%` exact-page outcome should not be treated as enough evidence for a provenance-matcher rewrite.
+- Froze the near-term operator rule: keep collecting comparable windows, keep outlier/lineage review lean, and do not widen scale or change the methodology without stronger evidence.
+
+Verification:
+- This was a docs-only interpretation freeze based on already verified commands and live run evidence.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - benchmark run-diagnostic slice
+
+Added a terminal diagnostic for selected benchmark run-group ids so the team can distinguish matcher/normalization gaps from genuine domain-level grounding behavior before opening manual lineage pages.
+
+Files changed:
+- `lib/server/benchmark-run-diagnostic.ts`
+- `lib/server/benchmark-run-diagnostic.test.ts`
+- `scripts/benchmark-run-diagnostic.ts`
+- `package.json`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- Added a small read-only run diagnostic that summarizes page-URL citations, domain-only citations, matched provenance, exact-vs-normalized matches, supported overlap, and sample URLs for a selected run group.
+- Added `npm run benchmark:run:diagnostic -- --run-group-ids run-1,run-2`.
+- Added a lightweight `probable_issue` label so the first diagnosis step is faster and more consistent.
+- Kept the slice terminal-only and built entirely on existing run-detail / citation metadata.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/benchmark-run-diagnostic.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - benchmark outlier-selection slice
+
+Added a terminal command that ranks the biggest grounded winners and losers for the current scheduled benchmark window.
+
+Files changed:
+- `lib/server/benchmark-schedule-window-summary.ts`
+- `lib/server/benchmark-schedule-window-summary.test.ts`
+- `scripts/benchmark-schedule-outliers.ts`
+- `package.json`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- Extended the scheduled-window summary helper with outlier selection based on grounded minus ungrounded citation-rate delta.
+- Added `npm run benchmark:schedule:outliers`.
+- The command prints the top grounded winners and top grounded losers for the current configured window so manual lineage review starts from the highest-signal cases.
+- Kept the slice terminal-only and read-only to preserve the lean current architecture.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/benchmark-schedule-window-summary.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - benchmark scheduled-window summary slice
+
+Added a read-only command that summarizes the current scheduled benchmark window per domain, pairing ungrounded and grounded runs for the configured frame.
+
+Files changed:
+- `lib/server/benchmark-schedule-window-summary.ts`
+- `lib/server/benchmark-schedule-window-summary.test.ts`
+- `scripts/benchmark-schedule-summary.ts`
+- `package.json`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- Added a small summary helper that groups scheduled run groups by domain for one schedule window and pairs `ungrounded_inference` with `grounded_site`.
+- Added `npm run benchmark:schedule:summary`.
+- The summary prints the current configured schedule window with per-domain citation-rate comparison, exact-page quality, and both run-group ids.
+- Kept the slice terminal-only and read-only so the first live benchmark lane is easier to review without introducing a new admin route.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/benchmark-schedule-window-summary.test.ts lib/server/benchmark-schedule.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - benchmark schedule run-now slice
+
+Added a one-shot scheduler command so the recurring benchmark lane can be executed immediately through the same scheduler path as cron.
+
+Files changed:
+- `scripts/benchmark-schedule-run-now.ts`
+- `package.json`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- Added `npm run benchmark:schedule:run-now`.
+- The command reuses `runScheduledBenchmarkSweep(...)` and the current `BENCHMARK_SCHEDULE_*` env instead of introducing a parallel benchmark orchestration path.
+- Updated the benchmark collection runbook so the first operating lane now has an explicit immediate-proof step after preview and before relying on cron.
+
+Verification:
+- `npm.cmd run type-check`
+- `npm.cmd run benchmark:schedule:preview`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - benchmark schedule preview slice
+
+Added a dry-run preview path for the recurring benchmark schedule so operators can verify the exact query set, schedule window, and selected domains before waiting for cron or launching real scheduled runs.
+
+Files changed:
+- `lib/server/benchmark-schedule.ts`
+- `lib/server/benchmark-schedule.test.ts`
+- `scripts/benchmark-schedule-preview.ts`
+- `package.json`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- Added `previewBenchmarkScheduleSweep(...)` on the existing scheduler seam instead of introducing a separate selection path.
+- Added `npm run benchmark:schedule:preview` so the current `BENCHMARK_SCHEDULE_*` env can be checked directly from the terminal.
+- The preview prints the query-set identity, model lane, run modes, schedule window, selected domain count, and exact selected domains.
+- Updated the benchmark collection playbook so preview is now the required step immediately before enabling the recurring lane.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/benchmark-schedule.test.ts lib/server/benchmark-query-set-seed.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - law-firms query-set seed slice
+
+Added a repeatable seed path for the first frozen `law_firms` benchmark query set so the initial recurring collection lane no longer depends on manual admin entry.
+
+Files changed:
+- `lib/server/benchmark-query-set-seed.ts`
+- `lib/server/benchmark-query-set-seed.test.ts`
+- `scripts/benchmark-seed-query-set.ts`
+- `eval/fixtures/benchmark-law-firms-p1-query-set.json`
+- `package.json`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- Added a small query-set seeding helper that upserts one benchmark query set and replaces its queries using the existing repository seam.
+- Added `npm run benchmark:seed:query-set` so the first recurring collection lane has a repeatable, scriptable query-set bootstrap path.
+- Added the first frozen collection fixture at `eval/fixtures/benchmark-law-firms-p1-query-set.json`.
+- Froze the first law-firms collection query-set identity as:
+  - `law-firms-p1-core`
+  - version `v1`
+  - vertical `law_firms`
+  - 8 queries
+- Updated the benchmark collection playbook so the first lane now has one exact command sequence: seed query set, import seed domains, then enable the twice-daily schedule.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/benchmark-query-set-seed.test.ts lib/server/benchmark-seed-queue.test.ts lib/server/benchmark-schedule.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - benchmark collection start slice
+
+Added the first narrow recurring benchmark collection path for category-based seed data.
+
+Files changed:
+- `lib/server/benchmark-seed-queue.ts`
+- `lib/server/benchmark-seed-queue.test.ts`
+- `scripts/benchmark-seed-domains.ts`
+- `lib/server/benchmark-repository.ts`
+- `lib/server/benchmark-schedule.ts`
+- `lib/server/benchmark-schedule.test.ts`
+- `package.json`
+- `.dev.vars.example`
+- `wrangler.jsonc`
+- `types/geo-pulse-env.d.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+
+What changed:
+- Added a small CSV helper layer so `benchmark_seed.csv` can be parsed, filtered by industry and priority, and mapped into explicit schedule-enabled benchmark domains.
+- Added `npm run benchmark:seed:domains` so the first collection slice can be imported without inventing a new benchmark subsystem.
+- Extended the recurring benchmark scheduler so it can narrow sweeps to one benchmark vertical plus selected seed priorities.
+- Added 12-hour schedule windows so a twice-daily lane does not self-dedupe against the first run of the day.
+- Froze the first collection operating plan in `PLAYBOOK/benchmark-collection-operations-v1.md`.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/benchmark-seed-queue.test.ts lib/server/benchmark-schedule.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+## 2026-03-29 â€” results chronology slice
+
+Added one explicit top-of-page action band to the customer results route so the next step is obvious before payment, during report generation, and after delivery.
+
+Files changed:
+- `components/results-view.tsx`
+- `tests/e2e/smoke.spec.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added a new top-of-page action band on the results route, directly under the journey/status section.
+- Preview state now points users straight to the paid audit or the preview-save path instead of making them infer the next move from lower on the page.
+- Generating state now explains what is happening and where recovery lives, with direct links for refresh/sign-in.
+- Delivered state now prioritizes open/download/sign-in actions as the main top-of-page choices, rather than burying those actions below the score block.
+- Kept the change on the existing route and existing state model, with scroll-to actions for the current checkout/save sections instead of adding new routes or orchestration.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Playwright attempt:
+
+```text
+Error: spawn EPERM
+```
+
+Escalated targeted Playwright:
+
+`npx.cmd playwright test tests/e2e/smoke.spec.ts --grep "checkout return messaging|in-progress action band|delivered results page explains dashboard recovery"`
+
+```text
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › tests\e2e\smoke.spec.ts:100:7 › public smoke flows › results page shows checkout return messaging before payment confirmation (18.9s)
+  ✓  2 [chromium] › tests\e2e\smoke.spec.ts:136:7 › public smoke flows › results page surfaces the in-progress action band while the full audit is generating (5.9s)
+  ✓  3 [chromium] › tests\e2e\smoke.spec.ts:167:7 › public smoke flows › delivered results page explains dashboard recovery with the checkout email (5.8s)
+
+  3 passed (1.1m)
+```
+
+---
+
+## 2026-03-29 â€” paid-report recovery slice
+
+Tightened the successful paid-path recovery story so non-technical users know how to find the report again after purchase.
+
+Files changed:
+- `components/results-view.tsx`
+- `app/login/page.tsx`
+- `app/dashboard/page.tsx`
+- `workers/report/resend-delivery-helpers.ts`
+- `tests/e2e/smoke.spec.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Delivered results now include an explicit recovery panel that tells the user to sign in with the Stripe checkout email if they want the report in the dashboard later.
+- Customer login now includes a short recovery note explaining that paid reports attach to the Stripe checkout email.
+- Dashboard empty state now explains the most likely recovery mistake: signing in with a different email than the purchase email.
+- Delivery email helper copy now reinforces the same recovery rule for both attachment and download-link variants.
+- Added Playwright browser proof for the delivered-results recovery panel while keeping the slice architecture-light.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Playwright attempt:
+
+```text
+Error: spawn EPERM
+```
+
+Escalated targeted Playwright:
+
+`npx.cmd playwright test tests/e2e/smoke.spec.ts --grep "delivered results page explains dashboard recovery|customer login page renders the magic-link flow|authenticated admin session renders dashboard admin actions"`
+
+```text
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › tests\e2e\smoke.spec.ts:133:7 › public smoke flows › delivered results page explains dashboard recovery with the checkout email (27.1s)
+  ✓  2 [chromium] › tests\e2e\smoke.spec.ts:297:7 › public smoke flows › customer login page renders the magic-link flow (10.7s)
+  ✓  3 [chromium] › tests\e2e\smoke.spec.ts:323:7 › public smoke flows › authenticated admin session renders dashboard admin actions (6.7s)
+
+  3 passed (1.5m)
+```
+
+---
+
+## 2026-03-29 â€” paid-path traceability slice
+
+Added the missing observability seam on the local paid-report path so founder testing can distinguish webhook success from queue/report-worker failure.
+
+Files changed:
+- `app/api/webhooks/stripe/route.ts`
+- `lib/server/stripe/ensure-deep-audit-job-queued.ts`
+- `workers/queue/report-queue-consumer.ts`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added structured success/failure logging to the Stripe `checkout.session.completed` webhook path with event id, session id, scan id, and duplicate status.
+- Added structured queue-enqueue logging so the app now records when the deep-audit job was actually queued, and when queue send fails.
+- Added report-worker lifecycle breadcrumbs for `report_job_started`, `report_job_email_sent`, and `report_job_completed`, complementing the existing failure logs.
+- Kept the slice architecture-light: no new tables, no new routes, no new queue type, just better visibility on the existing paid-report pipeline.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run app/api/webhooks/stripe/route.test.ts lib/server/stripe/checkout-completed.test.ts`
+
+```text
+ RUN  v4.1.2 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  12 passed (12)
+   Start at  00:08:45
+   Duration  1.50s (transform 1.06s, setup 0ms, import 1.65s, tests 482ms, environment 2ms)
+```
+
+---
+
+## 2026-03-28 â€” UX-008 results/report action truth pass
+
+Implemented one narrow customer-flow UX slice on the results-to-report transition after founder review of broken report/share actions.
+
+Files changed:
+- `components/results-view.tsx`
+- `components/score-display.tsx`
+- `components/report-viewer.tsx`
+- `lib/client/results-journey.ts`
+- `lib/client/results-journey.test.ts`
+- `lib/client/report-viewer.ts`
+- `tests/e2e/smoke.spec.ts`
+- `docs/01-current-state.md`
+- `docs/03-verification-and-evidence.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Turned the static score snapshot card into a real share action: native browser share when available, copy-link fallback when not, plus a direct preview link to the OG snapshot image.
+- Tightened delivered-report messaging so the results page only promises direct access when PDF or markdown artifacts are actually present.
+- Added clearer public results-page error states for missing, expired, and private scans instead of collapsing them into one generic load failure.
+- Updated the report viewer to fall back to a direct PDF download when the interactive markdown artifact is unavailable, instead of implying the report is simply missing.
+- Added browser proof for the new share action and the PDF-only fallback without widening the route surface.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/client/results-journey.test.ts`
+
+```text
+ RUN  v4.1.2 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  2 passed (2)
+      Tests  11 passed (11)
+   Start at  17:31:14
+   Duration  846ms (transform 333ms, setup 0ms, import 451ms, tests 31ms, environment 1ms)
+```
+
+Initial sandbox Playwright attempt:
+
+```text
+Error: spawn EPERM
+```
+
+Escalated targeted Playwright:
+
+`npx.cmd playwright test tests/e2e/smoke.spec.ts --grep "share snapshot|PDF download only|checkout return messaging|report page renders interactive summary"`
+
+```text
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › tests\e2e\smoke.spec.ts:100:7 › public smoke flows › results page shows checkout return messaging before payment confirmation (15.3s)
+  ✓  2 [chromium] › tests\e2e\smoke.spec.ts:133:7 › public smoke flows › results page share snapshot action copies the results link (4.0s)
+  ✓  3 [chromium] › tests\e2e\smoke.spec.ts:209:7 › public smoke flows › report page renders interactive summary from mocked report content (14.6s)
+
+  3 passed (1.2m)
+```
+
+Additional targeted Playwright for the new PDF-only fallback:
+
+`npx.cmd playwright test tests/e2e/smoke.spec.ts --grep "PDF download when no web report is available"`
+
+```text
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › tests\e2e\smoke.spec.ts:180:7 › public smoke flows › report page falls back to a PDF download when no web report is available (25.7s)
+
+  1 passed (1.2m)
+```
+
+---
+
 ## 2026-03-28 — BM-039 grounded vs ungrounded comparison view
 
 Implemented the first internal benchmark comparison surface for methodology inspection without adding a new route or broad benchmark rewrite.
@@ -99,6 +571,304 @@ Test Files  2 passed (2)
      Tests  9 passed (9)
   Start at  03:13:58
   Duration  3.31s (transform 2.91s, setup 0ms, import 3.73s, tests 272ms, environment 1ms)
+```
+
+## 2026-03-28 — BM-041 competitor/cohort methodology freeze
+
+Added the first explicit competitor/cohort benchmark methodology so comparative benchmark work stays narrow, inspectable, and low-maintenance.
+
+Files changed:
+- `PLAYBOOK/benchmark-competitor-cohort-methodology-v1.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Froze the first comparative benchmark frame rules so competitor/cohort comparisons are only valid when query set, model lane, run mode, and benchmark window all match.
+- Added narrow v1 cohort guardrails: small cohorts only, one vertical per cohort, explicit domain roles, conservative claim language, and no public ranking posture.
+- Made BM-043 lineage inspection a practical prerequisite for trustworthy cohort inspection, so BM-042 builds on inspectable run evidence instead of abstract cohort scoring.
+
+Verification:
+
+```text
+Docs-only design slice. No code-path changes or runtime verification required.
+```
+
+## 2026-03-28 — BM-043 benchmark query lineage inspection
+
+Implemented the first run-level benchmark lineage view by extending the existing run-detail page instead of adding a new route or persistence layer.
+
+Files changed:
+- `components/benchmark-run-detail-view.tsx`
+- `lib/server/benchmark-run-detail.ts`
+- `lib/server/benchmark-run-detail.test.ts`
+- `PLAYBOOK/benchmark-admin-ui-v1.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `docs/01-current-state.md`
+- `docs/02-implementation-map.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added helper parsing for citation provenance and claim-overlap metadata already stored in `query_citations.metadata`.
+- Extended the existing benchmark run-detail page with a per-query lineage section that shows prompt, response, extracted citations, grounded source resolution, and claim-overlap status as one read-only chain.
+- Kept the current route, current tables, and current storage model intact so the change improves inspectability without creating a second benchmark UI subsystem.
+- Updated the benchmark UI and roadmap docs so the lineage surface is now part of the declared admin shape and benchmark sequencing.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-run-detail.test.ts lib/server/benchmark-admin-data.test.ts`
+
+```text
+ RUN  v4.1.2 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  18 passed (18)
+   Start at  16:14:50
+   Duration  794ms (transform 488ms, setup 0ms, import 646ms, tests 62ms, environment 2ms)
+```
+
+## 2026-03-28 — BM-042 narrow cohort storage and admin slice
+
+Implemented the first stored competitor/cohort benchmark slice without adding a new benchmark subsystem.
+
+Files changed:
+- `supabase/migrations/015_benchmark_cohorts.sql`
+- `lib/server/benchmark-admin-data.ts`
+- `lib/server/benchmark-admin-data.test.ts`
+- `app/dashboard/benchmarks/domains/[domainId]/page.tsx`
+- `lib/supabase/e2e-auth.ts`
+- `tests/e2e/smoke.spec.ts`
+- `PLAYBOOK/benchmark-admin-ui-v1.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `docs/01-current-state.md`
+- `docs/02-implementation-map.md`
+- `docs/03-verification-and-evidence.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added explicit internal cohort storage with `benchmark_cohorts` and `benchmark_cohort_members`, keeping one query-set/model/run-mode frame per cohort and explicit measured-customer vs competitor roles.
+- Extended the benchmark admin data layer with one narrow cohort snapshot query that resolves the latest comparable run for each member domain inside the stored frame.
+- Added a read-only cohort-frame panel to the existing benchmark domain history page, linking back to domain history and run detail instead of creating a second benchmark surface.
+- Extended the E2E admin-data seam and added targeted Playwright smoke coverage for the changed domain-history route.
+- Updated the benchmark docs and task ledger so the repo truth now reflects that the first stored cohort frame exists, while broader comparative work remains intentionally narrow and internal.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-admin-data.test.ts lib/server/benchmark-run-detail.test.ts`
+
+```text
+ RUN  v4.1.2 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  19 passed (19)
+   Start at  16:35:15
+   Duration  703ms (transform 720ms, setup 0ms, import 919ms, tests 62ms, environment 1ms)
+```
+
+Initial sandbox Playwright attempt:
+
+```text
+Error: spawn EPERM
+```
+
+Escalated targeted Playwright:
+
+`npx.cmd playwright test tests/e2e/smoke.spec.ts --grep "benchmark cohort frame on domain history"`
+
+```text
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › tests\e2e\smoke.spec.ts:252:7 › public smoke flows › authenticated admin session renders benchmark cohort frame on domain history (16.2s)
+
+  1 passed (1.1m)
+```
+
+## 2026-03-28 — BM-044 multi-model benchmark lane support
+
+Implemented the first additional live model lane support without widening the benchmark trigger flow or adding a new provider subsystem.
+
+Files changed:
+- `lib/server/benchmark-execution.ts`
+- `lib/server/benchmark-execution.test.ts`
+- `lib/server/cf-env.ts`
+- `types/geo-pulse-env.d.ts`
+- `app/dashboard/benchmarks/page.tsx`
+- `.dev.vars.example`
+- `docs/06-environment-and-secrets.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `docs/01-current-state.md`
+- `docs/02-implementation-map.md`
+- `docs/03-verification-and-evidence.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added `BENCHMARK_EXECUTION_ENABLED_MODELS` as a narrow comma-separated allowlist for live benchmark model lanes on the existing execution boundary.
+- Kept the current single-provider shape intact: one provider, one API key, one endpoint, and multiple allowed model ids instead of a wider orchestration or provider-routing layer.
+- Preserved the current admin trigger form shape; the first enabled model remains the default lane, and unknown model ids are still skipped truthfully.
+- Updated the benchmark overview page copy to reflect when more than one model lane is enabled, and documented the new env contract in the shared environment docs.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-execution.test.ts`
+
+```text
+ RUN  v4.1.2 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  2 passed (2)
+      Tests  28 passed (28)
+   Start at  16:45:50
+   Duration  2.62s (transform 370ms, setup 0ms, import 517ms, tests 4.08s, environment 0ms)
+```
+
+Escalated targeted Playwright:
+
+`npx.cmd playwright test tests/e2e/smoke.spec.ts --grep "authenticated admin session renders benchmark overview"`
+
+```text
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › tests\e2e\smoke.spec.ts:234:7 › public smoke flows › authenticated admin session renders benchmark overview (16.3s)
+
+  1 passed (48.4s)
+```
+
+## 2026-03-28 — BM-045 benchmark schedule hardening
+
+Implemented the first operator hardening slice for larger internal benchmark sweeps without splitting the benchmark runtime.
+
+Files changed:
+- `lib/server/benchmark-schedule.ts`
+- `lib/server/benchmark-schedule.test.ts`
+- `docs/06-environment-and-secrets.md`
+- `.dev.vars.example`
+- `types/geo-pulse-env.d.ts`
+- `PLAYBOOK/benchmark-scale-path.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `docs/01-current-state.md`
+- `docs/02-implementation-map.md`
+- `docs/03-verification-and-evidence.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added explicit schedule isolation caps: `BENCHMARK_SCHEDULE_MAX_RUNS` now limits total scheduled launches per sweep, and `BENCHMARK_SCHEDULE_MAX_FAILURES` stops the sweep early after repeated failures.
+- Changed the scheduled sweep behavior to continue after an individual run failure instead of aborting the whole sweep immediately, while still surfacing each failed run through structured logs.
+- Extended the schedule summary to report failed run count and whether the sweep stopped early, and added warning/error completion events on the existing structured-log path.
+- Kept the hardening on the current cron/schedule seam rather than introducing a second queue, service, or benchmark UI surface.
+
+Verification:
+
+`npm.cmd run type-check`
+
+```text
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+```
+
+Initial sandbox Vitest attempt:
+
+```text
+failed to load config from C:\Users\Carine Tamon\Desktop\CLAUDE WORKSPACE\projects\geopulse\geo-pulse\vitest.config.ts
+
+⎯⎯⎯⎯⎯⎯⎯ Startup Error ⎯⎯⎯⎯⎯⎯⎯⎯
+Error: Build failed with 1 error:
+
+[plugin externalize-deps]
+Error: spawn EPERM
+```
+
+Escalated targeted Vitest:
+
+`npx.cmd vitest run lib/server/benchmark-schedule.test.ts lib/server/benchmark-execution.test.ts`
+
+```text
+ RUN  v4.1.2 C:/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse
+
+
+ Test Files  4 passed (4)
+      Tests  36 passed (36)
+   Start at  16:52:56
+   Duration  2.90s (transform 1.25s, setup 0ms, import 2.06s, tests 4.12s, environment 1ms)
+```
+
+## 2026-03-28 — BM-046 benchmark operations decision freeze
+
+Recorded the post-hardening operations decision for the 500 to 1000-site benchmark path without adding new benchmark runtime code.
+
+Files changed:
+- `PLAYBOOK/benchmark-operations-decision-v1.md`
+- `PLAYBOOK/benchmark-scale-path.md`
+- `PLAYBOOK/measurement-platform-roadmap.md`
+- `docs/01-current-state.md`
+- `docs/03-verification-and-evidence.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Froze the current decision that GEO-Pulse should not split benchmark execution into a separate deployable benchmark service yet.
+- Made the triggers for a future split explicit: customer-path reliability risk, schedule brittleness, cost-boundary pressure, observability failure, or real 100 to 200-domain operating evidence that the current runtime is no longer sufficient.
+- Updated the scale path and roadmap so the 500 to 1000-site benchmark route remains planned, not implemented, and so the current repo/runtime remains the truthful posture for now.
+
+Verification:
+
+```text
+Docs-only decision slice. No code-path changes or runtime verification required.
 ```
 
 ## How to write an entry
@@ -5056,3 +5826,4 @@ Test Files  2 passed (2)
 **Notes:** BM-038 is accepted as the first exact-page citation-quality metric slice. The benchmark now has a narrow internal quality metric that is clearly separated from citation presence and share-of-voice.
 
 ---
+

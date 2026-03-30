@@ -24,6 +24,13 @@
     "eval:promptfoo:write:retrieval": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/promptfoo-eval-write.ts --framework promptfoo_retrieval",
     "eval:retrieval:write": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/retrieval-eval-write.ts",
     "benchmark:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed.ts",
+    "benchmark:seed:domains": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-domains.ts",
+    "benchmark:seed:query-set": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts",
+    "benchmark:schedule:preview": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-preview.ts",
+    "benchmark:schedule:run-now": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-run-now.ts",
+    "benchmark:schedule:summary": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-summary.ts",
+    "benchmark:schedule:outliers": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-outliers.ts",
+    "benchmark:run:diagnostic": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-run-diagnostic.ts",
     "benchmark:run": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-runner.ts"
   },
   "dependencies": {

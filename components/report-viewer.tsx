@@ -29,22 +29,31 @@ export function ReportViewer({ scanId }: { scanId: string }) {
       try {
         const res = await fetch(`/api/scans/${scanId}`);
         if (!res.ok) {
-          setState({ phase: 'error', message: 'Could not load scan data.' });
+          if (!cancelled) {
+            setState({ phase: 'error', message: 'Could not load scan data.', pdfUrl: null });
+          }
           return;
         }
         const scan = (await res.json()) as ScanResponse;
 
         if (!scan.markdownUrl) {
-          setState({
-            phase: 'error',
-            message: 'No report available yet. The report may still be generating.',
-          });
+          if (!cancelled) {
+            setState({
+              phase: 'error',
+              message: scan.pdfUrl
+                ? 'This report is available as a PDF download only.'
+                : 'No web report is available yet. The report may still be generating.',
+              pdfUrl: scan.pdfUrl ?? null,
+            });
+          }
           return;
         }
 
         const mdRes = await fetch(scan.markdownUrl);
         if (!mdRes.ok) {
-          setState({ phase: 'error', message: 'Could not fetch report content.' });
+          if (!cancelled) {
+            setState({ phase: 'error', message: 'Could not fetch report content.', pdfUrl: scan.pdfUrl ?? null });
+          }
           return;
         }
 
@@ -54,7 +63,7 @@ export function ReportViewer({ scanId }: { scanId: string }) {
         }
       } catch {
         if (!cancelled) {
-          setState({ phase: 'error', message: 'Network error loading report.' });
+          setState({ phase: 'error', message: 'Network error loading report.', pdfUrl: null });
         }
       }
     }
@@ -113,6 +122,17 @@ export function ReportViewer({ scanId }: { scanId: string }) {
           description_off
         </span>
         <p className="font-body text-on-surface-variant">{state.message}</p>
+        {state.pdfUrl ? (
+          <a
+            href={state.pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/30 px-3 py-1.5 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
+          >
+            <span className="material-symbols-outlined text-sm">download</span>
+            Download PDF
+          </a>
+        ) : null}
         <Link
           href={`/results/${scanId}`}
           className="mt-6 inline-block font-body text-sm text-primary underline"

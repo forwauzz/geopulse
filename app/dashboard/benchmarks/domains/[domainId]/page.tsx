@@ -59,6 +59,14 @@ function toDelta(next: number | null | undefined, previous: number | null | unde
   return `${delta > 0 ? '+' : ''}${String(delta)} pts`;
 }
 
+function formatRunModeLabel(value: string): string {
+  return value === 'grounded_site' ? 'grounded site' : value.replaceAll('_', ' ');
+}
+
+function formatCohortRoleLabel(value: string): string {
+  return value === 'measured_customer' ? 'measured customer' : value.replaceAll('_', ' ');
+}
+
 function TrendSvg(values: number[], ariaLabel: string) {
   if (values.length < 2) {
     return (
@@ -166,10 +174,12 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
 
   let runGroups;
   let history;
+  let cohorts;
   try {
-    [runGroups, history] = await Promise.all([
+    [runGroups, history, cohorts] = await Promise.all([
       benchmarkData.getRunGroups({ domainId }),
       benchmarkData.getDomainHistory(domainId),
+      benchmarkData.getCohortsForDomain(domainId),
     ]);
   } catch (error) {
     const message =
@@ -294,6 +304,129 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
         <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
           <h2 className="font-headline text-lg font-semibold text-on-background">Share of voice trend</h2>
           <div className="mt-4">{TrendSvg(shareSeries, 'Share of voice over time')}</div>
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-headline text-xl font-bold text-on-background">Cohort frames</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Narrow internal competitor comparisons using one stored query set, one model lane,
+              and one run mode per cohort.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 space-y-4">
+          {cohorts.length === 0 ? (
+            <div className="rounded-xl bg-surface-container-lowest p-6 text-sm text-on-surface-variant shadow-float">
+              No stored cohort frames include this domain yet.
+            </div>
+          ) : (
+            cohorts.map((cohort) => (
+              <section
+                key={cohort.cohortId}
+                className="rounded-xl bg-surface-container-lowest p-6 shadow-float"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-headline text-lg font-semibold text-on-background">
+                      {cohort.cohortName}
+                    </h3>
+                    <p className="mt-1 text-sm text-on-surface-variant">
+                      {cohort.querySetName} | {cohort.querySetVersion} | {cohort.modelId} |{' '}
+                      {formatRunModeLabel(cohort.runMode)}
+                    </p>
+                    {cohort.description ? (
+                      <p className="mt-2 max-w-3xl text-sm text-on-surface-variant">
+                        {cohort.description}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="text-sm text-on-surface-variant">
+                    Window: {cohort.benchmarkWindowLabel ?? 'unlabeled'}
+                  </div>
+                </div>
+
+                <div className="mt-4 overflow-x-auto rounded-xl border border-outline-variant/10 bg-surface-container-low">
+                  <table className="min-w-[960px] w-full border-collapse text-left font-body text-sm">
+                    <thead className="bg-surface-container-high">
+                      <tr className="text-on-surface-variant">
+                        <th className="px-4 py-3">Role</th>
+                        <th className="px-4 py-3">Domain</th>
+                        <th className="px-4 py-3">Latest comparable run</th>
+                        <th className="px-4 py-3 text-right">Coverage</th>
+                        <th className="px-4 py-3 text-right">Citation rate</th>
+                        <th className="px-4 py-3 text-right">Share of voice</th>
+                        <th className="px-4 py-3 text-right">Page quality</th>
+                        <th className="px-4 py-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cohort.members.map((member) => (
+                        <tr
+                          key={`${cohort.cohortId}-${member.domainId}`}
+                          className="border-t border-outline-variant/10"
+                        >
+                          <td className="px-4 py-3 capitalize">
+                            {formatCohortRoleLabel(member.role)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-on-background">{member.displayName}</div>
+                            <div className="text-xs text-on-surface-variant">
+                              {member.canonicalDomain}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {member.latestRunCreatedAt ? (
+                              <div className="space-y-1">
+                                <div>{formatTs(member.latestRunCreatedAt)}</div>
+                                <div className="text-xs capitalize text-on-surface-variant">
+                                  {member.status ?? 'unknown'}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-on-surface-variant">No comparable run yet</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {toPercent(member.queryCoverage)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {toPercent(member.citationRate)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {toPercent(member.shareOfVoice)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {toPercent(member.exactPageQualityRate)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-3">
+                              {member.latestRunGroupId ? (
+                                <Link
+                                  href={`/dashboard/benchmarks/${member.latestRunGroupId}`}
+                                  className="font-medium text-tertiary hover:underline"
+                                >
+                                  Run detail
+                                </Link>
+                              ) : null}
+                              <Link
+                                href={`/dashboard/benchmarks/domains/${member.domainId}`}
+                                className="font-medium text-on-surface-variant hover:text-primary"
+                              >
+                                Domain history
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))
+          )}
         </div>
       </section>
 

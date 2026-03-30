@@ -1,6 +1,6 @@
 # Benchmark Scale Path
 
-Last updated: 2026-03-26
+Last updated: 2026-03-28
 
 ## Purpose
 
@@ -103,6 +103,8 @@ The correct first move is to prove the benchmark data model and run discipline o
 - benchmark concurrency caps per provider
 - alerting for batch failures
 - benchmark runs paused automatically if customer queue lag grows
+- hard caps for scheduled launches per sweep
+- early stop after repeated benchmark-run failures with structured visibility
 
 ### Goals
 
@@ -178,6 +180,11 @@ The correct first move is to prove the benchmark data model and run discipline o
 - only now evaluate Temporal or Prefect if queue orchestration is too brittle
 - only now consider broader retrieval-simulation infrastructure like Qdrant
 
+Current BM-046 decision:
+- this remains a future path, not the current implementation choice
+- keep the benchmark workload in the current repo/runtime until real 100 to 200-domain operating evidence shows the current cron/schedule path is no longer sufficient
+- decision record: `PLAYBOOK/benchmark-operations-decision-v1.md`
+
 ### Required protections
 
 - dedicated benchmark workers or services
@@ -239,6 +246,15 @@ Split only when at least one of these becomes true:
 - benchmark observability is meaningfully worse because it shares runtime concerns with the product path
 
 Until then, the correct move is a staged internal subsystem in the current repo.
+
+## BM-046 decision freeze
+
+After `BM-045`, the repo decision is:
+- do not split into a separate benchmark service yet
+- treat the current capped schedule path as the right posture for the present stage
+- reopen the split decision only after real operating evidence shows customer-path risk, schedule brittleness, cost-boundary pressure, or observability failure
+
+This keeps the architecture factual instead of premature.
 
 ## Recommended Next Implementation Order
 

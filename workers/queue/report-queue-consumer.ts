@@ -287,6 +287,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     return;
   }
 
+  structuredLog('report_job_started', {
+    scanId: job.scanId,
+    paymentId: 'paymentId' in job ? job.paymentId : null,
+    stripeSessionId: 'stripeSessionId' in job ? job.stripeSessionId : null,
+  }, 'info');
+
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('supabase_not_configured');
   }
@@ -541,6 +547,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     throw new Error(emailResult.message);
   }
 
+  structuredLog('report_job_email_sent', {
+    scanId: job.scanId,
+    attachedPdf: attachPdf,
+    usedDownloadLinks: !!downloadLinks?.pdfUrl,
+  }, 'info');
+
   const now = new Date().toISOString();
   const { error: repErr } = await supabase.from('reports').insert({
     scan_id: job.scanId,
@@ -557,5 +569,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   if (repErr) {
     throw new Error(repErr.message);
   }
+
+  structuredLog('report_job_completed', {
+    scanId: job.scanId,
+    attachedPdf: attachPdf,
+    hasPdfUrl: !!pdfUrl,
+    hasMarkdownUrl: !!downloadLinks?.markdownUrl,
+  }, 'info');
 }
 

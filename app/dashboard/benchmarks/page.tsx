@@ -69,7 +69,11 @@ export default async function BenchmarksAdminPage({ searchParams }: Props) {
       defaultModelId={executionConfig.model}
       liveLaneLabel={
         executionConfig.provider === 'gemini'
-          ? `gemini · ${executionConfig.model}`
+          ? `gemini · ${executionConfig.model}${
+              executionConfig.enabledModels.length > 1
+                ? ` (+${executionConfig.enabledModels.length - 1} more)`
+                : ''
+            }`
           : 'stub only'
       }
       selectedDomain={selectedDomain}

@@ -35,6 +35,7 @@ describe('resolveBenchmarkExecutionConfig', () => {
       provider: 'stub',
       apiKey: '',
       model: 'gemini-2.0-flash',
+      enabledModels: ['gemini-2.0-flash'],
       endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
     });
   });
@@ -51,7 +52,24 @@ describe('resolveBenchmarkExecutionConfig', () => {
       provider: 'gemini',
       apiKey: 'benchmark-key',
       model: 'gemini-2.5-flash',
+      enabledModels: ['gemini-2.5-flash'],
       endpoint: 'https://example.test/models',
+    });
+  });
+
+  it('uses a comma-separated model allowlist when provided', () => {
+    expect(
+      resolveBenchmarkExecutionConfig({
+        BENCHMARK_EXECUTION_PROVIDER: 'gemini',
+        BENCHMARK_EXECUTION_MODEL: 'gemini-2.5-flash-lite',
+        BENCHMARK_EXECUTION_ENABLED_MODELS: 'gemini-2.5-flash-lite, gemini-2.5-flash',
+      })
+    ).toEqual({
+      provider: 'gemini',
+      apiKey: '',
+      model: 'gemini-2.5-flash-lite',
+      enabledModels: ['gemini-2.5-flash-lite', 'gemini-2.5-flash'],
+      endpoint: 'https://generativelanguage.googleapis.com/v1beta/models',
     });
   });
 });
@@ -69,11 +87,12 @@ describe('StubBenchmarkExecutionAdapter', () => {
 });
 
 describe('GeminiBenchmarkExecutionAdapter', () => {
-  it('skips execution when the requested lane is not the configured lane', async () => {
+  it('skips execution when the requested lane is not enabled', async () => {
     const adapter = new GeminiBenchmarkExecutionAdapter({
       provider: 'gemini',
       apiKey: 'benchmark-key',
       model: 'gemini-2.5-flash',
+      enabledModels: ['gemini-2.5-flash'],
       endpoint: 'https://example.test/models',
     });
 
@@ -88,6 +107,7 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
       provider: 'gemini',
       apiKey: '',
       model: 'gemini-2.0-flash',
+      enabledModels: ['gemini-2.0-flash'],
       endpoint: 'https://example.test/models',
     });
 
@@ -116,6 +136,7 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
         provider: 'gemini',
         apiKey: 'benchmark-key',
         model: 'gemini-2.0-flash',
+        enabledModels: ['gemini-2.0-flash'],
         endpoint: 'https://example.test/models',
       },
       fetchMock as unknown as typeof fetch
@@ -128,6 +149,40 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('executes an additional enabled model lane beyond the default model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Example appears in comparison responses.' }],
+            },
+          },
+        ],
+      }),
+    });
+
+    const adapter = new GeminiBenchmarkExecutionAdapter(
+      {
+        provider: 'gemini',
+        apiKey: 'benchmark-key',
+        model: 'gemini-2.5-flash-lite',
+        enabledModels: ['gemini-2.5-flash-lite', 'gemini-2.5-flash'],
+        endpoint: 'https://example.test/models',
+      },
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, {
+      ...sampleContext,
+      modelId: 'gemini-2.5-flash',
+    });
+
+    expect(result.status).toBe('completed');
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/gemini-2.5-flash:generateContent');
+  });
+
   it('fails clearly when grounded mode is requested without grounding context', async () => {
     const fetchMock = vi.fn();
     const adapter = new GeminiBenchmarkExecutionAdapter(
@@ -135,6 +190,7 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
         provider: 'gemini',
         apiKey: 'benchmark-key',
         model: 'gemini-2.0-flash',
+        enabledModels: ['gemini-2.0-flash'],
         endpoint: 'https://example.test/models',
       },
       fetchMock as unknown as typeof fetch
@@ -170,6 +226,7 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
         provider: 'gemini',
         apiKey: 'benchmark-key',
         model: 'gemini-2.0-flash',
+        enabledModels: ['gemini-2.0-flash'],
         endpoint: 'https://example.test/models',
       },
       fetchMock as unknown as typeof fetch
@@ -223,6 +280,7 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
         provider: 'gemini',
         apiKey: 'benchmark-key',
         model: 'gemini-2.0-flash',
+        enabledModels: ['gemini-2.0-flash'],
         endpoint: 'https://example.test/models',
       },
       fetchMock as unknown as typeof fetch
@@ -261,6 +319,7 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
         provider: 'gemini',
         apiKey: 'benchmark-key',
         model: 'gemini-2.0-flash',
+        enabledModels: ['gemini-2.0-flash'],
         endpoint: 'https://example.test/models',
       },
       fetchMock as unknown as typeof fetch
@@ -286,6 +345,7 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
         provider: 'gemini',
         apiKey: 'benchmark-key',
         model: 'gemini-2.0-flash',
+        enabledModels: ['gemini-2.0-flash'],
         endpoint: 'https://example.test/models',
       },
       fetchMock as unknown as typeof fetch

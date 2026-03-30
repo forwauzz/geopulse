@@ -26,6 +26,7 @@ Required:
 - `GEMINI_ENDPOINT`
 - `BENCHMARK_EXECUTION_PROVIDER`
 - `BENCHMARK_EXECUTION_MODEL`
+- `BENCHMARK_EXECUTION_ENABLED_MODELS`
 - `BENCHMARK_EXECUTION_ENDPOINT`
 - `ADMIN_EMAIL`
 
@@ -126,15 +127,43 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 ### Internal benchmarks
 - Supabase URL + service role key
 - `BENCHMARK_EXECUTION_PROVIDER=gemini` only if you want live benchmark execution
-- `BENCHMARK_EXECUTION_MODEL` must match the model lane you enter in the admin trigger form
+- `BENCHMARK_EXECUTION_MODEL` is the default enabled model lane shown first in admin
+- `BENCHMARK_EXECUTION_ENABLED_MODELS` optionally enables multiple comma-separated model lanes on the same provider/key/endpoint
+- if `BENCHMARK_EXECUTION_ENABLED_MODELS` is unset, only the single `BENCHMARK_EXECUTION_MODEL` lane is live
 - `BENCHMARK_EXECUTION_API_KEY` can be set explicitly, or the benchmark lane can fall back to `GEMINI_API_KEY`
 - if benchmark execution vars are unset, the admin benchmark runner safely falls back to the stub adapter
 - `BENCHMARK_SCHEDULE_ENABLED=true` only if you want the Worker cron to run recurring internal benchmark sweeps
 - `BENCHMARK_SCHEDULE_QUERY_SET_ID` must point at the active benchmark query set used for the recurring lane
 - `BENCHMARK_SCHEDULE_MODEL_ID` freezes the recurring model lane label so benchmark history stays comparable over time
 - `BENCHMARK_SCHEDULE_RUN_MODES` optionally narrows the recurring sweep to `ungrounded_inference`, `grounded_site`, or both
+- `BENCHMARK_SCHEDULE_VERTICAL` optionally freezes the recurring lane to one benchmark vertical such as `law_firms`
+- `BENCHMARK_SCHEDULE_SEED_PRIORITIES` optionally narrows the recurring lane to explicit CSV seed priorities such as `1` or `1,2`
 - `BENCHMARK_SCHEDULE_DOMAIN_LIMIT` keeps the recurring sweep bounded while the benchmark lane is still in the small-cohort stage
+- `BENCHMARK_SCHEDULE_MAX_RUNS` hard-caps the total scheduled runs launched in one sweep so benchmark work stays isolated from customer paths
+- `BENCHMARK_SCHEDULE_MAX_FAILURES` stops the sweep early after repeated failures and records the failure cap in structured logs
+- `BENCHMARK_SCHEDULE_WINDOW_HOURS` controls schedule idempotency windows; use `12` for a twice-daily lane, keep `24` for once-daily
 - `BENCHMARK_SCHEDULE_VERSION` gives the recurring lane an explicit operator version tag in run metadata
+- the current Worker cron is twice daily (`0 0,12 * * *` UTC), so `BENCHMARK_SCHEDULE_WINDOW_HOURS=12` is the matching low-maintenance choice for the first recurring benchmark lane
+- the repo now includes a repeatable query-set seed path for the first collection lane:
+  - `npm run benchmark:seed:query-set`
+  - default fixture: `eval/fixtures/benchmark-law-firms-p1-query-set.json`
+- the repo now includes a repeatable schedule preview path before cron is enabled:
+  - `npm run benchmark:schedule:preview`
+  - it reads the current `BENCHMARK_SCHEDULE_*` env and prints the exact selected domains for that lane
+- the repo now includes a one-shot scheduler execution path for proving the recurring lane without waiting for cron:
+  - `npm run benchmark:schedule:run-now`
+  - it uses the same `BENCHMARK_SCHEDULE_*` env and scheduler path as the Worker cron
+- the repo now includes a one-shot scheduled-window review path:
+  - `npm run benchmark:schedule:summary`
+  - it summarizes the current configured window using the existing run-group and metric records
+  - optional: `-- --window-date YYYY-MM-DDTHH` to inspect one completed window explicitly
+- the repo now includes a one-shot outlier-selection path:
+  - `npm run benchmark:schedule:outliers`
+  - it ranks the biggest grounded winners and losers in the current configured window for manual lineage inspection
+  - optional: `-- --window-date YYYY-MM-DDTHH` to target one completed window explicitly
+- the repo now includes a run-diagnostic path for selected run-group ids:
+  - `npm run benchmark:run:diagnostic -- --run-group-ids run-1,run-2`
+  - it summarizes page-URL citations, domain-only citations, matched provenance, and overlap status before manual review
 - service role key
 - admin user email in auth/db
 - optional local write tooling:

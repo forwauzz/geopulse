@@ -64,6 +64,19 @@ export function buildE2EAdminDb() {
       completed_at: runGroupCreatedAt,
       created_at: runGroupCreatedAt,
     },
+    {
+      id: 'e2e-run-group-2',
+      query_set_id: 'e2e-query-set-1',
+      label: 'benchmark-grounded_site-gemini-2.5-flash-lite-e2e-competitor',
+      run_scope: 'single_domain',
+      model_set_version: 'gemini-2.5-flash-lite',
+      status: 'completed',
+      notes: null,
+      metadata: { run_mode: 'grounded_site' },
+      started_at: '2026-03-27T18:40:29.844Z',
+      completed_at: '2026-03-27T18:40:29.844Z',
+      created_at: '2026-03-27T18:40:29.844Z',
+    },
   ];
 
   const queryRuns = [
@@ -78,6 +91,17 @@ export function buildE2EAdminDb() {
       error_message: null,
       executed_at: runGroupCreatedAt,
     },
+    {
+      id: 'e2e-query-run-2',
+      run_group_id: 'e2e-run-group-2',
+      domain_id: 'e2e-domain-2',
+      query_id: 'e2e-query-1',
+      status: 'completed',
+      response_text: 'Competitor Example provides AI consulting services.',
+      response_metadata: {},
+      error_message: null,
+      executed_at: '2026-03-27T18:40:29.844Z',
+    },
   ];
 
   const metrics = [
@@ -88,6 +112,14 @@ export function buildE2EAdminDb() {
       query_coverage: 1,
       citation_rate: 0.88,
       share_of_voice: 1,
+    },
+    {
+      run_group_id: 'e2e-run-group-2',
+      domain_id: 'e2e-domain-2',
+      model_id: 'gemini-2.5-flash-lite',
+      query_coverage: 0.63,
+      citation_rate: 0.42,
+      share_of_voice: 0.51,
     },
   ];
 
@@ -102,6 +134,14 @@ export function buildE2EAdminDb() {
       canonical_domain: 'example.com',
       site_url: 'https://example.com/',
       display_name: 'Example Co',
+      created_at: runGroupCreatedAt,
+    },
+    {
+      id: 'e2e-domain-2',
+      domain: 'competitor.example',
+      canonical_domain: 'competitor.example',
+      site_url: 'https://competitor.example/',
+      display_name: 'Competitor Example',
       created_at: runGroupCreatedAt,
     },
   ];
@@ -128,6 +168,33 @@ export function buildE2EAdminDb() {
     },
   ];
 
+  const cohorts = [
+    {
+      id: 'e2e-cohort-1',
+      name: 'Example healthcare cohort',
+      query_set_id: 'e2e-query-set-1',
+      model_id: 'gemini-2.5-flash-lite',
+      run_mode: 'grounded_site',
+      benchmark_window_label: '2026-W13',
+      description: 'Internal comparison frame for smoke coverage.',
+      status: 'active',
+      created_at: runGroupCreatedAt,
+    },
+  ];
+
+  const cohortMembers = [
+    {
+      cohort_id: 'e2e-cohort-1',
+      domain_id: 'e2e-domain-1',
+      role: 'measured_customer',
+    },
+    {
+      cohort_id: 'e2e-cohort-1',
+      domain_id: 'e2e-domain-2',
+      role: 'competitor',
+    },
+  ];
+
   const rowsByTable: Record<string, unknown[]> = {
     benchmark_run_groups: runGroups,
     query_runs: queryRuns,
@@ -136,6 +203,8 @@ export function buildE2EAdminDb() {
     benchmark_domains: domains,
     benchmark_queries: queries,
     query_citations: citations,
+    benchmark_cohorts: cohorts,
+    benchmark_cohort_members: cohortMembers,
   };
 
   return {

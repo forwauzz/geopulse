@@ -149,21 +149,60 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
       return data ?? null;
     },
 
-    async listCustomerDomainsForBenchmarkScheduling(
-      limit = 20
-    ): Promise<BenchmarkDomainRow[]> {
-      const { data, error } = await supabase
+    async listDomainsForBenchmarkScheduling(args?: {
+      readonly limit?: number;
+      readonly vertical?: string | null;
+      readonly seedPriorities?: readonly number[];
+      readonly requireScheduleEnabled?: boolean;
+    }): Promise<BenchmarkDomainRow[]> {
+      const limit = args?.limit ?? 20;
+      const vertical = args?.vertical?.trim() || null;
+      const seedPriorities = (args?.seedPriorities ?? []).filter((value) => Number.isFinite(value));
+      const requireScheduleEnabled =
+        args?.requireScheduleEnabled ?? (seedPriorities.length > 0 || !!vertical);
+      const fetchLimit = Math.max(limit * 5, 100);
+
+      let query = supabase
         .from('benchmark_domains')
         .select(
           'id,domain,canonical_domain,site_url,display_name,vertical,subvertical,geo_region,is_customer,is_competitor,metadata,created_at,updated_at'
         )
-        .eq('is_customer', true)
-        .eq('is_competitor', false)
+        .not('site_url', 'is', null)
         .order('created_at', { ascending: true })
-        .limit(limit);
+        .limit(fetchLimit);
 
+      if (vertical) {
+        query = query.eq('vertical', vertical);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
-      return ((data ?? []) as BenchmarkDomainRow[]).filter((row) => !!row.site_url);
+
+      return ((data ?? []) as BenchmarkDomainRow[])
+        .filter((row) => {
+          if (!row.site_url) return false;
+
+          const metadata = row.metadata ?? {};
+          const scheduleEnabled = metadata['schedule_enabled'] === true;
+          const rawPriority = metadata['seed_priority'];
+          const priority =
+            typeof rawPriority === 'number'
+              ? rawPriority
+              : typeof rawPriority === 'string'
+                ? Number.parseInt(rawPriority, 10)
+                : null;
+
+          if (seedPriorities.length > 0 && (!priority || !seedPriorities.includes(priority))) {
+            return false;
+          }
+
+          if (requireScheduleEnabled) {
+            return scheduleEnabled;
+          }
+
+          return scheduleEnabled || (row.is_customer && !row.is_competitor);
+        })
+        .slice(0, limit);
     },
 
     async upsertDomain(input: BenchmarkDomainUpsertInput): Promise<BenchmarkDomainRow> {
