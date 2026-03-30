@@ -7,6 +7,10 @@ export type UploadedReportKeys = {
   readonly markdownKey: string;
 };
 
+export type UploadedRewriteKey = {
+  readonly rewrittenMarkdownKey: string;
+};
+
 export function publicObjectUrl(publicBase: string, key: string): string {
   const base = publicBase.replace(/\/$/, '');
   const path = key.startsWith('/') ? key : `/${key}`;
@@ -35,4 +39,18 @@ export async function uploadDeepAuditReportFiles(
   });
 
   return { pdfKey, markdownKey: mdKey };
+}
+
+export async function uploadDeepAuditRewrittenMarkdown(
+  bucket: R2Bucket,
+  scanId: string,
+  markdownUtf8: string
+): Promise<UploadedRewriteKey> {
+  const rewrittenMarkdownKey = `deep-audits/${scanId}/report.rewritten.md`;
+
+  await bucket.put(rewrittenMarkdownKey, markdownUtf8, {
+    httpMetadata: { contentType: 'text/markdown; charset=utf-8', cacheControl: 'private, max-age=3600' },
+  });
+
+  return { rewrittenMarkdownKey };
 }

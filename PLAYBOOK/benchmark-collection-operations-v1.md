@@ -144,6 +144,14 @@ npm run benchmark:schedule:run-now
 
 This uses the same `BENCHMARK_SCHEDULE_*` config and scheduler path as cron.
 
+To force one future or specific window explicitly:
+
+```bash
+npm run benchmark:schedule:run-now -- --window-date 2026-03-30T12
+```
+
+Use this only for controlled internal collection when you want the next comparable window immediately without waiting for the UTC slot to arrive.
+
 ## Window summary command
 
 After the immediate run or a cron window finishes, print the paired domain summary for the current scheduled frame:
@@ -180,6 +188,21 @@ npm run benchmark:schedule:outliers -- --window-date 2026-03-29T12
 ```
 
 Use that list to choose the first inspection set in the existing run-detail lineage view.
+
+## Multi-window recurrence command
+
+After a few comparable windows exist, summarize which domains keep winning or lagging across the same frame:
+
+```bash
+npm run benchmark:schedule:recurrence -- --window-dates 2026-03-30T00,2026-03-30T12,2026-03-31T00
+```
+
+Use this as a small evidence helper only:
+- explicit chosen windows
+- same query set
+- same model lane
+- same schedule version
+- no new benchmark UI or persistent aggregation layer
 
 ## Run diagnostic command
 
@@ -261,12 +284,93 @@ What would reopen this decision:
 - a new model lane that begins returning page-level grounded citations
 - a later query-set revision that changes citation depth behavior materially
 
+## Next replacement candidate
+
+The next narrow replacement candidate for `law_firms` is now frozen as a draft only:
+- sub-cohort: `business_counsel / biglaw / enterprise`
+- draft fixture: `eval/fixtures/benchmark-law-firms-business-counsel-v1-query-set.json`
+
+Current rule:
+- keep the live broad lane unchanged for comparability
+- do not seed or schedule the narrow draft until the target cohort list is frozen operationally
+- treat the draft as a methodology artifact, not a live lane
+
+The first narrow target-domain list is now also frozen:
+- cohort label: `law_firms_business_counsel_v1`
+- domain count: `17`
+- source: current `law_firms` priority-1 live lane
+
+Excluded from this first narrow lane on purpose:
+- `forthepeople.com`
+- `cordellcordell.com`
+- `fragomen.com`
+- `seyfarth.com`
+
+The first narrow query-set seed command is now explicit too:
+
+```bash
+npm run benchmark:seed:query-set:business-counsel
+```
+
+This command is allowed before scheduling because it only creates the query-set record.
+It does not change the live recurring lane on its own.
+
+Current seeded draft record:
+- `query_set_id: 9910b5ac-ade6-42be-9dca-9b85c04e4469`
+- `query_count: 6`
+
+The scheduler now supports an explicit domain allowlist for narrow preview and later narrow-lane launch:
+- env key: `BENCHMARK_SCHEDULE_DOMAINS`
+- value shape: comma-separated canonical domains
+
+For the first narrow preview, use the frozen 17-domain cohort rather than the full broad `law_firms` priority-1 slice.
+
+## First narrow-lane outcome
+
+The first live narrow replacement frame is now real:
+- schedule version: `law-firms-business-counsel-v1`
+- query set id: `9910b5ac-ade6-42be-9dca-9b85c04e4469`
+- domain count: `17`
+- first window: `2026-03-30T00`
+
+Current truth after the first window:
+- the narrow lane ran cleanly
+- grounded-vs-ungrounded signal remains meaningful
+- the narrower cohort/query frame is cleaner than the broad mixed lane
+- `exact_page_quality_rate` still remains non-gating
+
+Current operator rule:
+- keep collecting this narrow lane unchanged for comparable windows
+- do not change prompt/model/evidence-depth yet
+- do not launch a second narrow law-firm sub-cohort yet
+
+## Primary law-firms lens
+
+After three comparable windows, the primary internal law-firms benchmark lens is now:
+- `law-firms-business-counsel-v1`
+
+The original broad lane:
+- `law-firms-p1-v1`
+
+should now be treated as:
+- a legacy broad comparison frame
+- useful for historical contrast
+- not the main law-firms methodology lane going forward
+
+For this stage, use the recurrence helper when freezing recurring winners and laggards from a small explicit window set rather than hand-comparing one-window outputs repeatedly.
+
 ## Next slices after this one
 
 Only after the first lane stabilizes:
 1. widen `law_firms` to priority `2`
 2. start `real_estate` priority `1`
 3. decide whether `dental` should wait for more curated seed selection because its priority-1 slice is too small
+
+Near-term methodology slices now come first:
+1. freeze the first narrow replacement target subgroup
+2. freeze the first narrow query-set draft for that subgroup
+3. freeze the exact target-domain list for that subgroup
+4. only then seed and test a narrow replacement lane
 
 ## Non-goals
 

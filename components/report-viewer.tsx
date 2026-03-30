@@ -49,7 +49,7 @@ export function ReportViewer({ scanId }: { scanId: string }) {
           return;
         }
 
-        const mdRes = await fetch(scan.markdownUrl);
+        const mdRes = await fetch(`/api/scans/${scanId}/report-markdown`, { cache: 'no-store' });
         if (!mdRes.ok) {
           if (!cancelled) {
             setState({ phase: 'error', message: 'Could not fetch report content.', pdfUrl: scan.pdfUrl ?? null });
@@ -165,6 +165,13 @@ export function ReportViewer({ scanId }: { scanId: string }) {
               PDF
             </a>
           ) : null}
+          <a
+            href={`/api/scans/${state.scan.scanId}/report-markdown?download=1`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/30 px-3 py-1.5 font-body text-xs font-semibold text-on-background transition hover:bg-surface-container-low"
+          >
+            <span className="material-symbols-outlined text-sm">description</span>
+            Markdown
+          </a>
         </div>
       </nav>
 

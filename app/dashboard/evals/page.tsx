@@ -53,6 +53,7 @@ type CombinedEvalRow = {
 
 const FRAMEWORKS = [
   { id: 'all', label: 'All evals' },
+  { id: 'layer_one_report', label: 'Layer One Report' },
   { id: 'promptfoo_report', label: 'Promptfoo Report' },
   { id: 'promptfoo_retrieval', label: 'Promptfoo Retrieval' },
   { id: 'deterministic_retrieval', label: 'Deterministic Retrieval' },
@@ -446,6 +447,13 @@ export default async function ReportEvalsAdminPage({ searchParams }: Props) {
                       {row.sourceTable === 'retrieval_eval_runs' ? (
                         <Link
                           href={`/dashboard/evals/retrieval/${row.id}`}
+                          className="font-medium text-tertiary hover:underline"
+                        >
+                          View detail
+                        </Link>
+                      ) : row.framework === 'layer_one_report' ? (
+                        <Link
+                          href={`/dashboard/evals/report/${row.id}`}
                           className="font-medium text-tertiary hover:underline"
                         >
                           View detail

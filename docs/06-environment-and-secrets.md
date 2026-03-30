@@ -138,6 +138,7 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - `BENCHMARK_SCHEDULE_RUN_MODES` optionally narrows the recurring sweep to `ungrounded_inference`, `grounded_site`, or both
 - `BENCHMARK_SCHEDULE_VERTICAL` optionally freezes the recurring lane to one benchmark vertical such as `law_firms`
 - `BENCHMARK_SCHEDULE_SEED_PRIORITIES` optionally narrows the recurring lane to explicit CSV seed priorities such as `1` or `1,2`
+- `BENCHMARK_SCHEDULE_DOMAINS` optionally freezes the recurring lane to an explicit comma-separated canonical-domain allowlist
 - `BENCHMARK_SCHEDULE_DOMAIN_LIMIT` keeps the recurring sweep bounded while the benchmark lane is still in the small-cohort stage
 - `BENCHMARK_SCHEDULE_MAX_RUNS` hard-caps the total scheduled runs launched in one sweep so benchmark work stays isolated from customer paths
 - `BENCHMARK_SCHEDULE_MAX_FAILURES` stops the sweep early after repeated failures and records the failure cap in structured logs
@@ -153,6 +154,7 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - the repo now includes a one-shot scheduler execution path for proving the recurring lane without waiting for cron:
   - `npm run benchmark:schedule:run-now`
   - it uses the same `BENCHMARK_SCHEDULE_*` env and scheduler path as the Worker cron
+  - optional: `-- --window-date YYYY-MM-DDTHH` to force one explicit window for controlled internal collection
 - the repo now includes a one-shot scheduled-window review path:
   - `npm run benchmark:schedule:summary`
   - it summarizes the current configured window using the existing run-group and metric records
@@ -161,6 +163,9 @@ If a page says `Could not load analytics`, first verify the active DB has the at
   - `npm run benchmark:schedule:outliers`
   - it ranks the biggest grounded winners and losers in the current configured window for manual lineage inspection
   - optional: `-- --window-date YYYY-MM-DDTHH` to target one completed window explicitly
+- the repo now includes a small explicit multi-window recurrence path:
+  - `npm run benchmark:schedule:recurrence -- --window-dates 2026-03-30T00,2026-03-30T12,2026-03-31T00`
+  - it summarizes recurring winners and laggards across a chosen comparable window set on the current configured lane
 - the repo now includes a run-diagnostic path for selected run-group ids:
   - `npm run benchmark:run:diagnostic -- --run-group-ids run-1,run-2`
   - it summarizes page-URL citations, domain-only citations, matched provenance, and overlap status before manual review
@@ -171,6 +176,11 @@ If a page says `Could not load analytics`, first verify the active DB has the at
   - `npm run eval:promptfoo:write:report -- --site-url https://example.com`
   - `npm run eval:promptfoo:write:retrieval -- --site-url https://example.com`
   - `npm run eval:retrieval:write -- --site-url https://example.com`
+  - `npm run report:layer-one:rewrite-prompt -- --report eval/fixtures/sample-deep-audit.md`
+- optional internal rewritten-report generation:
+  - `DEEP_AUDIT_INTERNAL_REWRITE_ENABLED=true`
+  - optional model override: `DEEP_AUDIT_INTERNAL_REWRITE_MODEL=gemini-2.5-flash-lite`
+  - this produces a best-effort internal rewritten markdown artifact and a second `layer_one_report` eval row after deterministic report generation
 
 ## Sanity checks
 

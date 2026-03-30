@@ -5,6 +5,80 @@
 
 ---
 
+### 2026-03-30 - Deep-audit markdown delivery fix
+
+Added `app/api/scans/[id]/report-markdown/route.ts` and switched the report viewer to load markdown through the app instead of browser-fetching the raw storage URL directly. Also added a direct markdown download action in the delivered-report UI.
+
+Current truth: `View report` no longer depends on client-side fetches to the raw markdown object URL, so delivered markdown reports are less likely to fail because of public object access or CORS behavior.
+
+### 2026-03-30 - Layer One internal rewritten-artifact contract freeze
+
+Added `PLAYBOOK/layer-one-internal-rewrite-artifact-v1.md` to freeze the next implementation boundary for paid-report improvement.
+
+Current truth:
+- the deterministic paid report remains the customer-facing source of truth for now
+- any rewritten Layer One markdown should begin as a second internal artifact
+- the next implementation step should store and evaluate both artifacts side-by-side before any paid default is changed
+
+### 2026-03-30 - Layer One internal rewritten-artifact implementation
+
+Implemented the first internal rewritten-report generation seam in the paid deep-audit pipeline.
+
+Files:
+- `lib/server/layer-one-report-internal-rewrite.ts`
+- `lib/server/layer-one-report-internal-rewrite.test.ts`
+- `lib/server/report-eval-writer.ts`
+- `lib/server/report-eval-writer.test.ts`
+- `lib/server/cf-env.ts`
+- `workers/report/r2-report-storage.ts`
+- `workers/queue/report-queue-consumer.ts`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- added a best-effort internal Layer One rewrite helper that reuses the frozen rewrite prompt contract
+- gated runtime execution behind `DEEP_AUDIT_INTERNAL_REWRITE_ENABLED`
+- allowed optional model override via `DEEP_AUDIT_INTERNAL_REWRITE_MODEL`
+- stored rewritten markdown separately at `deep-audits/<scanId>/report.rewritten.md`
+- wrote a second `report_eval_runs` row for the rewritten artifact under the existing `layer_one_report` framework
+- kept deterministic paid report delivery unchanged when rewrite is disabled or fails
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/layer-one-report-internal-rewrite.test.ts lib/server/report-eval-writer.test.ts workers/report/deep-audit-report.test.ts lib/server/stripe/checkout-completed.test.ts`
+
+### 2026-03-30 - Layer One report internal comparison access
+
+Added the first admin comparison surface for deterministic vs rewritten report evals.
+
+Files:
+- `app/dashboard/evals/report/[id]/page.tsx`
+- `app/dashboard/evals/page.tsx`
+
+What changed:
+- `layer_one_report` rows in the main eval analytics table now link to a report detail page
+- the new detail page loads one `report_eval_runs` row plus sibling report-eval rows for the same `scan_id`
+- deterministic and internal rewritten variants are compared side-by-side on score and key metrics
+- run metadata and available artifact links are visible in one place for operator review
+
+Verification:
+- `npm.cmd run type-check`
+
+### 2026-03-30 - Layer One operator judgment seam
+
+Added the first lightweight persistent review loop for rewritten report quality.
+
+Files:
+- `app/dashboard/evals/actions.ts`
+- `app/dashboard/evals/report/[id]/page.tsx`
+
+What changed:
+- report detail now supports `better`, `worse`, and `unclear` judgments for rewritten report variants
+- judgments are stored in `report_eval_runs.metadata`
+- the comparison page now shows the latest judgment, timestamp, and judging admin email when available
+
+Verification:
+- `npm.cmd run type-check`
+
 ## 2026-03-29 - two-window benchmark decision freeze
 
 Froze the operator decision after two comparable `law_firms-p1-v1` windows on `gemini-2.5-flash-lite`.
@@ -30,6 +104,526 @@ What changed:
 Verification:
 - This was a docs-only decision freeze based on already verified run evidence and diagnostics.
 - No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - law-firms fit analysis freeze
+
+Froze the first manual taxonomy and fit analysis for the current 21-domain `law_firms` priority-1 lane.
+
+Files changed:
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Recorded that the current `law_firms` lane is a mixed cohort rather than one coherent law-firm comparison frame.
+- Grouped the 21 live domains into likely sub-cohort buckets:
+  - business counsel / biglaw / enterprise
+  - employment / labor
+  - immigration specialist
+  - family law / divorce
+  - personal injury / consumer litigation
+- Recorded that the frozen `law-firms-p1-core v1` query set mixes multiple legal-service intents, so many current domain/query pairs are low-fit by design.
+- Froze the new interpretation rule: future redesign work should treat cohort split and query-set redesign as coupled work, while the current broad lane stays unchanged for comparability.
+
+Verification:
+- This was a docs-only analysis freeze based on the current seed file, the frozen query-set fixture, the grounding prompt/evidence path, and the two completed benchmark windows.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - law-firms replacement-target freeze
+
+Froze the first narrow replacement target for the `law_firms` benchmark redesign.
+
+Files changed:
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Recorded that the first narrow replacement lane should target the `business_counsel / biglaw / enterprise` subgroup.
+- Recorded the initial target-domain list from the current 21-domain live lane.
+- Froze the rule for the next slice: the next law-firms query-set rewrite should serve that subgroup only, rather than trying to improve the whole mixed lane at once.
+
+Verification:
+- This was a docs-only methodology decision based on the already-frozen fit analysis.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - business-counsel narrow query-set draft freeze
+
+Froze the first narrow replacement query-set draft for the `business_counsel / biglaw / enterprise` subgroup.
+
+Files changed:
+- `eval/fixtures/benchmark-law-firms-business-counsel-v1-query-set.json`
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Added a draft-only query-set fixture for the first narrow replacement lane.
+- Kept the fixture intentionally narrow:
+  - business-buyer intent
+  - enterprise/business-law framing
+  - no PI, divorce, immigration-only, workers-comp, or estate-planning prompts
+- Froze the operational rule that this draft is not yet seeded or scheduled.
+- Recorded that the next methodology slice should freeze the exact target-domain list before the draft becomes a live lane candidate.
+
+Verification:
+- This was a fixture-and-docs methodology slice only.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - business-counsel target-domain freeze
+
+Froze the exact target-domain list for the first narrow `business_counsel / biglaw / enterprise` replacement lane.
+
+Files changed:
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Recorded the explicit frozen cohort identity for the first narrow lane:
+  - `law_firms_business_counsel_v1`
+  - 17 domains
+- Recorded the deliberate exclusions from the current 21-domain broad lane:
+  - `forthepeople.com`
+  - `cordellcordell.com`
+  - `fragomen.com`
+  - `seyfarth.com`
+- Froze the operational rule that the next narrow live experiment should launch as a separate frame rather than mutating the existing broad lane.
+
+Verification:
+- This was a docs-only methodology slice based on the already-frozen fit analysis and narrow query-set draft.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - business-counsel query-set seed path
+
+Added the explicit seed command for the first narrow `business_counsel / biglaw / enterprise` draft query set.
+
+Files changed:
+- `package.json`
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+
+What changed:
+- Added `npm run benchmark:seed:query-set:business-counsel`.
+- Pointed the command at `eval/fixtures/benchmark-law-firms-business-counsel-v1-query-set.json`.
+- Recorded the operator rule that this command only creates the draft query-set record and does not make the narrow lane live on its own.
+
+Verification:
+- This was a small script-alias and docs slice.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-29 - business-counsel query-set seeded
+
+Seeded the first narrow `business_counsel / biglaw / enterprise` draft query-set record.
+
+Files changed:
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+
+What changed:
+- Recorded the successful seed result for the narrow draft query set.
+- Froze the returned record id for later narrow-lane preview and scheduling work:
+  - `query_set_id: 9910b5ac-ade6-42be-9dca-9b85c04e4469`
+  - `query_count: 6`
+
+Verification:
+- Operator command:
+  - `npm run benchmark:seed:query-set:business-counsel`
+- Output confirmed:
+  - `benchmark query set seed ok: query_set_id: 9910b5ac-ade6-42be-9dca-9b85c04e4469 query_count: 6`
+- No additional type-check, Vitest, or Playwright was needed for this evidence-only slice.
+
+## 2026-03-29 - benchmark schedule domain-allowlist slice
+
+Added an optional canonical-domain allowlist to the existing benchmark scheduler so narrow cohort previews can be exact without disturbing the live broad lane.
+
+Files changed:
+- `lib/server/benchmark-repository.ts`
+- `lib/server/benchmark-schedule.ts`
+- `lib/server/benchmark-schedule.test.ts`
+- `types/geo-pulse-env.d.ts`
+- `docs/06-environment-and-secrets.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `docs/01-current-state.md`
+
+What changed:
+- Added `BENCHMARK_SCHEDULE_DOMAINS` as an optional comma-separated canonical-domain allowlist.
+- Extended the scheduler preview/execution seam to pass the explicit domain allowlist through the existing repository filter.
+- Kept the behavior opt-in so the broad live lane is unchanged unless the new env var is set.
+- Recorded the narrow preview rule for the first `business_counsel / biglaw / enterprise` experiment.
+
+Verification:
+- Code-path verification is covered by updated `lib/server/benchmark-schedule.test.ts`.
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - first business-counsel narrow-lane result freeze
+
+Froze the first live result for the narrow `business_counsel / biglaw / enterprise` law-firms lane.
+
+Files changed:
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Recorded that the first live `law-firms-business-counsel-v1` window completed cleanly:
+  - `17` paired domains
+  - `34` launched runs
+  - `0` failures
+- Recorded that the narrower frame produced cleaner grounded-vs-ungrounded signal than the broad mixed lane.
+- Recorded that `exact-page quality` still remained `0%`, so the narrow-lane win is methodology fit, not a provenance-depth change.
+- Froze the next operator rule: keep collecting repeated comparable windows on this narrow lane before changing prompt/model/evidence-depth or opening a second narrow law-firms sub-cohort.
+
+Verification:
+- Operator commands:
+  - `npm run benchmark:schedule:run-now`
+  - `npm run benchmark:schedule:summary -- --window-date 2026-03-30T00`
+  - `npm run benchmark:schedule:outliers -- --window-date 2026-03-30T00`
+- Output confirmed:
+  - `schedule_version: law-firms-business-counsel-v1`
+  - `domain_count: 17`
+  - `launched_runs: 34`
+  - `failed_runs: 0`
+  - cleaner grounded citation-rate deltas under the narrow frame
+- No type-check, Vitest, or Playwright was needed for this evidence-only decision slice.
+
+## 2026-03-29 - primary law-firms lens freeze
+
+Froze the primary internal law-firms benchmark lens after three comparable narrow-lane windows.
+
+Files changed:
+- `PLAYBOOK/law-firms-p1-fit-analysis-v1.md`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What changed:
+- Recorded that `law-firms-business-counsel-v1` is now the primary internal law-firms benchmark frame.
+- Demoted the original broad `law-firms-p1-v1` lane to a secondary legacy comparison frame.
+- Recorded the first recurring narrow-lane winner set:
+  - `lw.com`
+  - `perkinscoie.com`
+  - `fr.com`
+  - `kirkland.com`
+  - `sidley.com`
+- Recorded the first recurring weaker grounded set:
+  - `gibsondunn.com`
+  - `btlaw.com`
+  - `cozen.com`
+  - `duanemorris.com`
+  - `goodwinlaw.com`
+- Froze the next operator rule: keep collecting the narrow lane unchanged and do not open a second narrow law-firms sub-cohort yet.
+
+Verification:
+- Operator evidence came from three completed narrow-lane windows:
+  - `2026-03-30T00`
+  - `2026-03-30T12`
+  - `2026-03-31T00`
+- Each completed with `17/17` paired domains and `0` failures.
+- No type-check, Vitest, or Playwright was needed for this evidence-only decision slice.
+
+## 2026-03-29 - schedule run-now window override
+
+Added a small override to the schedule run-now command so the next benchmark window can be created on demand.
+
+Files changed:
+- `scripts/benchmark-schedule-run-now.ts`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/06-environment-and-secrets.md`
+- `docs/01-current-state.md`
+
+What changed:
+- Added `--window-date YYYY-MM-DDTHH` support to `npm run benchmark:schedule:run-now`.
+- Kept the change script-local so the scheduler core and cron path remain unchanged.
+- Recorded the operator rule that this override is for controlled internal collection only.
+
+Verification:
+- `npm.cmd run type-check`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-29 - benchmark recurrence review slice
+
+Added a small terminal command for repeated-window benchmark review so recurring winners and laggards can be checked across a chosen set of comparable windows without building new benchmark infrastructure.
+
+Files changed:
+- `lib/server/benchmark-schedule-window-summary.ts`
+- `lib/server/benchmark-schedule-window-summary.test.ts`
+- `scripts/benchmark-schedule-recurrence.ts`
+- `package.json`
+- `PLAYBOOK/benchmark-collection-operations-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+
+What changed:
+- Added `buildBenchmarkScheduleMultiWindowSummary(...)` on top of the existing scheduled-window summary seam.
+- Added `npm run benchmark:schedule:recurrence -- --window-dates YYYY-MM-DDTHH,YYYY-MM-DDTHH`.
+- Kept the helper explicit and read-only:
+  - chosen windows only
+  - same query set / model / schedule frame
+  - terminal output only
+  - no new admin route or persistent rollup table
+- Updated the benchmark docs so repeated-window review stays evidence-driven and lean.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/benchmark-schedule-window-summary.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-30 - Layer One report rewriter contract freeze
+
+Froze the first report-shape contract for future Layer One audit rewrites.
+
+Files changed:
+- `PLAYBOOK/layer-one-report-rewriter-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added one explicit Layer One report rewriter contract with a fixed section order:
+  - executive summary
+  - confirmed audit findings
+  - likely implications
+  - priority actions
+  - optional advanced GEO improvements
+  - open questions and follow-up checks
+- Recorded why this is the first slice:
+  - recent rewritten reports can sound strong while blending audit-backed facts with speculative GEO strategy
+  - the contract must be frozen before evidence-discipline or tone rules are tightened
+- Recorded the next justified slice:
+  - `L1-RW-002` evidence-discipline rules
+
+Verification:
+- Docs-only design slice.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-30 - Layer One evidence-discipline freeze
+
+Froze the minimum claim-boundary rules for future Layer One audit rewrites.
+
+Files changed:
+- `PLAYBOOK/layer-one-report-evidence-discipline-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added one explicit evidence-discipline document for Layer One rewrites.
+- Froze the allowed claim classes:
+  - confirmed findings
+  - bounded implications
+  - optional strategic recommendations
+- Froze the prohibited patterns:
+  - invented market statistics
+  - hard root-cause claims from weak signals
+  - fabricated operational specifics not present in the audit
+  - overclaimed `2026 standard` language
+  - collapsing optional GEO ideas into mandatory remediation
+- Recorded the next justified slice:
+  - `L1-RW-003` tone and verbosity cleanup
+
+Verification:
+- Docs-only design slice.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-30 - Layer One tone and verbosity freeze
+
+Froze the default presentation rules for future Layer One audit rewrites.
+
+Files changed:
+- `PLAYBOOK/layer-one-report-tone-and-verbosity-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added one explicit tone-and-verbosity document for Layer One rewrites.
+- Froze the target presentation style:
+  - plain
+  - direct
+  - specific
+  - calm
+  - operational
+- Froze the key anti-patterns:
+  - broad industry throat-clearing
+  - consultancy-style inflation
+  - repeated framing
+  - long conclusions that restate the whole report
+- Recorded the next justified slice:
+  - `L1-RW-004` recommendation formatting
+
+Verification:
+- Docs-only design slice.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-30 - Layer One recommendation-format freeze
+
+Froze the default action-card format for future Layer One audit rewrites.
+
+Files changed:
+- `PLAYBOOK/layer-one-report-recommendation-format-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added one explicit recommendation-format document for Layer One rewrites.
+- Froze the required action-card fields:
+  - issue
+  - why it matters
+  - action
+  - priority
+  - confidence
+- Froze the allowed `Priority` values:
+  - `Immediate`
+  - `Near-term`
+  - `Later`
+- Froze the allowed `Confidence` values:
+  - `High`
+  - `Medium`
+  - `Low`
+- Recorded the next justified slice:
+  - `L1-RW-005` ambiguous-signal wording patterns
+
+Verification:
+- Docs-only design slice.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-30 - Layer One ambiguous-signal wording freeze
+
+Froze the standard wording patterns for ambiguous Layer One audit signals.
+
+Files changed:
+- `PLAYBOOK/layer-one-report-ambiguous-signal-wording-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added one explicit ambiguous-signal wording document for Layer One rewrites.
+- Froze the three-step structure for non-binary findings:
+  - observed signal
+  - bounded implication
+  - verification step
+- Added standard patterns for:
+  - `402/403` and low-confidence extraction
+  - partial schema signals
+  - stale freshness signals
+  - mixed page-level outcomes
+- Recorded that the next justified move is no longer another docs-only design slice.
+- The next justified slice is now implementation of the rewrite rules in the actual prompt/runtime path.
+
+Verification:
+- Docs-only design slice.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-30 - Layer One rewrite-prompt implementation slice
+
+Implemented the first real execution seam for the Layer One report hardening rules.
+
+Files changed:
+- `lib/server/layer-one-report-rewrite-prompt.ts`
+- `lib/server/layer-one-report-rewrite-prompt.test.ts`
+- `scripts/layer-one-report-rewrite-prompt.ts`
+- `package.json`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added a reusable prompt builder that converts report markdown into a constrained rewrite prompt for another LLM.
+- The prompt builder applies the frozen Layer One rules:
+  - fixed section order
+  - evidence discipline
+  - tone and verbosity rules
+  - recommendation formatting
+  - ambiguous-signal wording
+- Added `npm run report:layer-one:rewrite-prompt -- --report <markdown-path>` for local use on existing reports.
+- Kept the slice narrow:
+  - no customer-facing report renderer changes
+  - no retrieval changes
+  - no claim that the shipped runtime now rewrites reports automatically
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/layer-one-report-rewrite-prompt.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
+
+## 2026-03-30 - Layer One real-world rewrite fixture slice
+
+Added the first real-world external rewrite example for the new Layer One constrained prompt seam.
+
+Files changed:
+- `docs/review-inputs/reports/cllc-gemini-report.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added a markdown copy of the external Gemini-generated CLLC report as a stable local review fixture.
+- This gives the new rewrite-prompt command a real bad-output example to run against, instead of relying only on the shipped sample audit fixture.
+- Kept the slice narrow:
+  - no UI changes
+  - no product runtime changes
+  - no claim that the external report itself is now corrected
+
+Verification:
+- Operator workflow slice only.
+- The next step is to run the existing rewrite-prompt command against this markdown fixture.
+
+## 2026-03-30 - Layer One gold rewrite fixture slice
+
+Added the first gold-standard rewritten Layer One report fixture for prompt-tuning work.
+
+Files changed:
+- `eval/fixtures/cllc-layer-one-rewrite-gold.md`
+- `docs/01-current-state.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added the merged CLLC rewritten report as a stable local fixture.
+- This gives the rewrite workflow one concrete target output to compare against when future prompt changes are evaluated.
+- Kept the slice narrow:
+  - no prompt changes
+  - no UI changes
+  - no runtime report-generation changes
+
+Verification:
+- Fixture/docs slice only.
+- No type-check, Vitest, or Playwright was needed for this slice.
+
+## 2026-03-30 - automatic Layer One report eval writing
+
+Implemented automatic deterministic report-eval writes for generated deep-audit markdown.
+
+Files changed:
+- `lib/server/report-eval-writer.ts`
+- `lib/server/report-eval-writer.test.ts`
+- `workers/queue/report-queue-consumer.ts`
+- `app/dashboard/evals/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- Added a deterministic Layer One report-eval summary/writer built on the existing markdown structural scorer.
+- The writer records generated reports into `report_eval_runs` under framework `layer_one_report`.
+- The queue consumer now writes this eval row automatically after a report is successfully created.
+- The eval write is best-effort only:
+  - report delivery still succeeds if the analytics insert fails
+  - failures are logged through the existing structured log path
+- Added a dedicated framework label in the admin eval analytics page so report quality history can be filtered and graphed directly.
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/report-eval-writer.test.ts`
+- No Playwright was needed because this slice changed no user-facing route.
 
 ## 2026-03-29 - first live benchmark window interpretation slice
 

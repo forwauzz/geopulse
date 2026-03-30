@@ -36,6 +36,29 @@ export type BenchmarkScheduleWindowOutlier = {
   readonly groundedRunGroupId: string | null;
 };
 
+export type BenchmarkScheduleMultiWindowDomainSummary = {
+  readonly canonicalDomain: string;
+  readonly siteUrl: string | null;
+  readonly pairedWindowCount: number;
+  readonly positiveDeltaWindowCount: number;
+  readonly negativeDeltaWindowCount: number;
+  readonly zeroDeltaWindowCount: number;
+  readonly averageDeltaCitationRate: number;
+  readonly averageUngroundedCitationRate: number;
+  readonly averageGroundedCitationRate: number;
+  readonly nonZeroExactPageWindowCount: number;
+};
+
+export type BenchmarkScheduleMultiWindowSummary = {
+  readonly querySetId: string;
+  readonly modelId: string;
+  readonly scheduleVersion: string;
+  readonly windowDates: readonly string[];
+  readonly windowCount: number;
+  readonly pairedDomainCount: number;
+  readonly domains: readonly BenchmarkScheduleMultiWindowDomainSummary[];
+};
+
 function readText(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
@@ -167,4 +190,99 @@ export function selectBenchmarkScheduleWindowOutliers(
     .slice(0, limit);
 
   return { winners, losers };
+}
+
+function average(values: readonly number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function buildBenchmarkScheduleMultiWindowSummary(args: {
+  readonly runs: readonly BenchmarkRunListRow[];
+  readonly querySetId: string;
+  readonly modelId: string;
+  readonly scheduleVersion: string;
+  readonly windowDates: readonly string[];
+}): BenchmarkScheduleMultiWindowSummary {
+  const windowDates = Array.from(
+    new Set(args.windowDates.map((value) => value.trim()).filter((value) => value.length > 0))
+  );
+  const windowSummaries = windowDates.map((windowDate) =>
+    buildBenchmarkScheduleWindowSummary({
+      runs: args.runs,
+      querySetId: args.querySetId,
+      modelId: args.modelId,
+      scheduleVersion: args.scheduleVersion,
+      windowDate,
+    })
+  );
+  const byDomain = new Map<
+    string,
+    {
+      canonicalDomain: string;
+      siteUrl: string | null;
+      deltas: number[];
+      ungroundedRates: number[];
+      groundedRates: number[];
+      nonZeroExactPageWindowCount: number;
+    }
+  >();
+
+  for (const summary of windowSummaries) {
+    for (const domain of summary.domains) {
+      if (
+        typeof domain.ungroundedCitationRate !== 'number' ||
+        typeof domain.groundedCitationRate !== 'number'
+      ) {
+        continue;
+      }
+
+      const existing = byDomain.get(domain.domainId) ?? {
+        canonicalDomain: domain.canonicalDomain,
+        siteUrl: domain.siteUrl,
+        deltas: [],
+        ungroundedRates: [],
+        groundedRates: [],
+        nonZeroExactPageWindowCount: 0,
+      };
+
+      existing.deltas.push(domain.groundedCitationRate - domain.ungroundedCitationRate);
+      existing.ungroundedRates.push(domain.ungroundedCitationRate);
+      existing.groundedRates.push(domain.groundedCitationRate);
+      if ((domain.groundedExactPageQualityRate ?? 0) > 0) {
+        existing.nonZeroExactPageWindowCount += 1;
+      }
+
+      byDomain.set(domain.domainId, existing);
+    }
+  }
+
+  const domains = Array.from(byDomain.values())
+    .map((domain) => ({
+      canonicalDomain: domain.canonicalDomain,
+      siteUrl: domain.siteUrl,
+      pairedWindowCount: domain.deltas.length,
+      positiveDeltaWindowCount: domain.deltas.filter((value) => value > 0).length,
+      negativeDeltaWindowCount: domain.deltas.filter((value) => value < 0).length,
+      zeroDeltaWindowCount: domain.deltas.filter((value) => value === 0).length,
+      averageDeltaCitationRate: average(domain.deltas),
+      averageUngroundedCitationRate: average(domain.ungroundedRates),
+      averageGroundedCitationRate: average(domain.groundedRates),
+      nonZeroExactPageWindowCount: domain.nonZeroExactPageWindowCount,
+    }))
+    .sort((left, right) => {
+      if (right.averageDeltaCitationRate !== left.averageDeltaCitationRate) {
+        return right.averageDeltaCitationRate - left.averageDeltaCitationRate;
+      }
+      return left.canonicalDomain.localeCompare(right.canonicalDomain);
+    });
+
+  return {
+    querySetId: args.querySetId,
+    modelId: args.modelId,
+    scheduleVersion: args.scheduleVersion,
+    windowDates,
+    windowCount: windowDates.length,
+    pairedDomainCount: domains.length,
+    domains,
+  };
 }
