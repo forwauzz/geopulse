@@ -64,6 +64,42 @@ Launch is not fully closed yet.
   - login page explains the recovery rule
   - dashboard empty state tells users how to recover an already-purchased report
 - interactive in-browser report view above markdown sections
+- Layer One report-rewriter contract freeze:
+  - the repo now has a frozen section-order contract for future Layer One report rewrites
+  - this is a writing-contract artifact only, not a new prompt/runtime implementation yet
+- Layer One evidence-discipline freeze:
+  - the repo now has frozen claim-boundary rules for future Layer One report rewrites
+  - this is still a writing-policy artifact only, not a new prompt/runtime implementation yet
+- Layer One tone and verbosity freeze:
+  - the repo now has frozen tone rules for future Layer One report rewrites
+  - the intended output is plain, direct, and operator-trustworthy rather than consultancy-styled
+- Layer One recommendation-format freeze:
+  - the repo now has a frozen action-card shape for future Layer One report rewrites
+  - priority actions should now resolve into issue, why it matters, action, priority, and confidence
+- Layer One ambiguous-signal wording freeze:
+  - the repo now has frozen wording patterns for future Layer One report rewrites when findings are real but not fully diagnostic
+  - examples include `402/403`, low-confidence extraction, partial schema, stale dates, and mixed page-level outcomes
+- Layer One rewrite-prompt path:
+  - the repo now includes a local script that builds the constrained Layer One rewrite prompt from existing report markdown
+  - this is the first actual implementation seam for the report rewriter rules; the product report runtime itself is still deterministic
+- Layer One gold rewrite fixture:
+  - the repo now includes a first gold-standard rewritten Layer One report fixture for `cllcenter.com`
+  - this exists to anchor future prompt tuning against a concrete target output rather than abstract style rules only
+- Automatic Layer One report eval writing:
+  - generated deep-audit markdown now writes a deterministic `report_eval_runs` row automatically after report creation
+  - admin eval analytics can now show real Layer One report history over time under a dedicated `layer_one_report` framework
+- Layer One internal rewritten-artifact contract freeze:
+  - the repo now has a frozen rule that any rewritten Layer One report should begin as a second internal artifact, not an immediate replacement for the deterministic paid report
+  - the next implementation step should store and evaluate both versions before any customer-facing default is changed
+- Layer One internal rewritten-artifact implementation:
+  - deep-audit report generation can now optionally create a second internal rewritten markdown artifact after the deterministic markdown is built
+  - the rewritten artifact is best-effort, separately stored, separately evaluated, and does not replace the paid report by default
+- Layer One report internal comparison access:
+  - admin eval analytics now link report rows to a report-detail page
+  - that page groups sibling `report_eval_runs` by `scan_id` so deterministic and rewritten report variants can be compared side-by-side for one scan
+- Layer One operator judgment seam:
+  - the report-detail admin page now supports `better`, `worse`, or `unclear` judgments on the rewritten report variant
+  - judgments are stored in `report_eval_runs.metadata` so repeated internal review can build an evidence base before any paid-report default changes
 
 ### Paid deep audit
 - `scan_runs` / `scan_pages`
@@ -118,6 +154,7 @@ Launch is not fully closed yet.
   - explicit scheduled-window summary command for reviewing one frame from the terminal
   - explicit outlier-selection command for choosing the first manual review set
   - explicit run-diagnostic command for selected grounded outlier runs before manual lineage review
+  - explicit multi-window recurrence command for freezing recurring winners/laggards from a small chosen window set
   - recurring schedule can now narrow by vertical and seed priority
   - twice-daily schedule windows are supported for slow internal collection lanes
   - first live-window interpretation is now frozen:
@@ -130,6 +167,39 @@ Launch is not fully closed yet.
 - benchmark operations decision freeze:
   - do not split into a separate benchmark service yet
   - 500 to 1000-site ops remain planned, not implemented
+ - law-firms fit analysis freeze:
+   - the first 21-domain `law_firms` lane is now explicitly understood as a mixed cohort, not one coherent law-firm frame
+   - the current query set mixes multiple legal-service intents against firms with very different specialties
+   - the broad lane remains useful for internal directional collection, but not yet as a precision methodology lane
+ - law-firms replacement-target freeze:
+   - the first narrow replacement lane should target `business_counsel / biglaw / enterprise`
+   - the next query-set rewrite should serve that subgroup only
+ - law-firms narrow query-set draft freeze:
+   - the first replacement query-set draft now exists for the `business_counsel / biglaw / enterprise` subgroup
+   - it is a frozen draft fixture only, not yet seeded or scheduled
+ - law-firms narrow target-domain freeze:
+   - the first replacement lane now has an explicit 17-domain target list under `law_firms_business_counsel_v1`
+   - the broad 21-domain lane remains unchanged for comparability
+ - law-firms narrow seed path freeze:
+   - the first replacement query-set draft now has an explicit seed command
+   - this still does not make the narrow lane live until scheduling is configured separately
+   - the seeded draft query-set record now exists:
+     `9910b5ac-ade6-42be-9dca-9b85c04e4469`
+ - law-firms narrow preview path:
+   - the scheduler can now narrow by explicit canonical-domain allowlist
+   - this enables previewing the frozen 17-domain business-counsel cohort without disturbing the live broad lane
+ - first live narrow law-firms lane:
+   - `law-firms-business-counsel-v1` completed its first 17-domain window cleanly
+   - the narrower frame produced cleaner grounded-vs-ungrounded signal than the broad mixed lane
+   - exact-page quality still remained non-gating
+ - primary law-firms benchmark lens:
+   - after three comparable windows, `law-firms-business-counsel-v1` is now the primary internal law-firms benchmark frame
+   - the original broad `law-firms-p1-v1` lane is now a secondary legacy comparison frame
+ - narrow-lane recurrence review:
+   - the repo now includes a small terminal-only recurrence helper for explicit multi-window review on the current schedule frame
+   - this is intended for evidence review across a few comparable windows, not a new benchmark subsystem
+ - schedule run-now override:
+   - the scheduler now supports `--window-date YYYY-MM-DDTHH` for controlled internal creation of the next benchmark window without waiting for cron time to advance
 
 ### Marketing attribution
 - event ingestion
@@ -152,3 +222,16 @@ These still block launch closure:
 - Launch readiness is still gated by operational security closure, not by missing core product code.
 - Deep-audit core scale plumbing is implemented; remaining launch risk is operational/security closure, not DA-004 core code.
 - Retrieval analytics are implemented for deterministic and Promptfoo-backed runs, but RAGAS runtime remains intentionally unshipped.
+- The first live `law_firms` benchmark lane is operationally real, but its current frame is over-mixed: many domain/query pairs are low-fit by design because the cohort mixes enterprise firms, immigration, divorce, PI, and employment specialists under one broad query set.
+- The first replacement benchmark lane should not try to fix "all law firms" at once. The next precision slice is now explicitly anchored on the `business_counsel / biglaw / enterprise` subgroup.
+- The first replacement query-set draft is now frozen as a methodology artifact. It narrows the frame to enterprise/business-law buying intent, but it is not live until the exact target cohort is frozen too.
+- The first replacement cohort is now frozen too: 17 business-counsel-oriented domains from the current priority-1 lane. The next live experiment should be launched as a separate narrow frame, not by mutating the current broad lane.
+- The first narrow live law-firms experiment now validates the methodology direction: narrowing the cohort/query frame improved signal quality even though page-level provenance behavior did not change yet.
+- The law-firms benchmark strategy is now clearer: the narrow business-counsel lane is the main internal lens, and the broad lane should no longer drive methodology decisions by itself.
+- Layer One report quality improvement should start at the rewrite layer, not retrieval. The first frozen step is now the report contract: confirmed findings, bounded implications, priority actions, optional advanced GEO ideas, and open questions should be separated instead of blended.
+- Layer One report quality now also has a frozen evidence boundary: rewritten reports should not invent market data, hard-diagnose weak signals, or present optional GEO strategy as confirmed audit fact.
+- Layer One report quality also now has a frozen tone boundary: future rewrites should open with the site and findings, use plain operational language, and cut inflated industry framing.
+- Layer One report quality also now has a frozen action boundary: priority recommendations should be compact, concrete, and mechanically consistent instead of mixing strategy prose with implementation steps.
+- Layer One report quality also now has a frozen ambiguity boundary: future rewrites should describe uncertain findings with observed signal, bounded implication, and verification step instead of jumping to root cause.
+- The first implementation step for report hardening is now in repo too: a reusable Layer One rewrite-prompt builder exists for existing markdown reports, while customer-facing report generation remains deterministic.
+- Deep-audit report viewing no longer depends on the browser fetching the raw markdown file URL directly. The results/report UI now uses a same-origin markdown proxy route, which also provides a stable markdown download path for delivered reports.

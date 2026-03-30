@@ -153,13 +153,22 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
       readonly limit?: number;
       readonly vertical?: string | null;
       readonly seedPriorities?: readonly number[];
+      readonly canonicalDomains?: readonly string[];
       readonly requireScheduleEnabled?: boolean;
     }): Promise<BenchmarkDomainRow[]> {
       const limit = args?.limit ?? 20;
       const vertical = args?.vertical?.trim() || null;
       const seedPriorities = (args?.seedPriorities ?? []).filter((value) => Number.isFinite(value));
+      const canonicalDomains = Array.from(
+        new Set(
+          (args?.canonicalDomains ?? [])
+            .map((value) => value.trim().toLowerCase())
+            .filter((value) => value.length > 0)
+        )
+      );
       const requireScheduleEnabled =
-        args?.requireScheduleEnabled ?? (seedPriorities.length > 0 || !!vertical);
+        args?.requireScheduleEnabled ??
+        (seedPriorities.length > 0 || !!vertical || canonicalDomains.length > 0);
       const fetchLimit = Math.max(limit * 5, 100);
 
       let query = supabase
@@ -173,6 +182,10 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
 
       if (vertical) {
         query = query.eq('vertical', vertical);
+      }
+
+      if (canonicalDomains.length > 0) {
+        query = query.in('canonical_domain', canonicalDomains);
       }
 
       const { data, error } = await query;
@@ -193,6 +206,13 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
                 : null;
 
           if (seedPriorities.length > 0 && (!priority || !seedPriorities.includes(priority))) {
+            return false;
+          }
+
+          if (
+            canonicalDomains.length > 0 &&
+            !canonicalDomains.includes(row.canonical_domain.trim().toLowerCase())
+          ) {
             return false;
           }
 

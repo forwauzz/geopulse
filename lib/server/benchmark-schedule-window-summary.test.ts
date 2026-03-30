@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildBenchmarkScheduleMultiWindowSummary,
   buildBenchmarkScheduleWindowSummary,
   selectBenchmarkScheduleWindowOutliers,
 } from './benchmark-schedule-window-summary';
@@ -178,6 +179,145 @@ describe('buildBenchmarkScheduleWindowSummary', () => {
           groundedExactPageQualityRate: 0,
           ungroundedRunGroupId: 'run-3',
           groundedRunGroupId: 'run-4',
+        },
+      ],
+    });
+  });
+
+  it('summarizes recurring performance across multiple explicit windows', () => {
+    const runs: BenchmarkRunListRow[] = [
+      makeRun({
+        domain_id: 'domain-1',
+        canonical_domain: 'winner.com',
+        site_url: 'https://winner.com/',
+        citation_rate: 0.25,
+      }),
+      makeRun({
+        id: 'run-2',
+        domain_id: 'domain-1',
+        canonical_domain: 'winner.com',
+        site_url: 'https://winner.com/',
+        metadata: {
+          schedule_version: 'law-firms-p1-v1',
+          schedule_window_utc: '2026-03-29T12',
+          run_mode: 'grounded_site',
+          exact_page_quality_rate: 0,
+        },
+        citation_rate: 0.75,
+      }),
+      makeRun({
+        id: 'run-3',
+        domain_id: 'domain-1',
+        canonical_domain: 'winner.com',
+        site_url: 'https://winner.com/',
+        metadata: {
+          schedule_version: 'law-firms-p1-v1',
+          schedule_window_utc: '2026-03-30T00',
+          run_mode: 'ungrounded_inference',
+          exact_page_quality_rate: 0,
+        },
+        citation_rate: 0.5,
+      }),
+      makeRun({
+        id: 'run-4',
+        domain_id: 'domain-1',
+        canonical_domain: 'winner.com',
+        site_url: 'https://winner.com/',
+        metadata: {
+          schedule_version: 'law-firms-p1-v1',
+          schedule_window_utc: '2026-03-30T00',
+          run_mode: 'grounded_site',
+          exact_page_quality_rate: 0,
+        },
+        citation_rate: 1,
+      }),
+      makeRun({
+        id: 'run-5',
+        domain_id: 'domain-2',
+        canonical_domain: 'loser.com',
+        site_url: 'https://loser.com/',
+        citation_rate: 0.75,
+      }),
+      makeRun({
+        id: 'run-6',
+        domain_id: 'domain-2',
+        canonical_domain: 'loser.com',
+        site_url: 'https://loser.com/',
+        metadata: {
+          schedule_version: 'law-firms-p1-v1',
+          schedule_window_utc: '2026-03-29T12',
+          run_mode: 'grounded_site',
+          exact_page_quality_rate: 0,
+        },
+        citation_rate: 0.25,
+      }),
+      makeRun({
+        id: 'run-7',
+        domain_id: 'domain-2',
+        canonical_domain: 'loser.com',
+        site_url: 'https://loser.com/',
+        metadata: {
+          schedule_version: 'law-firms-p1-v1',
+          schedule_window_utc: '2026-03-30T00',
+          run_mode: 'ungrounded_inference',
+          exact_page_quality_rate: 0,
+        },
+        citation_rate: 1,
+      }),
+      makeRun({
+        id: 'run-8',
+        domain_id: 'domain-2',
+        canonical_domain: 'loser.com',
+        site_url: 'https://loser.com/',
+        metadata: {
+          schedule_version: 'law-firms-p1-v1',
+          schedule_window_utc: '2026-03-30T00',
+          run_mode: 'grounded_site',
+          exact_page_quality_rate: 0,
+        },
+        citation_rate: 0.5,
+      }),
+    ];
+
+    expect(
+      buildBenchmarkScheduleMultiWindowSummary({
+        runs,
+        querySetId: 'set-1',
+        modelId: 'gemini-2.5-flash-lite',
+        scheduleVersion: 'law-firms-p1-v1',
+        windowDates: ['2026-03-29T12', '2026-03-30T00'],
+      })
+    ).toEqual({
+      querySetId: 'set-1',
+      modelId: 'gemini-2.5-flash-lite',
+      scheduleVersion: 'law-firms-p1-v1',
+      windowDates: ['2026-03-29T12', '2026-03-30T00'],
+      windowCount: 2,
+      pairedDomainCount: 2,
+      domains: [
+        {
+          canonicalDomain: 'winner.com',
+          siteUrl: 'https://winner.com/',
+          pairedWindowCount: 2,
+          positiveDeltaWindowCount: 2,
+          negativeDeltaWindowCount: 0,
+          zeroDeltaWindowCount: 0,
+          averageDeltaCitationRate: 0.5,
+          averageUngroundedCitationRate: 0.375,
+          averageGroundedCitationRate: 0.875,
+          nonZeroExactPageWindowCount: 0,
+        },
+        {
+          canonicalDomain: 'loser.com',
+          siteUrl: 'https://loser.com/',
+          pairedWindowCount: 2,
+          positiveDeltaWindowCount: 0,
+          negativeDeltaWindowCount: 2,
+          zeroDeltaWindowCount: 0,
+          averageDeltaCitationRate: -0.5,
+          averageUngroundedCitationRate: 0.875,
+          averageGroundedCitationRate: 0.375,
+          nonZeroExactPageWindowCount: 0,
         },
       ],
     });

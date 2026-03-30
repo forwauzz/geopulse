@@ -479,6 +479,15 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
                     View report
                   </a>
                 )}
+                {data.markdownUrl && (
+                  <a
+                    href={`/api/scans/${data.scanId}/report-markdown?download=1`}
+                    className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
+                  >
+                    <span className="material-symbols-outlined text-base">description</span>
+                    Download markdown
+                  </a>
+                )}
                 {data.pdfUrl && (
                   <a
                     href={data.pdfUrl}

@@ -35,6 +35,8 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     RECONCILE_SECRET: '',
     DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '',
     DEEP_AUDIT_BROWSER_RENDER_MODE: 'off',
+    DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: '',
+    DEEP_AUDIT_INTERNAL_REWRITE_MODEL: '',
   };
 }
 

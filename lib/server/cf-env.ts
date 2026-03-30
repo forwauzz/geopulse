@@ -32,6 +32,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   DEEP_AUDIT_DEFAULT_PAGE_LIMIT: string;
   /** Plaintext var: off, auto, or force for optional Browser Rendering on paid deep audits. */
   DEEP_AUDIT_BROWSER_RENDER_MODE: string;
+  DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: string;
+  DEEP_AUDIT_INTERNAL_REWRITE_MODEL: string;
 };
 
 /**
@@ -128,6 +130,8 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
       DEEP_AUDIT_BROWSER_RENDER_MODE: pickEnvString(e, 'DEEP_AUDIT_BROWSER_RENDER_MODE'),
+      DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'),
+      DEEP_AUDIT_INTERNAL_REWRITE_MODEL: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_MODEL'),
     };
   } catch {
     return {
@@ -142,6 +146,10 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
       DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
+      DEEP_AUDIT_INTERNAL_REWRITE_ENABLED:
+        process.env['DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'] ?? '',
+      DEEP_AUDIT_INTERNAL_REWRITE_MODEL:
+        process.env['DEEP_AUDIT_INTERNAL_REWRITE_MODEL'] ?? '',
     };
   }
 }

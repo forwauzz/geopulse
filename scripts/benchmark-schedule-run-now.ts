@@ -2,7 +2,33 @@ import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-executi
 import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
 import { createServiceRoleClient } from '../lib/supabase/service-role';
 
+function parseArgs(argv: string[]): { windowDate: string | null } {
+  const values = new Map<string, string>();
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (!token || !token.startsWith('--')) continue;
+    const value = argv[index + 1];
+    if (!value || value.startsWith('--')) continue;
+    values.set(token.slice(2), value);
+    index += 1;
+  }
+
+  return {
+    windowDate: values.get('window-date') ?? null,
+  };
+}
+
+function parseWindowDateOverride(value: string | null): Date | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(`${value}:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid --window-date value: ${value}. Expected YYYY-MM-DDTHH`);
+  }
+  return parsed;
+}
+
 async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
   const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
   const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
   if (!url || !key) {
@@ -15,6 +41,7 @@ async function main(): Promise<void> {
     supabase,
     env: process.env as Record<string, string | undefined>,
     adapter: createBenchmarkExecutionAdapter(process.env),
+    now: parseWindowDateOverride(args.windowDate),
   });
 
   if (!summary.enabled) {

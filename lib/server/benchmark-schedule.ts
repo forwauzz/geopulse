@@ -19,6 +19,7 @@ type ScheduleEnvLike = {
   readonly BENCHMARK_SCHEDULE_RUN_MODES?: string;
   readonly BENCHMARK_SCHEDULE_VERTICAL?: string;
   readonly BENCHMARK_SCHEDULE_SEED_PRIORITIES?: string;
+  readonly BENCHMARK_SCHEDULE_DOMAINS?: string;
   readonly BENCHMARK_SCHEDULE_DOMAIN_LIMIT?: string;
   readonly BENCHMARK_SCHEDULE_MAX_RUNS?: string;
   readonly BENCHMARK_SCHEDULE_MAX_FAILURES?: string;
@@ -33,6 +34,7 @@ type ScheduledRunConfig = {
   readonly runModes: readonly BenchmarkRunMode[];
   readonly vertical: string | null;
   readonly seedPriorities: readonly number[];
+  readonly canonicalDomains: readonly string[];
   readonly domainLimit: number;
   readonly maxRuns: number;
   readonly maxFailures: number;
@@ -65,6 +67,7 @@ export type BenchmarkSchedulePreview = {
   readonly windowDate: string;
   readonly vertical: string | null;
   readonly seedPriorities: readonly number[];
+  readonly canonicalDomains: readonly string[];
   readonly runModes: readonly BenchmarkRunMode[];
   readonly domainLimit: number;
   readonly maxRuns: number;
@@ -94,6 +97,19 @@ function parsePositiveIntList(raw: string | null): number[] {
         .split(',')
         .map((value) => Number.parseInt(value.trim(), 10))
         .filter((value) => Number.isFinite(value) && value > 0)
+    )
+  );
+}
+
+function parseTextList(raw: string | null): string[] {
+  if (!raw) return [];
+
+  return Array.from(
+    new Set(
+      raw
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .filter((value) => value.length > 0)
     )
   );
 }
@@ -155,6 +171,7 @@ export function parseBenchmarkScheduleConfig(
     runModes: uniqueRunModes,
     vertical: normalizeText(env?.BENCHMARK_SCHEDULE_VERTICAL),
     seedPriorities: parsePositiveIntList(normalizeText(env?.BENCHMARK_SCHEDULE_SEED_PRIORITIES)),
+    canonicalDomains: parseTextList(normalizeText(env?.BENCHMARK_SCHEDULE_DOMAINS)),
     domainLimit: parsePositiveInt(normalizeText(env?.BENCHMARK_SCHEDULE_DOMAIN_LIMIT), 20),
     maxRuns: parsePositiveInt(normalizeText(env?.BENCHMARK_SCHEDULE_MAX_RUNS), 40),
     maxFailures: parsePositiveInt(normalizeText(env?.BENCHMARK_SCHEDULE_MAX_FAILURES), 5),
@@ -223,7 +240,11 @@ export async function previewBenchmarkScheduleSweep(args: {
     limit: args.config.domainLimit,
     vertical: args.config.vertical,
     seedPriorities: args.config.seedPriorities,
-    requireScheduleEnabled: args.config.seedPriorities.length > 0 || !!args.config.vertical,
+    canonicalDomains: args.config.canonicalDomains,
+    requireScheduleEnabled:
+      args.config.seedPriorities.length > 0 ||
+      !!args.config.vertical ||
+      args.config.canonicalDomains.length > 0,
   });
 
   return {
@@ -236,6 +257,7 @@ export async function previewBenchmarkScheduleSweep(args: {
     windowDate,
     vertical: args.config.vertical,
     seedPriorities: args.config.seedPriorities,
+    canonicalDomains: args.config.canonicalDomains,
     runModes: args.config.runModes,
     domainLimit: args.config.domainLimit,
     maxRuns: args.config.maxRuns,
@@ -274,7 +296,11 @@ export async function executeBenchmarkScheduleSweep(args: {
     limit: args.config.domainLimit,
     vertical: args.config.vertical,
     seedPriorities: args.config.seedPriorities,
-    requireScheduleEnabled: args.config.seedPriorities.length > 0 || !!args.config.vertical,
+    canonicalDomains: args.config.canonicalDomains,
+    requireScheduleEnabled:
+      args.config.seedPriorities.length > 0 ||
+      !!args.config.vertical ||
+      args.config.canonicalDomains.length > 0,
   });
   let launchedRuns = 0;
   let skippedExistingRuns = 0;
@@ -287,6 +313,7 @@ export async function executeBenchmarkScheduleSweep(args: {
     run_mode_count: args.config.runModes.length,
     vertical: args.config.vertical,
     seed_priorities: args.config.seedPriorities.join(','),
+    schedule_domains: args.config.canonicalDomains.join(','),
     domain_count: domains.length,
     max_runs: args.config.maxRuns,
     max_failures: args.config.maxFailures,
@@ -305,6 +332,7 @@ export async function executeBenchmarkScheduleSweep(args: {
           max_runs: args.config.maxRuns,
           window_hours: args.config.windowHours,
           schedule_version: args.config.scheduleVersion,
+          schedule_domains: args.config.canonicalDomains.join(','),
         });
         break outer;
       }
@@ -318,6 +346,7 @@ export async function executeBenchmarkScheduleSweep(args: {
           max_failures: args.config.maxFailures,
           window_hours: args.config.windowHours,
           schedule_version: args.config.scheduleVersion,
+          schedule_domains: args.config.canonicalDomains.join(','),
         });
         break outer;
       }
@@ -362,6 +391,7 @@ export async function executeBenchmarkScheduleSweep(args: {
               schedule_window_hours: args.config.windowHours,
               schedule_vertical: args.config.vertical,
               schedule_seed_priorities: args.config.seedPriorities,
+              schedule_domains: args.config.canonicalDomains,
               schedule_run_key: scheduleRunKey,
               schedule_query_set_name: querySet.name,
               schedule_query_set_version: querySet.version,
@@ -381,6 +411,7 @@ export async function executeBenchmarkScheduleSweep(args: {
           schedule_version: args.config.scheduleVersion,
           schedule_window_utc: windowDate,
           error: error instanceof Error ? error.message : 'unknown',
+          schedule_domains: args.config.canonicalDomains.join(','),
         });
       }
     }
@@ -414,6 +445,7 @@ export async function executeBenchmarkScheduleSweep(args: {
       window_hours: args.config.windowHours,
       vertical: args.config.vertical,
       seed_priorities: args.config.seedPriorities.join(','),
+      schedule_domains: args.config.canonicalDomains.join(','),
       schedule_version: summary.scheduleVersion,
     }
   );
