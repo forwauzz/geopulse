@@ -31,6 +31,7 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     STRIPE_PRICE_ID_DEEP_AUDIT: '',
     RESEND_API_KEY: '',
     RESEND_FROM_EMAIL: '',
+    KIT_API_KEY: '',
     NEXT_PUBLIC_APP_URL: '',
     RECONCILE_SECRET: '',
     DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '',

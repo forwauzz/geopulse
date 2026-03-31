@@ -31,7 +31,10 @@ Current truth:
 - planning docs still exist on `planning/content-machine-v1`
 - the first implementation slice is now in repo: canonical content tables, downstream delivery records, a server-side admin data helper, and a minimal `/dashboard/content` inventory page
 - the second implementation slice is now in repo too: provider-control records for downstream destinations, a destination admin helper, and feature-flag controls for newsletter providers inside `/dashboard/content`
-- no public blog runtime, publish workflow, editor UI, or newsletter API integration is shipped yet
+- the third implementation slice is now in repo too: local draft import from `PLAYBOOK/content-machine-drafts` into canonical `content_items` via an admin action in `/dashboard/content`
+- the fourth implementation slice is now in repo too: a first content-item detail/editor page at `/dashboard/content/[contentId]` for reviewing and updating imported records
+- the fifth implementation slice is now in repo too: a provider adapter contract, first Kit adapter, and a draft-push action from the content-item page into the selected destination
+- no public blog runtime or full publish workflow is shipped yet
 - the repo now has a first-pass product marketing context, founder voice draft, social-research synthesis, blog LLM-readiness spec, content-machine blueprint, and content-writing skill spec
 - the implementation direction remains site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
 
@@ -270,6 +273,23 @@ Current truth:
   - paid-plan requirement visibility
   - API/scheduling/archive capability visibility
   - operator-facing availability reason
+- local draft import inside `/dashboard/content`:
+  - reads `PLAYBOOK/content-machine-drafts`
+  - groups brief / article / newsletter assets by slug
+  - derives stable `content_id` values
+  - upserts idempotently into canonical content storage
+- first content detail/editor page:
+  - `/dashboard/content/[contentId]`
+  - basic metadata editing
+  - brief/draft markdown editing
+  - delivery visibility per content item
+- first destination adapter seam:
+  - provider adapter contract
+  - first Kit implementation
+  - draft push from `/dashboard/content/[contentId]`
+  - downstream delivery record persisted after push
+  - computed destination readiness from both feature flags and live environment state
+  - structured push events written into the admin logs stream for operator debugging
 - dashboard admin navigation now links to the content inventory
 
 ## Current Blockers
