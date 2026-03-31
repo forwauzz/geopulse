@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
+  customerFacingFinding,
   parseCoverageSummary,
   parseIssues,
   scoreNarrative,
@@ -191,8 +192,9 @@ class PdfBuilder {
         this.page.drawText(issue.check ?? issue.checkId ?? 'Check', { x: MARGIN + 70, y: this.y, size: 9, font: this.fontBold, color: INK });
         this.y -= 22;
 
-        if (issue.finding) {
-          this.drawText(issue.finding, 8, false, MUTED, 70);
+        const finding = customerFacingFinding(issue);
+        if (finding) {
+          this.drawText(finding, 8, false, MUTED, 70);
         }
         this.y -= 4;
       }
@@ -230,7 +232,7 @@ class PdfBuilder {
       const status = issueStatusLabel(row);
       const statusClr = issueStatusColor(status);
       const weight = String(row.weight ?? 0);
-      const finding = (row.finding ?? '').slice(0, 70);
+      const finding = customerFacingFinding(row).slice(0, 70);
 
       this.page.drawText(name, { x: MARGIN + 4, y: this.y, size: 8, font: this.font, color: INK });
       this.page.drawText(status, { x: MARGIN + 220, y: this.y, size: 8, font: this.fontBold, color: statusClr });

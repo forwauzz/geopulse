@@ -4,7 +4,7 @@
 
 ### P4-003
 SPF / DKIM / DMARC still needs operator completion and evidence.
-Current blocker: domain purchase / DNS setup is paused due to a credit-card issue.
+Current blocker: domain is now purchased, but DNS / Resend setup and evidence are still pending.
 
 ### P4-006
 Launch security sign-off is still pending.
@@ -13,6 +13,12 @@ It cannot be fully closed until `P4-003` DNS evidence exists.
 ### P4-004
 Managed Cloudflare WAF remains unresolved as an operational decision.
 Current repo mitigation exists, but the operational closure is not done.
+
+### Production domain cutover
+Still open:
+- route `getgeopulse.com` to the live app in Cloudflare
+- update Turnstile, Supabase Auth, and Stripe webhook/return assumptions to the custom domain
+- collect operator evidence for the custom-domain cutover before final `P4-006`
 
 ## Engineering Work Still Open
 
@@ -49,6 +55,22 @@ Still open:
 - keep optional GEO strategy clearly separated from audit-backed remediation
 - review real internal rewritten artifacts against deterministic reports before deciding whether any paid default should change
 - add a tighter aggregate review loop for rewritten-report quality over time, now that per-report operator judgments can be recorded
+
+### Report Design — implementation still open
+Design contracts frozen; RD-007 (team-owner map) shipped. See `docs/01-current-state.md` for what is done.
+Still open (Phase B — no start date yet):
+- use the now-rendered `Immediate Wins` markdown section as the validation point before exposing more owner-aware sections
+- decide whether the current deterministic `Immediate Wins` wording is good enough for paid reports, or whether one more shaping pass is needed before adding Team Action Map
+- continue trimming noisy report copy that weakens trust, especially repetitive per-page guidance and raw low-confidence evidence leakage
+- continue reducing customer-facing ambiguity around low-confidence LLM checks so bounded wording does not read like confirmed diagnosis
+- continue cleaning obviously broken or machine-looking guidance strings at the check source before broader report redesign
+- decide later whether the per-page section should stay as non-passing rows only or be compressed further into page-level summaries
+- update markdown builder to output new section order (RD-011)
+- build Team Action Map section grouped by owner (RD-010 contract not yet written)
+- PDF redesign to match new structure (RD-014 through RD-018)
+- web report viewer reorder (RD-019 through RD-021)
+- update structural eval assertions for new sections (RD-022)
+- wire Layer One rewriter as paid default only after validation on real reports (no start date)
 
 ### API-002 to API-007
 Still deferred until launch closure.

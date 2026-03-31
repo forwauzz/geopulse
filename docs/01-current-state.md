@@ -91,6 +91,15 @@ Launch is not fully closed yet.
 - Layer One internal rewritten-artifact contract freeze:
   - the repo now has a frozen rule that any rewritten Layer One report should begin as a second internal artifact, not an immediate replacement for the deterministic paid report
   - the next implementation step should store and evaluate both versions before any customer-facing default is changed
+- Report Design Phase A — design contracts frozen (RD-001 through RD-006 were docs only; RD-007 is the first tiny code-facing enabling slice):
+  - team-owner taxonomy: all 22 checks mapped to Engineering / Content / Brand / Product (`PLAYBOOK/rd-001-team-owner-taxonomy-v1.md`)
+  - executive brief contract: CRO-facing opening section spec (`PLAYBOOK/rd-002-executive-brief-contract-v1.md`)
+  - immediate wins format: ticket-style pre-filtered fast-start section spec (`PLAYBOOK/rd-006-immediate-wins-format-v1.md`)
+  - section order contract: new body order and appendix split frozen (`PLAYBOOK/rd-005-section-order-contract-v1.md`)
+  - "What AI-Ready Leaders Do Differently" contract: audit-derived best-practice framing spec (`PLAYBOOK/rd-004-ai-ready-leaders-contract-v1.md`)
+  - Team Action Map (rd-010) is the only remaining Phase A section still pending
+  - RD-007 (first code slice): standalone `TeamOwner` type + `TEAM_OWNER_MAP` + `getTeamOwner` helper in `workers/report/team-owner-map.ts`; no customer-facing behavior changed; 5/5 tests pass
+  - no report output, PDF, or web UI changed yet; Phase B implements these contracts
 - Layer One internal rewritten-artifact implementation:
   - deep-audit report generation can now optionally create a second internal rewritten markdown artifact after the deterministic markdown is built
   - the rewritten artifact is best-effort, separately stored, separately evaluated, and does not replace the paid report by default
@@ -100,6 +109,26 @@ Launch is not fully closed yet.
 - Layer One operator judgment seam:
   - the report-detail admin page now supports `better`, `worse`, or `unclear` judgments on the rewritten report variant
   - judgments are stored in `report_eval_runs.metadata` so repeated internal review can build an evidence base before any paid-report default changes
+- Report Design Phase B enabling seam:
+  - normalized report issue rows now carry `teamOwner` via the standalone RD-007 map
+  - this is a data-shape propagation step only; no customer-facing report sections use owner grouping yet
+- Report Design canonical payload propagation:
+  - the canonical deep-audit report payload now preserves `teamOwner` on highlighted issues, all issues, and page-level issue rows
+  - this still does not change customer-facing report structure; it only makes owner data available deeper in the report pipeline
+- Report Design internal Immediate Wins seam:
+  - the canonical deep-audit report payload now derives an internal-only `immediateWins` block from owner-aware issues
+  - the markdown report now renders a first deterministic `Immediate Wins` section from that block
+  - this is the first owner-aware customer-facing report section; broader report-order, PDF, and web-viewer redesign work is still pending
+- Report Design per-page markdown cleanup:
+  - passed checks in the per-page checklist no longer print `Fix:` lines
+  - the per-page checklist now shows only non-passing rows
+  - this reduces noisy, contradictory report copy without changing scoring, findings, or report order
+- Report Design bounded low-confidence wording:
+  - customer-facing report rendering now rewrites raw low-confidence transport tokens like `http_403` into bounded explanatory wording
+  - the underlying audit data is unchanged; only customer-facing markdown/PDF phrasing was softened
+- Report Design metadata-guidance cleanup:
+  - broken title-length guidance like `1070` has been corrected at the audit-check source
+  - customer-facing reports now inherit a readable `10-70` title range from the underlying check output
 
 ### Paid deep audit
 - `scan_runs` / `scan_pages`
@@ -213,6 +242,11 @@ These still block launch closure:
 - `P4-003` SPF / DKIM / DMARC operator setup
 - `P4-006` launch security sign-off
 - `P4-004` WAF remains operationally unresolved (`deferred / mitigated` in repo)
+
+Current domain truth:
+- the new production domain is now `getgeopulse.com`
+- repo production config now points at `https://getgeopulse.com/`
+- buying the domain removes the old purchase blocker, but launch is still waiting on DNS/email/WAF/operator evidence
 
 ## Most Important Truths
 
