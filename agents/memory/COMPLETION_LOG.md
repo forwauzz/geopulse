@@ -5,6 +5,43 @@
 
 ---
 
+### 2026-03-31 - Content machine planning foundation
+
+Created the first planning-only documentation set for the GEO-Pulse content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `.agents/product-marketing-context.md`
+- `PLAYBOOK/content-machine-v1-blueprint.md`
+- `PLAYBOOK/blog-llm-readiness-spec.md`
+- `PLAYBOOK/content-writing-skill-spec.md`
+- `PLAYBOOK/content-machine-inputs/README.md`
+- `PLAYBOOK/content-machine-inputs/brand-voice.soulmd`
+- `PLAYBOOK/content-machine-inputs/social-research-prompt.md`
+- `PLAYBOOK/content-machine-inputs/social-research-packet.template.md`
+- `PLAYBOOK/content-machine-inputs/social-research-synthesis-2026-03-31.md`
+
+What was established:
+- content-machine planning is now explicit in repo, rather than only in chat
+- GEO-Pulse content planning is site-first: canonical publication should live on GEO-Pulse before newsletter or downstream distribution
+- the planned content system is explicitly tied to `content_id` and the existing marketing-attribution layer
+- founder/operator voice rules were translated into a first-pass GEO-Pulse brand-voice draft
+- early external research from GPT + Gemini was synthesized into repeated pain points, usable language, and first content-topic directions
+- a blog LLM-readiness spec now exists so GEO-Pulse does not create the product-truth gap of selling AI-search readiness while publishing weakly extractable content on its own site
+- a future content-writing skill now has a first planning spec and dependency list
+
+What was not implemented:
+- no blog runtime
+- no newsletter integration
+- no content database model
+- no writing skill folder yet
+- no publishing workflow yet
+
+Verification:
+- docs-only planning slice
+- no code or runtime behavior changed
+
+---
+
 ### 2026-03-30 - RD-007 Standalone team-owner mapping artifact
 
 Added the first code-facing implementation artifact from the Phase A design: a standalone team-owner lookup module derived directly from the RD-001 taxonomy.

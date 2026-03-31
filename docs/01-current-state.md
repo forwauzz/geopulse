@@ -23,6 +23,16 @@ Current orchestrator phase: `Phase 4 - Launch`
 
 Launch is not fully closed yet.
 
+## Current planning stream
+
+A separate planning-only content-machine stream now exists on branch `planning/content-machine-v1`.
+
+Current truth:
+- this is documentation and planning only
+- no content-machine runtime, blog engine, or newsletter integration is shipped yet
+- the repo now has a first-pass product marketing context, founder voice draft, social-research synthesis, blog LLM-readiness spec, content-machine blueprint, and content-writing skill spec
+- the planning direction is explicitly site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
+
 ## What Is Implemented
 
 ### Core product
