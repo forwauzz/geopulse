@@ -5,6 +5,100 @@
 
 ---
 
+### 2026-03-31 - Content destination provider-control slice
+
+Added the second runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `supabase/migrations/017_content_distribution_destinations.sql`
+- `lib/server/content-destination-admin-data.ts`
+- `lib/server/content-destination-admin-data.test.ts`
+- `app/dashboard/content/actions.ts`
+
+Files updated:
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- a provider-control registry now exists in Supabase via:
+  - `public.content_distribution_destinations`
+- seeded destination records now exist for:
+  - Kit
+  - Ghost
+  - beehiiv
+  - Mailchimp
+- the content admin page now shows:
+  - explicit enabled / disabled state
+  - availability status
+  - paid-plan requirement
+  - API publish / scheduling / public-archive capabilities
+  - operator-facing reason text
+- provider enable/disable is now an admin action instead of an implicit code decision
+- the downstream model remains app-first:
+  - GEO-Pulse stays canonical
+  - providers are controlled as destinations, not as the source of truth
+
+What was not implemented:
+- no real provider adapter yet
+- no credential/env validation against live API keys yet
+- no default-destination selection workflow yet
+- no publish-to-Kit or publish-to-Ghost path yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-admin-data.test.ts lib/server/content-destination-admin-data.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
+### 2026-03-31 - Content machine foundation implementation slice
+
+Added the first runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `supabase/migrations/016_content_machine_foundation.sql`
+- `lib/server/content-admin-data.ts`
+- `lib/server/content-admin-data.test.ts`
+- `app/dashboard/content/page.tsx`
+
+Files updated:
+- `app/dashboard/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- canonical content storage now exists in Supabase via:
+  - `public.content_items`
+  - `public.content_distribution_deliveries`
+- the canonical model is site-first and tied to later attribution via `content_id`
+- content records can now store:
+  - title, slug, status, type
+  - target persona / topic / CTA metadata
+  - source links and market-language snippets
+  - brief and draft markdown
+  - canonical publish URL
+  - downstream distribution metadata
+- a first admin-only inventory page now exists at `/dashboard/content`
+- the dashboard admin nav now links to that content inventory
+- a small server-side helper now hydrates content rows with downstream delivery counts and latest delivery state
+
+What was not implemented:
+- no create/edit UI
+- no import of the existing PLAYBOOK drafts into the new tables
+- no public blog route
+- no newsletter API push
+- no publish action
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-admin-data.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
 ### 2026-03-31 - Content machine planning foundation
 
 Created the first planning-only documentation set for the GEO-Pulse content machine on branch `planning/content-machine-v1`.

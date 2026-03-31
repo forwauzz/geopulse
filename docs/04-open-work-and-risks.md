@@ -29,11 +29,12 @@ Deferred:
 
 ### Content machine planning -> implementation gap
 Still open:
-- choose the first newsletter platform from the current shortlist
+- wire the new canonical content tables into real create/edit flows instead of PLAYBOOK-only drafts
 - decide the canonical on-site publishing surface for GEO-Pulse articles
-- convert the planning docs into an implementation backlog
-- define the first editorial backlog and article-to-newsletter workflow
-- decide whether article pages will get an explicit pre-publish LLM-readiness check
+- add the first editor/admin workflow for importing or creating content items
+- add adapter-based newsletter API integration on top of `content_distribution_deliveries`
+- connect provider credentials / env checks to `content_distribution_destinations.availability_status`
+- add an explicit pre-publish LLM-readiness check before on-site publish
 
 ### RE-008 to RE-010
 Still pending:
@@ -145,6 +146,16 @@ This now also includes the content-machine planning set:
 - `PLAYBOOK/blog-llm-readiness-spec.md`
 - `PLAYBOOK/content-writing-skill-spec.md`
 - `PLAYBOOK/content-machine-inputs/*`
+
+And the new implementation seam:
+- `supabase/migrations/016_content_machine_foundation.sql`
+- `supabase/migrations/017_content_distribution_destinations.sql`
+- `lib/server/content-admin-data.ts`
+- `lib/server/content-destination-admin-data.ts`
+- `app/dashboard/content/page.tsx`
+
+### Provider lock-in risk
+If GEO-Pulse jumps straight to one newsletter API without keeping the admin-controlled destination layer as the source of truth, the content machine can silently become vendor-shaped. The new destination registry reduces that risk, but only if future integration work continues to target adapters and feature flags instead of hard-coding one provider path.
 
 ### GEO credibility risk
 If GEO-Pulse publishes blog and newsletter content that is not itself structured for LLM extractability, the company creates a product-truth gap: selling AI-search readiness while failing to model it on its own domain.
