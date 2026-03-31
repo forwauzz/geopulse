@@ -28,10 +28,12 @@ Launch is not fully closed yet.
 A separate planning-only content-machine stream now exists on branch `planning/content-machine-v1`.
 
 Current truth:
-- this is documentation and planning only
-- no content-machine runtime, blog engine, or newsletter integration is shipped yet
+- planning docs still exist on `planning/content-machine-v1`
+- the first implementation slice is now in repo: canonical content tables, downstream delivery records, a server-side admin data helper, and a minimal `/dashboard/content` inventory page
+- the second implementation slice is now in repo too: provider-control records for downstream destinations, a destination admin helper, and feature-flag controls for newsletter providers inside `/dashboard/content`
+- no public blog runtime, publish workflow, editor UI, or newsletter API integration is shipped yet
 - the repo now has a first-pass product marketing context, founder voice draft, social-research synthesis, blog LLM-readiness spec, content-machine blueprint, and content-writing skill spec
-- the planning direction is explicitly site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
+- the implementation direction remains site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
 
 ## What Is Implemented
 
@@ -245,6 +247,30 @@ Current truth:
 - UTM/session capture
 - attribution views
 - weekly email reporting
+
+### Content machine foundation
+- canonical content inventory tables:
+  - `public.content_items`
+  - `public.content_distribution_deliveries`
+- downstream provider registry:
+  - `public.content_distribution_destinations`
+- service-role-only storage for:
+  - content ids
+  - briefs and drafts
+  - target persona / topic / CTA metadata
+  - downstream newsletter or syndication delivery records
+- server-side admin helper:
+  - `lib/server/content-admin-data.ts`
+- server-side destination helper:
+  - `lib/server/content-destination-admin-data.ts`
+- minimal admin inventory UI:
+  - `/dashboard/content`
+- provider-control panel inside `/dashboard/content`:
+  - explicit enabled / disabled state
+  - paid-plan requirement visibility
+  - API/scheduling/archive capability visibility
+  - operator-facing availability reason
+- dashboard admin navigation now links to the content inventory
 
 ## Current Blockers
 
