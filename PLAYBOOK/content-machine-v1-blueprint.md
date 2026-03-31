@@ -274,6 +274,10 @@ Current founder-selected first-pass platform set:
 - Ghost
 - Mailchimp
 
+Current planning recommendation:
+- first target: Kit
+- strongest alternative if GEO-Pulse later wants a dedicated publishing system: Ghost
+
 Selection criteria for the first newsletter/distribution platform:
 - API quality
 - ability to push posts programmatically
