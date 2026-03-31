@@ -1,0 +1,4 @@
+interface:
+  display_name: "GEO Content Engine"
+  short_description: "Draft GEO-Pulse articles and newsletters."
+  default_prompt: "Use $geo-content-engine to create a GEO-Pulse brief, article, or newsletter draft from the product context, founder voice, and structured research inputs."
