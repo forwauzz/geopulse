@@ -1,4 +1,4 @@
-import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
+import { createBenchmarkExecutionAdapter, type BenchmarkExecutionEnvLike } from '../lib/server/benchmark-execution';
 import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
 import { createServiceRoleClient } from '../lib/supabase/service-role';
 
@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   const summary = await runScheduledBenchmarkSweep({
     supabase,
     env: process.env as Record<string, string | undefined>,
-    adapter: createBenchmarkExecutionAdapter(process.env),
+    adapter: createBenchmarkExecutionAdapter(process.env as BenchmarkExecutionEnvLike),
     now: parseWindowDateOverride(args.windowDate),
   });
 
