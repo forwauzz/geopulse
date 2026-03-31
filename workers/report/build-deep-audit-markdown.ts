@@ -1,5 +1,7 @@
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
+  customerFacingFinding,
+  parseIssues,
   scoreNarrative,
   type IssueRow,
 } from './deep-audit-report-helpers';
@@ -12,9 +14,8 @@ const CATEGORY_LABELS: Record<string, string> = {
   conversion_readiness: 'Conversion Readiness',
 };
 
-function parseIssues(raw: unknown): IssueRow[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((x): x is IssueRow => x !== null && typeof x === 'object');
+function markdownInline(value: string): string {
+  return value.replace(/\n+/g, ' ').trim();
 }
 
 function severityLabel(weight: number | undefined): string {
@@ -65,6 +66,20 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   const grade = payload.aggregateLetterGrade ?? '—';
   lines.push(scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName));
   lines.push('');
+
+  if (payload.immediateWins.length > 0) {
+    lines.push('## Immediate Wins');
+    lines.push('');
+    for (let i = 0; i < payload.immediateWins.length; i += 1) {
+      const win = payload.immediateWins[i]!;
+      lines.push(`${String(i + 1)}. **${markdownInline(win.what)}**`);
+      lines.push(`   - **Who:** ${win.who}`);
+      lines.push(`   - **Why:** ${markdownInline(win.why)}`);
+      lines.push(`   - **How:** ${markdownInline(win.how)}`);
+      lines.push(`   - **Effort:** ${win.effort}`);
+    }
+    lines.push('');
+  }
 
   const cats = payload.categoryScores;
   if (cats && cats.length > 0) {
@@ -121,8 +136,9 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
       const row = failedSorted[i]!;
       const title = row.check ?? row.checkId ?? 'Check';
       const sev = severityLabel(row.weight);
+      const finding = customerFacingFinding(row);
       lines.push(`${String(i + 1)}. **${title}** [${sev}]`);
-      if (row.finding) lines.push(`   - ${row.finding}`);
+      if (finding) lines.push(`   - ${finding}`);
       if (row.fix) lines.push(`   - **Fix:** ${row.fix}`);
     }
     lines.push('');
@@ -136,7 +152,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     const title = row.check ?? row.checkId ?? 'Check';
     const st = issueStatusLabel(row);
     const w = String(row.weight ?? 0);
-    const finding = (row.finding ?? '').replace(/\|/g, '\\|').slice(0, 100);
+    const finding = customerFacingFinding(row).replace(/\|/g, '\\|').slice(0, 100);
     lines.push(`| ${title} | ${st} | ${w} | ${finding} |`);
   }
   lines.push('');
@@ -158,16 +174,17 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     for (const pg of payload.pages) {
       lines.push(`### ${pg.url}`);
       lines.push('');
-      const pageIssues = parseIssues(pg.issuesJson);
+      const pageIssues = parseIssues(pg.issuesJson).filter((row) => issueStatusLabel(row) !== 'PASS');
       if (pageIssues.length === 0) {
-        lines.push('_(no issue rows)_');
+        lines.push('_(no non-passing issue rows)_');
       } else {
         for (const row of pageIssues) {
           const title = row.check ?? row.checkId ?? 'Check';
           const st = issueStatusLabel(row);
+          const finding = customerFacingFinding(row);
           lines.push(`- **${title}** [${st}]`);
-          if (row.finding) lines.push(`  - ${row.finding}`);
-          if (row.fix) lines.push(`  - Fix: ${row.fix}`);
+          if (finding) lines.push(`  - ${finding}`);
+          if (row.fix && st !== 'PASS') lines.push(`  - Fix: ${row.fix}`);
         }
       }
       lines.push('');

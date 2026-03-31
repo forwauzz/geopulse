@@ -5,6 +5,148 @@
 
 ---
 
+### 2026-03-30 - RD-007 Standalone team-owner mapping artifact
+
+Added the first code-facing implementation artifact from the Phase A design: a standalone team-owner lookup module derived directly from the RD-001 taxonomy.
+
+Files changed:
+- `workers/report/team-owner-map.ts` (new)
+- `workers/report/team-owner-map.test.ts` (new)
+- `agents/memory/PROJECT_STATE.md` (RD-007 added and marked DONE)
+
+What was implemented:
+- `TeamOwner` type: `'Engineering' | 'Content' | 'Brand' | 'Product'`
+- `TEAM_OWNER_MAP`: frozen `Record<string, TeamOwner>` keyed by check ID, covers all 22 currently implemented checks (11 Engineering, 9 Content, 2 Brand, 0 Product)
+- `getTeamOwner(checkId)`: returns `TeamOwner | undefined`; undefined for any check ID not in the map
+- No changes to `audit.ts` interfaces, any check files, payload types, or any existing runtime path
+- File lives in `workers/report/` (report-framing concern, not scan-engine concern)
+
+What was not changed:
+- No customer-facing report behavior changed
+- No interfaces modified
+- No existing files touched
+
+Verification:
+- `npm run type-check` → 0 errors
+- `npx vitest run workers/report/team-owner-map.test.ts` → 5/5 tests pass
+  - all 22 known check IDs covered
+  - all entries map to valid TeamOwner values
+  - correct counts per owner (11/9/2/0)
+  - unknown IDs return undefined
+
+---
+
+### 2026-03-30 - RD-004 "What AI-Ready Leaders Do Differently" contract
+
+Froze the content rules and format for the audit-derived best-practices context section of the paid report.
+
+Files changed:
+- `PLAYBOOK/rd-004-ai-ready-leaders-contract-v1.md` (new)
+- `agents/memory/PROJECT_STATE.md` (RD-004 status → DONE)
+
+What was decided:
+- Section position: 5th in the customer-facing body (per RD-005 order)
+- Core framing constraint: "AI-ready sites" language derives the positive standard from each check's own pass condition — not from external competitor measurement
+- Required format per gap block: AI-ready sites / This site / Gap — three fields, bounded language throughout
+- Selection: weight ≥ 6, not LOW_CONFIDENCE, failed or WARNING; 3–6 blocks, ordered by weight descending
+- Prohibited: named competitors, percentage statistics, benchmark quartile claims, "industry leaders" framing unless measured
+- Section is context-only; no action steps (those live in Immediate Wins and Team Action Map)
+- Full illustrative example included with three blocks (JSON-LD, extractability, E-E-A-T)
+
+Verification:
+- Docs-only slice; no runtime or code changes; no type-check required
+
+---
+
+### 2026-03-30 - RD-005 Section order contract
+
+Froze the new section order for the paid deep-audit report — the architectural reorganization that moves CRO-relevant narrative to the front and all technical detail to a clearly labeled appendix.
+
+Files changed:
+- `PLAYBOOK/rd-005-section-order-contract-v1.md` (new)
+- `agents/memory/PROJECT_STATE.md` (RD-005 status → DONE)
+
+What was decided:
+- New body order (6 sections): Executive Brief → Immediate Wins → Team Action Map → Score Summary → "What AI-Ready Leaders Do Differently" → Coverage Summary
+- Appendix (A–E): Score Breakdown (all checks) → Priority Action Plan → Pages Scanned → Per-Page Checklist → Technical Appendix
+- No technical data is deleted — all existing sections survive as appendix material
+- Appendix labeled: "For Engineering and SEO Teams"
+- Two body sections are placeholders pending their own slices: Team Action Map (rd-010) and "What AI-Ready Leaders Do Differently" (rd-004)
+- Layer One rewriter contract section order will need a future update to align — noted in this doc; both co-exist for now
+- This contract is the specification Phase B implementation tasks will implement; no runtime code changes in this slice
+
+Verification:
+- Docs-only slice; no runtime or code changes; no type-check required
+
+---
+
+### 2026-03-30 - RD-006 Immediate Wins format
+
+Froze the format and selection rules for the Immediate Wins section — the pre-filtered, ticket-style fast-start layer of the paid report.
+
+Files changed:
+- `PLAYBOOK/rd-006-immediate-wins-format-v1.md` (new)
+- `agents/memory/PROJECT_STATE.md` (RD-006 status → DONE)
+
+What was decided:
+- Selection criteria: failed or WARNING status AND weight ≥ 5 AND confidence not LOW_CONFIDENCE; top 3-5 by weight descending
+- Disqualifiers: LOW_CONFIDENCE, BLOCKED, NOT_EVALUATED, weight < 5, or fix requires cross-team unblocking before work can start
+- Five required fields per win: What (imperative voice), Who (single team owner from RD-001), Why (one sentence, audit-tied, bounded), How (specific enough to act without reading further), Effort (Quick / Moderate only)
+- Format is implementation-ticket style, not audit-finding style — "Add", "Update", "Remove", not "X needs improvement"
+- Immediate Wins is not a replacement for Priority Actions; both exist with intentional overlap — wins are the fast-access pre-filtered version
+- Full illustrative example included with three wins (robots.txt, JSON-LD, Q&A content) to make format concrete
+
+Verification:
+- Docs-only slice; no runtime or code changes; no type-check required
+- Format validated for consistency with `layer-one-report-recommendation-format-v1.md` action card pattern
+
+---
+
+### 2026-03-30 - RD-002 Executive Brief contract
+
+Froze the required shape and content rules for the Executive Brief — the new opening section of the paid report designed for CRO-level readers.
+
+Files changed:
+- `PLAYBOOK/rd-002-executive-brief-contract-v1.md` (new)
+- `agents/memory/PROJECT_STATE.md` (RD-002 status → DONE)
+
+What was decided:
+- Executive Brief has four required elements in fixed order: (1) site condition statement, (2) three-finding summary with team owner labels, (3) single primary action directive naming the responsible owner, (4) directional exposure statement
+- Three-finding summary uses the four owners from RD-001 exactly; each bullet names owner, issue, and bounded consequence
+- Primary action directive maps to the highest-weight failed check; one directive only, no list
+- Directional exposure statement: no numeric estimates, no revenue projections, no invented statistics — bounded language ("suggests", "may", "likely") tied to audit findings
+- Maximum 300 words; works as a standalone document if extracted
+- Replaces the existing executive summary section; transition to happen in RD-005
+- Full illustrative example included in the doc with real domain (techehealthservices.com) to make expectations concrete
+
+Verification:
+- Docs-only slice; no runtime or code changes; no type-check required
+- Contract reviewed against all five existing Layer One PLAYBOOK docs for consistency
+
+---
+
+### 2026-03-30 - RD-001 Team-owner taxonomy
+
+Created the first Report Design Phase A design document: team-owner taxonomy mapping all 22 implemented audit checks to four owners (Engineering, Content, Brand, Product).
+
+Files changed:
+- `PLAYBOOK/rd-001-team-owner-taxonomy-v1.md` (new)
+- `agents/memory/PROJECT_STATE.md` (added Report Design task registry section)
+
+What was decided:
+- 11 checks → Engineering (server config, technical directives, infrastructure): `ai-crawler-access`, `llms-txt`, `json-ld`, `schema-types`, `security-headers`, `snippet-eligibility`, `canonical`, `robots-meta`, `https-only`, `viewport`, `html-size` — combined weight 56 (50.5%)
+- 9 checks → Content (writing, editorial structure, page maintenance): `llm-qa-pattern`, `llm-extractability`, `heading-structure`, `title-tag`, `meta-description`, `freshness`, `internal-links`, `external-links`, `alt-text` — combined weight 45 (40.5%)
+- 2 checks → Brand (organizational identity, credibility signals, brand representation surfaces): `eeat-signals`, `open-graph` — combined weight 10 (9.0%)
+- 0 checks → Product (gap noted): no conversion readiness or CTA checks exist yet; `conversion_readiness` category is in the scoring system but unimplemented
+- Ambiguous assignments are documented with decision rationale in the taxonomy file
+- This is docs-only; no runtime check logic, no category scoring, no PDF/UI changed
+
+Verification:
+- No code changes; no type-check required for this slice
+- Document reviewed against all 22 check files in `workers/scan-engine/checks/`
+
+---
+
 ### 2026-03-30 - Deep-audit markdown delivery fix
 
 Added `app/api/scans/[id]/report-markdown/route.ts` and switched the report viewer to load markdown through the app instead of browser-fetching the raw storage URL directly. Also added a direct markdown download action in the delivered-report UI.
@@ -78,6 +220,199 @@ What changed:
 
 Verification:
 - `npm.cmd run type-check`
+
+### 2026-03-30 - Report Design teamOwner propagation slice
+
+Propagated `teamOwner` into normalized report issue rows using the standalone RD-007 lookup map.
+
+Files:
+- `workers/report/deep-audit-report-helpers.ts`
+- `workers/report/deep-audit-report-helpers.test.ts`
+- `workers/report/build-deep-audit-markdown.ts`
+- `workers/report/deep-audit-report.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- `IssueRow` now includes optional `teamOwner`
+- `parseIssues(...)` now normalizes issue rows and attaches owner metadata from `getTeamOwner(checkId)`
+- markdown generation now uses the shared issue parser instead of its own duplicate local parser
+- no report section order, PDF layout, web UI, or customer-facing output changed in this slice
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/report/deep-audit-report-helpers.test.ts workers/report/deep-audit-report.test.ts workers/report/team-owner-map.test.ts`
+
+### 2026-03-30 - Report Design canonical payload teamOwner propagation
+
+Carried `teamOwner` through the canonical deep-audit report payload.
+
+Files:
+- `workers/report/deep-audit-report-payload.ts`
+- `workers/report/deep-audit-report.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- page-level `issuesJson` in the canonical payload now stores normalized `IssueRow[]` instead of raw unknown values
+- `highlightedIssues` and `allIssues` in the canonical payload now store normalized `IssueRow[]`
+- payload construction now preserves `teamOwner` across the report data model instead of dropping it after helper parsing
+- no customer-facing report section order, PDF layout, or web UI changed in this slice
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/report/deep-audit-report-helpers.test.ts workers/report/deep-audit-report.test.ts workers/report/team-owner-map.test.ts`
+
+### 2026-03-30 - Report Design internal Immediate Wins payload seam
+
+Added the first owner-aware ticket-selection seam to the canonical deep-audit payload.
+
+Files:
+- `workers/report/immediate-wins.ts`
+- `workers/report/immediate-wins.test.ts`
+- `workers/report/deep-audit-report-payload.ts`
+- `workers/report/deep-audit-report.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- added `buildImmediateWins(...)`, which selects up to 5 owner-aware, medium/high-weight, non-low-confidence failed or warning issues
+- added a compact `ImmediateWinPayload` shape with `what / who / why / how / effort`
+- extended the canonical deep-audit payload with `immediateWins`
+- kept the section internal-only at this stage; no markdown, PDF, or web-render change happened in this slice
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/report/immediate-wins.test.ts workers/report/deep-audit-report.test.ts workers/report/deep-audit-report-helpers.test.ts workers/report/team-owner-map.test.ts`
+
+### 2026-03-30 - Report Design deterministic Immediate Wins markdown slice
+
+Rendered the first owner-aware report section into the deterministic paid markdown report.
+
+Files:
+- `workers/report/build-deep-audit-markdown.ts`
+- `workers/report/deep-audit-report.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- added a deterministic `## Immediate Wins` section after the existing executive summary
+- each win now renders as a compact ticket-style block with `Who`, `Why`, `How`, and `Effort`
+- reused the already-derived owner-aware payload data instead of introducing a new scoring or prompt path
+- kept the broader report order, PDF layout, and web report viewer structure unchanged
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/report/immediate-wins.test.ts workers/report/deep-audit-report.test.ts workers/report/deep-audit-report-helpers.test.ts workers/report/team-owner-map.test.ts`
+
+### 2026-03-30 - Report Design per-page markdown cleanup slice
+
+Removed contradictory `Fix:` lines from passed checks in the per-page markdown checklist.
+
+Files:
+- `workers/report/build-deep-audit-markdown.ts`
+- `workers/report/deep-audit-report.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- per-page checklist rows now show `Fix:` only for non-passing checks
+- passed checks still keep their finding text and status, but no longer show action copy that implies something is broken
+- this is a narrow trust/readability cleanup only; no scoring, payload selection, PDF output, or report order changed
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/report/deep-audit-report.test.ts`
+
+### 2026-03-30 - Report Design bounded low-confidence wording slice
+
+Removed raw transport-token leakage from customer-facing report wording.
+
+Files:
+- `workers/report/deep-audit-report-helpers.ts`
+- `workers/report/deep-audit-report-helpers.test.ts`
+- `workers/report/build-deep-audit-markdown.ts`
+- `workers/report/build-deep-audit-pdf.ts`
+- `workers/report/deep-audit-report.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- added a shared `customerFacingFinding(...)` helper for report rendering
+- raw tokens like `http_403` are now rewritten into bounded wording when surfaced in markdown or PDF
+- low-confidence access/delivery failures now read as verification-needed interference, not as direct content diagnosis
+- underlying stored audit findings remain unchanged; this is a presentation-layer trust fix only
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/report/deep-audit-report.test.ts workers/report/deep-audit-report-helpers.test.ts`
+
+### 2026-03-30 - Report Design metadata-guidance cleanup slice
+
+Corrected broken title-length guidance at the audit-check source.
+
+Files:
+- `workers/scan-engine/checks/check-title.ts`
+- `workers/scan-engine/check-title.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- replaced the corrupted title-length guidance separator in the title check output
+- customer-facing reports now inherit `aim for 10-70` instead of broken `1070`-style text
+- added a regression test directly at the check level so this string does not silently break again
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/scan-engine/check-title.test.ts`
+
+### 2026-03-30 - Report Design per-page markdown compression slice
+
+Reduced report noise by limiting the per-page checklist to non-passing rows only.
+
+Files:
+- `workers/report/build-deep-audit-markdown.ts`
+- `workers/report/deep-audit-report.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- the markdown per-page checklist now filters out `PASS` rows
+- pages with no non-passing items now render a compact placeholder instead of a full pass list
+- this keeps page-level evidence visible while removing one of the largest remaining sources of repetition
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run workers/report/deep-audit-report.test.ts`
+
+### 2026-03-30 - Production domain cutover prep slice
+
+Aligned repo production config and operator runbook to the newly purchased `getgeopulse.com` domain.
+
+Files:
+- `wrangler.jsonc`
+- `PLAYBOOK/getgeopulse-domain-cutover-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What changed:
+- production `NEXT_PUBLIC_APP_URL` now points to `https://getgeopulse.com/`
+- added a dedicated operator checklist for Cloudflare custom-domain routing, Turnstile hostname allowlist, Supabase Auth redirects, Stripe webhook/return URLs, Resend DNS, and WAF follow-up
+- updated launch-state docs to reflect that domain purchase is no longer the blocker; the remaining blocker is DNS / custom-domain / evidence completion
+- recorded explicitly that buying the domain does not close `P4-004` by itself
+
+Verification:
+- docs/config slice only
+- no runtime code-path logic changed beyond the production app URL constant in `wrangler.jsonc`
 
 ## 2026-03-29 - two-window benchmark decision freeze
 
@@ -6420,4 +6755,3 @@ Test Files  2 passed (2)
 **Notes:** BM-038 is accepted as the first exact-page citation-quality metric slice. The benchmark now has a narrow internal quality metric that is clearly separated from citation presence and share-of-voice.
 
 ---
-
