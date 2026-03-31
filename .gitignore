@@ -7,8 +7,13 @@ node_modules/
 .next/
 .open-next/
 .open-next-stale/
+.open-next-stale-*/
 out/
 dist/
+
+# Local build repro / CI verify scratch dirs
+.tmp-build-repro/
+.tmp-ci-verify/
 
 # Secrets — NEVER commit these
 .dev.vars
@@ -53,6 +58,8 @@ cloudflare-env.d.ts
 # Testing
 coverage/
 .promptfoo/
+playwright-report/
+test-results/
 
 # IDE
 .idea/

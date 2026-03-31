@@ -15,3 +15,38 @@ body {
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
 }
+
+@keyframes loading-orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes loading-stripe-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.loading-orbit {
+  animation: loading-orbit-spin 2.8s linear infinite;
+}
+
+.loading-stripe {
+  position: relative;
+}
+
+.loading-stripe::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 30%;
+  background: linear-gradient(90deg, transparent, rgba(247, 201, 95, 0.8), transparent);
+  animation: loading-stripe-slide 1.8s ease-in-out infinite;
+}

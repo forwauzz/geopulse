@@ -19,6 +19,11 @@ type CategoryScoreData = {
   checkCount: number;
 };
 
+type SnapshotActionState = {
+  label: string;
+  helper: string;
+};
+
 const R = 88;
 const CX = 100;
 const CY = 100;
@@ -90,11 +95,17 @@ export function ScoreDisplay({
   letterGrade,
   issues,
   categoryScores = [],
+  snapshotAction,
+  snapshotHref,
+  snapshotState,
 }: {
   score: number;
   letterGrade: string;
   issues: Issue[];
   categoryScores?: CategoryScoreData[];
+  snapshotAction?: (() => Promise<void>) | (() => void);
+  snapshotHref?: string;
+  snapshotState?: SnapshotActionState | null;
 }) {
   const s = clampScore(score);
   const offset = CIRC * (1 - s / 100);
@@ -160,14 +171,45 @@ export function ScoreDisplay({
             <span className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">Share</span>
             <h3 className="mt-4 font-headline text-2xl leading-snug">Your score snapshot</h3>
           </div>
-          <div className="mt-8 flex items-end justify-between gap-4">
-            <div>
-              <div className="font-headline text-4xl font-bold">{s} / 100</div>
-              <p className="mt-1 font-body text-sm text-on-surface-variant">Share this page to show your score.</p>
+          <div className="mt-8 space-y-4">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <div className="font-headline text-4xl font-bold">{s} / 100</div>
+                <p className="mt-1 font-body text-sm text-on-surface-variant">
+                  Share this results page and the score preview will travel with it.
+                </p>
+              </div>
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-container-low">
+                <span className="material-symbols-outlined text-3xl text-primary">share</span>
+              </div>
             </div>
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-surface-container-low">
-              <span className="material-symbols-outlined text-3xl text-primary">share</span>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void snapshotAction?.()}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
+              >
+                <span className="material-symbols-outlined text-base">share</span>
+                Share snapshot
+              </button>
+              {snapshotHref ? (
+                <a
+                  href={snapshotHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/25 bg-surface-container-lowest px-4 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
+                >
+                  <span className="material-symbols-outlined text-base">image</span>
+                  Preview image
+                </a>
+              ) : null}
             </div>
+            {snapshotState ? (
+              <div className="rounded-xl bg-surface-container-low px-4 py-3">
+                <p className="font-body text-sm font-semibold text-on-background">{snapshotState.label}</p>
+                <p className="mt-1 font-body text-xs leading-5 text-on-surface-variant">{snapshotState.helper}</p>
+              </div>
+            ) : null}
           </div>
           <div className="pointer-events-none absolute -bottom-12 -right-12 h-64 w-64 rounded-full border border-outline-variant/10" aria-hidden />
           <div className="pointer-events-none absolute -bottom-4 -right-4 h-48 w-48 rounded-full border border-outline-variant/15" aria-hidden />

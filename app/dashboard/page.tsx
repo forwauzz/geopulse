@@ -91,7 +91,19 @@ export default async function DashboardPage() {
                 href="/dashboard/evals"
                 className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
               >
-                Report evals
+                Eval analytics
+              </Link>
+              <Link
+                href="/dashboard/benchmarks"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Benchmarks
+              </Link>
+              <Link
+                href="/dashboard/logs"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Logs
               </Link>
             </>
           )}
@@ -134,7 +146,7 @@ export default async function DashboardPage() {
             <Link href="/" className="font-medium text-tertiary hover:underline">
               home page
             </Link>
-            .
+            . If you already bought a report, make sure you signed in with the same email you used at Stripe checkout.
           </li>
         ) : (
           scanList.map((s) => {

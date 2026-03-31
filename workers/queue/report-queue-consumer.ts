@@ -1,12 +1,18 @@
 import type { ReportQueueMessage } from '../../lib/queue/report-job';
 import { parseReportQueueMessage } from '../../lib/queue/report-job';
+import { rewriteLayerOneReportInternal } from '../../lib/server/layer-one-report-internal-rewrite';
 import { createServiceRoleClient } from '../../lib/supabase/service-role';
+import { writeGeneratedReportEval } from '../../lib/server/report-eval-writer';
 import { structuredLog } from '../../lib/server/structured-log';
 import { buildDeepAuditMarkdown } from '../report/build-deep-audit-markdown';
 import { buildDeepAuditPdfFromPayload } from '../report/build-deep-audit-pdf';
 import { buildDeepAuditReportPayload } from '../report/deep-audit-report-payload';
 import { DEEP_AUDIT_ATTACH_MAX_BYTES } from '../report/deep-audit-delivery-policy';
-import { publicObjectUrl, uploadDeepAuditReportFiles } from '../report/r2-report-storage';
+import {
+  publicObjectUrl,
+  uploadDeepAuditReportFiles,
+  uploadDeepAuditRewrittenMarkdown,
+} from '../report/r2-report-storage';
 import type { DeepAuditDownloadLinks } from '../report/resend-delivery';
 import { sendDeepAuditEmail } from '../report/resend-delivery';
 import { GeminiProvider } from '../providers/gemini';
@@ -287,6 +293,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     return;
   }
 
+  structuredLog('report_job_started', {
+    scanId: job.scanId,
+    paymentId: 'paymentId' in job ? job.paymentId : null,
+    stripeSessionId: 'stripeSessionId' in job ? job.stripeSessionId : null,
+  }, 'info');
+
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('supabase_not_configured');
   }
@@ -541,6 +553,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     throw new Error(emailResult.message);
   }
 
+  structuredLog('report_job_email_sent', {
+    scanId: job.scanId,
+    attachedPdf: attachPdf,
+    usedDownloadLinks: !!downloadLinks?.pdfUrl,
+  }, 'info');
+
   const now = new Date().toISOString();
   const { error: repErr } = await supabase.from('reports').insert({
     scan_id: job.scanId,
@@ -557,5 +575,97 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   if (repErr) {
     throw new Error(repErr.message);
   }
+
+  try {
+    await writeGeneratedReportEval(supabase as any, {
+      markdown: markdownText,
+      siteUrl: scan.url,
+      reportId: null,
+      scanId: job.scanId,
+      generatorVersion: 'deep-audit-markdown-v1',
+      promptSetName: 'layer-one-default',
+      allIssues: allIssueRows,
+      reportPayloadVersion: payload.version,
+    });
+  } catch (error) {
+    structuredLog('report_eval_write_failed', {
+      scanId: job.scanId,
+      message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+    });
+  }
+
+  try {
+    const rewriteResult = await rewriteLayerOneReportInternal(markdownText, {
+      enabled: env.DEEP_AUDIT_INTERNAL_REWRITE_ENABLED,
+      apiKey: env.GEMINI_API_KEY,
+      model: (env.DEEP_AUDIT_INTERNAL_REWRITE_MODEL ?? '').trim() || env.GEMINI_MODEL,
+      endpoint: env.GEMINI_ENDPOINT,
+    });
+
+    if (rewriteResult.status === 'completed') {
+      let rewrittenArtifactKey: string | null = null;
+      let rewrittenArtifactUrl: string | null = null;
+
+      if (bucket) {
+        const uploaded = await uploadDeepAuditRewrittenMarkdown(
+          bucket,
+          job.scanId,
+          rewriteResult.rewrittenMarkdown
+        );
+        rewrittenArtifactKey = uploaded.rewrittenMarkdownKey;
+        if (publicBase) {
+          rewrittenArtifactUrl = publicObjectUrl(publicBase, uploaded.rewrittenMarkdownKey);
+        }
+      }
+
+      await writeGeneratedReportEval(supabase as any, {
+        markdown: rewriteResult.rewrittenMarkdown,
+        siteUrl: scan.url,
+        reportId: null,
+        scanId: job.scanId,
+        generatorVersion: 'deep-audit-markdown-rewrite-v1',
+        promptSetName: 'layer-one-rewriter-v1',
+        allIssues: allIssueRows,
+        reportPayloadVersion: payload.version,
+        metadata: {
+          artifact_variant: 'internal_rewrite',
+          source_generator_version: 'deep-audit-markdown-v1',
+          rewrite_model: rewriteResult.modelId,
+          rewrite_executed_at: rewriteResult.executedAt,
+          rewrite_artifact_key: rewrittenArtifactKey,
+          rewrite_artifact_url: rewrittenArtifactUrl,
+          rewrite_response_metadata: rewriteResult.responseMetadata,
+        },
+      });
+
+      structuredLog(
+        'report_internal_rewrite_completed',
+        {
+          scanId: job.scanId,
+          rewriteModel: rewriteResult.modelId,
+          hasStoredArtifact: !!rewrittenArtifactKey,
+        },
+        'info'
+      );
+    } else if (rewriteResult.status === 'failed') {
+      structuredLog('report_internal_rewrite_failed', {
+        scanId: job.scanId,
+        rewriteModel: rewriteResult.modelId,
+        message: rewriteResult.errorMessage.slice(0, 200),
+      });
+    }
+  } catch (error) {
+    structuredLog('report_internal_rewrite_failed', {
+      scanId: job.scanId,
+      message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+    });
+  }
+
+  structuredLog('report_job_completed', {
+    scanId: job.scanId,
+    attachedPdf: attachPdf,
+    hasPdfUrl: !!pdfUrl,
+    hasMarkdownUrl: !!downloadLinks?.markdownUrl,
+  }, 'info');
 }
 

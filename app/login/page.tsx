@@ -26,6 +26,12 @@ export default async function LoginPage({ searchParams }: Props) {
       <p className="mt-2 font-body text-on-surface-variant">
         We&apos;ll email you a magic link — no password. Use the same email as checkout to see your reports.
       </p>
+      <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+        <p className="font-body text-sm font-semibold text-on-background">Report recovery tip</p>
+        <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">
+          If you already paid for a deep audit, sign in with the Stripe checkout email first. That is how past paid reports are linked into your dashboard.
+        </p>
+      </div>
       {err ? (
         <p className="mt-4 rounded-xl border border-error/30 bg-surface-container-low px-4 py-3 font-body text-sm text-error">
           {decodeURIComponent(err)}

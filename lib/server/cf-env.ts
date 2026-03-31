@@ -11,6 +11,11 @@ export type ScanApiEnv = {
   GEMINI_API_KEY: string;
   GEMINI_MODEL: string;
   GEMINI_ENDPOINT: string;
+  BENCHMARK_EXECUTION_PROVIDER: string;
+  BENCHMARK_EXECUTION_API_KEY: string;
+  BENCHMARK_EXECUTION_MODEL: string;
+  BENCHMARK_EXECUTION_ENABLED_MODELS?: string;
+  BENCHMARK_EXECUTION_ENDPOINT: string;
 };
 
 export type PaymentApiEnv = ScanApiEnv & {
@@ -23,10 +28,12 @@ export type PaymentApiEnv = ScanApiEnv & {
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
-  /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–120). */
+  /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–1000). */
   DEEP_AUDIT_DEFAULT_PAGE_LIMIT: string;
   /** Plaintext var: off, auto, or force for optional Browser Rendering on paid deep audits. */
   DEEP_AUDIT_BROWSER_RENDER_MODE: string;
+  DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: string;
+  DEEP_AUDIT_INTERNAL_REWRITE_MODEL: string;
 };
 
 /**
@@ -73,6 +80,11 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     GEMINI_ENDPOINT: String(
       e['GEMINI_ENDPOINT'] ?? 'https://generativelanguage.googleapis.com/v1beta/models'
     ),
+    BENCHMARK_EXECUTION_PROVIDER: String(e['BENCHMARK_EXECUTION_PROVIDER'] ?? ''),
+    BENCHMARK_EXECUTION_API_KEY: String(e['BENCHMARK_EXECUTION_API_KEY'] ?? ''),
+    BENCHMARK_EXECUTION_MODEL: String(e['BENCHMARK_EXECUTION_MODEL'] ?? ''),
+    BENCHMARK_EXECUTION_ENABLED_MODELS: String(e['BENCHMARK_EXECUTION_ENABLED_MODELS'] ?? ''),
+    BENCHMARK_EXECUTION_ENDPOINT: String(e['BENCHMARK_EXECUTION_ENDPOINT'] ?? ''),
   };
 }
 
@@ -91,6 +103,12 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       GEMINI_ENDPOINT:
         process.env['GEMINI_ENDPOINT'] ??
         'https://generativelanguage.googleapis.com/v1beta/models',
+      BENCHMARK_EXECUTION_PROVIDER: process.env['BENCHMARK_EXECUTION_PROVIDER'] ?? '',
+      BENCHMARK_EXECUTION_API_KEY: process.env['BENCHMARK_EXECUTION_API_KEY'] ?? '',
+      BENCHMARK_EXECUTION_MODEL: process.env['BENCHMARK_EXECUTION_MODEL'] ?? '',
+      BENCHMARK_EXECUTION_ENABLED_MODELS:
+        process.env['BENCHMARK_EXECUTION_ENABLED_MODELS'] ?? '',
+      BENCHMARK_EXECUTION_ENDPOINT: process.env['BENCHMARK_EXECUTION_ENDPOINT'] ?? '',
     };
   }
 }
@@ -112,6 +130,8 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
       DEEP_AUDIT_BROWSER_RENDER_MODE: pickEnvString(e, 'DEEP_AUDIT_BROWSER_RENDER_MODE'),
+      DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'),
+      DEEP_AUDIT_INTERNAL_REWRITE_MODEL: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_MODEL'),
     };
   } catch {
     return {
@@ -126,6 +146,10 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
       DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
+      DEEP_AUDIT_INTERNAL_REWRITE_ENABLED:
+        process.env['DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'] ?? '',
+      DEEP_AUDIT_INTERNAL_REWRITE_MODEL:
+        process.env['DEEP_AUDIT_INTERNAL_REWRITE_MODEL'] ?? '',
     };
   }
 }

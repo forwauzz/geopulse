@@ -92,3 +92,30 @@ Do not adopt `ragas` before the deterministic baseline is in place, or scores wi
 - Schema exists for runs, prompts, passages, and answers
 - At least one documented prompt-set shape exists
 - Non-goals are explicit so the product does not overclaim retrieval capability
+
+## Fixture shape used now
+
+The current deterministic writer expects a fixture JSON with:
+
+```json
+{
+  "siteUrl": "https://example.com/",
+  "pages": [
+    { "url": "https://example.com/docs", "section": "docs", "content": "..." }
+  ],
+  "prompts": [
+    {
+      "promptKey": "schema_coverage",
+      "promptText": "How do I improve schema coverage for FAQ answers?",
+      "expectedSources": ["https://example.com/docs"],
+      "expectedFacts": ["FAQPage schema"]
+    }
+  ]
+}
+```
+
+Current repo examples:
+- `eval/fixtures/retrieval-eval-sample.json`
+
+Current writer:
+- `npm run eval:retrieval:write -- --site-url https://example.com`

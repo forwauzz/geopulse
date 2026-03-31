@@ -1,54 +1,16 @@
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function uint8ToBase64(bytes: Uint8Array): string {
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(bytes).toString('base64');
-  }
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i]!);
-  }
-  return btoa(binary);
-}
-
 export type ResendEmailResult = { ok: true } | { ok: false; message: string };
+import {
+  buildDeliveryCallToAction,
+  escapeHtml,
+  gradeColor,
+  severityColor,
+  severityLabel,
+  uint8ToBase64,
+  type DeepAuditDownloadLinks,
+  type EmailIssueRow,
+} from './resend-delivery-helpers';
 
-export type DeepAuditDownloadLinks = {
-  readonly pdfUrl: string;
-  readonly markdownUrl?: string;
-};
-
-export type EmailIssueRow = {
-  readonly check: string;
-  readonly fix?: string;
-  readonly weight?: number;
-};
-
-function severityLabel(weight: number | undefined): string {
-  if (!weight) return 'Low';
-  if (weight >= 8) return 'High';
-  if (weight >= 5) return 'Medium';
-  return 'Low';
-}
-
-function severityColor(sev: string): string {
-  if (sev === 'High') return '#9E4040';
-  if (sev === 'Medium') return '#997326';
-  return '#565E74';
-}
-
-function gradeColor(grade: string): string {
-  if (grade === 'A' || grade === 'A+') return '#268055';
-  if (grade === 'B' || grade === 'B+') return '#3B7A57';
-  if (grade === 'C') return '#997326';
-  return '#9E4040';
-}
+export type { DeepAuditDownloadLinks, EmailIssueRow } from './resend-delivery-helpers';
 
 function buildBrandedHtml(input: {
   domain: string;
@@ -89,25 +51,12 @@ function buildBrandedHtml(input: {
       </table>`;
   }
 
-  const resultsPageUrl = input.appUrl && input.scanId
-    ? `${input.appUrl.replace(/\/$/, '')}/results/${input.scanId}`
-    : null;
-
-  let ctaHref: string | null = null;
-  let ctaLabel = 'View full report';
-  let attachNote = '';
-
-  if (input.attachPdf) {
-    attachNote = '<p style="color:#586162;font-size:13px;text-align:center;margin-top:12px;">Your full report is attached to this email.</p>';
-    if (resultsPageUrl) {
-      ctaHref = resultsPageUrl;
-      ctaLabel = 'View your results online';
-    }
-  } else if (input.downloadLinks?.pdfUrl) {
-    ctaHref = input.downloadLinks.pdfUrl;
-    ctaLabel = 'Download full report';
-    attachNote = '<p style="color:#586162;font-size:13px;text-align:center;margin-top:12px;">Your report is available via the link above.</p>';
-  }
+  const { ctaHref, ctaLabel, attachNote } = buildDeliveryCallToAction({
+    attachPdf: input.attachPdf,
+    downloadLinks: input.downloadLinks,
+    scanId: input.scanId,
+    appUrl: input.appUrl,
+  });
 
   let downloadHtml = '';
   if (ctaHref) {

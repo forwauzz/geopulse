@@ -33,14 +33,14 @@
     "NEXT_PUBLIC_SUPABASE_URL": "https://vynrlgtxqnomxenakafn.supabase.co",
     // Public anon key (RLS-enforced); same as Supabase Dashboard → Settings → API
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
-    "NEXT_PUBLIC_APP_URL": "https://geo-pulse.uzzielt.workers.dev/",
+    "NEXT_PUBLIC_APP_URL": "https://getgeopulse.com/",
     // Public Turnstile site key (secret is TURNSTILE_SECRET_KEY via wrangler secret put)
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACvc7UFcxK8LCQjT",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
     // Public R2.dev base for deep-audit PDF/MD links (not a secret). Override in .dev.vars locally if needed.
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
-    // Default page cap for new paid deep audits (1–120); same ceiling as crawl Worker.
+    // Default page cap for new paid deep audits (1–1000); same ceiling as crawl Worker.
     "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "10",
     // Browser Rendering mode for paid deep audits: off | auto
     "DEEP_AUDIT_BROWSER_RENDER_MODE": "off"
@@ -115,9 +115,9 @@
     ]
   },
 
-  // Daily ping — keeps Supabase free-tier project from pausing after 7 days idle (see agents/DATABASE.md)
+  // Twice-daily ping keeps Supabase warm and drives the bounded internal benchmark lane when enabled.
   "triggers": {
-    "crons": ["0 12 * * *"]
+    "crons": ["0 0,12 * * *"]
   },
 
   // Observability

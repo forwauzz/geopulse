@@ -1,0 +1,75 @@
+{
+  "name": "law-firms-business-counsel-core",
+  "version": "v1",
+  "vertical": "law_firms",
+  "description": "First frozen narrow law-firms query set for the business_counsel / biglaw / enterprise subgroup.",
+  "status": "draft",
+  "metadata": {
+    "owner": "internal",
+    "source": "law_firms_p1_fit_analysis_v1",
+    "target_subcohort": "business_counsel_biglaw_enterprise",
+    "replacement_for": "law-firms-p1-core v1"
+  },
+  "queries": [
+    {
+      "queryKey": "choose-corporate-law-firm",
+      "queryText": "What should a business look for when choosing a corporate law firm?",
+      "intentType": "comparative",
+      "topic": "corporate_law",
+      "weight": 1.2,
+      "metadata": {
+        "frame": "selection_criteria"
+      }
+    },
+    {
+      "queryKey": "cross-border-regulatory-counsel",
+      "queryText": "Which law firms are strong at cross-border regulatory and compliance matters?",
+      "intentType": "discovery",
+      "topic": "regulatory_compliance",
+      "weight": 1.1,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "high-stakes-litigation-firms",
+      "queryText": "Which law firms are known for high-stakes business litigation?",
+      "intentType": "discovery",
+      "topic": "business_litigation",
+      "weight": 1.1,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "government-investigations-counsel",
+      "queryText": "What makes a law firm credible for government investigations or white-collar matters?",
+      "intentType": "direct",
+      "topic": "white_collar_investigations",
+      "weight": 1,
+      "metadata": {
+        "frame": "trust_signal"
+      }
+    },
+    {
+      "queryKey": "employment-counsel-for-business",
+      "queryText": "Which law firms help businesses with employment disputes or workplace compliance?",
+      "intentType": "discovery",
+      "topic": "employment_law_business",
+      "weight": 0.95,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "complex-tax-trade-counsel",
+      "queryText": "Which law firms are recommended for complex tax, trade, or sanctions matters?",
+      "intentType": "discovery",
+      "topic": "tax_trade_sanctions",
+      "weight": 1.05,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 /**
  * Single source of truth for deep-audit page caps (must stay aligned with `workers/scan-engine/deep-audit-crawl.ts` usage).
  */
-export const MAX_DEEP_AUDIT_PAGE_LIMIT = 120;
+export const MAX_DEEP_AUDIT_PAGE_LIMIT = 1000;
 
 const FALLBACK_DEFAULT = 10;
 

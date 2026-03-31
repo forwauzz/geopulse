@@ -1,6 +1,8 @@
 'use client';
 
 import { useActionState } from 'react';
+import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { adminLoginLoadingJourney } from '@/lib/client/loading-journeys';
 import Link from 'next/link';
 import { signInAdminWithPassword, type AdminLoginState } from './actions';
 
@@ -10,6 +12,7 @@ type Props = {
 
 export function AdminLoginForm({ nextPath }: Props) {
   const [state, formAction, pending] = useActionState(signInAdminWithPassword, null);
+  useLongWaitEffect(pending, adminLoginLoadingJourney);
 
   return (
     <form action={formAction} className="mt-8 flex max-w-md flex-col gap-4">

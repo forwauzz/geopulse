@@ -24,17 +24,21 @@ This file is the shortest path for a new developer or LLM to continue work safel
 ## What A New Team Should Know First
 
 ### The product is real
-This is not a prototype-only repo. The paid flow, queue, report generation, and dashboard all exist.
+This is not a prototype-only repo. The paid flow, queue, report generation, dashboard, admin eval analytics, and guided results journey all exist.
 
 ### The main unfinished work is operational
 The highest priority unfinished work is launch closure, not another feature branch.
 
-### The main deep-audit unfinished engineering item is scale
-DA-004 remainder is still the substantive engineering gap.
+### The deep-audit core scale path is already shipped
+DA-004 is complete in repo; future Workflows exploration is optional, not the current main gap.
 
 ### Retrieval work is staged
-Promptfoo and deterministic retrieval foundations exist.
-Ragas and benchmark claims do not.
+Promptfoo, deterministic retrieval persistence, and admin drilldown exist.
+RAGAS runtime and benchmark claims do not.
+
+### Measurement-platform work is planned, not shipped
+The repo now carries an explicit roadmap for a future benchmark/measurement layer.
+Treat `PLAYBOOK/measurement-platform-roadmap.md` as the planning source, but do not present those capabilities as implemented unless the corresponding `BM-*` tasks are closed with evidence.
 
 ## Safe Continuation Paths
 
@@ -44,12 +48,18 @@ Ragas and benchmark claims do not.
 - finalize WAF position
 
 ### Path B: deep-audit scale
-- continue DA-004 only after consciously deciding it outranks launch closure
-- design Workflows orchestration with the existing chunked queue path as baseline
+- only revisit Workflows or extreme-scale benchmarking after consciously deciding it outranks launch closure
+- treat the existing chunked queue path as the baseline, not a placeholder
 
 ### Path C: retrieval/eval later
 - do not start with `ragas`
 - expand datasets and offline retrieval scenarios first
+- keep site identity stable when writing repeated Promptfoo or retrieval runs
+
+### Path D: measurement platform later
+- keep the current audit/report product stable
+- start with internal benchmark schemas and one narrow benchmark runner
+- do not jump straight to 1000-site operations
 
 ## How To Update This Handoff Set
 

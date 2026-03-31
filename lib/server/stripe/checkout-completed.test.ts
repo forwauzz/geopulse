@@ -22,6 +22,10 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     GEMINI_API_KEY: '',
     GEMINI_MODEL: '',
     GEMINI_ENDPOINT: '',
+    BENCHMARK_EXECUTION_PROVIDER: '',
+    BENCHMARK_EXECUTION_API_KEY: '',
+    BENCHMARK_EXECUTION_MODEL: '',
+    BENCHMARK_EXECUTION_ENDPOINT: '',
     STRIPE_SECRET_KEY: '',
     STRIPE_WEBHOOK_SECRET: '',
     STRIPE_PRICE_ID_DEEP_AUDIT: '',
@@ -31,6 +35,8 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     RECONCILE_SECRET: '',
     DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '',
     DEEP_AUDIT_BROWSER_RENDER_MODE: 'off',
+    DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: '',
+    DEEP_AUDIT_INTERNAL_REWRITE_MODEL: '',
   };
 }
 

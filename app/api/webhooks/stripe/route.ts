@@ -1,5 +1,6 @@
 import type Stripe from 'stripe';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import { structuredError, structuredLog } from '@/lib/server/structured-log';
 import { createStripeClient } from '@/lib/server/stripe-client';
 import { handleCheckoutSessionCompleted } from '@/lib/server/stripe/checkout-completed';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -52,11 +53,25 @@ export async function POST(request: Request): Promise<Response> {
   const result = await handleCheckoutSessionCompleted(supabase, session, event.id, env);
 
   if (!result.ok) {
+    structuredError('stripe_checkout_completed_failed', {
+      stripeEventId: event.id,
+      stripeSessionId: session.id,
+      scanId: session.metadata?.['scan_id'] ?? null,
+      reason: result.reason,
+      status: result.status,
+    });
     return Response.json(
       { error: { code: result.reason, message: result.reason } },
       { status: result.status }
     );
   }
+
+  structuredLog('stripe_checkout_completed_processed', {
+    stripeEventId: event.id,
+    stripeSessionId: session.id,
+    scanId: session.metadata?.['scan_id'] ?? null,
+    duplicate: result.duplicate,
+  }, 'info');
 
   const email = session.customer_details?.email ?? session.customer_email ?? undefined;
   await emitMarketingEvent(supabase, 'payment_completed', {
