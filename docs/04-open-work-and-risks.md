@@ -27,6 +27,14 @@ Deferred:
 - queue-backed marketing ingestion hardening
 - replay / DLQ path for analytics events
 
+### Content machine planning -> implementation gap
+Still open:
+- choose the first newsletter platform from the current shortlist
+- decide the canonical on-site publishing surface for GEO-Pulse articles
+- convert the planning docs into an implementation backlog
+- define the first editorial backlog and article-to-newsletter workflow
+- decide whether article pages will get an explicit pre-publish LLM-readiness check
+
 ### RE-008 to RE-010
 Still pending:
 - ragas pipeline if explicitly approved later
@@ -130,6 +138,16 @@ The new `docs/` set should be kept aligned with:
 - `agents/memory/COMPLETION_LOG.md`
 - `SECURITY.md`
 - `PLAYBOOK/`
+
+This now also includes the content-machine planning set:
+- `.agents/product-marketing-context.md`
+- `PLAYBOOK/content-machine-v1-blueprint.md`
+- `PLAYBOOK/blog-llm-readiness-spec.md`
+- `PLAYBOOK/content-writing-skill-spec.md`
+- `PLAYBOOK/content-machine-inputs/*`
+
+### GEO credibility risk
+If GEO-Pulse publishes blog and newsletter content that is not itself structured for LLM extractability, the company creates a product-truth gap: selling AI-search readiness while failing to model it on its own domain.
 
 ### Product truth risk in the audit journey
 The repo now uses state-driven report status on the results page, a real share-snapshot action, a PDF-only report fallback, and explicit paid-report recovery guidance. It should still be manually tested against real checkout return, webhook timing, and delivered-report states before broader onboarding.
