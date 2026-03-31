@@ -1,8 +1,10 @@
 import Link from 'next/link';
-import { updateContentDestinationConfig } from './actions';
+import { importContentMachineDrafts, updateContentDestinationConfig } from './actions';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
+import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,10 +71,15 @@ export default async function ContentAdminPage() {
   const destinationAdminData = createContentDestinationAdminData(adminContext.adminDb);
 
   try {
-    const [items, destinations] = await Promise.all([
+    const [env, items, destinations] = await Promise.all([
+      getPaymentApiEnv(),
       contentAdminData.getRecentContentItems(),
       destinationAdminData.getDestinations(),
     ]);
+    const resolvedDestinations = destinations.map((destination) => ({
+      ...destination,
+      health: evaluateContentDestinationHealth(destination, env),
+    }));
 
     return (
       <main className="mx-auto max-w-6xl px-6 py-16">
@@ -90,11 +97,25 @@ export default async function ContentAdminPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <form action={importContentMachineDrafts}>
+              <button
+                type="submit"
+                className="rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
+              >
+                Import local drafts
+              </button>
+            </form>
             <Link
               href="/dashboard/attribution"
               className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
             >
               Attribution
+            </Link>
+            <Link
+              href="/dashboard/logs"
+              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+            >
+              Logs
             </Link>
             <Link
               href="/dashboard"
@@ -138,6 +159,13 @@ export default async function ContentAdminPage() {
           </div>
         </section>
 
+        <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
+          <strong className="text-on-background">Import behavior:</strong> the import button reads
+          markdown files from <code>PLAYBOOK/content-machine-drafts</code> and upserts stable
+          content records by derived <code>content_id</code>. It is safe to rerun when draft files
+          change.
+        </div>
+
         <section className="mt-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -173,7 +201,7 @@ export default async function ContentAdminPage() {
                     </td>
                   </tr>
                 ) : (
-                  destinations.map((destination) => (
+                  resolvedDestinations.map((destination) => (
                     <tr
                       key={destination.id}
                       className="border-t border-outline-variant/10 align-top"
@@ -218,9 +246,9 @@ export default async function ContentAdminPage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <span
-                            className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${availabilityTone(destination.availability_status)}`}
+                            className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${availabilityTone(destination.health.availabilityStatus)}`}
                           >
-                            {formatLabel(destination.availability_status)}
+                            {formatLabel(destination.health.availabilityStatus)}
                           </span>
                           <span
                             className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${destination.enabled ? 'bg-primary/15 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}
@@ -230,7 +258,7 @@ export default async function ContentAdminPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-on-surface-variant">
-                        {destination.availability_reason ?? '-'}
+                        {destination.health.availabilityReason ?? '-'}
                       </td>
                       <td className="px-4 py-3">
                         <form action={updateContentDestinationConfig} className="space-y-2">
@@ -305,7 +333,12 @@ export default async function ContentAdminPage() {
                   items.map((item) => (
                     <tr key={item.id} className="border-t border-outline-variant/10 align-top">
                       <td className="px-4 py-3">
-                        <div className="font-medium text-on-background">{item.title}</div>
+                        <Link
+                          href={`/dashboard/content/${item.content_id}`}
+                          className="font-medium text-on-background hover:text-primary"
+                        >
+                          {item.title}
+                        </Link>
                         <div className="mt-1 text-xs text-on-surface-variant">
                           {item.content_id} / {item.slug}
                         </div>

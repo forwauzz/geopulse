@@ -5,6 +5,169 @@
 
 ---
 
+### 2026-03-31 - Content destination readiness and push logging slice
+
+Added the sixth runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-destination-health.ts`
+- `lib/server/content-destination-health.test.ts`
+
+Files updated:
+- `lib/server/content-destination-adapters.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- destination readiness is now computed from both feature flags and live environment state rather than relying only on stored provider rows
+- Kit now resolves to `not_configured` in admin when `KIT_API_KEY` is missing, and push actions are blocked before any provider call is attempted
+- `/dashboard/content` now shows the effective availability state and links directly to `/dashboard/logs`
+- `/dashboard/content/[contentId]` now disables push buttons when a destination is not actually ready and links directly to `/dashboard/logs`
+- draft push attempts now emit structured events into `app_logs`:
+  - `content_destination_push_started`
+  - `content_destination_push_blocked`
+  - `content_destination_push_succeeded`
+  - `content_destination_push_failed`
+- the existing `/dashboard/logs` page can now be used to inspect content-distribution activity without backend shell access
+
+What was not implemented:
+- no provider-side connectivity probe or remote capability check
+- no provider adapter beyond Kit yet
+- no scheduled/public publication workflow yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-admin-data.test.ts lib/server/content-destination-admin-data.test.ts lib/server/content-draft-import.test.ts lib/server/content-destination-adapters.test.ts lib/server/content-destination-health.test.ts lib/server/stripe/checkout-completed.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
+### 2026-03-31 - Content destination adapter and Kit push slice
+
+Added the fifth runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-destination-adapters.ts`
+- `lib/server/content-destination-adapters.test.ts`
+
+Files updated:
+- `lib/server/cf-env.ts`
+- `types/geo-pulse-env.d.ts`
+- `lib/server/content-destination-admin-data.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `lib/server/stripe/checkout-completed.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- a destination adapter contract now exists for downstream content publication
+- the first adapter implementation is Kit
+- Kit draft pushes now:
+  - convert stored markdown into simple HTML
+  - create a draft broadcast via the Kit API
+  - return a normalized provider publication id / status / URL payload
+- `/dashboard/content/[contentId]` now exposes per-destination push controls for API-capable newsletter destinations
+- successful pushes now persist a `content_distribution_deliveries` row tied to the canonical content item
+- `KIT_API_KEY` is now part of the server-side env contract for this slice
+
+What was not implemented:
+- no adapter beyond Kit yet
+- no scheduled-send or public-publication workflow yet
+- no provider-credential health loop reflected back into availability state yet
+- no publish action for canonical on-site articles yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-admin-data.test.ts lib/server/content-destination-admin-data.test.ts lib/server/content-draft-import.test.ts lib/server/content-destination-adapters.test.ts lib/server/stripe/checkout-completed.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
+### 2026-03-31 - Content item detail/editor slice
+
+Added the fourth runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `app/dashboard/content/[contentId]/page.tsx`
+
+Files updated:
+- `lib/server/content-admin-data.ts`
+- `lib/server/content-admin-data.test.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- imported content items can now be opened from the inventory table
+- `/dashboard/content/[contentId]` now provides:
+  - basic metadata editing
+  - status editing
+  - brief markdown editing
+  - draft markdown editing
+  - per-item delivery visibility
+- the admin server helper now supports loading one content item plus its downstream deliveries
+- the save action updates canonical `content_items` by stable `content_id`
+
+What was not implemented:
+- no rich editorial workflow yet
+- no diff/history view yet
+- no publish action yet
+- no destination-specific compose UI yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-admin-data.test.ts lib/server/content-destination-admin-data.test.ts lib/server/content-draft-import.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
+### 2026-03-31 - Content draft import slice
+
+Added the third runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-draft-import.ts`
+- `lib/server/content-draft-import.test.ts`
+
+Files updated:
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- local markdown assets under `PLAYBOOK/content-machine-drafts` can now be imported into canonical content storage from `/dashboard/content`
+- the import path:
+  - groups `brief`, `article`, and `newsletter` files by shared slug
+  - derives stable `content_id` values
+  - maps article/newsletter/brief assets into `content_items`
+  - upserts idempotently so reruns are safe when draft files change
+- the admin UI now exposes an `Import local drafts` action instead of leaving the draft set stranded in `PLAYBOOK`
+
+What was not implemented:
+- no rich editor or content detail page yet
+- no public blog route yet
+- no publish action yet
+- no automatic import on file change
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-admin-data.test.ts lib/server/content-destination-admin-data.test.ts lib/server/content-draft-import.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
 ### 2026-03-31 - Content destination provider-control slice
 
 Added the second runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.

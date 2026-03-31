@@ -29,11 +29,12 @@ Deferred:
 
 ### Content machine planning -> implementation gap
 Still open:
-- wire the new canonical content tables into real create/edit flows instead of PLAYBOOK-only drafts
+- build real create/edit flows on top of the canonical content tables after the current PLAYBOOK-draft import seam
 - decide the canonical on-site publishing surface for GEO-Pulse articles
-- add the first editor/admin workflow for importing or creating content items
-- add adapter-based newsletter API integration on top of `content_distribution_deliveries`
-- connect provider credentials / env checks to `content_distribution_destinations.availability_status`
+- expand the current basic content-item detail page into a fuller editing workflow
+- expand beyond the first Kit adapter into a broader adapter set without breaking the contract boundary
+- extend provider health past local env/config checks into provider-side connectivity validation when worth the complexity
+- decide whether draft pushes should stay draft-only or later support scheduled/public publication from admin
 - add an explicit pre-publish LLM-readiness check before on-site publish
 
 ### RE-008 to RE-010
@@ -152,7 +153,12 @@ And the new implementation seam:
 - `supabase/migrations/017_content_distribution_destinations.sql`
 - `lib/server/content-admin-data.ts`
 - `lib/server/content-destination-admin-data.ts`
+- `lib/server/content-destination-adapters.ts`
+- `lib/server/content-destination-health.ts`
+- `lib/server/content-draft-import.ts`
 - `app/dashboard/content/page.tsx`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `app/dashboard/logs/page.tsx`
 
 ### Provider lock-in risk
 If GEO-Pulse jumps straight to one newsletter API without keeping the admin-controlled destination layer as the source of truth, the content machine can silently become vendor-shaped. The new destination registry reduces that risk, but only if future integration work continues to target adapters and feature flags instead of hard-coding one provider path.

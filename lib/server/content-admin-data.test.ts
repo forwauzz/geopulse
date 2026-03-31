@@ -110,4 +110,116 @@ describe('createContentAdminData', () => {
       },
     ]);
   });
+
+  it('loads one content item detail with deliveries', async () => {
+    const supabase = {
+      from(table: string) {
+        if (table === 'content_items') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return {
+                maybeSingle() {
+                  return Promise.resolve({
+                    data: {
+                      id: 'item-1',
+                      content_id: 'ai-search-readiness-audit-article',
+                      slug: 'ai-search-readiness-audit',
+                      title: 'How to Audit Your Site for AI Search Readiness',
+                      status: 'draft',
+                      content_type: 'article',
+                      target_persona: 'SEO consultants',
+                      primary_problem: 'Teams do not know what to audit first.',
+                      topic_cluster: 'ai_search_readiness',
+                      keyword_cluster: null,
+                      cta_goal: 'free_scan',
+                      source_type: 'internal_plus_research',
+                      source_links: ['PLAYBOOK/content-machine-drafts/article.md'],
+                      brief_markdown: '# brief',
+                      draft_markdown: '# article',
+                      canonical_url: null,
+                      metadata: null,
+                      published_at: null,
+                      created_at: '2026-03-31T10:00:00.000Z',
+                      updated_at: '2026-03-31T12:00:00.000Z',
+                    },
+                    error: null,
+                  });
+                },
+              };
+            },
+          };
+        }
+
+        if (table === 'content_distribution_deliveries') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'delivery-1',
+                    content_item_id: 'item-1',
+                    destination_type: 'newsletter',
+                    destination_name: 'kit',
+                    status: 'queued',
+                    published_at: null,
+                    created_at: '2026-03-31T13:00:00.000Z',
+                  },
+                ],
+                error: null,
+              });
+            },
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      },
+    } as any;
+
+    const row = await createContentAdminData(supabase).getContentItemDetail(
+      'ai-search-readiness-audit-article'
+    );
+
+    expect(row).toEqual({
+      id: 'item-1',
+      content_id: 'ai-search-readiness-audit-article',
+      slug: 'ai-search-readiness-audit',
+      title: 'How to Audit Your Site for AI Search Readiness',
+      status: 'draft',
+      content_type: 'article',
+      target_persona: 'SEO consultants',
+      primary_problem: 'Teams do not know what to audit first.',
+      topic_cluster: 'ai_search_readiness',
+      keyword_cluster: null,
+      cta_goal: 'free_scan',
+      source_type: 'internal_plus_research',
+      source_links: ['PLAYBOOK/content-machine-drafts/article.md'],
+      brief_markdown: '# brief',
+      draft_markdown: '# article',
+      canonical_url: null,
+      metadata: {},
+      published_at: null,
+      created_at: '2026-03-31T10:00:00.000Z',
+      updated_at: '2026-03-31T12:00:00.000Z',
+      deliveries: [
+        {
+          id: 'delivery-1',
+          content_item_id: 'item-1',
+          destination_type: 'newsletter',
+          destination_name: 'kit',
+          status: 'queued',
+          published_at: null,
+          created_at: '2026-03-31T13:00:00.000Z',
+        },
+      ],
+    });
+  });
 });

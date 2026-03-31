@@ -46,6 +46,7 @@ Core app secrets:
 - `GEMINI_API_KEY`
 - `BENCHMARK_EXECUTION_API_KEY`
 - `RESEND_API_KEY`
+- `KIT_API_KEY`
 - `TURNSTILE_SECRET_KEY`
 
 Conditional secrets:
@@ -123,6 +124,21 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 
 ### Admin evals
 - Supabase URL
+
+### Content machine destinations
+- content admin/editor pages still use the shared server-side env loader in `lib/server/cf-env.ts`
+- the first real destination adapter is Kit, so draft pushes from `/dashboard/content/[contentId]` require:
+  - `KIT_API_KEY`
+- current behavior:
+  - GEO-Pulse converts the stored markdown into simple HTML
+  - pushes a draft broadcast to Kit via API
+  - stores the downstream delivery record in `content_distribution_deliveries`
+  - resolves destination readiness in admin from both feature flags and `KIT_API_KEY`
+  - writes push lifecycle events into `app_logs`, visible at `/dashboard/logs`
+- current non-goals:
+  - no auto-send to subscribers
+  - no provider-side connectivity or send-permission probe yet
+  - no provider adapter beyond Kit yet
 
 ### Internal benchmarks
 - Supabase URL + service role key

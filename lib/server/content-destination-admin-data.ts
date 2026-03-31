@@ -40,5 +40,23 @@ export function createContentDestinationAdminData(supabase: SupabaseLike) {
         metadata: row.metadata ?? {},
       }));
     },
+
+    async getDestinationById(id: string): Promise<ContentDestinationRow | null> {
+      const { data, error } = await supabase
+        .from('content_distribution_destinations')
+        .select(
+          'id,destination_key,destination_type,provider_name,display_name,enabled,is_default,requires_paid_plan,supports_api_publish,supports_scheduling,supports_public_archive,plan_tier,availability_status,availability_reason,metadata,created_at,updated_at'
+        )
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data) return null;
+
+      return {
+        ...(data as ContentDestinationRow),
+        metadata: (data as ContentDestinationRow).metadata ?? {},
+      };
+    },
   };
 }
