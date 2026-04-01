@@ -45,16 +45,16 @@ export function SiteHeaderShell({
           ) : isSignedIn ? (
             <>
               <Link
-                href="/"
-                className="hidden font-headline text-lg font-semibold text-on-background md:inline md:italic"
-              >
-                Home
-              </Link>
-              <Link
                 href="/blog"
                 className="hidden font-headline text-lg font-semibold text-on-background md:inline"
               >
                 Blog
+              </Link>
+              <Link
+                href="/pricing"
+                className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+              >
+                Pricing
               </Link>
               <Link
                 href="/dashboard"
@@ -82,6 +82,18 @@ export function SiteHeaderShell({
             </>
           ) : (
             <>
+              <Link
+                href="/blog"
+                className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+              >
+                Blog
+              </Link>
+              <Link
+                href="/pricing"
+                className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+              >
+                Pricing
+              </Link>
               <Link
                 href="/login"
                 className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
