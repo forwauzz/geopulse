@@ -54,7 +54,7 @@ export async function loadAdminPageContext(nextPath: string): Promise<AdminPageC
   } = await supabaseSession.auth.getUser();
 
   if (!user) {
-    redirect(`/login?next=${nextPath}`);
+    redirect(`/admin/login?next=${nextPath}`);
   }
 
   requireAdminOrRedirect(user.email);
