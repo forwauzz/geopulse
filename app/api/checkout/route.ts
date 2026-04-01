@@ -87,7 +87,7 @@ export async function POST(request: Request): Promise<Response> {
       { status: 500 }
     );
   }
-  if (!scan || scan.user_id !== null || scan.status !== 'complete') {
+  if (!scan || scan.status !== 'complete') {
     return Response.json(
       { error: { code: 'invalid_scan', message: 'Scan is not eligible for checkout' } },
       { status: 400 }
@@ -111,6 +111,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (sessionUserId && sessionUserEmail && scan.agency_account_id) {
+    const canAccessAsOwner = scan.user_id === sessionUserId;
     const agencyAccess = await resolveAgencyScanAccess({
       supabase,
       userId: sessionUserId,
@@ -125,7 +126,7 @@ export async function POST(request: Request): Promise<Response> {
       agencyClientId: scan.agency_client_id ?? null,
     });
 
-    if (agencyAccess.isMember && !entitlements.deepAuditEnabled) {
+    if ((canAccessAsOwner || agencyAccess.isMember) && !entitlements.deepAuditEnabled) {
       return Response.json(
         {
           error: {
@@ -137,7 +138,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    if (agencyAccess.isMember && !agencyAccess.paymentRequired) {
+    if ((canAccessAsOwner || agencyAccess.isMember) && !agencyAccess.paymentRequired) {
       const syntheticSessionId = `agency-bypass:${scanId}`;
       const syntheticEventId = `agency-bypass-completed:${scanId}`;
       const result = await handleCheckoutSessionCompleted(

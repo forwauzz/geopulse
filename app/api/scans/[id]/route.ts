@@ -65,7 +65,7 @@ export async function GET(
         agencyClientId: scan.agency_client_id ?? null,
       });
 
-      if (scan.user_id !== null && !canAccessAsOwner) {
+      if (scan.user_id !== null && !(canAccessAsOwner || canAccessAsAgency)) {
         return Response.json({ error: { code: 'forbidden' } }, { status: 403 });
       }
 

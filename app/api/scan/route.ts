@@ -91,6 +91,7 @@ export async function POST(request: Request): Promise<Response> {
   );
   const supabaseForAttr = supabase;
 
+  let sessionUserId: string | null = null;
   let agencyContext: { agencyAccountId: string | null; agencyClientId: string | null } | null = null;
   if (agencyAccountId) {
     try {
@@ -98,6 +99,7 @@ export async function POST(request: Request): Promise<Response> {
       const {
         data: { user },
       } = await sessionClient.auth.getUser();
+      sessionUserId = user?.id ?? null;
 
       if (
         user?.id &&
@@ -168,7 +170,7 @@ export async function POST(request: Request): Promise<Response> {
       letter_grade: scan.output.letterGrade,
       issues_json: scan.output.issues,
       full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
-      user_id: null,
+      user_id: agencyContext ? sessionUserId : null,
       agency_account_id: agencyContext?.agencyAccountId ?? null,
       agency_client_id: agencyContext?.agencyClientId ?? null,
       run_source: agencyContext ? 'agency_dashboard' : 'public_self_serve',

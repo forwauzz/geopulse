@@ -60,6 +60,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       .from('scans')
       .select('id, url, domain, score, letter_grade, created_at')
       .eq('user_id', user.id)
+      .is('agency_account_id', null)
       .order('created_at', { ascending: false }),
     supabase
       .from('reports')
