@@ -2,10 +2,12 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB }
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
   customerFacingFinding,
+  deriveDemandCoverageSignals,
   parseCoverageSummary,
   parseIssues,
   scoreNarrative,
   severityLabel,
+  summarizePageIssuePatterns,
   type IssueRow,
 } from './deep-audit-report-helpers';
 
@@ -52,6 +54,34 @@ function issueStatusColor(status: string): RGB {
     default:
       return FAIL_RED;
   }
+}
+
+function ownerLabel(row: IssueRow): string {
+  return row.teamOwner ?? 'Unassigned';
+}
+
+function enrichIssues(primary: IssueRow[], fallback: IssueRow[]): IssueRow[] {
+  const fallbackByKey = new Map<string, IssueRow>();
+  for (const row of fallback) {
+    const key = row.checkId ?? row.check ?? '';
+    if (key && !fallbackByKey.has(key)) {
+      fallbackByKey.set(key, row);
+    }
+  }
+
+  return primary.map((row) => {
+    const key = row.checkId ?? row.check ?? '';
+    const base = key ? fallbackByKey.get(key) : undefined;
+    if (!base) return row;
+    return {
+      ...base,
+      ...row,
+      teamOwner: row.teamOwner ?? base.teamOwner,
+      finding: row.finding ?? base.finding,
+      fix: row.fix ?? base.fix,
+      weight: row.weight ?? base.weight,
+    };
+  });
 }
 
 const INK = rgb(0.17, 0.2, 0.21);
@@ -253,22 +283,31 @@ class PdfBuilder {
       const num = String(i + 1).padStart(2, '0');
       const sev = severityLabel(issue.weight);
       const sevClr = severityColor(sev);
+      const finding = customerFacingFinding(issue);
 
-      this.ensureSpace(50);
-      this.page.drawRectangle({ x: MARGIN, y: this.y - 8, width: MAX_W, height: 44, color: ROW_ALT, borderColor: SURFACE, borderWidth: 0.5 });
+      this.ensureSpace(76);
+      this.page.drawRectangle({ x: MARGIN, y: this.y - 34, width: MAX_W, height: 70, color: ROW_ALT, borderColor: SURFACE, borderWidth: 0.5 });
 
       this.page.drawText(num, { x: MARGIN + 8, y: this.y, size: 20, font: this.fontBold, color: rgb(0.75, 0.78, 0.8) });
       this.page.drawText(issue.check ?? issue.checkId ?? 'Check', { x: MARGIN + 44, y: this.y + 4, size: 10, font: this.fontBold, color: INK });
       this.page.drawText(`[${sev}]`, { x: MARGIN + 44, y: this.y - 10, size: 7, font: this.fontBold, color: sevClr });
+      this.page.drawText(`Owner: ${ownerLabel(issue)}`, { x: MARGIN + 100, y: this.y - 10, size: 8, font: this.fontBold, color: PRIMARY });
 
-      if (issue.fix) {
-        const fixLines = wrapLine(issue.fix, 65);
-        this.page.drawText(fixLines[0] ?? '', { x: MARGIN + 100, y: this.y - 10, size: 8, font: this.font, color: INK });
-        if (fixLines[1]) {
-          this.page.drawText(fixLines[1], { x: MARGIN + 100, y: this.y - 22, size: 8, font: this.font, color: INK });
+      if (finding) {
+        const whyLines = wrapLine(`Why it matters: ${finding}`, 72);
+        this.page.drawText(whyLines[0] ?? '', { x: MARGIN + 44, y: this.y - 24, size: 8, font: this.font, color: MUTED });
+        if (whyLines[1]) {
+          this.page.drawText(whyLines[1], { x: MARGIN + 44, y: this.y - 36, size: 8, font: this.font, color: MUTED });
         }
       }
-      this.y -= 52;
+      if (issue.fix) {
+        const fixLines = wrapLine(`First move: ${issue.fix}`, 72);
+        this.page.drawText(fixLines[0] ?? '', { x: MARGIN + 44, y: this.y - 48, size: 8, font: this.font, color: INK });
+        if (fixLines[1]) {
+          this.page.drawText(fixLines[1], { x: MARGIN + 44, y: this.y - 60, size: 8, font: this.font, color: INK });
+        }
+      }
+      this.y -= 78;
     }
     this.y -= 8;
   }
@@ -299,6 +338,55 @@ class PdfBuilder {
     this.y -= 8;
   }
 
+  drawDemandCoverage(allIssues: readonly IssueRow[]): void {
+    const signals = deriveDemandCoverageSignals(allIssues);
+    if (signals.length === 0) return;
+
+    this.drawSectionTitle('Question-Answer Readiness');
+    this.drawText(
+      'This section summarizes whether key pages are currently shaped to answer likely buyer questions clearly enough for machine retrieval and reuse.',
+      9,
+      false,
+      INK
+    );
+    this.y -= 4;
+
+    for (const signal of signals) {
+      this.drawText(`${signal.title} [${signal.status}]`, 9, true, INK);
+      this.drawText(signal.summary, 8, false, MUTED, 12);
+      if (signal.firstMove) {
+        this.drawText(`First move: ${signal.firstMove}`, 8, false, INK, 12);
+      }
+      this.y -= 4;
+    }
+    this.y -= 8;
+  }
+
+  drawRepeatedPagePatterns(
+    summaries: readonly { url: string; issues: readonly IssueRow[] }[]
+  ): void {
+    const patterns = summarizePageIssuePatterns(
+      summaries.map((summary) => ({ url: summary.url, issuesJson: summary.issues }))
+    );
+    if (patterns.length === 0) return;
+
+    this.drawSectionTitle('Repeated Page Patterns');
+    for (const pattern of patterns) {
+      this.drawText(
+        `${pattern.checkName} appears on ${String(pattern.affectedPages)} pages.`,
+        9,
+        true,
+        INK
+      );
+      if (pattern.sampleFinding) {
+        this.drawText(pattern.sampleFinding, 8, false, MUTED, 12);
+      }
+      this.drawText(`Sample pages: ${pattern.sampleUrls.join(', ')}`, 8, false, MUTED, 12);
+      this.y -= 4;
+    }
+    this.y -= 8;
+  }
+
   drawTechnicalAppendix(appendix: DeepAuditReportPayload['technicalAppendix'], rawCoverage: unknown): void {
     const coverage = parseCoverageSummary(rawCoverage);
     if (!appendix && !coverage) return;
@@ -315,7 +403,7 @@ class PdfBuilder {
 
   drawPageSummaries(pages: { url: string; score: number | null; grade: string | null; issues: IssueRow[] }[]): void {
     if (pages.length <= 1) return;
-    this.drawSectionTitle('Per-Page Breakdown');
+    this.drawSectionTitle('Page-Level Reference');
     this.y -= 4;
 
     for (const pg of pages) {
@@ -424,7 +512,7 @@ export async function buildDeepAuditPdf(input: {
   const grade = input.letterGrade ?? '—';
   const issues = parseIssues(input.issuesJson);
   const allIssues = issues.length > 0 ? issues : (input.pageSummaries?.[0] ? parseIssues(input.pageSummaries[0].issuesJson) : []);
-  const highlightedIssues = parseIssues(input.highlightedIssues);
+  const highlightedIssues = enrichIssues(parseIssues(input.highlightedIssues), allIssues);
 
   const totalChecks = allIssues.length;
   const passedChecks = allIssues.filter((i) => issueStatusLabel(i) === 'PASS').length;
@@ -433,6 +521,7 @@ export async function buildDeepAuditPdf(input: {
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
   const topFailed = (highlightedIssues.length > 0 ? highlightedIssues : failedSorted).slice(0, 5);
   const topIssueName = topFailed[0]?.check ?? topFailed[0]?.checkId ?? '';
+  const firstMove = topFailed[0]?.fix ?? '';
 
   const now = new Date().toISOString().split('T')[0] ?? '';
   const scanIdShort = (input.scanId ?? '').slice(0, 8);
@@ -445,17 +534,24 @@ export async function buildDeepAuditPdf(input: {
 
   pdf.drawCoverPage(input.domain, score, grade, now);
 
-  const narrative = scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName);
+  const narrative = scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName, firstMove);
   pdf.drawExecutiveSummary(narrative, topFailed.slice(0, 3));
   if (input.categoryScores && input.categoryScores.length > 0) {
     pdf.drawCategoryBreakdown(input.categoryScores);
   }
   pdf.drawCoverageSummary(input.coverageSummary);
+  pdf.drawDemandCoverage(allIssues);
   pdf.drawScoreBreakdown(allIssues);
   pdf.drawActionPlan(failedSorted);
 
   const summaries = input.pageSummaries?.length ? input.pageSummaries : null;
   if (summaries && summaries.length > 1) {
+    pdf.drawRepeatedPagePatterns(
+      summaries.map((pg) => ({
+        url: pg.url,
+        issues: parseIssues(pg.issuesJson),
+      })),
+    );
     pdf.drawPageSummaries(
       summaries.map((pg) => ({
         url: pg.url,
