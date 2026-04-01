@@ -17,6 +17,7 @@ type ModeComparisonRow = {
     readonly createdAt: string;
     readonly queryCoverage: number | null;
     readonly citationRate: number | null;
+    readonly measuredDomainCitationRate: number | null;
     readonly shareOfVoice: number | null;
     readonly exactPageQualityRate: number | null;
   } | null;
@@ -25,6 +26,7 @@ type ModeComparisonRow = {
     readonly createdAt: string;
     readonly queryCoverage: number | null;
     readonly citationRate: number | null;
+    readonly measuredDomainCitationRate: number | null;
     readonly shareOfVoice: number | null;
     readonly exactPageQualityRate: number | null;
   } | null;
@@ -120,6 +122,7 @@ function buildModeComparisons(
     readonly createdAt: string;
     readonly queryCoverage: number | null;
     readonly citationRate: number | null;
+    readonly measuredDomainCitationRate: number | null;
     readonly shareOfVoice: number | null;
     readonly exactPageQualityRate: number | null;
   }>
@@ -144,6 +147,7 @@ function buildModeComparisons(
       createdAt: row.createdAt,
       queryCoverage: row.queryCoverage,
       citationRate: row.citationRate,
+      measuredDomainCitationRate: row.measuredDomainCitationRate,
       shareOfVoice: row.shareOfVoice,
       exactPageQualityRate: row.exactPageQualityRate,
     };
@@ -221,6 +225,11 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
     .reverse()
     .map((point) => point.shareOfVoice)
     .filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
+  const measuredCitationSeries = history
+    .slice()
+    .reverse()
+    .map((point) => point.measuredDomainCitationRate)
+    .filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
 
   const latest = history[0] ?? null;
   const modeComparisons = buildModeComparisons(history);
@@ -257,7 +266,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
         </div>
       </div>
 
-      <section className="mt-8 grid gap-4 md:grid-cols-4">
+      <section className="mt-8 grid gap-4 md:grid-cols-5">
         <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
           <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
             Runs
@@ -284,6 +293,14 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
         </div>
         <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
           <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+            Latest measured cite
+          </p>
+          <p className="mt-2 font-headline text-3xl font-bold text-on-background">
+            {toPercent(latest?.measuredDomainCitationRate)}
+          </p>
+        </div>
+        <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
+          <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
             Latest share of voice
           </p>
           <p className="mt-2 font-headline text-3xl font-bold text-on-background">
@@ -292,7 +309,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
         </div>
       </section>
 
-      <section className="mt-8 grid gap-4 lg:grid-cols-3">
+      <section className="mt-8 grid gap-4 lg:grid-cols-4">
         <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
           <h2 className="font-headline text-lg font-semibold text-on-background">Coverage trend</h2>
           <div className="mt-4">{TrendSvg(coverageSeries, 'Query coverage over time')}</div>
@@ -300,6 +317,14 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
         <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
           <h2 className="font-headline text-lg font-semibold text-on-background">Citation rate trend</h2>
           <div className="mt-4">{TrendSvg(citationSeries, 'Citation rate over time')}</div>
+        </div>
+        <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
+          <h2 className="font-headline text-lg font-semibold text-on-background">
+            Measured cite trend
+          </h2>
+          <div className="mt-4">
+            {TrendSvg(measuredCitationSeries, 'Measured-domain citation rate over time')}
+          </div>
         </div>
         <div className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
           <h2 className="font-headline text-lg font-semibold text-on-background">Share of voice trend</h2>
@@ -357,6 +382,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                         <th className="px-4 py-3">Latest comparable run</th>
                         <th className="px-4 py-3 text-right">Coverage</th>
                         <th className="px-4 py-3 text-right">Citation rate</th>
+                        <th className="px-4 py-3 text-right">Measured cite</th>
                         <th className="px-4 py-3 text-right">Share of voice</th>
                         <th className="px-4 py-3 text-right">Page quality</th>
                         <th className="px-4 py-3">Actions</th>
@@ -394,6 +420,9 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                           </td>
                           <td className="px-4 py-3 text-right">
                             {toPercent(member.citationRate)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {toPercent(member.measuredDomainCitationRate)}
                           </td>
                           <td className="px-4 py-3 text-right">
                             {toPercent(member.shareOfVoice)}
@@ -443,7 +472,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
           </div>
         </div>
         <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
-          <table className="min-w-[1240px] w-full border-collapse text-left font-body text-sm">
+          <table className="min-w-[1360px] w-full border-collapse text-left font-body text-sm">
             <thead className="bg-surface-container-low">
               <tr className="text-on-surface-variant">
                 <th className="px-4 py-3">Query set</th>
@@ -452,6 +481,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                 <th className="px-4 py-3">Grounded</th>
                 <th className="px-4 py-3 text-right">Coverage delta</th>
                 <th className="px-4 py-3 text-right">Citation delta</th>
+                <th className="px-4 py-3 text-right">Measured cite delta</th>
                 <th className="px-4 py-3 text-right">SOV delta</th>
                 <th className="px-4 py-3 text-right">Page quality</th>
               </tr>
@@ -459,7 +489,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
             <tbody>
               {modeComparisons.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-on-surface-variant" colSpan={8}>
+                  <td className="px-4 py-6 text-on-surface-variant" colSpan={9}>
                     No grounded/ungrounded comparisons exist for this domain yet.
                   </td>
                 </tr>
@@ -480,6 +510,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                           <div className="text-xs text-on-surface-variant">
                             {toPercent(row.ungrounded.queryCoverage)} coverage |{' '}
                             {toPercent(row.ungrounded.citationRate)} citation |{' '}
+                            {toPercent(row.ungrounded.measuredDomainCitationRate)} measured |{' '}
                             {toPercent(row.ungrounded.shareOfVoice)} sov
                           </div>
                         </div>
@@ -494,6 +525,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                           <div className="text-xs text-on-surface-variant">
                             {toPercent(row.grounded.queryCoverage)} coverage |{' '}
                             {toPercent(row.grounded.citationRate)} citation |{' '}
+                            {toPercent(row.grounded.measuredDomainCitationRate)} measured |{' '}
                             {toPercent(row.grounded.shareOfVoice)} sov
                           </div>
                         </div>
@@ -506,6 +538,12 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {toDelta(row.grounded?.citationRate, row.ungrounded?.citationRate)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {toDelta(
+                        row.grounded?.measuredDomainCitationRate,
+                        row.ungrounded?.measuredDomainCitationRate
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {toDelta(row.grounded?.shareOfVoice, row.ungrounded?.shareOfVoice)}
@@ -524,7 +562,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
       <section className="mt-8">
         <h2 className="font-headline text-xl font-bold text-on-background">Run history</h2>
         <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
-          <table className="min-w-[920px] w-full border-collapse text-left font-body text-sm">
+          <table className="min-w-[1040px] w-full border-collapse text-left font-body text-sm">
             <thead className="bg-surface-container-low">
               <tr className="text-on-surface-variant">
                 <th className="px-4 py-3">Created</th>
@@ -535,6 +573,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Coverage</th>
                 <th className="px-4 py-3 text-right">Citation rate</th>
+                <th className="px-4 py-3 text-right">Measured cite</th>
                 <th className="px-4 py-3 text-right">Share of voice</th>
                 <th className="px-4 py-3 text-right">Page quality</th>
                 <th className="px-4 py-3">Actions</th>
@@ -543,7 +582,7 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
             <tbody>
               {history.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-on-surface-variant" colSpan={10}>
+                  <td className="px-4 py-6 text-on-surface-variant" colSpan={11}>
                     No benchmark history exists for this domain.
                   </td>
                 </tr>
@@ -560,6 +599,9 @@ export default async function BenchmarkDomainHistoryPage({ params }: Props) {
                     <td className="px-4 py-3 capitalize">{row.status}</td>
                     <td className="px-4 py-3 text-right">{toPercent(row.queryCoverage)}</td>
                     <td className="px-4 py-3 text-right">{toPercent(row.citationRate)}</td>
+                    <td className="px-4 py-3 text-right">
+                      {toPercent(row.measuredDomainCitationRate)}
+                    </td>
                     <td className="px-4 py-3 text-right">{toPercent(row.shareOfVoice)}</td>
                     <td className="px-4 py-3 text-right">
                       {toPercent(row.exactPageQualityRate)}

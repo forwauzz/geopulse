@@ -129,6 +129,7 @@ describe('computeBenchmarkMetrics', () => {
 
     expect(metrics.queryCoverage).toBeCloseTo(2 / 3);
     expect(metrics.citationRate).toBe(1);
+    expect(metrics.measuredDomainCitationRate).toBe(1);
     expect(metrics.shareOfVoice).toBeCloseTo(2 / 3);
     expect(metrics.exactPageQualityRate).toBeCloseTo(1 / 2);
     expect(metrics.metrics.scheduled_runs).toBe(3);
@@ -137,6 +138,8 @@ describe('computeBenchmarkMetrics', () => {
     expect(metrics.metrics.failed_runs).toBe(0);
     expect(metrics.metrics.cited_runs).toBe(2);
     expect(metrics.metrics.inclusion_rate).toBe(1);
+    expect(metrics.metrics.measured_domain_cited_runs).toBe(2);
+    expect(metrics.metrics.measured_domain_citation_rate).toBe(1);
     expect(metrics.metrics.explicit_url_citation_count).toBe(1);
     expect(metrics.metrics.explicit_domain_citation_count).toBe(1);
     expect(metrics.metrics.brand_mention_citation_count).toBe(1);
@@ -155,6 +158,7 @@ describe('computeBenchmarkMetrics', () => {
 
     expect(metrics.queryCoverage).toBe(0);
     expect(metrics.citationRate).toBe(0);
+    expect(metrics.measuredDomainCitationRate).toBe(0);
     expect(metrics.shareOfVoice).toBe(0);
     expect(metrics.exactPageQualityRate).toBe(0);
     expect(metrics.metrics.cited_runs).toBe(0);

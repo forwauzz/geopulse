@@ -42,6 +42,7 @@ async function main(): Promise<void> {
     env: process.env as Record<string, string | undefined>,
     adapter: createBenchmarkExecutionAdapter(process.env as BenchmarkExecutionEnvLike),
     now: parseWindowDateOverride(args.windowDate),
+    triggerSource: 'manual_run_now',
   });
 
   if (!summary.enabled) {

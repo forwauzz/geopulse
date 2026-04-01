@@ -5,6 +5,51 @@
 
 ---
 
+### 2026-03-31 - Distribution engine planning slice
+
+Added the first explicit distribution-engine planning document on branch `planning/content-machine-v1`.
+
+Files added:
+- `PLAYBOOK/distribution-engine-v1-plan.md`
+
+Files updated:
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was decided:
+- the repo now has a dedicated plan for evolving the content machine into a broader distribution engine
+- the next future implementation order is now frozen explicitly:
+  - draft schema first
+  - add typed distribution repositories and admin capability surfaces second
+  - add queued delivery orchestration third
+  - only then start generalized social/video adapter work
+- the target platform set is now explicit in planning:
+  - X
+  - LinkedIn
+  - Threads
+  - Instagram
+  - Facebook
+  - YouTube
+  - TikTok
+  - newsletter providers
+- the end-state goal is explicit too:
+  - operators should not need to log into each platform for normal posting
+- the plan also freezes a sequencing rule:
+  - after this planning slice, benchmarking remains the next active implementation stream unless the user explicitly reprioritizes
+
+What was not implemented:
+- no distribution-engine schema yet
+- no social/video account connection model yet
+- no generalized distribution job queue yet
+- no new social platform adapter yet
+
+Verification:
+- docs/planning-only slice
+- no runtime behavior changed
+
+---
+
 ### 2026-03-31 - Blog launch set assembly slice
 
 Assembled the first concrete blog launch packet and the next two connected article drafts on branch `planning/content-machine-v1`.

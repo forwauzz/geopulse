@@ -208,6 +208,7 @@ export function BenchmarkOverviewView({
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Coverage</th>
                 <th className="px-4 py-3 text-right">Citation rate</th>
+                <th className="px-4 py-3 text-right">Measured cite</th>
                 <th className="px-4 py-3 text-right">Share of voice</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
@@ -215,7 +216,7 @@ export function BenchmarkOverviewView({
             <tbody>
               {runGroups.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-on-surface-variant" colSpan={10}>
+                  <td className="px-4 py-6 text-on-surface-variant" colSpan={11}>
                     No benchmark runs yet. Seed a benchmark and run the internal runner first.
                   </td>
                 </tr>
@@ -238,6 +239,9 @@ export function BenchmarkOverviewView({
                     </td>
                     <td className="px-4 py-3 text-right">
                       {formatBenchmarkOverviewPercent(row.citation_rate)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {formatBenchmarkOverviewPercent(row.measured_domain_citation_rate)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {formatBenchmarkOverviewPercent(row.share_of_voice)}

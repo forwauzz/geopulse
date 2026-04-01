@@ -43,6 +43,7 @@ type ScheduledRunConfig = {
 };
 
 type BenchmarkScheduleRepo = ReturnType<typeof createBenchmarkRepository>;
+export type BenchmarkScheduleTriggerSource = 'worker_cron' | 'manual_run_now';
 
 export type BenchmarkScheduleSummary = {
   readonly enabled: boolean;
@@ -282,6 +283,7 @@ export async function executeBenchmarkScheduleSweep(args: {
   readonly adapter: BenchmarkExecutionAdapter;
   readonly config: ScheduledRunConfig;
   readonly now?: Date;
+  readonly triggerSource?: BenchmarkScheduleTriggerSource;
 }): Promise<BenchmarkScheduleSummary> {
   const windowDate = toBenchmarkScheduleWindowDate(
     args.now ?? new Date(),
@@ -385,7 +387,7 @@ export async function executeBenchmarkScheduleSweep(args: {
             runScope: 'scheduled_internal_benchmark',
             notes: `Scheduled benchmark sweep (${windowDate})`,
             runMetadata: {
-              trigger_source: 'worker_cron',
+              trigger_source: args.triggerSource ?? 'worker_cron',
               schedule_version: args.config.scheduleVersion,
               schedule_window_utc: windowDate,
               schedule_window_hours: args.config.windowHours,
@@ -458,6 +460,7 @@ export async function runScheduledBenchmarkSweep(args: {
   readonly env: ScheduleEnvLike;
   readonly adapter?: BenchmarkExecutionAdapter;
   readonly now?: Date;
+  readonly triggerSource?: BenchmarkScheduleTriggerSource;
 }): Promise<BenchmarkScheduleSummary> {
   const config = parseBenchmarkScheduleConfig(args.env);
   const windowDate = toBenchmarkScheduleWindowDate(
@@ -487,6 +490,7 @@ export async function runScheduledBenchmarkSweep(args: {
       adapter: args.adapter ?? createBenchmarkExecutionAdapter(args.env as any),
       config,
       now: args.now,
+      triggerSource: args.triggerSource,
     });
   } catch (error) {
     structuredError('benchmark_schedule_failed', {
