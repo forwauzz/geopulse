@@ -89,7 +89,7 @@ export function SiteHeaderShell({
                 Sign in
               </Link>
               <Link
-                href="/login?next=/dashboard/attribution"
+                href="/admin/login?next=/dashboard"
                 className="hidden text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background md:inline"
               >
                 Admin sign in

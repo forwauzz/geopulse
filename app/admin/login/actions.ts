@@ -18,9 +18,9 @@ const GENERIC_AUTH_ERROR = 'Invalid email or password.';
 
 function safeNextPath(raw: FormDataEntryValue | null): string {
   if (typeof raw !== 'string' || raw.length === 0) {
-    return '/dashboard/attribution';
+    return '/dashboard';
   }
-  return raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard/attribution';
+  return raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
 }
 
 export async function signInAdminWithPassword(
