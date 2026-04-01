@@ -83,6 +83,7 @@ export default {
           supabase,
           env,
           adapter: createBenchmarkExecutionAdapter(env),
+          triggerSource: 'worker_cron',
         });
       } catch (err) {
         structuredError('benchmark_schedule_worker_error', {

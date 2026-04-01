@@ -183,6 +183,77 @@ describe('benchmark schedule helpers', () => {
     });
   });
 
+  it('persists the provided trigger source in scheduled run metadata', async () => {
+    const runBenchmarkGroup = vi.fn().mockResolvedValue({
+      runGroupId: 'run-1',
+      queryRunCount: 6,
+      skippedQueryCount: 0,
+    });
+    const repo = {
+      getQuerySetById: vi.fn().mockResolvedValue({
+        id: 'set-1',
+        name: 'brand-baseline',
+        vertical: null,
+        version: 'v1',
+        description: null,
+        status: 'active',
+        metadata: {},
+        created_at: '2026-03-28T00:00:00.000Z',
+      }),
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+        {
+          id: 'domain-1',
+          domain: 'www.geopulse.ai',
+          canonical_domain: 'geopulse.ai',
+          site_url: 'https://www.geopulse.ai/',
+          display_name: 'GeoPulse',
+          vertical: null,
+          subvertical: null,
+          geo_region: null,
+          is_customer: true,
+          is_competitor: false,
+          metadata: {},
+          created_at: '2026-03-28T00:00:00.000Z',
+          updated_at: '2026-03-28T00:00:00.000Z',
+        },
+      ]),
+      getRunGroupByScheduleKey: vi.fn().mockResolvedValue(null),
+    };
+
+    await executeBenchmarkScheduleSweep({
+      repo,
+      runBenchmarkGroup: runBenchmarkGroup as any,
+      supabase: {},
+      adapter: {} as any,
+      config: {
+        enabled: true,
+        querySetId: 'set-1',
+        modelId: 'gemini-2.5-flash-lite',
+        runModes: ['ungrounded_inference'],
+        vertical: null,
+        seedPriorities: [],
+        canonicalDomains: [],
+        domainLimit: 10,
+        maxRuns: 10,
+        maxFailures: 3,
+        windowHours: 12,
+        scheduleVersion: 'v1',
+      },
+      now: new Date('2026-03-28T12:00:00.000Z'),
+      triggerSource: 'manual_run_now',
+    });
+
+    expect(runBenchmarkGroup).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        runMetadata: expect.objectContaining({
+          trigger_source: 'manual_run_now',
+        }),
+      }),
+      {}
+    );
+  });
+
   it('previews the configured schedule window and selected domains without launching runs', async () => {
     const repo = {
       getQuerySetById: vi.fn().mockResolvedValue({

@@ -35,6 +35,7 @@ describe('buildBenchmarkRunDiagnostic', () => {
         query_set_version: 'v1',
         query_coverage: 1,
         citation_rate: 0.5,
+        measured_domain_citation_rate: 0.5,
         share_of_voice: 0.5,
       },
       queryRuns: [

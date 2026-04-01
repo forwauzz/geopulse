@@ -228,6 +228,21 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
 
     const markdown = getDraftBody(request.item);
     const previewText = buildPreviewText(markdown);
+    const body: Record<string, unknown> = {
+      subject: request.item.title,
+      body: markdown,
+      status: 'draft',
+      description: `Draft pushed from GEO-Pulse content item ${request.item.content_id}`,
+      metadata: {
+        geopulse_content_id: request.item.content_id,
+        geopulse_topic_cluster: request.item.topic_cluster,
+        preview_text: previewText,
+      },
+    };
+
+    if (request.item.canonical_url?.trim()) {
+      body['canonical_url'] = request.item.canonical_url.trim();
+    }
 
     const response = await fetch('https://api.buttondown.com/v1/emails', {
       method: 'POST',
@@ -235,18 +250,7 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
         'Content-Type': 'application/json',
         Authorization: `Token ${request.env.BUTTONDOWN_API_KEY}`,
       },
-      body: JSON.stringify({
-        subject: request.item.title,
-        body: markdown,
-        status: 'draft',
-        description: `Draft pushed from GEO-Pulse content item ${request.item.content_id}`,
-        canonical_url: request.item.canonical_url,
-        metadata: {
-          geopulse_content_id: request.item.content_id,
-          geopulse_topic_cluster: request.item.topic_cluster,
-          preview_text: previewText,
-        },
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {

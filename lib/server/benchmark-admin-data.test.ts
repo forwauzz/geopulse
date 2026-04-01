@@ -68,6 +68,9 @@ describe('createBenchmarkAdminData', () => {
                     query_coverage: 1,
                     citation_rate: 0.5,
                     share_of_voice: 0.25,
+                    metrics: {
+                      measured_domain_citation_rate: 0.5,
+                    },
                   },
                 ],
                 error: null,
@@ -206,6 +209,9 @@ describe('createBenchmarkAdminData', () => {
                     query_coverage: 1,
                     citation_rate: 1,
                     share_of_voice: 1,
+                    metrics: {
+                      measured_domain_citation_rate: 1,
+                    },
                   },
                 ],
                 error: null,
@@ -349,6 +355,7 @@ describe('createBenchmarkAdminData', () => {
         query_set_version: 'v1',
         query_coverage: 1,
         citation_rate: 0.5,
+        measured_domain_citation_rate: 0.5,
         share_of_voice: 0.25,
       },
     ];
@@ -367,6 +374,7 @@ describe('createBenchmarkAdminData', () => {
         createdAt: '2026-03-26T00:00:00.000Z',
         queryCoverage: 1,
         citationRate: 0.5,
+        measuredDomainCitationRate: 0.5,
         shareOfVoice: 0.25,
         exactPageQualityRate: 0.4,
       },
@@ -568,6 +576,7 @@ describe('createBenchmarkAdminData', () => {
         query_set_version: 'v1',
         query_coverage: 0.8,
         citation_rate: 0.5,
+        measured_domain_citation_rate: 0.4,
         share_of_voice: 0.4,
       },
       {
@@ -594,6 +603,7 @@ describe('createBenchmarkAdminData', () => {
         query_set_version: 'v1',
         query_coverage: 0.6,
         citation_rate: 0.3,
+        measured_domain_citation_rate: 0.2,
         share_of_voice: 0.2,
       },
     ];
@@ -621,6 +631,7 @@ describe('createBenchmarkAdminData', () => {
             latestRunCreatedAt: '2026-03-28T10:00:00.000Z',
             queryCoverage: 0.8,
             citationRate: 0.5,
+            measuredDomainCitationRate: 0.4,
             shareOfVoice: 0.4,
             exactPageQualityRate: 0.5,
             status: 'completed',
@@ -634,6 +645,7 @@ describe('createBenchmarkAdminData', () => {
             latestRunCreatedAt: '2026-03-28T09:00:00.000Z',
             queryCoverage: 0.6,
             citationRate: 0.3,
+            measuredDomainCitationRate: 0.2,
             shareOfVoice: 0.2,
             exactPageQualityRate: 0.2,
             status: 'completed',

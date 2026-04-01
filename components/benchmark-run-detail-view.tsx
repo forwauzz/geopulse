@@ -62,9 +62,13 @@ export function BenchmarkRunDetailView({ detail }: BenchmarkRunDetailViewProps) 
         </div>
       </div>
 
-      <section className="mt-8 grid gap-4 md:grid-cols-5">
+      <section className="mt-8 grid gap-4 md:grid-cols-6">
         <MetricCard label="Query coverage" value={formatBenchmarkPercent(runGroup.query_coverage)} />
         <MetricCard label="Citation rate" value={formatBenchmarkPercent(runGroup.citation_rate)} />
+        <MetricCard
+          label="Measured cite"
+          value={formatBenchmarkPercent(runGroup.measured_domain_citation_rate)}
+        />
         <MetricCard label="Share of voice" value={formatBenchmarkPercent(runGroup.share_of_voice)} />
         <MetricCard label="Completed queries" value={String(completedRuns)} />
         <MetricCard label="Failed queries" value={String(failedRuns)} />

@@ -30,6 +30,7 @@ export type BenchmarkRunListRow = {
   readonly query_set_version: string;
   readonly query_coverage: number | null;
   readonly citation_rate: number | null;
+  readonly measured_domain_citation_rate: number | null;
   readonly share_of_voice: number | null;
 };
 
@@ -75,6 +76,7 @@ export type BenchmarkDomainHistoryPoint = {
   readonly createdAt: string;
   readonly queryCoverage: number | null;
   readonly citationRate: number | null;
+  readonly measuredDomainCitationRate: number | null;
   readonly shareOfVoice: number | null;
   readonly exactPageQualityRate: number | null;
 };
@@ -103,6 +105,7 @@ export type BenchmarkCohortSnapshot = {
     readonly latestRunCreatedAt: string | null;
     readonly queryCoverage: number | null;
     readonly citationRate: number | null;
+    readonly measuredDomainCitationRate: number | null;
     readonly shareOfVoice: number | null;
     readonly exactPageQualityRate: number | null;
     readonly status: string | null;
@@ -111,6 +114,14 @@ export type BenchmarkCohortSnapshot = {
 
 function toMap<T extends { id: string }>(rows: readonly T[]): Map<string, T> {
   return new Map(rows.map((row) => [row.id, row] as const));
+}
+
+function readMetricNumber(
+  metrics: Record<string, unknown> | null | undefined,
+  key: string
+): number | null {
+  const value = metrics?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 export function createBenchmarkAdminData(supabase: SupabaseLike) {
@@ -165,7 +176,7 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
         await Promise.all([
           supabase
             .from('benchmark_domain_metrics')
-            .select('run_group_id,domain_id,model_id,query_coverage,citation_rate,share_of_voice')
+            .select('run_group_id,domain_id,model_id,query_coverage,citation_rate,share_of_voice,metrics')
             .in('run_group_id', runGroupIds),
           supabase
             .from('benchmark_query_sets')
@@ -213,6 +224,7 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
           query_coverage: number | null;
           citation_rate: number | null;
           share_of_voice: number | null;
+          metrics: Record<string, unknown> | null;
         }>).map((row) => [`${row.run_group_id}:${row.domain_id}`, row] as const)
       );
 
@@ -237,6 +249,10 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
             query_set_version: querySet?.version ?? 'unknown',
             query_coverage: metric?.query_coverage ?? null,
             citation_rate: metric?.citation_rate ?? null,
+            measured_domain_citation_rate: readMetricNumber(
+              metric?.metrics,
+              'measured_domain_citation_rate'
+            ),
             share_of_voice: metric?.share_of_voice ?? null,
           };
         })
@@ -350,6 +366,7 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
         createdAt: row.created_at,
         queryCoverage: row.query_coverage,
         citationRate: row.citation_rate,
+        measuredDomainCitationRate: row.measured_domain_citation_rate,
         shareOfVoice: row.share_of_voice,
         exactPageQualityRate:
           typeof row.metadata['exact_page_quality_rate'] === 'number'
@@ -495,6 +512,7 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
                   latestRunCreatedAt: latestRun?.created_at ?? null,
                   queryCoverage: latestRun?.query_coverage ?? null,
                   citationRate: latestRun?.citation_rate ?? null,
+                  measuredDomainCitationRate: latestRun?.measured_domain_citation_rate ?? null,
                   shareOfVoice: latestRun?.share_of_voice ?? null,
                   exactPageQualityRate:
                     typeof latestRun?.metadata['exact_page_quality_rate'] === 'number'
