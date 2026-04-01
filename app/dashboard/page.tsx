@@ -41,7 +41,7 @@ function buildNewScanHref(accountId: string | null, clientId: string | null): st
   if (accountId) params.set('agencyAccount', accountId);
   if (clientId) params.set('agencyClient', clientId);
   const query = params.toString();
-  return query.length > 0 ? `/?${query}` : '/';
+  return query.length > 0 ? `/dashboard/new-scan?${query}` : '/dashboard/new-scan';
 }
 
 export default async function DashboardPage({ searchParams }: Props) {
@@ -122,7 +122,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/"
+            href="/dashboard/new-scan"
             className="rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
           >
             New scan
@@ -452,7 +452,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                       </a>
                     ) : null}
                     <Link
-                      href={`/?url=${encodeURIComponent(s.url)}`}
+                      href={`/dashboard/new-scan?url=${encodeURIComponent(s.url)}`}
                       className="inline-flex items-center gap-1 font-medium text-on-surface-variant hover:text-primary"
                     >
                       <span className="material-symbols-outlined text-sm">refresh</span>
