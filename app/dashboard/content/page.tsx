@@ -1,5 +1,9 @@
 import Link from 'next/link';
-import { importContentMachineDrafts, updateContentDestinationConfig } from './actions';
+import {
+  importContentMachineDrafts,
+  seedTopicPagesFromClusters,
+  updateContentDestinationConfig,
+} from './actions';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
@@ -105,6 +109,14 @@ export default async function ContentAdminPage() {
                 Import local drafts
               </button>
             </form>
+            <form action={seedTopicPagesFromClusters}>
+              <button
+                type="submit"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Seed topic pages
+              </button>
+            </form>
             <Link
               href="/dashboard/attribution"
               className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
@@ -116,6 +128,12 @@ export default async function ContentAdminPage() {
               className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
             >
               Logs
+            </Link>
+            <Link
+              href="/dashboard/content/launch"
+              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+            >
+              Launch readiness
             </Link>
             <Link
               href="/dashboard"
@@ -164,6 +182,11 @@ export default async function ContentAdminPage() {
           markdown files from <code>PLAYBOOK/content-machine-drafts</code> and upserts stable
           content records by derived <code>content_id</code>. It is safe to rerun when draft files
           change.
+        </div>
+        <div className="mt-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
+          <strong className="text-on-background">Topic-page seeding:</strong> the seed button creates
+          or refreshes one canonical <code>research_note</code> record per article topic cluster so
+          topic-page intro copy can be edited from the existing content admin flow.
         </div>
 
         <section className="mt-12">

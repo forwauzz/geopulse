@@ -29,10 +29,16 @@ Deferred:
 
 ### Content machine planning -> implementation gap
 Still open:
-- build real create/edit flows on top of the canonical content tables after the current PLAYBOOK-draft import seam
-- decide the canonical on-site publishing surface for GEO-Pulse articles
 - expand the current basic content-item detail page into a fuller editing workflow
-- expand beyond the first Kit adapter into a broader adapter set without breaking the contract boundary
+- strengthen article-level schema beyond the current first `Article` JSON-LD layer
+- add richer trust metadata beyond the current author-name / role / URL fields
+- move from block-level internal linking into more editorially intentional in-body linking when the content workflow is ready
+- move topic-page intro editing from metadata-backed `research_note` records into a clearer dedicated editorial model if complexity grows
+- deepen the current editorial-readiness checklist if real launch review shows it is too shallow
+- decide later whether the editorial-readiness gate should cover topic pages too, or stay article-only
+- extend structured data beyond the current first article/topic-page coverage
+- adjust the first-launch threshold later if real publication cadence shows the current 3-article / 1-topic-hub rule is too weak or too strict
+- expand beyond Kit and Ghost into a broader adapter set without breaking the contract boundary
 - extend provider health past local env/config checks into provider-side connectivity validation when worth the complexity
 - decide whether draft pushes should stay draft-only or later support scheduled/public publication from admin
 - add an explicit pre-publish LLM-readiness check before on-site publish
@@ -156,8 +162,11 @@ And the new implementation seam:
 - `lib/server/content-destination-adapters.ts`
 - `lib/server/content-destination-health.ts`
 - `lib/server/content-draft-import.ts`
+- `lib/server/public-content-data.ts`
 - `app/dashboard/content/page.tsx`
 - `app/dashboard/content/[contentId]/page.tsx`
+- `app/blog/page.tsx`
+- `app/blog/[slug]/page.tsx`
 - `app/dashboard/logs/page.tsx`
 
 ### Provider lock-in risk

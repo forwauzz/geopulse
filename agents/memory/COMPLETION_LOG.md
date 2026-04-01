@@ -5,6 +5,517 @@
 
 ---
 
+### 2026-03-31 - Blog launch set assembly slice
+
+Assembled the first concrete blog launch packet and the next two connected article drafts on branch `planning/content-machine-v1`.
+
+Files added:
+- `PLAYBOOK/blog-launch-set-v1.md`
+- `PLAYBOOK/content-machine-drafts/2026-03-31-crawlable-but-not-extractable-brief.md`
+- `PLAYBOOK/content-machine-drafts/2026-03-31-crawlable-but-not-extractable-article.md`
+- `PLAYBOOK/content-machine-drafts/2026-03-31-schema-is-necessary-but-not-sufficient-brief.md`
+- `PLAYBOOK/content-machine-drafts/2026-03-31-schema-is-necessary-but-not-sufficient-article.md`
+
+What was assembled:
+- the first launch packet now defines the smallest credible V1 launch rule:
+  - 3 published canonical articles
+  - 1 published topic page
+  - 1 topic cluster with at least 2 published articles
+- the recommended first launch cluster is now explicit:
+  - `ai_search_readiness`
+- the first launch article set is now:
+  - How to Audit Your Site for AI Search Readiness
+  - Crawlable but Not Extractable: The Gap Most Teams Miss
+  - Why Schema Is Necessary but Not Sufficient
+- the next two pieces now have canonical briefs and article drafts in repo, not just backlog entries
+
+What was not implemented:
+- no content import or publish action was run in this slice
+- no launch-status records were changed in the database
+- no additional newsletter variants were drafted yet beyond the existing first piece
+
+Verification:
+- content/docs-only slice
+- no runtime behavior changed
+
+---
+
+### 2026-03-31 - Launch-readiness dashboard slice
+
+Added a dedicated admin view for the first blog launch threshold on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-launch-readiness.ts`
+- `lib/server/content-launch-readiness.test.ts`
+- `app/dashboard/content/launch/page.tsx`
+
+Files updated:
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- `/dashboard/content/launch` now summarizes the current first-launch threshold across:
+  - published article count
+  - ready article count
+  - published topic-page count
+  - connected published topic count
+- the dashboard now exposes article-level failures so launch prep is operational rather than manual guesswork
+- `/dashboard/content` now links directly to the launch-readiness view
+- the current first-launch threshold in code is:
+  - 3 published article passes
+  - 1 published topic page
+  - 1 topic cluster with at least 2 published articles
+
+What was not implemented:
+- no historical launch snapshots yet
+- no launch checklist export yet
+- no auto-publish sequencing from this dashboard yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-launch-readiness.test.ts lib/server/content-editorial-readiness.test.ts lib/server/content-structured-data.test.ts lib/server/content-topic-page-admin.test.ts lib/server/content-topic-pages.test.ts lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Editorial publish-gate slice
+
+Turned the lightweight article checklist into a real publish gate on branch `planning/content-machine-v1`.
+
+Files updated:
+- `lib/server/content-editorial-readiness.ts`
+- `lib/server/content-editorial-readiness.test.ts`
+- `app/dashboard/content/actions.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- article publish now fails when required editorial-readiness checks are incomplete
+- manual article status changes to `published` now use the same gate
+- the current required gate checks are:
+  - title quality
+  - opening strength
+  - answer-friendly structure
+  - source inputs
+  - bounded CTA presence
+- the gate remains intentionally narrow:
+  - article-only
+  - no reviewer workflow
+  - no separate editorial approval subsystem
+
+What was not implemented:
+- no gate for topic pages yet
+- no weighted scoring or editorial history yet
+- no override flow yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-editorial-readiness.test.ts lib/server/content-structured-data.test.ts lib/server/content-topic-page-admin.test.ts lib/server/content-topic-pages.test.ts lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Blog launch-readiness hardening slice
+
+Added the first explicit launch-readiness hardening for the public blog on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-editorial-readiness.ts`
+- `lib/server/content-editorial-readiness.test.ts`
+- `lib/server/content-structured-data.ts`
+- `lib/server/content-structured-data.test.ts`
+
+Files updated:
+- `app/blog/topic/[topic]/page.tsx`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- topic hub pages now emit first-pass `CollectionPage` structured data
+- article detail admin now exposes a lightweight editorial-readiness checklist based on the blog LLM-readiness spec
+- the current checklist covers:
+  - title shape
+  - opening strength
+  - answer-friendly structure
+  - internal-link path presence
+  - source inputs
+  - bounded CTA presence
+
+What was not implemented:
+- no hard publish gate based on checklist status yet
+- no richer topic-page schema beyond the first collection-page layer
+- no full editorial workflow or reviewer sign-off layer yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-editorial-readiness.test.ts lib/server/content-structured-data.test.ts lib/server/content-topic-page-admin.test.ts lib/server/content-topic-pages.test.ts lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - In-body internal-link block slice
+
+Added the first article-body internal-link path for canonical blog articles on branch `planning/content-machine-v1`.
+
+Files updated:
+- `app/blog/[slug]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- `/blog/[slug]` now renders an `On this topic` block inside the article body container before the main markdown body
+- that block now links to:
+  - the topic hub for the current article
+  - up to two sibling canonical articles from the same related-article set
+- the public article path now carries visible internal links before the long-form content begins, so clustering is part of the article experience itself
+
+What was not implemented:
+- no automatic markdown-link rewriting yet
+- no paragraph-level editorial internal-linking workflow yet
+- no topic-aware anchor links inside article markdown yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-topic-page-admin.test.ts lib/server/content-topic-pages.test.ts lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Editable topic-page copy slice
+
+Moved topic-page intro copy into the content system on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-topic-page-admin.ts`
+- `lib/server/content-topic-page-admin.test.ts`
+
+Files updated:
+- `lib/server/content-topic-pages.ts`
+- `lib/server/content-topic-pages.test.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `app/blog/topic/[topic]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- `/dashboard/content` now exposes a `Seed topic pages` action
+- seeding creates or refreshes one canonical published `research_note` item per article topic cluster
+- seeded topic-page records now carry intro-copy fields in `metadata`:
+  - `topic_page_definition`
+  - `topic_page_why_it_matters`
+  - `topic_page_practical_takeaway`
+- `/dashboard/content/[contentId]` now exposes topic-page intro editors for seeded topic-page records
+- `/blog/topic/[topic]` now loads published topic-page metadata from canonical content records before falling back to code defaults
+
+What was not implemented:
+- no dedicated topic-page content type or table yet
+- no richer topic-page publish workflow yet
+- no custom topic-page authoring UI separate from the generic content detail page yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-topic-page-admin.test.ts lib/server/content-topic-pages.test.ts lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Topic-page intros slice
+
+Added first extractable intro content on the public topic pages on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-topic-pages.ts`
+- `lib/server/content-topic-pages.test.ts`
+
+Files updated:
+- `app/blog/topic/[topic]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- topic pages now open with:
+  - a definition block
+  - a why-it-matters block
+  - a practical-takeaway block
+- known topic keys now use curated copy where it exists
+- unknown topic keys fall back to bounded generic topic-page copy rather than failing or staying empty
+- the public topic pages now function as lightweight answer-bearing cluster pages, not only as article indexes
+
+What was not implemented:
+- no admin-editable topic copy yet
+- no topic-specific structured data yet
+- no per-topic CTA variants yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-topic-pages.test.ts lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Topic landing pages slice
+
+Added dedicated public topic pages for blog clusters on branch `planning/content-machine-v1`.
+
+Files added:
+- `app/blog/topic/[topic]/page.tsx`
+
+Files updated:
+- `lib/server/content-navigation.ts`
+- `lib/server/content-navigation.test.ts`
+- `app/blog/page.tsx`
+- `app/blog/[slug]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- the public blog now has topic landing pages at `/blog/topic/[topic]`
+- topic labels on the blog index and article pages now link to dedicated cluster URLs
+- the blog index topic menu now supports both:
+  - jump-to-section navigation on `/blog`
+  - direct topic-page navigation
+- topic pages now expose all published articles for one cluster plus a topic navigation sidebar
+
+What was not implemented:
+- no custom intro copy per topic yet
+- no topic-specific schema or summaries yet
+- no article search UI yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Blog navigation and topic-clustering slice
+
+Added the first public blog navigation layer for topic clustering and article discovery on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-navigation.ts`
+- `lib/server/content-navigation.test.ts`
+
+Files updated:
+- `app/blog/page.tsx`
+- `app/blog/[slug]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- `/blog` now groups published articles by topic cluster instead of rendering one flat list only
+- `/blog` now exposes:
+  - a topic menu
+  - an article menu
+- `/blog/[slug]` now exposes:
+  - related articles, preferring the same topic cluster
+  - a browse-articles menu in the sidebar
+  - a direct link back to the full blog index
+- the public blog now better reflects the content-machine principle that canonical GEO-Pulse content should be easy to navigate, cluster, and interpret rather than existing as isolated pages
+
+What was not implemented:
+- no automatic in-body internal links yet
+- no topic landing pages yet
+- no pagination/search UI yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-navigation.test.ts lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Article author metadata and schema slice
+
+Added the first article trust-metadata layer for the public blog on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-article-metadata.ts`
+- `lib/server/content-article-metadata.test.ts`
+
+Files updated:
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `app/blog/[slug]/page.tsx`
+- `lib/server/public-content-data.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- `/dashboard/content/[contentId]` now supports editing:
+  - author name
+  - author role
+  - author URL
+- author fields are stored inside the existing `content_items.metadata` JSON rather than introducing a new table or migration
+- `/blog/[slug]` now shows the article author in both the header metadata line and the article metadata sidebar
+- published article pages now emit first-pass `Article` JSON-LD with:
+  - headline
+  - description
+  - canonical page URL
+  - published/updated dates
+  - author
+  - publisher
+
+What was not implemented:
+- no dedicated author table or multi-author model yet
+- no richer trust/org schema layer yet
+- no Open Graph image metadata specific to articles yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-article-metadata.test.ts lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-03-31 - Admin-to-blog publish workflow slice
+
+Added the first admin-to-public publish path for the content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/content-publishing.ts`
+- `lib/server/content-publishing.test.ts`
+
+Files updated:
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- `/dashboard/content/[contentId]` now exposes a dedicated `Publish to blog` action for canonical articles
+- publish guardrails are now centralized in a shared helper rather than duplicated in the UI and action layer
+- article publish now requires:
+  - title
+  - slug
+  - draft markdown
+  - CTA goal
+  - source type
+  - at least one source link
+- successful publish now derives the canonical article URL as `/blog/[slug]`
+- successful publish now sets `status = published` and preserves or creates `published_at`
+- the regular save action now also blocks invalid manual transitions into `published`
+
+What was not implemented:
+- no scheduling path yet
+- no author model yet
+- no article-specific schema layer yet
+- no richer review / approval workflow beyond the current status controls yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-publishing.test.ts lib/server/public-content-data.test.ts lib/server/content-admin-data.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
+### 2026-03-31 - Public blog surface slice
+
+Added the first public blog runtime for the content machine on branch `planning/content-machine-v1`.
+
+Files added:
+- `lib/server/public-content-data.ts`
+- `lib/server/public-content-data.test.ts`
+- `components/blog-article-body.tsx`
+- `app/blog/page.tsx`
+- `app/blog/[slug]/page.tsx`
+
+Files updated:
+- `components/site-header.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- GEO-Pulse now has a canonical public blog index at `/blog`
+- published article pages now exist at `/blog/[slug]`
+- public article reads come from canonical `content_items` with:
+  - `content_type = article`
+  - `status = published`
+- article pages render stored markdown, show article metadata, and include an on-page free-scan CTA
+- the site header now links directly to the blog so the public content surface is reachable without admin navigation
+
+What was not implemented:
+- no publish button or status transition flow from admin into the public blog yet
+- no author model yet
+- no article-specific schema layer yet
+- no topic-cluster navigation yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/public-content-data.test.ts`
+- `npm.cmd run build:worker`
+
+---
+
+### 2026-03-31 - Content-machine documentation sweep before blog work
+
+Updated the main content-machine planning and repo-state docs so the current implementation state matches the actual code before public blog work begins.
+
+Files updated:
+- `docs/01-current-state.md`
+- `PLAYBOOK/newsletter-platform-evaluation-v1.md`
+- `PLAYBOOK/content-machine-v1-blueprint.md`
+
+What was clarified:
+- the top-level repo state now reflects Kit and Ghost as implemented downstream adapters
+- the content-machine state summary now explicitly includes readiness resolution and push-event logging as shipped slices
+- the newsletter platform evaluation now distinguishes between:
+  - architectural recommendation: Kit remains the preferred first newsletter-default
+  - implementation truth: Ghost is now a working downstream adapter too
+- the V1 blueprint now records that Kit and Ghost exist in code while GEO-Pulse still lacks the canonical public blog surface
+
+Verification:
+- docs-only sweep
+
+---
+
+### 2026-03-31 - Ghost adapter slice
+
+Added Ghost as the second downstream content destination adapter on branch `planning/content-machine-v1`.
+
+Files updated:
+- `lib/server/content-destination-adapters.ts`
+- `lib/server/content-destination-adapters.test.ts`
+- `lib/server/content-destination-health.ts`
+- `lib/server/content-destination-health.test.ts`
+- `lib/server/cf-env.ts`
+- `types/geo-pulse-env.d.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- Ghost now resolves through the shared destination-adapter contract instead of requiring a custom path
+- Ghost draft pushes use the official Ghost Admin API draft-post flow:
+  - integration token authentication via signed JWT
+  - `POST /ghost/api/admin/posts/?source=html`
+  - draft-only post creation from the canonical GEO-Pulse markdown body
+- destination readiness now treats Ghost as configured only when:
+  - `GHOST_ADMIN_API_URL` exists
+  - `GHOST_ADMIN_API_KEY` exists
+- Ghost remains downstream-only:
+  - no public publish/send path
+  - no scheduling path
+  - no provider-side connectivity probe
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/content-admin-data.test.ts lib/server/content-destination-admin-data.test.ts lib/server/content-draft-import.test.ts lib/server/content-destination-adapters.test.ts lib/server/content-destination-health.test.ts lib/server/stripe/checkout-completed.test.ts`
+- `npm.cmd run build:worker`
+
+Sources:
+- Ghost Admin API overview: https://docs.ghost.org/admin-api
+- Ghost post creation: https://docs.ghost.org/admin-api/posts/creating-a-post
+
+---
+
 ### 2026-03-31 - Content destination readiness and push logging slice
 
 Added the sixth runtime/product slice for the GEO-Pulse content machine on branch `planning/content-machine-v1`.

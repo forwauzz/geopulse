@@ -3,9 +3,12 @@ import { notFound } from 'next/navigation';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
+import { parseArticleMetadata } from '@/lib/server/content-article-metadata';
+import { evaluateEditorialReadiness } from '@/lib/server/content-editorial-readiness';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
-import { pushContentItemToDestination, updateContentItem } from '../actions';
+import { buildCanonicalContentUrl, getContentPublishIssues } from '@/lib/server/content-publishing';
+import { publishContentItem, pushContentItemToDestination, updateContentItem } from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +36,11 @@ function formatLabel(value: string | null): string {
 }
 
 const STATUS_OPTIONS = ['idea', 'brief', 'draft', 'review', 'approved', 'published', 'archived'];
+
+function readTopicPageField(metadata: Record<string, unknown>, key: string): string {
+  const value = metadata[key];
+  return typeof value === 'string' ? value : '';
+}
 
 export default async function ContentItemDetailPage({ params }: Props) {
   const { contentId } = await params;
@@ -63,6 +71,20 @@ export default async function ContentItemDetailPage({ params }: Props) {
       (destination) =>
         destination.destination_type === 'newsletter' && destination.supports_api_publish
     );
+  const blogPath = buildCanonicalContentUrl(item.content_type, item.slug);
+  const publishIssues = getContentPublishIssues(item);
+  const canPublish = publishIssues.length === 0;
+  const articleMetadata = parseArticleMetadata(item.metadata);
+  const isTopicPage = item.content_type === 'research_note' && item.slug?.startsWith('topic-');
+  const editorialChecks =
+    item.content_type === 'article'
+      ? evaluateEditorialReadiness({
+          title: item.title,
+          draftMarkdown: item.draft_markdown,
+          sourceLinks: item.source_links,
+          ctaGoal: item.cta_goal,
+        })
+      : [];
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16">
@@ -91,6 +113,14 @@ export default async function ContentItemDetailPage({ params }: Props) {
           >
             Logs
           </Link>
+          {blogPath ? (
+            <Link
+              href={blogPath}
+              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+            >
+              Open blog route
+            </Link>
+          ) : null}
         </div>
       </div>
 
@@ -194,6 +224,67 @@ export default async function ContentItemDetailPage({ params }: Props) {
                 className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
               />
             </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-widest text-on-surface-variant">Author name</span>
+              <input
+                name="authorName"
+                defaultValue={articleMetadata.authorName ?? ''}
+                className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs uppercase tracking-widest text-on-surface-variant">Author role</span>
+              <input
+                name="authorRole"
+                defaultValue={articleMetadata.authorRole ?? ''}
+                className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+              />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-xs uppercase tracking-widest text-on-surface-variant">Author URL</span>
+              <input
+                name="authorUrl"
+                defaultValue={articleMetadata.authorUrl ?? ''}
+                className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+              />
+            </label>
+            {isTopicPage ? (
+              <>
+                <label className="block md:col-span-2">
+                  <span className="text-xs uppercase tracking-widest text-on-surface-variant">
+                    Topic definition
+                  </span>
+                  <textarea
+                    name="topicPageDefinition"
+                    defaultValue={readTopicPageField(item.metadata, 'topic_page_definition')}
+                    rows={5}
+                    className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+                  />
+                </label>
+                <label className="block md:col-span-2">
+                  <span className="text-xs uppercase tracking-widest text-on-surface-variant">
+                    Why it matters
+                  </span>
+                  <textarea
+                    name="topicPageWhyItMatters"
+                    defaultValue={readTopicPageField(item.metadata, 'topic_page_why_it_matters')}
+                    rows={5}
+                    className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+                  />
+                </label>
+                <label className="block md:col-span-2">
+                  <span className="text-xs uppercase tracking-widest text-on-surface-variant">
+                    Practical takeaway
+                  </span>
+                  <textarea
+                    name="topicPagePracticalTakeaway"
+                    defaultValue={readTopicPageField(item.metadata, 'topic_page_practical_takeaway')}
+                    rows={5}
+                    className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+                  />
+                </label>
+              </>
+            ) : null}
             <label className="block md:col-span-2">
               <span className="text-xs uppercase tracking-widest text-on-surface-variant">Brief markdown</span>
               <textarea
@@ -235,6 +326,80 @@ export default async function ContentItemDetailPage({ params }: Props) {
         </form>
 
         <div className="space-y-6">
+          {item.content_type === 'article' ? (
+            <section className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
+              <h2 className="font-headline text-lg font-semibold text-on-background">
+                Editorial readiness
+              </h2>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Lightweight pre-publish checks based on the blog LLM-readiness spec. This is a launch
+                guardrail, not a full editorial system.
+              </p>
+              <div className="mt-4 space-y-3">
+                {editorialChecks.map((check) => (
+                  <div key={check.key} className="rounded-xl bg-surface-container-low p-4">
+                    <p className="text-sm font-medium text-on-background">{check.label}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">
+                      {check.passed ? 'Pass' : 'Needs work'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
+            <h2 className="font-headline text-lg font-semibold text-on-background">Publish to blog</h2>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              This slice publishes canonical article content onto the GEO-Pulse blog. Newsletter and
+              other downstream pushes still happen separately.
+            </p>
+            <div className="mt-4 rounded-xl bg-surface-container-low p-4">
+              <p className="text-sm font-medium text-on-background">
+                {item.status === 'published'
+                  ? 'This article is already published.'
+                  : canPublish
+                    ? 'Ready to publish.'
+                    : 'Publish blockers remain.'}
+              </p>
+              <p className="mt-1 text-xs text-on-surface-variant">
+                Canonical route: {blogPath ?? 'Not available for this content type.'}
+              </p>
+              {isTopicPage ? (
+                <p className="mt-1 text-xs text-on-surface-variant">
+                  Topic page route: {item.topic_cluster ? `/blog/topic/${item.topic_cluster}` : '-'}
+                </p>
+              ) : null}
+              {publishIssues.length > 0 ? (
+                <ul className="mt-3 space-y-2 text-xs text-on-surface-variant">
+                  {publishIssues.map((issue) => (
+                    <li key={issue}>{issue}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="mt-4 flex flex-wrap gap-3">
+                <form action={publishContentItem}>
+                  <input type="hidden" name="contentId" value={item.content_id} />
+                  <button
+                    type="submit"
+                    disabled={!canPublish || item.status === 'published'}
+                    className="rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {item.status === 'published' ? 'Published' : 'Publish to blog'}
+                  </button>
+                </form>
+                {blogPath && item.status === 'published' ? (
+                  <Link
+                    href={blogPath}
+                    className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+                  >
+                    View live article
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          </section>
+
           <section className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
             <h2 className="font-headline text-lg font-semibold text-on-background">Push draft</h2>
             <div className="mt-4 space-y-3">
@@ -296,6 +461,13 @@ export default async function ContentItemDetailPage({ params }: Props) {
               <div>
                 <p className="text-xs uppercase tracking-widest text-on-surface-variant">Published</p>
                 <p className="mt-1 text-on-background">{formatDateTime(item.published_at)}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Author</p>
+                <p className="mt-1 text-on-background">
+                  {articleMetadata.authorName ?? '-'}
+                  {articleMetadata.authorRole ? ` / ${articleMetadata.authorRole}` : ''}
+                </p>
               </div>
             </div>
           </section>

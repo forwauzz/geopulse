@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agent Chat</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0d0d0d;
+  --s1:      #111111;
+  --s2:      #171717;
+  --s3:      #1e1e1e;
+  --s4:      #242424;
+  --border:  #222222;
+  --border2: #2d2d2d;
+  --text:    #e8e8e8;
+  --muted:   #888;
+  --dim:     #4a4a4a;
+  --sidebar: 268px;
+  --cc-w:    380px;
+}
+
+html, body { height: 100%; overflow: hidden; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+
+/* ── Topbar ─────────────────────────────────────────────────────────────── */
+.topbar { height: 50px; background: var(--s1); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; z-index: 20; }
+.topbar-left  { display: flex; align-items: center; gap: 10px; }
+.topbar-right { display: flex; align-items: center; gap: 6px; }
+.topbar h1 { font-size: 13px; font-weight: 700; color: #fff; letter-spacing: -0.2px; }
+
+.status-pill { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: var(--s3); border: 1px solid var(--border2); color: var(--muted); }
+.status-pill.live { background: #0f1f0f; border-color: #1a3a1a; color: #4a9a4a; }
+
+.topbar-btn { background: var(--s3); border: 1px solid var(--border2); color: var(--muted); border-radius: 7px; padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.topbar-btn:hover { background: var(--s4); color: var(--text); border-color: #3a3a3a; }
+.topbar-btn.open { background: #1a1a2e; border-color: #2a2a4e; color: #9999ee; }
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.layout { flex: 1; display: flex; overflow: hidden; }
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.sidebar { width: var(--sidebar); flex-shrink: 0; background: var(--s1); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-hdr { padding: 12px 12px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.sidebar-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.9px; color: var(--dim); }
+.btn-sm { background: var(--s3); border: 1px solid var(--border2); color: var(--muted); border-radius: 5px; padding: 3px 9px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.btn-sm:hover { background: var(--s4); color: var(--text); }
+
+.agents-list { flex: 1; overflow-y: auto; padding: 8px; }
+
+.agent-card { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; transition: all 0.15s; }
+.agent-card.off { opacity: 0.35; }
+.ac-row { display: flex; align-items: center; gap: 8px; }
+.ac-av { width: 28px; height: 28px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; color: #fff; }
+.ac-nm { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ac-nick { font-size: 10px; color: var(--dim); }
+.ac-tags { display: flex; align-items: center; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+.tag { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 20px; background: var(--s4); border: 1px solid var(--border2); color: var(--dim); }
+.tag.arbiter { background: #1a1400; border-color: #3a3000; color: #b89020; }
+.tag.off-tag { background: #181818; border-color: #222; color: #3a3a3a; }
+
+/* ── Chat ────────────────────────────────────────────────────────────────── */
+.chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+.messages { flex: 1; overflow-y: auto; padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+
+.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px; gap: 10px; }
+.empty-icon  { font-size: 32px; }
+.empty-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.empty-sub   { font-size: 12.5px; color: var(--muted); max-width: 380px; line-height: 1.7; }
+
+.msg { display: flex; flex-direction: column; max-width: 80%; animation: fadeUp 0.18s ease; }
+@keyframes fadeUp { from { opacity:0;transform:translateY(5px);} to {opacity:1;transform:translateY(0);} }
+.msg.u { align-self: flex-end;  align-items: flex-end; }
+.msg.a { align-self: flex-start; align-items: flex-start; }
+
+.msg-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.m-av  { width: 20px; height: 20px; border-radius: 5px; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700; color:#fff; flex-shrink:0; }
+.m-nm  { font-size: 11.5px; font-weight: 600; }
+.m-nick { font-size: 10px; color: var(--dim); }
+.m-ts  { font-size: 10px; color: var(--dim); }
+
+.bubble { background: var(--s2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 13px; font-size: 13.5px; line-height: 1.7; color: var(--text); word-break: break-word; white-space: pre-wrap; }
+.msg.u .bubble { background: #141422; border-color: #252545; border-bottom-right-radius: 3px; }
+.msg.a .bubble { border-bottom-left-radius: 3px; }
+
+/* Brainstorm session divider */
+.brainstorm-divider { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+.brainstorm-divider span { font-size: 10px; font-weight: 700; color: #6a4acf; text-transform: uppercase; letter-spacing: 0.8px; white-space: nowrap; }
+.brainstorm-divider::before,.brainstorm-divider::after { content:''; flex:1; height:1px; background:linear-gradient(to right,transparent,#3a2a6a); }
+.brainstorm-divider::after { background:linear-gradient(to left,transparent,#3a2a6a); }
+
+.typing-row { display:flex; align-items:center; gap:8px; padding:2px 0; }
+.dots { display:flex; gap:3px; }
+.dots span { width:5px; height:5px; background:var(--dim); border-radius:50%; animation:bop 1.1s infinite; }
+.dots span:nth-child(2){animation-delay:.18s;} .dots span:nth-child(3){animation-delay:.36s;}
+@keyframes bop{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-5px);}}
+
+.err-msg { background:#1e1010; border:1px solid #3a1818; border-radius:8px; padding:9px 13px; font-size:12.5px; color:#cc4444; max-width:80%; }
+
+/* ── Input bar ───────────────────────────────────────────────────────────── */
+.input-area { border-top: 1px solid var(--border); background: var(--s1); padding: 10px 14px 13px; flex-shrink: 0; }
+.ask-bar { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; min-height: 26px; align-items: center; }
+
+.ask-btn { border: 1px solid; border-radius: 20px; padding: 3px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.ask-btn:hover:not(:disabled) { filter: brightness(1.25); }
+.ask-btn:disabled { opacity:.35; cursor:default; }
+
+.ask-all-btn { background: var(--s3); border: 1px solid var(--border2); color: var(--muted); border-radius: 20px; padding: 3px 12px; font-size: 11.5px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.ask-all-btn:hover:not(:disabled) { background:var(--s4); color:var(--text); }
+.ask-all-btn:disabled { opacity:.35; cursor:default; }
+
+/* Brainstorm button */
+.brainstorm-btn { background: linear-gradient(135deg, #2d1f5a, #1f2d5a); border: 1px solid #4a3a8a; color: #c0a0ff; border-radius: 20px; padding: 3px 14px; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.brainstorm-btn:hover:not(:disabled) { background: linear-gradient(135deg, #3d2f6a, #2f3d6a); border-color: #6a5aaa; color: #d4b8ff; }
+.brainstorm-btn:disabled { opacity:.35; cursor:default; }
+
+.bar-sep { width: 1px; height: 18px; background: var(--border2); margin: 0 2px; }
+
+.input-row { display:flex; gap:8px; align-items:flex-end; }
+#msg-input { flex:1; background:var(--s2); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-size:13.5px; line-height:1.5; padding:9px 12px; resize:none; outline:none; font-family:inherit; min-height:40px; max-height:130px; transition:border-color .15s; }
+#msg-input:focus { border-color:#3a3a3a; }
+#msg-input::placeholder { color:var(--dim); }
+.btn-send { background:#fff; color:#000; border:none; border-radius:7px; padding:9px 18px; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .15s; white-space:nowrap; height:40px; flex-shrink:0; }
+.btn-send:hover{opacity:.85;} .btn-send:disabled{opacity:.3;cursor:default;}
+
+/* ══════════════════════════════════════════════════════════
+   CONTROL CENTER
+   ══════════════════════════════════════════════════════════ */
+.cc-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:40; opacity:0; pointer-events:none; transition:opacity .2s; }
+.cc-overlay.open { opacity:1; pointer-events:all; }
+
+.cc-drawer { position:fixed; top:0; right:0; bottom:0; width:var(--cc-w); background:var(--s1); border-left:1px solid var(--border2); display:flex; flex-direction:column; z-index:41; transform:translateX(100%); transition:transform .25s cubic-bezier(.4,0,.2,1); box-shadow:-8px 0 32px rgba(0,0,0,.5); }
+.cc-drawer.open { transform:translateX(0); }
+
+.cc-header { padding:16px 18px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+.cc-title { font-size:14px; font-weight:700; color:#fff; }
+.cc-close { background:none; border:none; color:var(--muted); font-size:16px; cursor:pointer; padding:3px 7px; border-radius:5px; transition:all .1s; line-height:1; }
+.cc-close:hover { background:#222; color:var(--text); }
+
+.cc-body { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:24px; }
+.cc-sec { display:flex; flex-direction:column; gap:10px; }
+.cc-sec-hdr { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.9px; color:var(--dim); display:flex; align-items:center; justify-content:space-between; }
+
+/* Shared context box */
+.shared-ctx-box { background:var(--s2); border:1px solid var(--border); border-radius:10px; padding:14px; }
+.shared-ctx-desc { font-size:11.5px; color:var(--muted); margin-bottom:10px; line-height:1.6; }
+.shared-ctx-box textarea { width:100%; background:var(--s3); border:1px solid var(--border2); border-radius:7px; color:var(--text); font-size:12.5px; line-height:1.6; padding:10px; resize:vertical; outline:none; font-family:inherit; min-height:110px; transition:border-color .15s; }
+.shared-ctx-box textarea:focus { border-color:#3a3a3a; }
+.shared-ctx-box textarea::placeholder { color:var(--dim); }
+.ctx-meta { display:flex; align-items:center; justify-content:space-between; margin-top:8px; }
+.ctx-chars { font-size:10px; color:var(--dim); }
+.ctx-save-btn { background:var(--s4); border:1px solid var(--border2); color:var(--muted); border-radius:5px; padding:4px 12px; font-size:11.5px; font-weight:600; cursor:pointer; transition:all .15s; }
+.ctx-save-btn:hover { background:#2a2a2a; color:var(--text); }
+.ctx-save-btn.saved { background:#0f1f0f; border-color:#1a3a1a; color:#4a9a4a; }
+
+/* User nickname box */
+.nick-box { background:var(--s2); border:1px solid var(--border); border-radius:10px; padding:13px; display:flex; align-items:center; gap:12px; }
+.nick-label { font-size:12px; color:var(--muted); flex-shrink:0; }
+.nick-box input { flex:1; background:var(--s3); border:1px solid var(--border2); border-radius:6px; color:var(--text); font-size:13px; padding:6px 10px; outline:none; font-family:inherit; transition:border-color .15s; }
+.nick-box input:focus { border-color:#3a3a3a; }
+.nick-save { background:var(--s4); border:1px solid var(--border2); color:var(--muted); border-radius:5px; padding:5px 12px; font-size:11.5px; font-weight:600; cursor:pointer; transition:all .15s; white-space:nowrap; }
+.nick-save:hover { background:#2a2a2a; color:var(--text); }
+
+/* CC agent rows */
+.cc-row { background:var(--s2); border:1px solid var(--border); border-radius:10px; padding:12px 13px; margin-bottom:8px; transition:border-color .15s; }
+.cc-row:hover { border-color:var(--border2); }
+.cc-row-top { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.cc-av { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; color:#fff; flex-shrink:0; transition:background .2s; }
+.cc-info { flex:1; min-width:0; }
+.cc-nm   { font-size:13px; font-weight:600; color:var(--text); }
+.cc-nick { font-size:10.5px; color:var(--dim); margin-top:1px; }
+.cc-sub  { font-size:10px; color:var(--dim); }
+.cc-row-bot { display:flex; align-items:center; justify-content:space-between; }
+.cc-acts { display:flex; gap:5px; align-items:center; }
+.cc-btn { background:var(--s3); border:1px solid var(--border2); color:var(--muted); border-radius:5px; padding:3px 9px; font-size:11px; cursor:pointer; transition:all .12s; }
+.cc-btn:hover { background:var(--s4); color:var(--text); }
+.cc-btn.del:hover { background:#201010; color:#cc4444; border-color:#3a1515; }
+
+/* Toggle */
+.tog-wrap { display:flex; align-items:center; gap:7px; }
+.tog-lbl  { font-size:11px; color:var(--muted); font-weight:500; min-width:22px; text-align:right; }
+.toggle   { position:relative; width:38px; height:22px; cursor:pointer; flex-shrink:0; display:block; }
+.toggle input { opacity:0; width:0; height:0; position:absolute; }
+.tog-track { position:absolute; inset:0; background:#2a2a2a; border-radius:11px; transition:background .2s; border:1px solid var(--border2); }
+.toggle input:checked + .tog-track { background:#1a3a1a; border-color:#2a5a2a; }
+.tog-thumb { position:absolute; top:3px; left:3px; width:14px; height:14px; background:#555; border-radius:50%; transition:all .2s; pointer-events:none; }
+.toggle input:checked ~ .tog-thumb { left:19px; background:#4aba4a; }
+
+/* Provider status */
+.prov-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.prov-card { background:var(--s2); border:1px solid var(--border); border-radius:8px; padding:9px 11px; display:flex; align-items:center; gap:8px; }
+.prov-card.ok { background:#0c180c; border-color:#1a2e1a; }
+.prov-dot { width:7px; height:7px; border-radius:50%; background:#333; flex-shrink:0; }
+.prov-card.ok .prov-dot { background:#3a9a3a; box-shadow:0 0 6px #3a9a3a70; }
+.prov-nm { font-size:11.5px; font-weight:600; color:var(--muted); }
+.prov-st { font-size:10px; color:var(--dim); margin-top:1px; }
+.prov-card.ok .prov-nm { color:var(--text); }
+.prov-card.ok .prov-st { color:#3a8a3a; }
+
+/* ── Modal ───────────────────────────────────────────────────────────────── */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:60; padding:20px; overflow-y:auto; }
+.modal-overlay.open { display:flex; }
+.modal { background:var(--s2); border:1px solid var(--border2); border-radius:14px; width:100%; max-width:480px; padding:22px; display:flex; flex-direction:column; gap:15px; margin:auto; }
+.modal-hdr { display:flex; align-items:center; justify-content:space-between; }
+.modal-ttl { font-size:15px; font-weight:700; color:#fff; }
+.modal-x { background:none; border:none; color:var(--muted); font-size:17px; cursor:pointer; padding:2px 6px; border-radius:4px; transition:all .1s; line-height:1; }
+.modal-x:hover { background:#2a2a2a; color:var(--text); }
+
+.field { display:flex; flex-direction:column; gap:5px; }
+.field label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.9px; color:var(--dim); }
+.field input,.field select,.field textarea { background:var(--s1); border:1px solid var(--border2); border-radius:7px; color:var(--text); font-size:13px; padding:8px 11px; outline:none; font-family:inherit; transition:border-color .15s; }
+.field input:focus,.field select:focus,.field textarea:focus { border-color:#3a3a3a; }
+.field textarea { resize:vertical; line-height:1.6; }
+.field-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.field-hint { font-size:10.5px; color:var(--dim); margin-top:2px; line-height:1.4; }
+
+/* Soul section in modal */
+.soul-section { background:var(--s3); border:1px solid var(--border2); border-radius:9px; padding:13px; display:flex; flex-direction:column; gap:10px; }
+.soul-section-title { font-size:11px; font-weight:700; color:var(--muted); display:flex; align-items:center; gap:6px; }
+.soul-section-title span { font-size:14px; }
+
+.swatches { display:flex; gap:7px; flex-wrap:wrap; }
+.swatch { width:26px; height:26px; border-radius:6px; cursor:pointer; border:2px solid transparent; transition:all .12s; }
+.swatch.on { border-color:#fff; transform:scale(1.15); }
+.swatch:hover:not(.on) { transform:scale(1.1); }
+
+.chk-row { display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12.5px; color:var(--muted); }
+.chk-row input { width:auto; cursor:pointer; }
+.chk-row:hover { color:var(--text); }
+
+.modal-foot { display:flex; gap:8px; justify-content:flex-end; }
+.btn-ok { background:#fff; color:#000; border:none; border-radius:7px; padding:9px 20px; font-size:13px; font-weight:700; cursor:pointer; transition:opacity .15s; }
+.btn-ok:hover{opacity:.85;}
+.btn-cancel { background:transparent; border:1px solid var(--border2); color:var(--muted); border-radius:7px; padding:9px 16px; font-size:13px; cursor:pointer; transition:all .15s; }
+.btn-cancel:hover{background:#222;color:var(--text);}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:transparent;} ::-webkit-scrollbar-thumb{background:#282828;border-radius:2px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>Multi-Agent Chat</h1>
+    <span class="status-pill" id="active-pill">0 active</span>
+  </div>
+  <div class="topbar-right">
+    <button class="topbar-btn" onclick="clearChat()">Clear chat</button>
+    <button class="topbar-btn" onclick="exportChat()">Export</button>
+    <button class="topbar-btn" id="cc-btn" onclick="toggleCC()">⚙ Control Center</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-hdr">
+      <span class="sidebar-lbl">Agents</span>
+      <button class="btn-sm" onclick="openModal()">+ Add</button>
+    </div>
+    <div class="agents-list" id="agents-list"></div>
+  </div>
+
+  <div class="chat-area">
+    <div class="messages" id="messages">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">🤖</div>
+        <div class="empty-title">Your crew is ready</div>
+        <div class="empty-sub">Type a message and hit Send, then click an agent to respond. Hit <strong>Brainstorm</strong> to drop a question on all active agents at once — they'll each give their take and ask you anything they need.</div>
+      </div>
+    </div>
+    <div class="input-area">
+      <div class="ask-bar" id="ask-bar"></div>
+      <div class="input-row">
+        <textarea id="msg-input"
+          placeholder="What's on your mind? (Enter to send, Shift+Enter for new line)"
+          rows="1"
+          onkeydown="handleKey(event)"
+          oninput="autoResize(this)"></textarea>
+        <button class="btn-send" id="send-btn" onclick="sendMsg()">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Control Center -->
+<div class="cc-overlay" id="cc-overlay" onclick="closeCC()"></div>
+<div class="cc-drawer" id="cc-drawer">
+  <div class="cc-header">
+    <span class="cc-title">⚙ Control Center</span>
+    <button class="cc-close" onclick="closeCC()">✕</button>
+  </div>
+  <div class="cc-body">
+
+    <!-- User nickname -->
+    <div class="cc-sec">
+      <div class="cc-sec-hdr">How agents address you</div>
+      <div class="nick-box">
+        <span class="nick-label">They call you:</span>
+        <input type="text" id="user-nick-input" placeholder="bro" maxlength="20">
+        <button class="nick-save" onclick="saveUserNick()">Update</button>
+      </div>
+    </div>
+
+    <!-- Shared context -->
+    <div class="cc-sec">
+      <div class="cc-sec-hdr">
+        Shared Context
+        <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">all agents read this</span>
+      </div>
+      <div class="shared-ctx-box">
+        <div class="shared-ctx-desc">Every agent sees this before every response. Use it for project background, key facts, constraints, or anything they should always know about your situation.</div>
+        <textarea id="shared-ctx-input" placeholder="Example: We're building a healthcare app for rural clinicians. The stack is React + Node. We're pre-revenue, 2 engineers, 3-month runway. Privacy and offline-first are non-negotiable..."></textarea>
+        <div class="ctx-meta">
+          <span class="ctx-chars" id="ctx-chars">0 characters</span>
+          <button class="ctx-save-btn" id="ctx-save-btn" onclick="saveSharedCtx()">Save context</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agents -->
+    <div class="cc-sec">
+      <div class="cc-sec-hdr">
+        Agents
+        <button class="btn-sm" onclick="openModal()">+ Add agent</button>
+      </div>
+      <div id="cc-list"></div>
+    </div>
+
+    <!-- API Status -->
+    <div class="cc-sec">
+      <div class="cc-sec-hdr">
+        API Status
+        <span style="font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--dim)">keys set in .env</span>
+      </div>
+      <div class="prov-grid" id="prov-grid"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Add / Edit Agent Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="bgClick(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-ttl" id="modal-title">Add Agent</div>
+      <button class="modal-x" onclick="closeModal()">✕</button>
+    </div>
+
+    <input type="hidden" id="edit-id">
+
+    <div class="field-2">
+      <div class="field">
+        <label>Agent Name</label>
+        <input type="text" id="f-name" placeholder="Claude, GPT, Skeptic…" maxlength="24">
+      </div>
+      <div class="field">
+        <label>Nickname <span style="font-weight:400;letter-spacing:0;text-transform:none">(their alias)</span></label>
+        <input type="text" id="f-nick" placeholder="Big Man, Honourable…" maxlength="24">
+        <div class="field-hint">Displayed in chat next to their name</div>
+      </div>
+    </div>
+
+    <div class="field-2">
+      <div class="field">
+        <label>Provider</label>
+        <select id="f-provider" onchange="onProvChange()"></select>
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <select id="f-model"></select>
+      </div>
+    </div>
+
+    <div class="field-2">
+      <div class="field">
+        <label>Role Label</label>
+        <input type="text" id="f-role" placeholder="Proposer · Critic · Arbiter…" maxlength="22">
+      </div>
+      <div class="field">
+        <label>Color</label>
+        <div class="swatches" id="swatches" style="padding-top:4px"></div>
+      </div>
+    </div>
+
+    <!-- Soul section -->
+    <div class="soul-section">
+      <div class="soul-section-title"><span>🪬</span> Soul — who is this agent?</div>
+      <div class="field">
+        <label>Personality & Character</label>
+        <textarea id="f-soul" rows="5" placeholder="Define this agent's identity, how they think, their communication style, expertise, and what makes them unique in this group. This is their character file — it shapes every response they give."></textarea>
+        <div class="field-hint">Leave blank to use the default for their role label (Proposer, Critic, Arbiter, etc.)</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="chk-row">
+        <input type="checkbox" id="f-arbiter">
+        Mark as ⚖ Final Arbiter — the agent you trust most for the final verdict
+      </label>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-ok" onclick="saveAgent()">Save Agent</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════════
+// CONSTANTS & DEFAULTS
+// ════════════════════════════════════════════════════════════════════════
+const PALETTE = ['#6366f1','#8b5cf6','#ec4899','#ef4444','#f59e0b','#10b981','#3b82f6','#14b8a6','#a855f7','#f97316'];
+const STORAGE_KEY = 'mac-session-v2';
+
+// Default souls for well-known agents
+const DEFAULT_SOULS = {
+  claude: `You are Claude, built by Anthropic. You think carefully before speaking and you're known for nuanced, honest perspectives. You have genuine intellectual curiosity and enjoy exploring the edges of a problem. You speak with measured confidence — direct but never dismissive. You care about getting things right more than sounding impressive. When you're uncertain, you say so.`,
+
+  'gpt-4o': `You are GPT-4o, built by OpenAI. You're known for broad knowledge and practical, grounded thinking. You cut through complexity and give people what they actually need without over-complicating it. You're confident and direct. You have a knack for making difficult things feel approachable without dumbing them down. You don't overthink — you ship answers.`,
+
+  gemini: `You are Gemini, built by Google DeepMind. You have a gift for synthesis and big-picture thinking. You find connections between ideas that others miss and bring in angles that aren't obvious at first glance. You think in systems and patterns. You communicate with precision and a certain elegance — you make complexity feel orderly.`,
+};
+
+// Default role-based souls (fallback when no custom soul is set)
+const ROLE_SOULS = {
+  proposer:     `You are a solution architect and strategic thinker. Your job is to propose specific, concrete, actionable solutions. You don't hedge endlessly — you commit to a direction while staying open to refinement. When revising your proposal based on feedback, you clearly explain what changed and why.`,
+  critic:       `You are a critical reviewer. Your job is to find flaws, blind spots, risks, and missing edge cases in proposed solutions. You are direct and specific — you do not redesign, you critique. You end every response with a clear verdict: Approved, Approved with Conditions, or Rejected, and you explain why.`,
+  reviewer:     `You are a balanced reviewer. You acknowledge genuine strengths alongside real weaknesses. You ask clarifying questions when something is unclear rather than assuming. Your feedback is specific and actionable, not vague.`,
+  arbiter:      `You are the Final Arbiter. You synthesize all perspectives in the discussion, weigh the real tradeoffs, and make a decisive call. You don't sit on the fence. You give a clear recommended path forward with enough reasoning that people can act on it.`,
+  brainstormer: `You are a creative thinker and brainstormer. You generate multiple alternative angles and possibilities. You build on ideas rather than dismissing them. You think out loud and explore territory others haven't considered yet.`,
+  devil:        `You are the devil's advocate. Your job is to find the strongest possible counterargument to any idea. You challenge assumptions rigorously. You are not trying to be difficult — you're trying to stress-test ideas so only the good ones survive.`,
+  default:      `You are a thoughtful AI assistant participating in a multi-agent discussion. You read the full conversation carefully before responding. You add genuine value with each message — you don't just agree or summarize what others said.`,
+};
+
+// ════════════════════════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════════════════════════
+let agents       = [];
+let conversation = [];
+let providers    = {};
+let apiStatus    = {};
+let isLoading    = false;
+let ccOpen       = false;
+let aidx = 0, midx = 0;
+let pickedColor  = PALETTE[0];
+let editId       = null;
+let userNickname = 'bro';
+let sharedContext = '';
+
+// ════════════════════════════════════════════════════════════════════════
+// SYSTEM PROMPT BUILDER
+// Every agent call goes through this — soul + shared context + rules
+// ════════════════════════════════════════════════════════════════════════
+function buildSystemPrompt(agent) {
+  const parts = [];
+
+  // 1. Soul — who this agent is
+  let soul = agent.soul?.trim();
+  if (!soul) {
+    const roleKey = (agent.role_label || '').toLowerCase().replace(/[^a-z]/g, '');
+    soul = ROLE_SOULS[roleKey] || ROLE_SOULS.default;
+    // If agent name matches a known default, prepend their identity
+    const nameKey = agent.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (DEFAULT_SOULS[nameKey]) soul = DEFAULT_SOULS[nameKey] + '\n\n' + soul;
+  }
+  parts.push(soul);
+
+  // 2. Shared context — what everyone knows
+  if (sharedContext.trim()) {
+    parts.push(`\n\nSHARED CONTEXT — read this carefully, it is the background for this entire session:\n${sharedContext.trim()}`);
+  }
+
+  // 3. Arbiter flag
+  if (agent.is_arbiter) {
+    parts.push(`\n\nYou are the Final Arbiter of this discussion. When the time comes for a final recommendation, be definitive. Give a clear, actionable path forward.`);
+  }
+
+  // 4. Hard communication rules — applied universally
+  const nick = agent.nickname?.trim() || agent.name;
+  const userNick = userNickname?.trim() || 'bro';
+  parts.push(`
+
+COMMUNICATION RULES — follow these exactly in every single response:
+- Always address the user as "${userNick}" — never use any other name for them
+- Your nickname in this session is "${nick}" — the user may address you by this name
+- Write in plain conversational prose only — absolutely no markdown formatting
+- This means no asterisks, no # headers, no bullet points, no numbered lists, no bold, no italics, no dashes as list items
+- Write the way you would speak out loud in a conversation
+- If the user's request is ambiguous or you need more information to give the best answer, ask ONE specific clarifying question before giving your full response
+- Be direct and honest — do not pad your responses with filler`);
+
+  return parts.join('');
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════════════════
+async function init() {
+  await Promise.all([loadProviders(), loadApiStatus()]);
+  buildProviderSelect();
+  loadSavedState();
+  renderAll();
+  // Populate CC inputs from loaded state
+  document.getElementById('user-nick-input').value = userNickname;
+  document.getElementById('shared-ctx-input').value = sharedContext;
+  updateCtxChars();
+  document.getElementById('shared-ctx-input').addEventListener('input', updateCtxChars);
+}
+
+function loadSavedState() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const data = JSON.parse(saved);
+      if (data.agents?.length)   agents = data.agents;
+      if (data.userNickname)     userNickname = data.userNickname;
+      if (data.sharedContext)    sharedContext = data.sharedContext;
+      if (data.aidx)             aidx = data.aidx;
+      return;
+    }
+  } catch(e) {}
+  // No saved state — seed defaults
+  seedDefaultAgents();
+}
+
+function seedDefaultAgents() {
+  const seeds = [
+    { name:'Claude',  nickname:'Honourable', provider:'anthropic', model:'claude-sonnet-4-6', role_label:'Proposer', color:PALETTE[1] },
+    { name:'GPT-4o',  nickname:'Big Man',    provider:'openai',    model:'gpt-4o',            role_label:'Critic',   color:PALETTE[0] },
+    { name:'Gemini',  nickname:'Your Highness', provider:'google', model:'gemini-2.0-flash',  role_label:'Reviewer', color:PALETTE[4] },
+  ];
+  seeds.forEach(s => {
+    const m = providers[s.provider]?.models?.[0] || s.model;
+    agents.push({ id:`a${++aidx}`, name:s.name, nickname:s.nickname, provider:s.provider,
+      model:m, role_label:s.role_label, color:s.color, soul:'', is_arbiter:false, active:true });
+  });
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ agents, userNickname, sharedContext, aidx }));
+  } catch(e) {}
+}
+
+async function loadProviders() {
+  try { providers = await (await fetch('/api/providers')).json(); }
+  catch {
+    providers = {
+      anthropic:{ label:'Anthropic (Claude)',   models:['claude-opus-4-6','claude-sonnet-4-6','claude-haiku-4-5-20251001'] },
+      openai:   { label:'OpenAI (ChatGPT)',      models:['gpt-4o','gpt-4o-mini','o1-mini'] },
+      google:   { label:'Google (Gemini)',       models:['gemini-2.0-flash','gemini-1.5-pro','gemini-1.5-flash'] },
+      groq:     { label:'Groq (Fast LLaMA)',     models:['llama-3.3-70b-versatile','mixtral-8x7b-32768'] },
+      mistral:  { label:'Mistral AI',            models:['mistral-large-latest','mistral-small-latest'] },
+    };
+  }
+}
+
+async function loadApiStatus() {
+  try { apiStatus = await (await fetch('/api/status')).json(); }
+  catch { apiStatus = {}; }
+}
+
+function buildProviderSelect() {
+  document.getElementById('f-provider').innerHTML =
+    Object.entries(providers).map(([id,p]) => `<option value="${id}">${x(p.label)}</option>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════════════════════════════
+function renderAll() {
+  renderSidebar();
+  renderCC();
+  renderProvGrid();
+  renderAskBar();
+  renderActivePill();
+}
+
+function renderSidebar() {
+  const el = document.getElementById('agents-list');
+  if (!agents.length) { el.innerHTML = `<div style="padding:18px 8px;text-align:center;font-size:11.5px;color:var(--dim)">No agents yet.<br>Add one above.</div>`; return; }
+  el.innerHTML = agents.map(a => `
+    <div class="agent-card${a.active?'':' off'}">
+      <div class="ac-row">
+        <div class="ac-av" style="background:${a.active?a.color:'#333'}">${a.name[0].toUpperCase()}</div>
+        <div style="flex:1;min-width:0">
+          <div class="ac-nm">${x(a.name)}</div>
+          <div class="ac-nick">${a.nickname ? x(a.nickname) : x(a.role_label)}</div>
+        </div>
+      </div>
+      <div class="ac-tags">
+        <span class="tag">${x(a.role_label)}</span>
+        ${a.is_arbiter?'<span class="tag arbiter">⚖ Arbiter</span>':''}
+        ${!a.active   ?'<span class="tag off-tag">Off</span>':''}
+      </div>
+    </div>`).join('');
+}
+
+function renderCC() {
+  const el = document.getElementById('cc-list');
+  if (!agents.length) { el.innerHTML = `<div style="font-size:12px;color:var(--dim);padding:4px 0">No agents yet.</div>`; return; }
+  el.innerHTML = agents.map(a => `
+    <div class="cc-row" id="ccr-${a.id}">
+      <div class="cc-row-top">
+        <div class="cc-av" id="ccav-${a.id}" style="background:${a.active?a.color:'#333'}">${a.name[0].toUpperCase()}</div>
+        <div class="cc-info">
+          <div class="cc-nm">${x(a.name)} ${a.nickname?`<span style="color:var(--dim);font-size:10px;font-weight:400">· ${x(a.nickname)}</span>`:''}</div>
+          <div class="cc-sub">${x(providers[a.provider]?.label||a.provider)} · ${x(a.model)}</div>
+        </div>
+      </div>
+      <div class="cc-row-bot">
+        <div class="cc-acts">
+          <span class="tag" style="margin-right:3px">${x(a.role_label)}</span>
+          ${a.is_arbiter?'<span class="tag arbiter" style="margin-right:3px">⚖</span>':''}
+          <button class="cc-btn" onclick="openModal('${a.id}')">Edit</button>
+          <button class="cc-btn del" onclick="removeAgent('${a.id}')">Remove</button>
+        </div>
+        <div class="tog-wrap">
+          <span class="tog-lbl" id="tl-${a.id}">${a.active?'On':'Off'}</span>
+          <label class="toggle">
+            <input type="checkbox" ${a.active?'checked':''} onchange="toggleAgent('${a.id}',this.checked)">
+            <div class="tog-track"></div>
+            <div class="tog-thumb"></div>
+          </label>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function renderProvGrid() {
+  document.getElementById('prov-grid').innerHTML =
+    Object.entries(providers).map(([id,p]) => {
+      const ok = apiStatus[id] === true;
+      return `<div class="prov-card${ok?' ok':''}">
+        <div class="prov-dot"></div>
+        <div><div class="prov-nm">${x(p.label.split(' ')[0])}</div><div class="prov-st">${ok?'Key configured':'No key set'}</div></div>
+      </div>`;
+    }).join('');
+}
+
+function renderAskBar() {
+  const bar = document.getElementById('ask-bar');
+  bar.innerHTML = '';
+  const active = agents.filter(a => a.active);
+
+  active.forEach(a => {
+    const btn = document.createElement('button');
+    btn.className = 'ask-btn';
+    btn.id = `ab-${a.id}`;
+    btn.textContent = `Ask ${a.nickname || a.name}`;
+    btn.style.cssText = `background:color-mix(in srgb,${a.color} 10%,#1a1a1a);border-color:color-mix(in srgb,${a.color} 35%,#2a2a2a);color:${a.color}`;
+    btn.onclick = () => askAgent(a.id);
+    bar.appendChild(btn);
+  });
+
+  if (active.length > 0) {
+    const sep = document.createElement('div');
+    sep.className = 'bar-sep';
+    bar.appendChild(sep);
+
+    if (active.length > 1) {
+      const all = document.createElement('button');
+      all.className = 'ask-all-btn';
+      all.id = 'ask-all';
+      all.textContent = 'Ask All';
+      all.disabled = isLoading;
+      all.onclick = askAll;
+      bar.appendChild(all);
+    }
+
+    const bs = document.createElement('button');
+    bs.className = 'brainstorm-btn';
+    bs.id = 'brainstorm-btn';
+    bs.textContent = '🧠 Brainstorm';
+    bs.disabled = isLoading;
+    bs.title = 'Send your message to all active agents simultaneously — they each respond independently and can ask you clarifying questions';
+    bs.onclick = brainstorm;
+    bar.appendChild(bs);
+  }
+}
+
+function renderActivePill() {
+  const n  = agents.filter(a => a.active).length;
+  const el = document.getElementById('active-pill');
+  el.textContent = `${n} active`;
+  el.className   = `status-pill${n > 0 ? ' live' : ''}`;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// CONTROL CENTER — user nick + shared context
+// ════════════════════════════════════════════════════════════════════════
+function saveUserNick() {
+  const val = document.getElementById('user-nick-input').value.trim();
+  if (!val) return;
+  userNickname = val;
+  saveState();
+  // Brief visual feedback
+  const btn = document.querySelector('.nick-save');
+  btn.textContent = 'Saved ✓';
+  setTimeout(() => btn.textContent = 'Update', 1500);
+}
+
+function saveSharedCtx() {
+  sharedContext = document.getElementById('shared-ctx-input').value;
+  saveState();
+  const btn = document.getElementById('ctx-save-btn');
+  btn.textContent = 'Saved ✓';
+  btn.classList.add('saved');
+  setTimeout(() => { btn.textContent = 'Save context'; btn.classList.remove('saved'); }, 2000);
+}
+
+function updateCtxChars() {
+  const n = document.getElementById('shared-ctx-input').value.length;
+  document.getElementById('ctx-chars').textContent = `${n.toLocaleString()} characters`;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// AGENT MANAGEMENT
+// ════════════════════════════════════════════════════════════════════════
+function toggleAgent(id, val) {
+  const a = agents.find(a => a.id === id);
+  if (!a) return;
+  a.active = val;
+  const lbl = document.getElementById(`tl-${id}`);
+  const av  = document.getElementById(`ccav-${id}`);
+  if (lbl) lbl.textContent = val ? 'On' : 'Off';
+  if (av)  av.style.background = val ? a.color : '#333';
+  renderSidebar();
+  renderAskBar();
+  renderActivePill();
+  saveState();
+}
+
+function removeAgent(id) {
+  if (!confirm('Remove this agent?')) return;
+  agents = agents.filter(a => a.id !== id);
+  renderAll();
+  saveState();
+}
+
+function openModal(agentId = null) {
+  editId = agentId;
+  document.getElementById('modal-title').textContent = agentId ? 'Edit Agent' : 'Add Agent';
+
+  document.getElementById('swatches').innerHTML = PALETTE.map(c => `
+    <div class="swatch${c===pickedColor?' on':''}" style="background:${c}" onclick="pickColor('${c}')"></div>`).join('');
+
+  if (agentId) {
+    const a = agents.find(a => a.id === agentId);
+    if (a) {
+      document.getElementById('f-name').value      = a.name;
+      document.getElementById('f-nick').value      = a.nickname || '';
+      document.getElementById('f-provider').value  = a.provider;
+      document.getElementById('f-role').value      = a.role_label;
+      document.getElementById('f-soul').value      = a.soul || '';
+      document.getElementById('f-arbiter').checked = a.is_arbiter;
+      pickedColor = a.color;
+      onProvChange(a.model);
+      refreshSwatches();
+    }
+  } else {
+    document.getElementById('f-name').value      = '';
+    document.getElementById('f-nick').value      = '';
+    document.getElementById('f-provider').value  = Object.keys(providers)[0] || 'anthropic';
+    document.getElementById('f-role').value      = '';
+    document.getElementById('f-soul').value      = '';
+    document.getElementById('f-arbiter').checked = false;
+    pickedColor = PALETTE[aidx % PALETTE.length];
+    onProvChange();
+    refreshSwatches();
+  }
+
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('f-name').focus(), 80);
+}
+
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); editId = null; }
+function bgClick(e)   { if (e.target === document.getElementById('modal-overlay')) closeModal(); }
+
+function onProvChange(selectModel = null) {
+  const pid = document.getElementById('f-provider').value;
+  const ms  = providers[pid]?.models || [];
+  const sel = document.getElementById('f-model');
+  sel.innerHTML = ms.map(m => `<option value="${m}">${m}</option>`).join('');
+  if (selectModel && ms.includes(selectModel)) sel.value = selectModel;
+}
+
+function pickColor(c) { pickedColor = c; refreshSwatches(); }
+function refreshSwatches() {
+  document.querySelectorAll('.swatch').forEach(el => {
+    el.classList.toggle('on', el.style.backgroundColor === pickedColor || hex(el.style.backgroundColor) === pickedColor);
+  });
+}
+function hex(rgb) {
+  const m = rgb.match(/\d+/g);
+  return (!m||m.length<3) ? rgb : '#'+m.slice(0,3).map(v=>(+v).toString(16).padStart(2,'0')).join('');
+}
+
+function saveAgent() {
+  const name    = document.getElementById('f-name').value.trim();
+  const nick    = document.getElementById('f-nick').value.trim();
+  const prov    = document.getElementById('f-provider').value;
+  const model   = document.getElementById('f-model').value;
+  const role    = document.getElementById('f-role').value.trim() || 'Agent';
+  const soul    = document.getElementById('f-soul').value.trim();
+  const arbiter = document.getElementById('f-arbiter').checked;
+
+  if (!name) { document.getElementById('f-name').focus(); return; }
+
+  if (editId) {
+    const a = agents.find(a => a.id === editId);
+    if (a) Object.assign(a, { name, nickname:nick, provider:prov, model, role_label:role, color:pickedColor, soul, is_arbiter:arbiter });
+  } else {
+    agents.push({ id:`a${++aidx}`, name, nickname:nick, provider:prov, model, role_label:role,
+      color:pickedColor, soul, is_arbiter:arbiter, active:true });
+  }
+
+  closeModal();
+  renderAll();
+  saveState();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// CONVERSATION
+// ════════════════════════════════════════════════════════════════════════
+function sendMsg() {
+  const inp  = document.getElementById('msg-input');
+  const text = inp.value.trim();
+  if (!text || isLoading) return;
+  addMsg({ role:'user', content:text });
+  inp.value = '';
+  autoResize(inp);
+  rmEmpty();
+}
+
+function addMsg(m) {
+  const entry = { id:`m${++midx}`, ts:Date.now(), ...m };
+  conversation.push(entry);
+  renderMsg(entry);
+  scrollEnd();
+}
+
+function renderMsg(m) {
+  const wrap = document.getElementById('messages');
+  const d    = document.createElement('div');
+  d.id = `msg-${m.id}`;
+  d.className = `msg ${m.role==='user'?'u':'a'}`;
+  const ts = new Date(m.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+
+  if (m.role === 'user') {
+    d.innerHTML = `
+      <div class="msg-meta" style="justify-content:flex-end">
+        <span class="m-ts">${ts}</span>
+        <span class="m-nm" style="color:var(--muted)">You</span>
+        <div class="m-av" style="background:#252545">Y</div>
+      </div>
+      <div class="bubble">${x(m.content)}</div>`;
+  } else {
+    const nickLabel = m.agent_nick ? `<span class="m-nick">· ${x(m.agent_nick)}</span>` : '';
+    d.innerHTML = `
+      <div class="msg-meta">
+        <div class="m-av" style="background:${m.agent_color}">${m.agent_name[0].toUpperCase()}</div>
+        <span class="m-nm" style="color:${m.agent_color}">${x(m.agent_name)}</span>
+        ${nickLabel}
+        <span class="m-ts">${ts}</span>
+      </div>
+      <div class="bubble">${x(m.content)}</div>`;
+  }
+  wrap.appendChild(d);
+}
+
+function addDivider(label) {
+  const el  = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'brainstorm-divider';
+  div.innerHTML = `<span>${x(label)}</span>`;
+  el.appendChild(div);
+  scrollEnd();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// AGENT CALLS
+// ════════════════════════════════════════════════════════════════════════
+async function callAgent(agent) {
+  const tid = showTyping(agent);
+  try {
+    const res = await fetch('/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        provider:      agent.provider,
+        model:         agent.model,
+        agent_id:      agent.id,
+        system_prompt: buildSystemPrompt(agent),
+        conversation:  conversation.map(m => ({
+          role:       m.role,
+          agent_id:   m.agent_id   || null,
+          agent_name: m.agent_name || null,
+          content:    m.content,
+        })),
+      }),
+    });
+    const data = await res.json();
+    removeTyping(tid);
+    if (data.error) showErr(agent, data.error);
+    else addMsg({ role:'agent', agent_id:agent.id, agent_name:agent.name,
+      agent_nick:agent.nickname, agent_color:agent.color, role_label:agent.role_label, content:data.content });
+  } catch(err) {
+    removeTyping(tid);
+    showErr(agent, `Server not reachable. Is app.py running? (${err.message})`);
+  }
+}
+
+async function askAgent(aid) {
+  if (isLoading) return;
+  const a = agents.find(a => a.id === aid);
+  if (!a) return;
+  setLoading(true, aid);
+  rmEmpty();
+  await callAgent(a);
+  setLoading(false);
+}
+
+async function askAll() {
+  if (isLoading) return;
+  const active = agents.filter(a => a.active);
+  if (!active.length) return;
+  setLoading(true);
+  rmEmpty();
+  for (const a of active) await callAgent(a);
+  setLoading(false);
+}
+
+// ── Brainstorm: all agents respond simultaneously ─────────────────────
+async function brainstorm() {
+  if (isLoading) return;
+  const active = agents.filter(a => a.active);
+  if (!active.length) return;
+
+  // If there's text in the input, send it as a user message first
+  const inp  = document.getElementById('msg-input');
+  const text = inp.value.trim();
+  if (text) {
+    addMsg({ role:'user', content:text });
+    inp.value = '';
+    autoResize(inp);
+  } else if (!conversation.length) {
+    return; // nothing to brainstorm on
+  }
+
+  rmEmpty();
+  setLoading(true);
+  addDivider(`🧠 Brainstorm — ${active.length} agent${active.length>1?'s':''} responding`);
+
+  // Show all typing indicators immediately
+  const typingIds = {};
+  active.forEach(a => { typingIds[a.id] = showTyping(a); });
+
+  // Fire all requests simultaneously
+  await Promise.all(active.map(async (a) => {
+    try {
+      const res = await fetch('/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          provider:      a.provider,
+          model:         a.model,
+          agent_id:      a.id,
+          system_prompt: buildSystemPrompt(a),
+          conversation:  conversation.map(m => ({
+            role:       m.role,
+            agent_id:   m.agent_id   || null,
+            agent_name: m.agent_name || null,
+            content:    m.content,
+          })),
+        }),
+      });
+      const data = await res.json();
+      removeTyping(typingIds[a.id]);
+      if (data.error) showErr(a, data.error);
+      else addMsg({ role:'agent', agent_id:a.id, agent_name:a.name,
+        agent_nick:a.nickname, agent_color:a.color, role_label:a.role_label, content:data.content });
+    } catch(err) {
+      removeTyping(typingIds[a.id]);
+      showErr(a, `Server not reachable (${err.message})`);
+    }
+  }));
+
+  setLoading(false);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// UI HELPERS
+// ════════════════════════════════════════════════════════════════════════
+function setLoading(val, aid = null) {
+  isLoading = val;
+  document.getElementById('send-btn').disabled = val;
+  document.querySelectorAll('.ask-btn').forEach(b => {
+    b.disabled = val;
+    b.style.opacity = (val && b.id !== `ab-${aid}`) ? '0.35' : '1';
+  });
+  const all = document.getElementById('ask-all');
+  if (all) all.disabled = val;
+  const bs = document.getElementById('brainstorm-btn');
+  if (bs)  bs.disabled  = val;
+}
+
+function showTyping(a) {
+  const id = `t${Date.now()}-${a.id}`;
+  const d  = document.createElement('div');
+  d.id = id; d.className = 'typing-row';
+  d.innerHTML = `
+    <div class="m-av" style="background:${a.color}">${a.name[0].toUpperCase()}</div>
+    <span style="font-size:11.5px;color:${a.color}">${x(a.nickname||a.name)}</span>
+    <div class="dots"><span></span><span></span><span></span></div>`;
+  document.getElementById('messages').appendChild(d);
+  scrollEnd();
+  return id;
+}
+
+function removeTyping(id) { const e = document.getElementById(id); if(e) e.remove(); }
+
+function showErr(a, msg) {
+  const d = document.createElement('div');
+  d.className = 'err-msg';
+  d.innerHTML = `<strong>${x(a.name)} error:</strong> ${x(msg)}`;
+  document.getElementById('messages').appendChild(d);
+  scrollEnd();
+}
+
+function rmEmpty()   { const e=document.getElementById('empty-state'); if(e) e.remove(); }
+function scrollEnd() { const e=document.getElementById('messages'); e.scrollTop=e.scrollHeight; }
+
+function clearChat() {
+  if (!conversation.length) return;
+  if (!confirm('Clear the conversation? Agents keep their souls and shared context — just the chat history resets.')) return;
+  conversation = [];
+  midx = 0;
+  document.getElementById('messages').innerHTML = `
+    <div class="empty-state" id="empty-state">
+      <div class="empty-icon">🤖</div>
+      <div class="empty-title">Chat cleared</div>
+      <div class="empty-sub">Fresh start. Your agent configs and shared context are still saved.</div>
+    </div>`;
+}
+
+function exportChat() {
+  if (!conversation.length) return;
+  const lines = [
+    'MULTI-AGENT CHAT TRANSCRIPT',
+    '============================',
+    `Date: ${new Date().toLocaleString()}`,
+    `User nickname: ${userNickname}`,
+    `Agents: ${agents.map(a=>`${a.name}${a.nickname?' ('+a.nickname+')':''} [${a.role_label}] — ${a.provider}/${a.model}`).join(', ')}`,
+    sharedContext ? `\nShared Context:\n${sharedContext}` : '',
+    '',
+  ];
+  conversation.forEach(m => {
+    const ts = new Date(m.ts).toLocaleTimeString();
+    const who = m.role==='user' ? userNickname||'You' : `${m.agent_name}${m.agent_nick?' ('+m.agent_nick+')':''}`;
+    lines.push(`[${ts}] ${who}:\n${m.content}\n`);
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/plain'}));
+  a.download = `agent-chat-${Date.now()}.txt`;
+  a.click();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// CONTROL CENTER
+// ════════════════════════════════════════════════════════════════════════
+function toggleCC() { ccOpen ? closeCC() : openCC(); }
+
+function openCC() {
+  ccOpen = true;
+  // Refresh live status
+  loadApiStatus().then(renderProvGrid);
+  renderCC();
+  // Sync inputs
+  document.getElementById('user-nick-input').value  = userNickname;
+  document.getElementById('shared-ctx-input').value = sharedContext;
+  updateCtxChars();
+  document.getElementById('cc-overlay').classList.add('open');
+  document.getElementById('cc-drawer').classList.add('open');
+  document.getElementById('cc-btn').classList.add('open');
+}
+
+function closeCC() {
+  ccOpen = false;
+  document.getElementById('cc-overlay').classList.remove('open');
+  document.getElementById('cc-drawer').classList.remove('open');
+  document.getElementById('cc-btn').classList.remove('open');
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════════════════════════
+function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,130)+'px'; }
+function x(s) {
+  if(!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+          .replace(/"/g,'&quot;').replace(/\n/g,'<br>');
+}
+
+init();
+</script>
+</body>
+</html>

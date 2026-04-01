@@ -278,6 +278,12 @@ Current planning recommendation:
 - first target: Kit
 - strongest alternative if GEO-Pulse later wants a dedicated publishing system: Ghost
 
+Current implementation note:
+- Kit and Ghost now both exist as downstream draft-push adapters in the repo
+- this does not change the canonical architecture decision
+- GEO-Pulse still owns canonical content records and still needs a real public blog surface
+- Ghost should still be treated as a destination unless GEO-Pulse explicitly chooses a bigger publishing-system change
+
 Selection criteria for the first newsletter/distribution platform:
 - API quality
 - ability to push posts programmatically

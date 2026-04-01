@@ -68,6 +68,14 @@ type DeliveryRow = {
   readonly created_at: string;
 };
 
+function readRequiredText(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+function readOptionalText(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
 export function createContentAdminData(supabase: SupabaseLike) {
   return {
     async getRecentContentItems(filters: ContentAdminFilters = {}): Promise<ContentAdminListRow[]> {
@@ -113,6 +121,15 @@ export function createContentAdminData(supabase: SupabaseLike) {
 
         return {
           ...item,
+          content_id: readRequiredText(item.content_id),
+          slug: readRequiredText(item.slug),
+          title: readRequiredText(item.title),
+          status: readRequiredText(item.status),
+          content_type: readRequiredText(item.content_type),
+          cta_goal: readRequiredText(item.cta_goal),
+          canonical_url: readOptionalText(item.canonical_url),
+          created_at: readRequiredText(item.created_at),
+          updated_at: readRequiredText(item.updated_at),
           delivery_count: itemDeliveries.length,
           published_delivery_count: itemDeliveries.filter((delivery) => delivery.status === 'published')
             .length,
@@ -146,6 +163,18 @@ export function createContentAdminData(supabase: SupabaseLike) {
 
       return {
         ...item,
+        content_id: readRequiredText(item.content_id),
+        slug: readRequiredText(item.slug),
+        title: readRequiredText(item.title),
+        status: readRequiredText(item.status),
+        content_type: readRequiredText(item.content_type),
+        cta_goal: readRequiredText(item.cta_goal),
+        source_type: readRequiredText(item.source_type),
+        brief_markdown: readOptionalText(item.brief_markdown),
+        draft_markdown: readOptionalText(item.draft_markdown),
+        canonical_url: readOptionalText(item.canonical_url),
+        created_at: readRequiredText(item.created_at),
+        updated_at: readRequiredText(item.updated_at),
         source_links: Array.isArray(item.source_links) ? item.source_links : [],
         metadata: item.metadata ?? {},
         deliveries: (deliveries ?? []) as DeliveryRow[],

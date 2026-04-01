@@ -37,6 +37,9 @@ interface CloudflareEnv {
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   KIT_API_KEY?: string;
+  GHOST_ADMIN_API_URL?: string;
+  GHOST_ADMIN_API_KEY?: string;
+  GHOST_ADMIN_API_VERSION?: string;
   DEEP_AUDIT_INTERNAL_REWRITE_ENABLED?: string;
   DEEP_AUDIT_INTERNAL_REWRITE_MODEL?: string;
   /** Optional — set when R2 bucket exposes a public base URL for report links. */

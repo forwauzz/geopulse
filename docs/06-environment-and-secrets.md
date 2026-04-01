@@ -129,16 +129,21 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - content admin/editor pages still use the shared server-side env loader in `lib/server/cf-env.ts`
 - the first real destination adapter is Kit, so draft pushes from `/dashboard/content/[contentId]` require:
   - `KIT_API_KEY`
+- the second adapter is Ghost, so Ghost draft pushes require:
+  - `GHOST_ADMIN_API_URL`
+  - `GHOST_ADMIN_API_KEY`
+  - optional: `GHOST_ADMIN_API_VERSION`
 - current behavior:
   - GEO-Pulse converts the stored markdown into simple HTML
   - pushes a draft broadcast to Kit via API
+  - pushes a draft post to Ghost via the Ghost Admin API
   - stores the downstream delivery record in `content_distribution_deliveries`
-  - resolves destination readiness in admin from both feature flags and `KIT_API_KEY`
+  - resolves destination readiness in admin from both feature flags and provider env such as `KIT_API_KEY` and Ghost Admin credentials
   - writes push lifecycle events into `app_logs`, visible at `/dashboard/logs`
 - current non-goals:
   - no auto-send to subscribers
   - no provider-side connectivity or send-permission probe yet
-  - no provider adapter beyond Kit yet
+  - no provider adapter beyond Kit and Ghost yet
 
 ### Internal benchmarks
 - Supabase URL + service role key

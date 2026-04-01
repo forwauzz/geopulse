@@ -222,4 +222,85 @@ describe('createContentAdminData', () => {
       ],
     });
   });
+
+  it('normalizes null text fields from legacy content rows', async () => {
+    const supabase = {
+      from(table: string) {
+        if (table === 'content_items') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return {
+                maybeSingle() {
+                  return Promise.resolve({
+                    data: {
+                      id: 'item-2',
+                      content_id: 'legacy-item',
+                      slug: null,
+                      title: null,
+                      status: null,
+                      content_type: 'research_note',
+                      target_persona: null,
+                      primary_problem: null,
+                      topic_cluster: null,
+                      keyword_cluster: null,
+                      cta_goal: null,
+                      source_type: null,
+                      source_links: null,
+                      brief_markdown: null,
+                      draft_markdown: null,
+                      canonical_url: null,
+                      metadata: null,
+                      published_at: null,
+                      created_at: null,
+                      updated_at: null,
+                    },
+                    error: null,
+                  });
+                },
+              };
+            },
+          };
+        }
+
+        if (table === 'content_distribution_deliveries') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({
+                data: [],
+                error: null,
+              });
+            },
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      },
+    } as any;
+
+    const row = await createContentAdminData(supabase).getContentItemDetail('legacy-item');
+
+    expect(row).toMatchObject({
+      content_id: 'legacy-item',
+      slug: '',
+      title: '',
+      status: '',
+      cta_goal: '',
+      source_type: '',
+      brief_markdown: null,
+      draft_markdown: null,
+      created_at: '',
+      updated_at: '',
+      source_links: [],
+      metadata: {},
+    });
+  });
 });
