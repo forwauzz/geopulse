@@ -36,8 +36,10 @@ describe('buildImmediateWins', () => {
     expect(wins).toHaveLength(2);
     expect(wins[0]?.checkId).toBe('ai-crawler-access');
     expect(wins[0]?.who).toBe('Engineering');
+    expect(wins[0]?.why).toContain('less likely to be reused');
     expect(wins[1]?.checkId).toBe('llm-qa-pattern');
     expect(wins[1]?.effort).toBe('Moderate');
+    expect(wins[1]?.why).toContain('answer likely buyer questions directly');
   });
 
   it('excludes issues without owner, low weight, or blocked status', () => {

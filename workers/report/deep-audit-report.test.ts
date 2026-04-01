@@ -145,10 +145,12 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('example.com');
     expect(md).toContain('50/100');
     expect(md).toContain('section docs');
+    expect(md).toContain('The site has meaningful readiness gaps');
+    expect(md).toContain('Start with Update robots.txt to allow AI crawlers');
     expect(md).toContain('## Immediate Wins');
     expect(md).toContain('**Who:** Engineering');
     expect(md).toContain('**Effort:** Quick');
-    expect(md).toContain('Per-Page Checklist');
+    expect(md).toContain('## Page-Level Reference');
     expect(md).toContain('_(no non-passing issue rows)_');
     expect(md).toContain('Coverage Summary');
     expect(md).toContain('Technical Appendix');
@@ -157,6 +159,8 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('| Meta | FAIL | 6 | missing |');
     expect(md).not.toContain('- **Title** [PASS]');
     expect(md).toContain('- **Meta** [FAIL]\n  - Fix: Add a meta description');
+    expect(md).toContain('**Owner:** Unassigned');
+    expect(md).toContain('**Why it matters:** missing');
   });
 
   it('replaces raw low-confidence transport evidence with bounded wording', () => {
@@ -218,6 +222,146 @@ describe('buildDeepAuditMarkdown', () => {
     const md = buildDeepAuditMarkdown(payload);
     expect(md).not.toContain('http_403');
     expect(md).toContain('could not confidently evaluate this check');
+  });
+
+  it('summarizes repeated page-level issues before the raw page reference', () => {
+    const payload = buildDeepAuditReportPayload({
+      scanId: 's-repeat',
+      runId: 'r-repeat',
+      domain: 'example.com',
+      seedUrl: 'https://example.com/',
+      aggregateScore: 48,
+      aggregateLetterGrade: 'F',
+      pages: [
+        {
+          url: 'https://example.com/a',
+          score: 48,
+          letter_grade: 'F',
+          issues_json: [
+            {
+              checkId: 'json-ld',
+              check: 'Schema.org type coverage',
+              status: 'FAIL',
+              finding: 'No Schema.org @type values found.',
+            },
+          ],
+          section: 'docs',
+        },
+        {
+          url: 'https://example.com/b',
+          score: 49,
+          letter_grade: 'F',
+          issues_json: [
+            {
+              checkId: 'json-ld',
+              check: 'Schema.org type coverage',
+              status: 'FAIL',
+              finding: 'No Schema.org @type values found.',
+            },
+          ],
+          section: 'blog',
+        },
+      ],
+      coverageSummary: { pages_fetched: 2, pages_errored: 0, robots_status: 200 },
+      highlightedIssues: [],
+      allIssues: [],
+      generatedAt: '2026-03-25T12:00:00.000Z',
+    });
+
+    const md = buildDeepAuditMarkdown(payload);
+    expect(md).toContain('## Repeated Page Patterns');
+    expect(md).toContain('**Schema.org type coverage** appears on 2 pages.');
+    expect(md).toContain('## Page-Level Reference');
+  });
+
+  it('adds a compact question-answer readiness section from existing content checks', () => {
+    const payload = buildDeepAuditReportPayload({
+      scanId: 's-demand',
+      runId: 'r-demand',
+      domain: 'example.com',
+      seedUrl: 'https://example.com/',
+      aggregateScore: 52,
+      aggregateLetterGrade: 'C',
+      pages: [],
+      coverageSummary: { pages_fetched: 1, pages_errored: 0, robots_status: 200 },
+      highlightedIssues: [],
+      allIssues: [
+        {
+          checkId: 'llm-qa-pattern',
+          check: 'Q&A / instructional structure (LLM)',
+          status: 'FAIL',
+          finding: 'Pages do not answer likely buyer questions directly.',
+          fix: 'Restructure key pages into a clear question-and-answer format.',
+        },
+        {
+          checkId: 'llm-extractability',
+          check: 'Content extractability (LLM)',
+          status: 'LOW_CONFIDENCE',
+          finding: 'The page content may be difficult for machine retrieval to interpret.',
+          fix: 'Strengthen the opening summary and heading follow-up content.',
+        },
+      ],
+      generatedAt: '2026-03-25T12:00:00.000Z',
+    });
+
+    const md = buildDeepAuditMarkdown(payload);
+    expect(md).toContain('## Question-Answer Readiness');
+    expect(md).toContain('**Direct question-answer structure** [FAIL]');
+    expect(md).toContain('**Clear answer extraction** [LOW_CONFIDENCE]');
+    expect(md).toContain('**First move:** Restructure key pages into a clear question-and-answer format.');
+  });
+
+  it('renders generic low-confidence findings as bounded verification language', () => {
+    const payload = buildDeepAuditReportPayload({
+      scanId: 's-low',
+      runId: 'r-low',
+      domain: 'example.com',
+      seedUrl: 'https://example.com/',
+      aggregateScore: 44,
+      aggregateLetterGrade: 'F',
+      pages: [
+        {
+          url: 'https://example.com/p',
+          score: 44,
+          letter_grade: 'F',
+          issues_json: [
+            {
+              checkId: 'llm-extractability',
+              check: 'Content extractability (LLM)',
+              status: 'LOW_CONFIDENCE',
+              finding: 'The page content may be difficult for machine retrieval to interpret.',
+              fix: 'Strengthen the opening summary and heading follow-up content.',
+            },
+          ],
+          section: 'docs',
+        },
+      ],
+      coverageSummary: { pages_fetched: 1, pages_errored: 0, robots_status: 200 },
+      highlightedIssues: [
+        {
+          checkId: 'llm-extractability',
+          check: 'Content extractability (LLM)',
+          status: 'LOW_CONFIDENCE',
+          weight: 10,
+          finding: 'The page content may be difficult for machine retrieval to interpret.',
+          fix: 'Strengthen the opening summary and heading follow-up content.',
+        },
+      ],
+      allIssues: [
+        {
+          checkId: 'llm-extractability',
+          check: 'Content extractability (LLM)',
+          status: 'LOW_CONFIDENCE',
+          weight: 10,
+          finding: 'The page content may be difficult for machine retrieval to interpret.',
+          fix: 'Strengthen the opening summary and heading follow-up content.',
+        },
+      ],
+      generatedAt: '2026-03-25T12:00:00.000Z',
+    });
+
+    const md = buildDeepAuditMarkdown(payload);
+    expect(md).toContain('not strong enough to treat as a confirmed diagnosis');
   });
 });
 

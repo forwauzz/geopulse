@@ -1,8 +1,10 @@
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
   customerFacingFinding,
+  deriveDemandCoverageSignals,
   parseIssues,
   scoreNarrative,
+  summarizePageIssuePatterns,
   type IssueRow,
 } from './deep-audit-report-helpers';
 
@@ -25,6 +27,10 @@ function severityLabel(weight: number | undefined): string {
   return 'Low';
 }
 
+function ownerLabel(row: IssueRow): string {
+  return row.teamOwner ?? 'Unassigned';
+}
+
 function issueStatusLabel(row: IssueRow): string {
   return row.status ?? (row.passed === true ? 'PASS' : row.passed === false ? 'FAIL' : '—');
 }
@@ -32,6 +38,30 @@ function issueStatusLabel(row: IssueRow): string {
 function parseCoverageSummary(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   return raw as Record<string, unknown>;
+}
+
+function enrichIssues(primary: IssueRow[], fallback: IssueRow[]): IssueRow[] {
+  const fallbackByKey = new Map<string, IssueRow>();
+  for (const row of fallback) {
+    const key = row.checkId ?? row.check ?? '';
+    if (key && !fallbackByKey.has(key)) {
+      fallbackByKey.set(key, row);
+    }
+  }
+
+  return primary.map((row) => {
+    const key = row.checkId ?? row.check ?? '';
+    const base = key ? fallbackByKey.get(key) : undefined;
+    if (!base) return row;
+    return {
+      ...base,
+      ...row,
+      teamOwner: row.teamOwner ?? base.teamOwner,
+      finding: row.finding ?? base.finding,
+      fix: row.fix ?? base.fix,
+      weight: row.weight ?? base.weight,
+    };
+  });
 }
 
 /**
@@ -52,19 +82,22 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   lines.push('');
 
   const allIssues = parseIssues(payload.allIssues);
-  const topIssues = parseIssues(payload.highlightedIssues);
+  const topIssues = enrichIssues(parseIssues(payload.highlightedIssues), allIssues);
   const totalChecks = allIssues.length;
   const passedChecks = allIssues.filter((i) => issueStatusLabel(i) === 'PASS').length;
   const failedSorted = topIssues
     .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const repeatedPagePatterns = summarizePageIssuePatterns(payload.pages);
+  const demandCoverageSignals = deriveDemandCoverageSignals(allIssues);
 
   lines.push('## Executive Summary');
   lines.push('');
   const topIssueName = failedSorted[0]?.check ?? failedSorted[0]?.checkId ?? '';
+  const firstMove = payload.immediateWins[0]?.what ?? failedSorted[0]?.fix ?? '';
   const score = payload.aggregateScore ?? 0;
   const grade = payload.aggregateLetterGrade ?? '—';
-  lines.push(scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName));
+  lines.push(scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName, firstMove));
   lines.push('');
 
   if (payload.immediateWins.length > 0) {
@@ -129,6 +162,24 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     lines.push('');
   }
 
+  if (demandCoverageSignals.length > 0) {
+    lines.push('## Question-Answer Readiness');
+    lines.push('');
+    lines.push(
+      'This section summarizes whether key pages are currently shaped to answer likely buyer questions clearly enough for machine retrieval and reuse.'
+    );
+    lines.push('');
+    for (let i = 0; i < demandCoverageSignals.length; i += 1) {
+      const signal = demandCoverageSignals[i]!;
+      lines.push(`${String(i + 1)}. **${signal.title}** [${signal.status}]`);
+      lines.push(`   - ${signal.summary}`);
+      if (signal.firstMove) {
+        lines.push(`   - **First move:** ${signal.firstMove}`);
+      }
+    }
+    lines.push('');
+  }
+
   if (failedSorted.length > 0) {
     lines.push('## Priority Action Plan');
     lines.push('');
@@ -138,8 +189,9 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
       const sev = severityLabel(row.weight);
       const finding = customerFacingFinding(row);
       lines.push(`${String(i + 1)}. **${title}** [${sev}]`);
-      if (finding) lines.push(`   - ${finding}`);
-      if (row.fix) lines.push(`   - **Fix:** ${row.fix}`);
+      lines.push(`   - **Owner:** ${ownerLabel(row)}`);
+      if (finding) lines.push(`   - **Why it matters:** ${finding}`);
+      if (row.fix) lines.push(`   - **First move:** ${row.fix}`);
     }
     lines.push('');
   }
@@ -168,8 +220,24 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   }
   lines.push('');
 
+  if (repeatedPagePatterns.length > 0) {
+    lines.push('## Repeated Page Patterns');
+    lines.push('');
+    for (let i = 0; i < repeatedPagePatterns.length; i += 1) {
+      const pattern = repeatedPagePatterns[i]!;
+      lines.push(
+        `${String(i + 1)}. **${pattern.checkName}** appears on ${String(pattern.affectedPages)} pages.`
+      );
+      if (pattern.sampleFinding) {
+        lines.push(`   - ${pattern.sampleFinding}`);
+      }
+      lines.push(`   - Sample pages: ${pattern.sampleUrls.map((url) => markdownInline(url)).join(', ')}`);
+    }
+    lines.push('');
+  }
+
   if (payload.pages.length > 1) {
-    lines.push('## Per-Page Checklist');
+    lines.push('## Page-Level Reference');
     lines.push('');
     for (const pg of payload.pages) {
       lines.push(`### ${pg.url}`);
