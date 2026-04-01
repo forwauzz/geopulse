@@ -9,6 +9,7 @@ import { resolveAgencyModelPolicy } from '@/lib/server/agency-model-policy';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import { structuredLog } from '@/lib/server/structured-log';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 import { optionalAttributionFields } from '@services/marketing-attribution/attribution-params';
 
@@ -116,6 +117,11 @@ export async function POST(request: Request): Promise<Response> {
           agencyClientId: agencyClientId ?? null,
         });
         if (!entitlements.scanLaunchEnabled) {
+          structuredLog('agency_scan_launch_blocked', {
+            userId: user.id,
+            agencyAccountId,
+            agencyClientId: agencyClientId ?? null,
+          });
           return Response.json(
             {
               error: {
@@ -130,6 +136,11 @@ export async function POST(request: Request): Promise<Response> {
           agencyAccountId,
           agencyClientId: agencyClientId ?? null,
         };
+        structuredLog('agency_scan_context_resolved', {
+          userId: user.id,
+          agencyAccountId,
+          agencyClientId: agencyClientId ?? null,
+        }, 'info');
       }
     } catch {
       agencyContext = null;
@@ -186,6 +197,15 @@ export async function POST(request: Request): Promise<Response> {
       { status: 500 }
     );
   }
+
+  structuredLog('scan_completed_persisted', {
+    scanId: row.id,
+    userId: agencyContext ? sessionUserId : null,
+    agencyAccountId: agencyContext?.agencyAccountId ?? null,
+    agencyClientId: agencyContext?.agencyClientId ?? null,
+    runSource: agencyContext ? 'agency_dashboard' : 'public_self_serve',
+    effectiveModel: scanModelPolicy.effectiveModel,
+  }, 'info');
 
   await emitMarketingEvent(supabaseForAttr, 'scan_completed', {
     ...attrCtx,
