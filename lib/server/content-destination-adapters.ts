@@ -20,7 +20,7 @@ export type ContentDestinationAdapter = {
   publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult>;
 };
 
-const ADAPTER_PROVIDERS = new Set(['ghost', 'kit']);
+const ADAPTER_PROVIDERS = new Set(['buttondown', 'ghost', 'kit']);
 
 function escapeHtml(value: string): string {
   return value
@@ -220,6 +220,65 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
   }
 }
 
+class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
+  async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
+    if (!request.env.BUTTONDOWN_API_KEY) {
+      throw new Error('BUTTONDOWN_API_KEY is missing.');
+    }
+
+    const markdown = getDraftBody(request.item);
+    const previewText = buildPreviewText(markdown);
+
+    const response = await fetch('https://api.buttondown.com/v1/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Token ${request.env.BUTTONDOWN_API_KEY}`,
+      },
+      body: JSON.stringify({
+        subject: request.item.title,
+        body: markdown,
+        status: 'draft',
+        description: `Draft pushed from GEO-Pulse content item ${request.item.content_id}`,
+        canonical_url: request.item.canonical_url,
+        metadata: {
+          geopulse_content_id: request.item.content_id,
+          geopulse_topic_cluster: request.item.topic_cluster,
+          preview_text: previewText,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Buttondown publish failed (${response.status}): ${errorText}`);
+    }
+
+    const json = (await response.json()) as {
+      id?: string;
+      absolute_url?: string | null;
+      creation_date?: string | null;
+      status?: string | null;
+    };
+
+    const providerPublicationId = json.id?.trim() ?? '';
+    if (!providerPublicationId) {
+      throw new Error('Buttondown publish succeeded but no email id was returned.');
+    }
+
+    return {
+      providerPublicationId,
+      destinationUrl: json.absolute_url ?? null,
+      status: 'drafted',
+      metadata: {
+        provider: 'buttondown',
+        creation_date: json.creation_date ?? null,
+        buttondown_status: json.status ?? 'draft',
+      },
+    };
+  }
+}
+
 class GhostContentDestinationAdapter implements ContentDestinationAdapter {
   async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
     if (!request.env.GHOST_ADMIN_API_URL) {
@@ -292,6 +351,8 @@ export function resolveContentDestinationAdapter(
   destination: ContentDestinationRow
 ): ContentDestinationAdapter {
   switch (destination.provider_name) {
+    case 'buttondown':
+      return new ButtondownContentDestinationAdapter();
     case 'ghost':
       return new GhostContentDestinationAdapter();
     case 'kit':

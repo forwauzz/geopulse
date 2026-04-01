@@ -5,6 +5,7 @@
 - target persona: SEO consultants
 - secondary persona: in-house content teams
 - working title: Crawlable but Not Extractable: The Gap Most Teams Miss
+- topic cluster: ai_search_readiness
 
 ## Problem
 - core problem: teams assume that if a page is reachable, it is also usable to AI systems

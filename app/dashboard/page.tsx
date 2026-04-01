@@ -64,7 +64,7 @@ export default async function DashboardPage() {
   const deepAuditCount = reportList.filter((r) => r.type === 'deep_audit').length;
 
   return (
-    <main className="mx-auto min-h-[60vh] max-w-3xl px-6 py-16">
+    <section className="min-h-[60vh]">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -79,40 +79,11 @@ export default async function DashboardPage() {
           >
             New scan
           </Link>
-          {isAdminEmail(user.email) && (
-            <>
-              <Link
-                href="/dashboard/attribution"
-                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
-              >
-                Attribution
-              </Link>
-              <Link
-                href="/dashboard/evals"
-                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
-              >
-                Eval analytics
-              </Link>
-              <Link
-                href="/dashboard/benchmarks"
-                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
-              >
-                Benchmarks
-              </Link>
-              <Link
-                href="/dashboard/content"
-                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
-              >
-                Content
-              </Link>
-              <Link
-                href="/dashboard/logs"
-                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
-              >
-                Logs
-              </Link>
-            </>
-          )}
+          {isAdminEmail(user.email) ? (
+            <span className="rounded-xl bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-surface-variant">
+              Admin tools in left menu
+            </span>
+          ) : null}
           <form action={signOut}>
             <button
               type="submit"
@@ -234,6 +205,6 @@ export default async function DashboardPage() {
           })
         )}
       </ul>
-    </main>
+    </section>
   );
 }

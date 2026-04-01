@@ -26,6 +26,7 @@ export type PaymentApiEnv = ScanApiEnv & {
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   KIT_API_KEY: string;
+  BUTTONDOWN_API_KEY: string;
   GHOST_ADMIN_API_URL: string;
   GHOST_ADMIN_API_KEY: string;
   GHOST_ADMIN_API_VERSION: string;
@@ -131,6 +132,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: pickEnvString(e, 'RESEND_API_KEY'),
       RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
       KIT_API_KEY: pickEnvString(e, 'KIT_API_KEY'),
+      BUTTONDOWN_API_KEY: pickEnvString(e, 'BUTTONDOWN_API_KEY'),
       GHOST_ADMIN_API_URL: pickEnvString(e, 'GHOST_ADMIN_API_URL'),
       GHOST_ADMIN_API_KEY: pickEnvString(e, 'GHOST_ADMIN_API_KEY'),
       GHOST_ADMIN_API_VERSION: pickEnvString(e, 'GHOST_ADMIN_API_VERSION'),
@@ -151,6 +153,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
       KIT_API_KEY: process.env['KIT_API_KEY'] ?? '',
+      BUTTONDOWN_API_KEY: process.env['BUTTONDOWN_API_KEY'] ?? '',
       GHOST_ADMIN_API_URL: process.env['GHOST_ADMIN_API_URL'] ?? '',
       GHOST_ADMIN_API_KEY: process.env['GHOST_ADMIN_API_KEY'] ?? '',
       GHOST_ADMIN_API_VERSION: process.env['GHOST_ADMIN_API_VERSION'] ?? '',

@@ -5,6 +5,7 @@
 - target persona: agency owners
 - secondary persona: SEO consultants
 - working title: Why Schema Is Necessary but Not Sufficient
+- topic cluster: ai_search_readiness
 
 ## Problem
 - core problem: teams often assume schema implementation alone will solve AI visibility problems

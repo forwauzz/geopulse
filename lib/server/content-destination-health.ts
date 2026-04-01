@@ -62,6 +62,23 @@ export function evaluateContentDestinationHealth(
     };
   }
 
+  if (destination.provider_name === 'buttondown') {
+    if (!env.BUTTONDOWN_API_KEY) {
+      return {
+        availabilityStatus: 'not_configured',
+        availabilityReason:
+          'BUTTONDOWN_API_KEY is missing, so draft pushes cannot be sent to Buttondown.',
+        readyToPush: false,
+      };
+    }
+
+    return {
+      availabilityStatus: 'available',
+      availabilityReason: 'Buttondown adapter is configured and ready for draft pushes.',
+      readyToPush: true,
+    };
+  }
+
   if (destination.provider_name === 'ghost') {
     if (!env.GHOST_ADMIN_API_URL) {
       return {
