@@ -8,6 +8,8 @@ type Props = {
   searchParams?: Promise<{
     level?: string;
     event?: string;
+    q?: string;
+    limit?: string;
   }>;
 };
 
@@ -21,18 +23,47 @@ function formatTs(iso: string): string {
   });
 }
 
-function buildHref(level: string, event: string): string {
+function buildHref(level: string, event: string, q: string, limit: string): string {
   const params = new URLSearchParams();
   if (level && level !== 'all') params.set('level', level);
   if (event && event !== 'all') params.set('event', event);
+  if (q.trim()) params.set('q', q.trim());
+  if (limit && limit !== '200') params.set('limit', limit);
   const query = params.toString();
   return query ? `/dashboard/logs?${query}` : '/dashboard/logs';
+}
+
+function summarizePayload(data: Record<string, unknown>): string {
+  const keys = [
+    'scanId',
+    'paymentId',
+    'scanRunId',
+    'runId',
+    'agencyAccountId',
+    'agencyClientId',
+    'stripeSessionId',
+    'message',
+    'reason',
+    'status',
+  ] as const;
+
+  const parts = keys
+    .map((key) => {
+      const value = data[key];
+      if (value == null || value === '') return null;
+      return `${key}: ${String(value)}`;
+    })
+    .filter((value): value is string => !!value);
+
+  return parts.join(' | ');
 }
 
 export default async function AdminLogsPage({ searchParams }: Props) {
   const sp = (await searchParams) ?? {};
   const selectedLevel = sp.level ?? 'all';
   const selectedEvent = sp.event ?? 'all';
+  const selectedQuery = sp.q ?? '';
+  const selectedLimit = ['100', '200', '500'].includes(sp.limit ?? '') ? (sp.limit as string) : '200';
 
   const adminContext = await loadAdminPageContext('/dashboard/logs');
   if (!adminContext.ok) {
@@ -50,6 +81,8 @@ export default async function AdminLogsPage({ searchParams }: Props) {
     logs = await logsData.getRecentLogs({
       level: selectedLevel === 'all' ? null : selectedLevel,
       event: selectedEvent === 'all' ? null : selectedEvent,
+      query: selectedQuery,
+      limit: Number(selectedLimit),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not load admin logs.';
@@ -114,11 +147,43 @@ export default async function AdminLogsPage({ searchParams }: Props) {
       </section>
 
       <section className="mt-8 rounded-2xl bg-surface-container-lowest p-6 shadow-float">
+        <form method="get" className="mb-5 flex flex-col gap-3 md:flex-row md:items-center">
+          <input type="hidden" name="level" value={selectedLevel === 'all' ? '' : selectedLevel} />
+          <input type="hidden" name="event" value={selectedEvent === 'all' ? '' : selectedEvent} />
+          <input
+            type="text"
+            name="q"
+            defaultValue={selectedQuery}
+            placeholder="Search scan id, payment id, agency id, message..."
+            className="min-h-[44px] flex-1 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 text-sm text-on-background outline-none transition focus:border-primary"
+          />
+          <select
+            name="limit"
+            defaultValue={selectedLimit}
+            className="min-h-[44px] rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 text-sm text-on-background outline-none"
+          >
+            <option value="100">100 rows</option>
+            <option value="200">200 rows</option>
+            <option value="500">500 rows</option>
+          </select>
+          <button
+            type="submit"
+            className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition hover:opacity-90"
+          >
+            Search logs
+          </button>
+          <Link
+            href="/dashboard/logs"
+            className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+          >
+            Clear
+          </Link>
+        </form>
         <div className="flex flex-wrap gap-3">
           {['all', 'error', 'warning', 'info'].map((level) => (
             <Link
               key={level}
-              href={buildHref(level, selectedEvent)}
+              href={buildHref(level, selectedEvent, selectedQuery, selectedLimit)}
               className={`rounded-full px-3 py-1.5 text-sm font-medium ${
                 selectedLevel === level
                   ? 'bg-primary text-on-primary'
@@ -131,7 +196,7 @@ export default async function AdminLogsPage({ searchParams }: Props) {
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
           <Link
-            href={buildHref(selectedLevel, 'all')}
+            href={buildHref(selectedLevel, 'all', selectedQuery, selectedLimit)}
             className={`rounded-full px-3 py-1.5 text-sm font-medium ${
               selectedEvent === 'all'
                 ? 'bg-tertiary text-on-primary'
@@ -143,7 +208,7 @@ export default async function AdminLogsPage({ searchParams }: Props) {
           {eventOptions.map((event) => (
             <Link
               key={event}
-              href={buildHref(selectedLevel, event)}
+              href={buildHref(selectedLevel, event, selectedQuery, selectedLimit)}
               className={`rounded-full px-3 py-1.5 text-sm font-medium ${
                 selectedEvent === event
                   ? 'bg-tertiary text-on-primary'
@@ -163,13 +228,14 @@ export default async function AdminLogsPage({ searchParams }: Props) {
               <th className="px-4 py-3">When</th>
               <th className="px-4 py-3">Level</th>
               <th className="px-4 py-3">Event</th>
+              <th className="px-4 py-3">Key fields</th>
               <th className="px-4 py-3">Payload</th>
             </tr>
           </thead>
           <tbody>
             {logs.length === 0 ? (
               <tr>
-                <td className="px-4 py-6 text-on-surface-variant" colSpan={4}>
+                <td className="px-4 py-6 text-on-surface-variant" colSpan={5}>
                   No logs matched this filter.
                 </td>
               </tr>
@@ -193,6 +259,9 @@ export default async function AdminLogsPage({ searchParams }: Props) {
                     </span>
                   </td>
                   <td className="px-4 py-3 font-medium text-on-background">{row.event}</td>
+                  <td className="px-4 py-3 text-xs text-on-surface-variant">
+                    {summarizePayload(row.data) || '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <pre className="max-w-3xl overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-surface-container-low px-3 py-2 text-xs text-on-background">
                       {JSON.stringify(row.data, null, 2)}

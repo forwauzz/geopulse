@@ -50,4 +50,48 @@ describe('createAdminLogsData', () => {
     ]);
     expect(calls.some((call) => call.op === 'level' && call.value === 'error')).toBe(true);
   });
+
+  it('applies text search across event and payload', async () => {
+    const supabase = {
+      from(_table: string) {
+        return {
+          select() {
+            return this;
+          },
+          order() {
+            return this;
+          },
+          limit() {
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'log-1',
+                  level: 'warning',
+                  event: 'deep_audit_checkout_stripe_redirect',
+                  data: { scanId: 'scan-1', agencyAccountId: 'acct-1' },
+                  created_at: '2026-04-01T10:00:00.000Z',
+                },
+                {
+                  id: 'log-2',
+                  level: 'info',
+                  event: 'report_job_completed',
+                  data: { scanId: 'scan-2' },
+                  created_at: '2026-04-01T09:00:00.000Z',
+                },
+              ],
+              error: null,
+            });
+          },
+          eq() {
+            return this;
+          },
+          then: undefined,
+        };
+      },
+    } as any;
+
+    const result = await createAdminLogsData(supabase).getRecentLogs({ query: 'acct-1', limit: 50 });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.event).toBe('deep_audit_checkout_stripe_redirect');
+  });
 });

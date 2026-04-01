@@ -10,6 +10,7 @@ import { createStripeClient } from '@/lib/server/stripe-client';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
+import { structuredLog } from '@/lib/server/structured-log';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 
 export const runtime = 'nodejs';
@@ -88,6 +89,11 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   if (!scan || scan.status !== 'complete') {
+    structuredLog('deep_audit_checkout_invalid_scan', {
+      scanId: parsed.data.scanId,
+      status: scan?.status ?? null,
+      hasScan: !!scan,
+    });
     return Response.json(
       { error: { code: 'invalid_scan', message: 'Scan is not eligible for checkout' } },
       { status: 400 }
@@ -127,6 +133,13 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     if ((canAccessAsOwner || agencyAccess.isMember) && !entitlements.deepAuditEnabled) {
+      structuredLog('deep_audit_checkout_blocked', {
+        scanId,
+        userId: sessionUserId,
+        agencyAccountId: scan.agency_account_id ?? null,
+        agencyClientId: scan.agency_client_id ?? null,
+        reason: 'deep_audit_disabled',
+      });
       return Response.json(
         {
           error: {
@@ -139,6 +152,14 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if ((canAccessAsOwner || agencyAccess.isMember) && !agencyAccess.paymentRequired) {
+      structuredLog('deep_audit_checkout_bypass_started', {
+        scanId,
+        userId: sessionUserId,
+        agencyAccountId: scan.agency_account_id ?? null,
+        agencyClientId: scan.agency_client_id ?? null,
+        ownerAccess: canAccessAsOwner,
+        agencyMemberAccess: agencyAccess.isMember,
+      }, 'info');
       const syntheticSessionId = `agency-bypass:${scanId}`;
       const syntheticEventId = `agency-bypass-completed:${scanId}`;
       const result = await handleCheckoutSessionCompleted(
@@ -196,6 +217,16 @@ export async function POST(request: Request): Promise<Response> {
       scan_id: scanId,
       metadata: { stripe_session_id: session.id },
     });
+
+    structuredLog('deep_audit_checkout_stripe_redirect', {
+      scanId,
+      userId: sessionUserId,
+      agencyAccountId: scan.agency_account_id ?? null,
+      agencyClientId: scan.agency_client_id ?? null,
+      ownerAccess: scan.user_id === sessionUserId,
+      hasAgencyAccount: !!scan.agency_account_id,
+      stripeSessionId: session.id,
+    }, 'info');
 
     return Response.json({ url: session.url });
   } catch (e) {
