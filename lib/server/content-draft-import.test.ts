@@ -18,6 +18,7 @@ describe('buildImportedContentItems', () => {
 - type: article
 - target persona: SEO consultants
 - working title: How to Audit Your Site for AI Search Readiness
+- topic cluster: ai_search_readiness
 
 ## Problem
 - core problem: many teams still do not know how to tell whether their site is actually understandable to AI search systems
@@ -58,6 +59,7 @@ describe('buildImportedContentItems', () => {
         status: 'brief',
         content_type: 'brief',
         target_persona: 'SEO consultants',
+        topic_cluster: 'ai_search_readiness',
         cta_goal: 'free_scan',
       }),
       expect.objectContaining({
@@ -66,6 +68,7 @@ describe('buildImportedContentItems', () => {
         title: 'How to Audit Your Site for AI Search Readiness',
         status: 'draft',
         content_type: 'article',
+        topic_cluster: 'ai_search_readiness',
       }),
       expect.objectContaining({
         content_id: 'ai-search-readiness-audit-newsletter',
@@ -73,6 +76,7 @@ describe('buildImportedContentItems', () => {
         title: 'How to Audit Your Site for AI Search Readiness',
         status: 'draft',
         content_type: 'newsletter',
+        topic_cluster: 'ai_search_readiness',
       }),
     ]);
   });

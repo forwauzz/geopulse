@@ -5,6 +5,7 @@
 - target persona: SEO consultants
 - secondary persona: agency owners
 - working title: How to Audit Your Site for AI Search Readiness
+- topic cluster: ai_search_readiness
 
 ## Problem
 - core problem: many teams still do not know how to tell whether their site is actually understandable to AI search systems

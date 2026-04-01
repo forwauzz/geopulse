@@ -41,6 +41,7 @@ const baseEnv = {
   RESEND_API_KEY: '',
   RESEND_FROM_EMAIL: '',
   KIT_API_KEY: '',
+  BUTTONDOWN_API_KEY: '',
   GHOST_ADMIN_API_URL: '',
   GHOST_ADMIN_API_KEY: '',
   GHOST_ADMIN_API_VERSION: '',
@@ -70,6 +71,50 @@ describe('evaluateContentDestinationHealth', () => {
     ).toEqual({
       availabilityStatus: 'available',
       availabilityReason: 'Kit adapter is configured and ready for draft pushes.',
+      readyToPush: true,
+    });
+  });
+
+  it('marks Buttondown unavailable when the API key is missing', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'buttondown',
+          destination_key: 'buttondown_newsletter',
+          display_name: 'Buttondown',
+          requires_paid_plan: false,
+          plan_tier: 'free_or_higher',
+        },
+        baseEnv
+      )
+    ).toEqual({
+      availabilityStatus: 'not_configured',
+      availabilityReason:
+        'BUTTONDOWN_API_KEY is missing, so draft pushes cannot be sent to Buttondown.',
+      readyToPush: false,
+    });
+  });
+
+  it('marks Buttondown available when the API key exists', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'buttondown',
+          destination_key: 'buttondown_newsletter',
+          display_name: 'Buttondown',
+          requires_paid_plan: false,
+          plan_tier: 'free_or_higher',
+        },
+        {
+          ...baseEnv,
+          BUTTONDOWN_API_KEY: 'buttondown_test_key',
+        }
+      )
+    ).toEqual({
+      availabilityStatus: 'available',
+      availabilityReason: 'Buttondown adapter is configured and ready for draft pushes.',
       readyToPush: true,
     });
   });

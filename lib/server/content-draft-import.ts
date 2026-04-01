@@ -98,6 +98,12 @@ function humanizeSlug(slug: string): string {
     .join(' ');
 }
 
+function normalizeTopicCluster(value: string | null, fallbackSlug: string): string {
+  const rawValue = value?.trim();
+  if (!rawValue) return fallbackSlug.replace(/-/g, '_');
+  return rawValue.toLowerCase().replace(/[\s-]+/g, '_');
+}
+
 export function buildImportedContentItems(groups: Map<string, ImportGroup>): ImportedContentItem[] {
   const imported: ImportedContentItem[] = [];
 
@@ -116,6 +122,10 @@ export function buildImportedContentItems(groups: Map<string, ImportGroup>): Imp
           .toLowerCase()
           .replace(/\s+/g, '_') as ImportedContentItem['cta_goal'])
       : 'free_scan';
+    const topicCluster = normalizeTopicCluster(
+      group.brief ? extractBriefField(group.brief.markdown, 'topic cluster') : null,
+      baseSlug
+    );
 
     if (group.brief) {
       imported.push({
@@ -126,7 +136,7 @@ export function buildImportedContentItems(groups: Map<string, ImportGroup>): Imp
         content_type: 'brief',
         target_persona: targetPersona,
         primary_problem: primaryProblem,
-        topic_cluster: baseSlug.replace(/-/g, '_'),
+        topic_cluster: topicCluster,
         keyword_cluster: null,
         cta_goal: ctaGoal,
         source_type: 'internal_plus_research',
@@ -146,7 +156,7 @@ export function buildImportedContentItems(groups: Map<string, ImportGroup>): Imp
         content_type: 'article',
         target_persona: targetPersona,
         primary_problem: primaryProblem,
-        topic_cluster: baseSlug.replace(/-/g, '_'),
+        topic_cluster: topicCluster,
         keyword_cluster: null,
         cta_goal: ctaGoal,
         source_type: 'internal_plus_research',
@@ -166,7 +176,7 @@ export function buildImportedContentItems(groups: Map<string, ImportGroup>): Imp
         content_type: 'newsletter',
         target_persona: targetPersona,
         primary_problem: primaryProblem,
-        topic_cluster: baseSlug.replace(/-/g, '_'),
+        topic_cluster: topicCluster,
         keyword_cluster: null,
         cta_goal: ctaGoal,
         source_type: 'internal_plus_research',

@@ -32,6 +32,7 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     RESEND_API_KEY: '',
     RESEND_FROM_EMAIL: '',
     KIT_API_KEY: '',
+    BUTTONDOWN_API_KEY: '',
     GHOST_ADMIN_API_URL: '',
     GHOST_ADMIN_API_KEY: '',
     GHOST_ADMIN_API_VERSION: '',

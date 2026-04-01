@@ -9,6 +9,134 @@ afterEach(() => {
 });
 
 describe('resolveContentDestinationAdapter', () => {
+  it('publishes a Buttondown draft email and returns normalized delivery data', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'btn-email-123',
+        absolute_url: null,
+        creation_date: '2026-03-31T21:00:00.000Z',
+        status: 'draft',
+      }),
+    } as Response) as typeof fetch;
+
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-buttondown',
+      destination_key: 'buttondown_newsletter',
+      destination_type: 'newsletter',
+      provider_name: 'buttondown',
+      display_name: 'Buttondown',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: 'free_or_higher',
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-03-31T10:00:00.000Z',
+      updated_at: '2026-03-31T10:00:00.000Z',
+    });
+
+    const result = await adapter.publishDraft({
+      destination: {
+        id: 'dest-buttondown',
+        destination_key: 'buttondown_newsletter',
+        destination_type: 'newsletter',
+        provider_name: 'buttondown',
+        display_name: 'Buttondown',
+        enabled: true,
+        is_default: false,
+        requires_paid_plan: false,
+        supports_api_publish: true,
+        supports_scheduling: true,
+        supports_public_archive: true,
+        plan_tier: 'free_or_higher',
+        availability_status: 'available',
+        availability_reason: null,
+        metadata: {},
+        created_at: '2026-03-31T10:00:00.000Z',
+        updated_at: '2026-03-31T10:00:00.000Z',
+      },
+      env: {
+        SCAN_CACHE: undefined,
+        NEXT_PUBLIC_SUPABASE_URL: '',
+        SUPABASE_SERVICE_ROLE_KEY: '',
+        TURNSTILE_SECRET_KEY: '',
+        GEMINI_API_KEY: '',
+        GEMINI_MODEL: '',
+        GEMINI_ENDPOINT: '',
+        BENCHMARK_EXECUTION_PROVIDER: '',
+        BENCHMARK_EXECUTION_API_KEY: '',
+        BENCHMARK_EXECUTION_MODEL: '',
+        BENCHMARK_EXECUTION_ENABLED_MODELS: '',
+        BENCHMARK_EXECUTION_ENDPOINT: '',
+        SCAN_QUEUE: undefined,
+        STRIPE_SECRET_KEY: '',
+        STRIPE_WEBHOOK_SECRET: '',
+        STRIPE_PRICE_ID_DEEP_AUDIT: '',
+        RESEND_API_KEY: '',
+        RESEND_FROM_EMAIL: '',
+        KIT_API_KEY: '',
+        BUTTONDOWN_API_KEY: 'buttondown_test_key',
+        GHOST_ADMIN_API_URL: '',
+        GHOST_ADMIN_API_KEY: '',
+        GHOST_ADMIN_API_VERSION: '',
+        NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com/',
+        RECONCILE_SECRET: '',
+        DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '',
+        DEEP_AUDIT_BROWSER_RENDER_MODE: '',
+        DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: '',
+        DEEP_AUDIT_INTERNAL_REWRITE_MODEL: '',
+      },
+      item: {
+        id: 'item-buttondown-1',
+        content_id: 'ai-search-readiness-audit-newsletter',
+        slug: 'ai-search-readiness-audit-newsletter',
+        title: 'How to Audit Your Site for AI Search Readiness',
+        status: 'draft',
+        content_type: 'newsletter',
+        target_persona: 'SEO consultants',
+        primary_problem: 'Teams do not know what to audit first.',
+        topic_cluster: 'ai_search_readiness',
+        keyword_cluster: null,
+        cta_goal: 'free_scan',
+        source_type: 'internal_plus_research',
+        source_links: [],
+        brief_markdown: null,
+        draft_markdown: '# Heading\n\nThis is the newsletter body.',
+        canonical_url: 'https://getgeopulse.com/blog/ai-search-readiness-audit',
+        metadata: {},
+        published_at: null,
+        created_at: '2026-03-31T10:00:00.000Z',
+        updated_at: '2026-03-31T10:00:00.000Z',
+        deliveries: [],
+      },
+    });
+
+    expect(result).toEqual({
+      providerPublicationId: 'btn-email-123',
+      destinationUrl: null,
+      status: 'drafted',
+      metadata: {
+        provider: 'buttondown',
+        creation_date: '2026-03-31T21:00:00.000Z',
+        buttondown_status: 'draft',
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = vi.mocked(global.fetch).mock.calls[0]!;
+    expect(url).toBe('https://api.buttondown.com/v1/emails');
+    expect(init?.method).toBe('POST');
+    expect(init?.headers).toMatchObject({
+      'Content-Type': 'application/json',
+      Authorization: 'Token buttondown_test_key',
+    });
+  });
+
   it('publishes a Ghost draft post and returns normalized delivery data', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -83,6 +211,7 @@ describe('resolveContentDestinationAdapter', () => {
         RESEND_API_KEY: '',
         RESEND_FROM_EMAIL: '',
         KIT_API_KEY: '',
+        BUTTONDOWN_API_KEY: '',
         GHOST_ADMIN_API_URL: 'https://example.ghost.io',
         GHOST_ADMIN_API_KEY:
           '0123456789abcdef01234567:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
@@ -211,6 +340,7 @@ describe('resolveContentDestinationAdapter', () => {
         RESEND_API_KEY: '',
         RESEND_FROM_EMAIL: '',
         KIT_API_KEY: 'kit_test_key',
+        BUTTONDOWN_API_KEY: '',
         GHOST_ADMIN_API_URL: '',
         GHOST_ADMIN_API_KEY: '',
         GHOST_ADMIN_API_VERSION: '',

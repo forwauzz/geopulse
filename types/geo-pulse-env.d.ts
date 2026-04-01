@@ -37,6 +37,7 @@ interface CloudflareEnv {
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   KIT_API_KEY?: string;
+  BUTTONDOWN_API_KEY?: string;
   GHOST_ADMIN_API_URL?: string;
   GHOST_ADMIN_API_KEY?: string;
   GHOST_ADMIN_API_VERSION?: string;

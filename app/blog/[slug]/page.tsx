@@ -53,6 +53,10 @@ function toAbsoluteUrl(appUrl: string, pathOrUrl: string | null, slug: string): 
   return `${base}${path}`;
 }
 
+function getPublicSourceLinks(sourceLinks: readonly string[]): string[] {
+  return sourceLinks.filter((sourceLink) => /^https?:\/\//i.test(sourceLink));
+}
+
 async function loadPublicContentData() {
   const env = await getScanApiEnv();
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -119,6 +123,7 @@ export default async function BlogArticlePage({ params }: Props) {
   const relatedArticles = getRelatedArticles(articles, article.slug, article.topic_cluster, 3);
   const bodyRelatedArticles = relatedArticles.slice(0, 2);
   const browseArticles = articles.filter((item) => item.slug !== article.slug).slice(0, 8);
+  const publicSourceLinks = getPublicSourceLinks(article.source_links);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16 md:px-10">
@@ -291,12 +296,17 @@ export default async function BlogArticlePage({ params }: Props) {
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Sources</p>
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">
+                  Public sources
+                </p>
                 <ul className="mt-2 space-y-2 text-on-surface-variant">
-                  {article.source_links.length === 0 ? (
-                    <li>-</li>
+                  {publicSourceLinks.length === 0 ? (
+                    <li>
+                      This article is currently based on GEO-Pulse editorial and product-context
+                      inputs. Add public citations when the draft makes external factual claims.
+                    </li>
                   ) : (
-                    article.source_links.map((sourceLink) => (
+                    publicSourceLinks.map((sourceLink) => (
                       <li key={sourceLink} className="break-all">
                         <a
                           href={sourceLink}
