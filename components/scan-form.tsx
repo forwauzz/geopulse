@@ -10,6 +10,8 @@ import { getAttributionContext } from '@/lib/client/attribution';
 type ScanFormProps = {
   siteKey: string;
   defaultUrl?: string;
+  agencyAccountId?: string | null;
+  agencyClientId?: string | null;
 };
 
 const E2E_BYPASS_TURNSTILE =
@@ -39,7 +41,7 @@ function messageFromScanError(data: unknown): string {
   return `${prefix}${detail || 'Scan failed'}`;
 }
 
-export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
+export function ScanForm({ siteKey, defaultUrl, agencyAccountId, agencyClientId }: ScanFormProps) {
   const router = useRouter();
   const [url, setUrl] = useState(defaultUrl ?? '');
   const bypassTurnstile = isTurnstileBypassEnabled();
@@ -71,7 +73,13 @@ export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, turnstileToken: token, ...getAttributionContext() }),
+        body: JSON.stringify({
+          url,
+          turnstileToken: token,
+          agencyAccountId: agencyAccountId ?? null,
+          agencyClientId: agencyClientId ?? null,
+          ...getAttributionContext(),
+        }),
       });
       const data: unknown = await res.json();
       if (!res.ok) {

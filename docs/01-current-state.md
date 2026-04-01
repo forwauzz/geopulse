@@ -47,8 +47,28 @@ Current truth:
 - the sixteenth implementation slice is now in repo too: topic-page structured data plus a lightweight editorial-readiness checklist in admin
 - the seventeenth implementation slice is now in repo too: article publishing is blocked when required editorial-readiness checks fail
 - the eighteenth implementation slice is now in repo too: a blog launch-readiness dashboard at `/dashboard/content/launch`
+- Buttondown is now added as a third live newsletter destination adapter alongside Kit and Ghost, while draft push remains the current default publish mode
+- the blog renderer now supports captioned images and standalone-link video embeds without changing the text-first canonical article model
+- authenticated dashboard routes now use a dedicated left-side navigation shell rather than relying on top-nav duplication
 - the repo now has a first-pass product marketing context, founder voice draft, social-research synthesis, blog LLM-readiness spec, content-machine blueprint, and content-writing skill spec
+- the repo now also has a dedicated distribution-engine planning document that freezes the next future implementation order as schema-first, asset-model second, adapter work later
 - the implementation direction remains site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
+- a new planning-only agency pilot stream is now documented in `docs/09-agency-pilot-lifter-plan.md`
+- that plan freezes the first target as one internal pilot agency (`lifter.ca`) with:
+  - agency login
+  - client-scoped audit history
+  - admin-controlled feature entitlements
+  - model-policy overrides
+  - pilot deep-audit payment bypass
+- the first implementation slice is now in repo too: schema foundation for `agency_accounts`, `agency_users`, `agency_clients`, `agency_client_domains`, `agency_feature_flags`, and `agency_model_policies`, plus benchmark-aware lineage columns on `scans` and `reports`
+- the second implementation slice is now in repo too: a minimal admin control page at `/dashboard/agencies` plus server helpers/actions for creating agency accounts, adding clients, and setting pilot feature flags and model policies
+- the third implementation slice is now in repo too: agency-user provisioning from `/dashboard/agencies` plus password sign-in support on `/login` for pilot accounts
+- the fourth implementation slice is now in repo too: `/dashboard` is agency-aware for members, with account/client context selection and client-scoped audit/report history for rows already linked to agency lineage
+- the next agency dashboard slice is now in repo too: agency members can create clients and add tracked domains directly from `/dashboard`, using the selected agency context
+- the fifth implementation slice is now in repo too: agency-context scans can now be launched from `/?agencyAccount=...&agencyClient=...`, and eligible agency results can bypass Stripe into the existing deep-audit queue path when `payment_required` is false
+- the sixth implementation slice is now in repo too: agency/client model policy now affects runtime for Gemini-backed `free_scan` and `deep_audit` paths, with requested/effective model lineage stamped onto scan metadata and deep-audit run config
+- the seventh implementation slice is now in repo too: agency feature entitlements now gate live product behavior for dashboard visibility, scan launch, report history, deep-audit CTA/access, and the first GEO-tracker entitlement state
+- what remains is deeper polish around agency-triggered audit UX, richer client-domain control, broader agency self-service controls, and live non-Gemini provider execution
 
 ## What Is Implemented
 

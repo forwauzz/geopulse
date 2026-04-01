@@ -9,6 +9,22 @@ There are three practical runtime contexts:
 2. Local Worker-compatible development via `.dev.vars`
 3. Cloudflare deployed runtime via `wrangler.jsonc` vars + `wrangler secret put`
 
+## Deploy persistence
+
+Cloudflare production config should be treated in two buckets:
+
+1. `wrangler.jsonc` `vars`
+- these are plain-text runtime values committed in repo
+- they deploy with the Worker config
+- you do not need to re-add them after every deploy
+- you only change them when you intentionally edit config
+
+2. Cloudflare secrets
+- these are stored in Cloudflare, not in git
+- set them once with `wrangler secret put` or in the Cloudflare dashboard
+- they persist across deploys
+- you do not need to re-add them after every push unless you rotate them
+
 ## Public non-secret config
 
 These values are safe to expose to the client or bundle into worker config.
@@ -19,16 +35,33 @@ Required:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 - `STRIPE_PRICE_ID_DEEP_AUDIT`
+- `ADMIN_EMAIL`
 - `DEEP_AUDIT_R2_PUBLIC_BASE`
 - `DEEP_AUDIT_DEFAULT_PAGE_LIMIT`
 - `DEEP_AUDIT_BROWSER_RENDER_MODE`
+- `RESEND_FROM_EMAIL`
 - `GEMINI_MODEL`
 - `GEMINI_ENDPOINT`
 - `BENCHMARK_EXECUTION_PROVIDER`
 - `BENCHMARK_EXECUTION_MODEL`
 - `BENCHMARK_EXECUTION_ENABLED_MODELS`
 - `BENCHMARK_EXECUTION_ENDPOINT`
-- `ADMIN_EMAIL`
+- `BENCHMARK_SCHEDULE_ENABLED`
+- `BENCHMARK_SCHEDULE_QUERY_SET_ID`
+- `BENCHMARK_SCHEDULE_MODEL_ID`
+- `BENCHMARK_SCHEDULE_RUN_MODES`
+- `BENCHMARK_SCHEDULE_VERTICAL`
+- `BENCHMARK_SCHEDULE_SEED_PRIORITIES`
+- `BENCHMARK_SCHEDULE_DOMAINS`
+- `BENCHMARK_SCHEDULE_DOMAIN_LIMIT`
+- `BENCHMARK_SCHEDULE_MAX_RUNS`
+- `BENCHMARK_SCHEDULE_MAX_FAILURES`
+- `BENCHMARK_SCHEDULE_WINDOW_HOURS`
+- `BENCHMARK_SCHEDULE_VERSION`
+- optional: `DEEP_AUDIT_INTERNAL_REWRITE_ENABLED`
+- optional: `DEEP_AUDIT_INTERNAL_REWRITE_MODEL`
+- optional: `MARKETING_REPORT_TO`
+- optional: `GHOST_ADMIN_API_VERSION`
 
 Source of truth:
 - `wrangler.jsonc`
@@ -46,10 +79,13 @@ Core app secrets:
 - `GEMINI_API_KEY`
 - `BENCHMARK_EXECUTION_API_KEY`
 - `RESEND_API_KEY`
-- `KIT_API_KEY`
 - `TURNSTILE_SECRET_KEY`
 
 Conditional secrets:
+- `KIT_API_KEY`
+- `BUTTONDOWN_API_KEY`
+- `GHOST_ADMIN_API_URL`
+- `GHOST_ADMIN_API_KEY`
 - `RECONCILE_SECRET`
 - `BROWSER_RENDERING_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
@@ -114,6 +150,7 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - all free scan env
 - Stripe price + secret + webhook secret
 - Resend API key
+- `RESEND_FROM_EMAIL`
 - R2 bucket binding + public base URL
 
 ### Browser Rendering fallback
@@ -166,6 +203,9 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - `BENCHMARK_SCHEDULE_WINDOW_HOURS` controls schedule idempotency windows; use `12` for a twice-daily lane, keep `24` for once-daily
 - `BENCHMARK_SCHEDULE_VERSION` gives the recurring lane an explicit operator version tag in run metadata
 - the current Worker cron is twice daily (`0 0,12 * * *` UTC), so `BENCHMARK_SCHEDULE_WINDOW_HOURS=12` is the matching low-maintenance choice for the first recurring benchmark lane
+- recommended production default:
+  - keep `BENCHMARK_SCHEDULE_ENABLED=false` in config until the exact live query-set id is frozen
+  - then enable it intentionally rather than silently inheriting an old schedule
 - the repo now includes a repeatable query-set seed path for the first collection lane:
   - `npm run benchmark:seed:query-set`
   - default fixture: `eval/fixtures/benchmark-law-firms-p1-query-set.json`
@@ -212,3 +252,57 @@ Before handing off to another team, verify:
 4. admin eval page shows inserted row
 5. retrieval drilldown opens when retrieval rows exist
 6. report page can fetch markdown and PDF without CSP errors
+
+## Current production checklist
+
+To match the current repo/runtime features in Cloudflare production, make sure these are present:
+
+### Plaintext vars in `wrangler.jsonc`
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+- `ADMIN_EMAIL`
+- `STRIPE_PRICE_ID_DEEP_AUDIT`
+- `GEMINI_MODEL`
+- `GEMINI_ENDPOINT`
+- `DEEP_AUDIT_R2_PUBLIC_BASE`
+- `DEEP_AUDIT_DEFAULT_PAGE_LIMIT`
+- `DEEP_AUDIT_BROWSER_RENDER_MODE`
+- `DEEP_AUDIT_INTERNAL_REWRITE_ENABLED`
+- `DEEP_AUDIT_INTERNAL_REWRITE_MODEL`
+- `RESEND_FROM_EMAIL`
+- `BENCHMARK_EXECUTION_PROVIDER`
+- `BENCHMARK_EXECUTION_MODEL`
+- `BENCHMARK_EXECUTION_ENABLED_MODELS`
+- `BENCHMARK_EXECUTION_ENDPOINT`
+- `BENCHMARK_SCHEDULE_ENABLED`
+- `BENCHMARK_SCHEDULE_QUERY_SET_ID`
+- `BENCHMARK_SCHEDULE_MODEL_ID`
+- `BENCHMARK_SCHEDULE_RUN_MODES`
+- `BENCHMARK_SCHEDULE_VERTICAL`
+- `BENCHMARK_SCHEDULE_SEED_PRIORITIES`
+- `BENCHMARK_SCHEDULE_DOMAINS`
+- `BENCHMARK_SCHEDULE_DOMAIN_LIMIT`
+- `BENCHMARK_SCHEDULE_MAX_RUNS`
+- `BENCHMARK_SCHEDULE_MAX_FAILURES`
+- `BENCHMARK_SCHEDULE_WINDOW_HOURS`
+- `BENCHMARK_SCHEDULE_VERSION`
+- optional: `MARKETING_REPORT_TO`
+- optional: `GHOST_ADMIN_API_VERSION`
+
+### Secrets stored in Cloudflare
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `GEMINI_API_KEY`
+- `BENCHMARK_EXECUTION_API_KEY`
+- `RESEND_API_KEY`
+- `TURNSTILE_SECRET_KEY`
+- optional: `KIT_API_KEY`
+- optional: `BUTTONDOWN_API_KEY`
+- optional: `GHOST_ADMIN_API_URL`
+- optional: `GHOST_ADMIN_API_KEY`
+- optional: `RECONCILE_SECRET`
+- optional: `BROWSER_RENDERING_API_TOKEN`
+- optional: `CLOUDFLARE_ACCOUNT_ID`

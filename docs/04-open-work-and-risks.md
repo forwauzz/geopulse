@@ -43,6 +43,17 @@ Still open:
 - decide whether draft pushes should stay draft-only or later support scheduled/public publication from admin
 - add an explicit pre-publish LLM-readiness check before on-site publish
 
+### Distribution engine planning -> implementation gap
+Planned, not active implementation yet:
+- draft schema for generalized distribution accounts, assets, media, jobs, and job attempts
+- expand the current destination model beyond newsletter-first assumptions
+- add account connection and token lifecycle handling for social/video platforms
+- add queued delivery orchestration for draft, scheduled, and publish-now modes
+- add R2-backed media asset handling for image, carousel, and video destinations
+- add generalized adapters for text-first social platforms before media-heavy platforms
+- do not begin by wiring platform adapters directly into the current newsletter-only delivery shape
+- benchmarking remains the next active implementation stream unless explicitly reprioritized
+
 ### RE-008 to RE-010
 Still pending:
 - ragas pipeline if explicitly approved later
@@ -58,6 +69,33 @@ Still pending:
 Still open:
 - adjust any copy or edge-case states found during future live-user observation
 - keep validating the top-of-page results action band against real founder/customer usage so the primary next step stays obvious
+
+### Agency pilot / tenant control plane
+Active implementation stream. See `docs/09-agency-pilot-lifter-plan.md`.
+
+Still open:
+- richer client/domain editing inside the agency dashboard
+- agency self-service controls bounded by admin entitlements
+- live non-Gemini audit execution for stored OpenAI / Anthropic model policies
+
+Current guidance:
+- shape this as a real account-control model, not as ad hoc email allowlists
+- keep public self-serve checkout intact
+- add the agency pilot as a second controlled path
+- optimize the first implementation order for one live pilot agency using GEO-Pulse soon, not for generic enterprise breadth
+- make the agency/client schema benchmark-aware from day one so real agency usage can later support segmented vertical analysis instead of creating an isolated product-data silo
+
+Current repo state:
+- the schema foundation is now present in `supabase/migrations/019_agency_pilot_foundation.sql`
+- a first admin control surface now exists at `/dashboard/agencies`
+- pilot password login now exists on `/login`, and agency users can be provisioned from the agency admin surface
+- `/dashboard` now supports agency account/client context and agency-linked history for existing linked rows
+- agency members can now create clients and add tracked domains from `/dashboard`
+- eligible agency scans can now bypass Stripe into the deep-audit queue when agency entitlements set `payment_required = false`
+- agency/client model policy now affects the live Gemini-backed `free_scan` and `deep_audit` runtime
+- agency entitlements now gate the live dashboard, scan-launch path, and deep-audit CTA/runtime for agency contexts
+- unsupported stored providers currently fall back to Gemini rather than silently changing execution shape
+- what remains is the fuller pilot control surface and broader entitlement enforcement on top of that runtime
 
 ### Retrieval eval detail UX
 Still open:
@@ -153,6 +191,7 @@ This now also includes the content-machine planning set:
 - `PLAYBOOK/blog-llm-readiness-spec.md`
 - `PLAYBOOK/content-writing-skill-spec.md`
 - `PLAYBOOK/content-machine-inputs/*`
+- `PLAYBOOK/distribution-engine-v1-plan.md`
 
 And the new implementation seam:
 - `supabase/migrations/016_content_machine_foundation.sql`
