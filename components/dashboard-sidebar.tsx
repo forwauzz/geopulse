@@ -71,6 +71,7 @@ export function DashboardSidebar({ userEmail, isAdmin }: DashboardSidebarProps) 
   ];
 
   const adminItems: NavItem[] = [
+    { href: '/dashboard/agencies', label: 'Agencies', icon: 'groups' },
     { href: '/dashboard/attribution', label: 'Attribution', icon: 'ads_click' },
     { href: '/dashboard/content', label: 'Content', icon: 'edit_square' },
     { href: '/dashboard/content/launch', label: 'Launch readiness', icon: 'rocket_launch' },

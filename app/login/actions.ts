@@ -1,10 +1,16 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 const emailSchema = z.object({
   email: z.string().email(),
+});
+
+const passwordLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8, 'Password must be at least 8 characters.'),
 });
 
 export type LoginActionState =
@@ -57,4 +63,40 @@ export async function sendMagicLink(
     ok: true,
     message: 'Check your email for the sign-in link.',
   };
+}
+
+export async function signInWithPassword(
+  _prev: LoginActionState | null,
+  formData: FormData
+): Promise<LoginActionState> {
+  const parsed = passwordLoginSchema.safeParse({
+    email: formData.get('email'),
+    password: formData.get('password'),
+  });
+
+  if (!parsed.success) {
+    const first = parsed.error.flatten().fieldErrors;
+    const msg =
+      first['email']?.[0] ?? first['password']?.[0] ?? 'Check your email and password.';
+    return { ok: false, message: msg };
+  }
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return { ok: false, message: 'Authentication is not configured.' };
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: parsed.data.email.trim(),
+    password: parsed.data.password,
+  });
+
+  if (error || !data.user) {
+    return { ok: false, message: 'Invalid email or password.' };
+  }
+
+  const nextPath = safeNextPath(formData.get('next'));
+  redirect(nextPath);
 }

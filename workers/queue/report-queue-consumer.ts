@@ -65,6 +65,16 @@ function extractBrowserRenderMode(config: unknown): string {
   return typeof mode === 'string' && mode.length > 0 ? mode : 'off';
 }
 
+function extractEffectiveModel(config: unknown, fallbackModel: string): string {
+  if (!config || typeof config !== 'object') return fallbackModel;
+  const modelPolicy = (config as Record<string, unknown>)['model_policy'];
+  if (!modelPolicy || typeof modelPolicy !== 'object') return fallbackModel;
+  const effectiveModel = (modelPolicy as Record<string, unknown>)['effective_model'];
+  return typeof effectiveModel === 'string' && effectiveModel.length > 0
+    ? effectiveModel
+    : fallbackModel;
+}
+
 function averageScores(scores: readonly number[]): number {
   if (scores.length === 0) return 0;
   const sum = scores.reduce((a, b) => a + b, 0);
@@ -316,7 +326,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
 
   const { data: scan, error: scanErr } = await supabase
     .from('scans')
-    .select('id,url,domain,score,letter_grade,issues_json,full_results_json')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,user_id,agency_account_id,agency_client_id')
     .eq('id', job.scanId)
     .maybeSingle();
 
@@ -357,6 +367,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   const pageLimit = extractPageLimit(runRow.config);
   const chunkSize = extractChunkSize(runRow.config);
   const browserRenderMode = extractBrowserRenderMode(runRow.config);
+  const effectiveModel = extractEffectiveModel(runRow.config, env.GEMINI_MODEL);
 
   const crawlPending =
     runRow.config && typeof runRow.config === 'object'
@@ -375,7 +386,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   if (shouldRunCrawl) {
     const llm = new GeminiProvider({
       GEMINI_API_KEY: env.GEMINI_API_KEY,
-      GEMINI_MODEL: env.GEMINI_MODEL,
+      GEMINI_MODEL: effectiveModel,
       GEMINI_ENDPOINT: env.GEMINI_ENDPOINT,
     });
     const crawl = await runDeepAuditCrawl(supabase, llm, {
@@ -562,7 +573,9 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   const now = new Date().toISOString();
   const { error: repErr } = await supabase.from('reports').insert({
     scan_id: job.scanId,
-    user_id: null,
+    user_id: scan.user_id ?? null,
+    agency_account_id: scan.agency_account_id ?? null,
+    agency_client_id: scan.agency_client_id ?? null,
     guest_email: job.customerEmail.trim().toLowerCase(),
     pdf_url: pdfUrl,
     markdown_url: downloadLinks?.markdownUrl ?? null,

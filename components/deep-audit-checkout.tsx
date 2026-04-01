@@ -9,16 +9,17 @@ import { getAttributionContext } from '@/lib/client/attribution';
 type Props = {
   siteKey: string;
   scanId: string;
+  mode?: 'stripe' | 'agency_bypass';
 };
 
 function turnstileUserMessage(serverMessage: string): string {
   if (serverMessage.includes('timeout-or-duplicate')) {
-    return 'Verification expired or was already used. Complete the checkbox again, then pay once.';
+    return 'Verification expired or was already used. Complete the checkbox again, then try once more.';
   }
   return serverMessage;
 }
 
-export function DeepAuditCheckout({ siteKey, scanId }: Props) {
+export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,14 +39,19 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
       setError('Please complete the verification.');
       return;
     }
+
     submittingRef.current = true;
     setLoading(true);
-    const tokenToSend = token;
+
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scanId, turnstileToken: tokenToSend, anonymous_id: getAttributionContext().anonymous_id }),
+        body: JSON.stringify({
+          scanId,
+          turnstileToken: token,
+          anonymous_id: getAttributionContext().anonymous_id,
+        }),
       });
       const data: unknown = await res.json().catch(() => null);
       if (!res.ok) {
@@ -57,15 +63,17 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
         resetTurnstile();
         return;
       }
+
       const url =
         data && typeof data === 'object' && 'url' in data && typeof (data as { url?: unknown }).url === 'string'
           ? (data as { url: string }).url
           : null;
       if (!url) {
-        setError('No checkout URL returned');
+        setError('No checkout URL returned.');
         resetTurnstile();
         return;
       }
+
       window.location.href = url;
     } catch {
       setError('Network error');
@@ -78,16 +86,27 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
 
   return (
     <div className="flex flex-col gap-5 rounded-xl bg-on-background p-6 text-surface md:p-8">
-      <h2 className="font-headline text-xl font-bold text-surface-container-lowest">Unlock the full picture</h2>
+      <h2 className="font-headline text-xl font-bold text-surface-container-lowest">
+        Unlock the full picture
+      </h2>
       <p className="font-body text-sm text-surface-container-low/80">
-        Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan.
-        One-time purchase, no subscription. After payment, we send the finished report to the email collected in Stripe checkout.
+        {mode === 'agency_bypass'
+          ? 'Run the expanded multi-page audit for this agency client without checkout. GEO-Pulse will queue the full report directly under the current pilot entitlement.'
+          : 'Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan. One-time purchase, no subscription. After payment, we send the finished report to the email collected in Stripe checkout.'}
       </p>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-surface-container-low/70">
-        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">language</span> Multi-page crawl</li>
-        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">checklist</span> Priority action plan</li>
-        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">mail</span> PDF + email delivery</li>
-        <li className="flex items-center gap-1.5"><span className="material-symbols-outlined text-sm">code</span> Developer-ready fixes</li>
+        <li className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-sm">language</span> Multi-page crawl
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-sm">checklist</span> Priority action plan
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-sm">mail</span> PDF + email delivery
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-sm">code</span> Developer-ready fixes
+        </li>
       </ul>
       <Turnstile
         ref={turnstileRef}
@@ -102,7 +121,13 @@ export function DeepAuditCheckout({ siteKey, scanId }: Props) {
         disabled={loading}
         className="rounded-xl bg-surface-container-lowest px-6 py-3.5 text-sm font-semibold text-on-background transition hover:bg-surface disabled:opacity-50"
       >
-        {loading ? 'Redirecting…' : 'Continue to full audit — $29'}
+        {loading
+          ? mode === 'agency_bypass'
+            ? 'Starting audit...'
+            : 'Redirecting...'
+          : mode === 'agency_bypass'
+            ? 'Run full audit now'
+            : 'Continue to full audit - $29'}
       </button>
     </div>
   );

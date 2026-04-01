@@ -24,6 +24,8 @@ type ScanData = {
   reportStatus: ReportStatus;
   pdfUrl: string | null;
   markdownUrl: string | null;
+  checkoutMode: 'stripe' | 'agency_bypass';
+  deepAuditAvailable: boolean;
 };
 
 type Props = { scanId: string; turnstileSiteKey: string; checkoutState?: string | null };
@@ -131,6 +133,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       reportStatus?: ReportStatus;
       pdfUrl?: string | null;
       markdownUrl?: string | null;
+      checkoutMode?: 'stripe' | 'agency_bypass';
+      deepAuditAvailable?: boolean;
     };
     return {
       data: {
@@ -144,6 +148,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         reportStatus: j.reportStatus ?? 'none',
         pdfUrl: j.pdfUrl ?? null,
         markdownUrl: j.markdownUrl ?? null,
+        checkoutMode: j.checkoutMode === 'agency_bypass' ? 'agency_bypass' : 'stripe',
+        deepAuditAvailable: j.deepAuditAvailable !== false,
       },
       error: null,
     };
@@ -240,7 +246,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
 
   const host = domainFromUrl(data.url);
   const hasDirectReportAccess = !!(data.pdfUrl || data.markdownUrl);
-  const showCheckout = !data.hasPaidReport && turnstileSiteKey;
+  const showCheckout = !data.hasPaidReport && turnstileSiteKey && data.deepAuditAvailable;
   const showEmailGate = !data.hasPaidReport && turnstileSiteKey;
   const journey = buildResultsJourneyModel({
     host,
@@ -528,6 +534,21 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
           </div>
         )}
 
+        {!data.deepAuditAvailable ? (
+          <section className="rounded-[28px] border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
+            <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">
+              Full audit
+            </p>
+            <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
+              Full audit is disabled for this agency client
+            </h2>
+            <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
+              GEO-Pulse admin has turned off the deep-audit module for this agency context. The preview remains
+              available, but the full-audit path is currently locked.
+            </p>
+          </section>
+        ) : null}
+
         {showCheckout ? (
           <section id="full-audit-checkout" className="rounded-[28px] border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
             <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">
@@ -537,10 +558,16 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
               Continue from preview to the full audit
             </h2>
             <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
-              The preview shows the score and top issues. The paid audit keeps going: more coverage, more detail, and delivery to the email you enter in Stripe checkout.
+              {data.checkoutMode === 'agency_bypass'
+                ? 'This agency client is eligible for pilot deep-audit bypass. GEO-Pulse will queue the full audit directly under the current agency entitlement.'
+                : 'The preview shows the score and top issues. The paid audit keeps going: more coverage, more detail, and delivery to the email you enter in Stripe checkout.'}
             </p>
             <div className="mt-5">
-              <DeepAuditCheckout siteKey={turnstileSiteKey} scanId={data.scanId} />
+              <DeepAuditCheckout
+                siteKey={turnstileSiteKey}
+                scanId={data.scanId}
+                mode={data.checkoutMode}
+              />
             </div>
           </section>
         ) : null}

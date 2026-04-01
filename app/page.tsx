@@ -27,9 +27,9 @@ const features = [
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ url?: string }>;
+  searchParams: Promise<{ url?: string; agencyAccount?: string; agencyClient?: string }>;
 }) {
-  const { url: prefillUrl } = await searchParams;
+  const { url: prefillUrl, agencyAccount, agencyClient } = await searchParams;
   const siteKey = getTurnstileSiteKey();
 
   return (
@@ -48,7 +48,12 @@ export default async function HomePage({
         </p>
         <div className="mx-auto mb-6 max-w-3xl">
           {siteKey ? (
-            <ScanForm siteKey={siteKey} defaultUrl={prefillUrl} />
+            <ScanForm
+              siteKey={siteKey}
+              defaultUrl={prefillUrl}
+              agencyAccountId={agencyAccount ?? null}
+              agencyClientId={agencyClient ?? null}
+            />
           ) : (
             <div className="space-y-3 rounded-xl bg-surface-container-low p-6 text-left text-error">
               <p className="font-medium">Turnstile is not configured for this deployment.</p>
