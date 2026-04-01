@@ -34,6 +34,12 @@ export async function SiteHeader() {
           >
             Home
           </Link>
+          <Link
+            href="/blog"
+            className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+          >
+            Blog
+          </Link>
           {isSignedIn ? (
             <>
               <Link

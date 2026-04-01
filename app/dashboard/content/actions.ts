@@ -5,10 +5,39 @@ import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { importPlaybookDrafts } from '@/lib/server/content-draft-import';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
+import { assertEditorialReadyForLaunch } from '@/lib/server/content-editorial-readiness';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
 import { resolveContentDestinationAdapter } from '@/lib/server/content-destination-adapters';
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
+import { mergeArticleMetadata } from '@/lib/server/content-article-metadata';
+import { seedTopicPageItems } from '@/lib/server/content-topic-page-admin';
+import { prepareContentForPublish } from '@/lib/server/content-publishing';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
+
+function mergeTopicPageMetadata(
+  metadata: Record<string, unknown>,
+  fields: {
+    readonly definition: string;
+    readonly whyItMatters: string;
+    readonly practicalTakeaway: string;
+  }
+): Record<string, unknown> {
+  const next = { ...metadata };
+
+  if (fields.definition.trim()) next['topic_page_definition'] = fields.definition.trim();
+  else delete next['topic_page_definition'];
+
+  if (fields.whyItMatters.trim()) next['topic_page_why_it_matters'] = fields.whyItMatters.trim();
+  else delete next['topic_page_why_it_matters'];
+
+  if (fields.practicalTakeaway.trim()) {
+    next['topic_page_practical_takeaway'] = fields.practicalTakeaway.trim();
+  } else {
+    delete next['topic_page_practical_takeaway'];
+  }
+
+  return next;
+}
 
 export async function updateContentDestinationConfig(formData: FormData) {
   const actionContext = await loadAdminActionContext();
@@ -64,6 +93,20 @@ export async function importContentMachineDrafts() {
   revalidatePath('/dashboard/content');
 }
 
+export async function seedTopicPagesFromClusters() {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  const result = await seedTopicPageItems(actionContext.adminDb, actionContext.user.id);
+  revalidatePath('/dashboard/content');
+  revalidatePath('/blog');
+  for (const topicKey of result.topicKeys) {
+    revalidatePath(`/blog/topic/${topicKey}`);
+  }
+}
+
 export async function updateContentItem(formData: FormData) {
   const actionContext = await loadAdminActionContext();
   if (!actionContext.ok) {
@@ -84,6 +127,12 @@ export async function updateContentItem(formData: FormData) {
   const canonicalUrl = String(formData.get('canonicalUrl') ?? '').trim();
   const briefMarkdown = String(formData.get('briefMarkdown') ?? '');
   const draftMarkdown = String(formData.get('draftMarkdown') ?? '');
+  const authorName = String(formData.get('authorName') ?? '').trim();
+  const authorRole = String(formData.get('authorRole') ?? '').trim();
+  const authorUrl = String(formData.get('authorUrl') ?? '').trim();
+  const topicPageDefinition = String(formData.get('topicPageDefinition') ?? '');
+  const topicPageWhyItMatters = String(formData.get('topicPageWhyItMatters') ?? '');
+  const topicPagePracticalTakeaway = String(formData.get('topicPagePracticalTakeaway') ?? '');
 
   const allowedStatuses = new Set([
     'idea',
@@ -103,6 +152,50 @@ export async function updateContentItem(formData: FormData) {
     throw new Error('Invalid content status.');
   }
 
+  const existingItem = await createContentAdminData(actionContext.adminDb).getContentItemDetail(contentId);
+  if (!existingItem) {
+    throw new Error('Content item not found.');
+  }
+
+  if (status === 'published' && existingItem.content_type === 'article') {
+    assertEditorialReadyForLaunch({
+      title,
+      draftMarkdown,
+      sourceLinks: existingItem.source_links,
+      ctaGoal: existingItem.cta_goal,
+    });
+  }
+
+  const publishFields =
+    status === 'published' && existingItem.content_type === 'article'
+      ? prepareContentForPublish({
+          content_type: existingItem.content_type,
+          slug,
+          title,
+          status,
+          cta_goal: existingItem.cta_goal,
+          source_type: existingItem.source_type,
+          source_links: existingItem.source_links,
+          draft_markdown: draftMarkdown,
+          canonical_url: existingItem.canonical_url,
+          published_at: existingItem.published_at,
+        })
+      : null;
+
+  let metadata = mergeArticleMetadata(existingItem.metadata, {
+    authorName: authorName || null,
+    authorRole: authorRole || null,
+    authorUrl: authorUrl || null,
+  });
+
+  if (existingItem.content_type === 'research_note' && existingItem.slug?.startsWith('topic-')) {
+    metadata = mergeTopicPageMetadata(metadata, {
+      definition: topicPageDefinition,
+      whyItMatters: topicPageWhyItMatters,
+      practicalTakeaway: topicPagePracticalTakeaway,
+    });
+  }
+
   const { error } = await actionContext.adminDb
     .from('content_items')
     .update({
@@ -112,9 +205,11 @@ export async function updateContentItem(formData: FormData) {
       target_persona: targetPersona || null,
       primary_problem: primaryProblem || null,
       topic_cluster: topicCluster || null,
-      canonical_url: canonicalUrl || null,
+      canonical_url: publishFields?.canonicalUrl ?? (canonicalUrl || null),
       brief_markdown: briefMarkdown || null,
       draft_markdown: draftMarkdown || null,
+      metadata,
+      published_at: publishFields?.publishedAt ?? existingItem.published_at,
     })
     .eq('content_id', contentId);
 
@@ -124,6 +219,55 @@ export async function updateContentItem(formData: FormData) {
 
   revalidatePath('/dashboard/content');
   revalidatePath(`/dashboard/content/${contentId}`);
+  revalidatePath('/blog');
+  revalidatePath(`/blog/${slug}`);
+  if (existingItem.content_type === 'research_note' && existingItem.topic_cluster) {
+    revalidatePath(`/blog/topic/${existingItem.topic_cluster}`);
+  }
+}
+
+export async function publishContentItem(formData: FormData) {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  const contentId = String(formData.get('contentId') ?? '').trim();
+  if (!contentId) {
+    throw new Error('Missing content id.');
+  }
+
+  const item = await createContentAdminData(actionContext.adminDb).getContentItemDetail(contentId);
+  if (!item) {
+    throw new Error('Content item not found.');
+  }
+
+  assertEditorialReadyForLaunch({
+    title: item.title,
+    draftMarkdown: item.draft_markdown,
+    sourceLinks: item.source_links,
+    ctaGoal: item.cta_goal,
+  });
+
+  const publishFields = prepareContentForPublish(item);
+
+  const { error } = await actionContext.adminDb
+    .from('content_items')
+    .update({
+      status: 'published',
+      canonical_url: publishFields.canonicalUrl,
+      published_at: publishFields.publishedAt,
+    })
+    .eq('content_id', contentId);
+
+  if (error) {
+    throw error;
+  }
+
+  revalidatePath('/dashboard/content');
+  revalidatePath(`/dashboard/content/${contentId}`);
+  revalidatePath('/blog');
+  revalidatePath(`/blog/${item.slug}`);
 }
 
 export async function pushContentItemToDestination(formData: FormData) {

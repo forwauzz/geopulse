@@ -41,6 +41,9 @@ const baseEnv = {
   RESEND_API_KEY: '',
   RESEND_FROM_EMAIL: '',
   KIT_API_KEY: '',
+  GHOST_ADMIN_API_URL: '',
+  GHOST_ADMIN_API_KEY: '',
+  GHOST_ADMIN_API_VERSION: '',
   NEXT_PUBLIC_APP_URL: '',
   RECONCILE_SECRET: '',
   DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '',
@@ -87,6 +90,49 @@ describe('evaluateContentDestinationHealth', () => {
       availabilityStatus: 'api_unavailable',
       availabilityReason: 'No live adapter is implemented yet for mailchimp.',
       readyToPush: false,
+    });
+  });
+
+  it('marks Ghost unavailable when the admin URL is missing', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'ghost',
+          destination_key: 'ghost_newsletter',
+        },
+        {
+          ...baseEnv,
+          GHOST_ADMIN_API_KEY:
+            '0123456789abcdef01234567:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        }
+      )
+    ).toEqual({
+      availabilityStatus: 'not_configured',
+      availabilityReason: 'GHOST_ADMIN_API_URL is missing, so draft pushes cannot be sent to Ghost.',
+      readyToPush: false,
+    });
+  });
+
+  it('marks Ghost available when the admin URL and API key exist', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'ghost',
+          destination_key: 'ghost_newsletter',
+        },
+        {
+          ...baseEnv,
+          GHOST_ADMIN_API_URL: 'https://example.ghost.io',
+          GHOST_ADMIN_API_KEY:
+            '0123456789abcdef01234567:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+        }
+      )
+    ).toEqual({
+      availabilityStatus: 'available',
+      availabilityReason: 'Ghost adapter is configured and ready for draft pushes.',
+      readyToPush: true,
     });
   });
 });

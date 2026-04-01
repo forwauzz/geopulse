@@ -1,6 +1,6 @@
 # Current State
 
-Last consolidated: 2026-03-26
+Last consolidated: 2026-03-31
 
 ## Product Status
 
@@ -33,8 +33,20 @@ Current truth:
 - the second implementation slice is now in repo too: provider-control records for downstream destinations, a destination admin helper, and feature-flag controls for newsletter providers inside `/dashboard/content`
 - the third implementation slice is now in repo too: local draft import from `PLAYBOOK/content-machine-drafts` into canonical `content_items` via an admin action in `/dashboard/content`
 - the fourth implementation slice is now in repo too: a first content-item detail/editor page at `/dashboard/content/[contentId]` for reviewing and updating imported records
-- the fifth implementation slice is now in repo too: a provider adapter contract, first Kit adapter, and a draft-push action from the content-item page into the selected destination
-- no public blog runtime or full publish workflow is shipped yet
+- the fifth implementation slice is now in repo too: a provider adapter contract, Kit and Ghost adapters, and a draft-push action from the content-item page into the selected destination
+- the sixth implementation slice is now in repo too: effective destination readiness from feature flags plus env state, surfaced directly in the content admin UI
+- the seventh implementation slice is now in repo too: structured content-push lifecycle events written into `app_logs` and visible at `/dashboard/logs`
+- the eighth implementation slice is now in repo too: a first public blog surface at `/blog` and `/blog/[slug]` backed by canonical published `content_items`
+- the ninth implementation slice is now in repo too: a first admin-to-blog publish workflow with publish guardrails, canonical blog URL derivation, and a dedicated publish action from `/dashboard/content/[contentId]`
+- the tenth implementation slice is now in repo too: first article author metadata captured in `content_items.metadata` plus article-level JSON-LD on `/blog/[slug]`
+- the eleventh implementation slice is now in repo too: topic-cluster navigation on `/blog` plus related-article and browse-article menus on `/blog/[slug]`
+- the twelfth implementation slice is now in repo too: dedicated topic landing pages at `/blog/topic/[topic]` so clusters are navigable URLs, not just labels
+- the thirteenth implementation slice is now in repo too: topic-page intros with definition, why-it-matters, and practical takeaway blocks on `/blog/topic/[topic]`
+- the fourteenth implementation slice is now in repo too: topic-page intro copy can be seeded and edited from the content admin via canonical `research_note` records
+- the fifteenth implementation slice is now in repo too: article-body internal-link blocks that point into topic hubs and sibling articles
+- the sixteenth implementation slice is now in repo too: topic-page structured data plus a lightweight editorial-readiness checklist in admin
+- the seventeenth implementation slice is now in repo too: article publishing is blocked when required editorial-readiness checks fail
+- the eighteenth implementation slice is now in repo too: a blog launch-readiness dashboard at `/dashboard/content/launch`
 - the repo now has a first-pass product marketing context, founder voice draft, social-research synthesis, blog LLM-readiness spec, content-machine blueprint, and content-writing skill spec
 - the implementation direction remains site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
 
@@ -285,11 +297,52 @@ Current truth:
   - delivery visibility per content item
 - first destination adapter seam:
   - provider adapter contract
-  - first Kit implementation
+  - Kit and Ghost implementations
   - draft push from `/dashboard/content/[contentId]`
   - downstream delivery record persisted after push
   - computed destination readiness from both feature flags and live environment state
   - structured push events written into the admin logs stream for operator debugging
+- first public blog runtime:
+  - `/blog`
+  - `/blog/[slug]`
+  - published-article read path backed by canonical `content_items`
+  - markdown-rendered article body with the free-scan CTA on-page
+  - top-level site header link to the blog
+- first admin-to-blog publish path:
+  - dedicated publish action on `/dashboard/content/[contentId]`
+  - publish blockers shown before release
+  - article-only canonical route derived as `/blog/[slug]`
+  - save-path guardrails now prevent invalid `status = published` updates
+- first article metadata + schema path:
+  - author name / role / URL editing on `/dashboard/content/[contentId]`
+  - author metadata stored in `content_items.metadata`
+  - author byline shown on `/blog/[slug]`
+  - first `Article` JSON-LD emitted on published article pages
+- first blog navigation + clustering path:
+  - `/blog` now exposes a topic menu and article menu
+  - published articles are grouped by topic cluster on the blog index
+  - `/blog/[slug]` now links to related articles and a browse-articles menu
+- first topic landing-page path:
+  - `/blog/topic/[topic]` lists all published articles for one topic cluster
+  - topic labels on `/blog` and `/blog/[slug]` now link to a dedicated cluster URL
+- first topic-page intro path:
+  - each topic page now opens with a definition block
+  - each topic page now explains why the topic matters
+  - each topic page now gives one practical takeaway before the article list
+- first editable topic-page copy path:
+  - `/dashboard/content` can seed one topic-page record per article topic cluster
+  - topic-page intro copy now lives in canonical content records instead of code-only defaults
+  - `/dashboard/content/[contentId]` can edit seeded topic-page copy through metadata-backed fields
+- first article internal-link path:
+  - `/blog/[slug]` now opens with an in-body topic-cluster link block
+  - the article body now points readers into the topic page and sibling articles before the main markdown body
+- first launch-readiness guardrails:
+  - `/blog/topic/[topic]` now emits topic-page structured data
+  - `/dashboard/content/[contentId]` now shows a lightweight editorial-readiness checklist for articles
+  - article publish now fails when required editorial-readiness checks are incomplete
+- first launch-readiness dashboard:
+  - `/dashboard/content/launch` summarizes whether the current content set meets the first-launch threshold
+  - the view shows article-level failures so launch prep is operational, not guesswork
 - dashboard admin navigation now links to the content inventory
 
 ## Current Blockers

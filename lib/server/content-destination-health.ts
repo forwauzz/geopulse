@@ -62,6 +62,31 @@ export function evaluateContentDestinationHealth(
     };
   }
 
+  if (destination.provider_name === 'ghost') {
+    if (!env.GHOST_ADMIN_API_URL) {
+      return {
+        availabilityStatus: 'not_configured',
+        availabilityReason:
+          'GHOST_ADMIN_API_URL is missing, so draft pushes cannot be sent to Ghost.',
+        readyToPush: false,
+      };
+    }
+    if (!env.GHOST_ADMIN_API_KEY) {
+      return {
+        availabilityStatus: 'not_configured',
+        availabilityReason:
+          'GHOST_ADMIN_API_KEY is missing, so draft pushes cannot be sent to Ghost.',
+        readyToPush: false,
+      };
+    }
+
+    return {
+      availabilityStatus: 'available',
+      availabilityReason: 'Ghost adapter is configured and ready for draft pushes.',
+      readyToPush: true,
+    };
+  }
+
   return {
     availabilityStatus: 'api_unavailable',
     availabilityReason: destination.availability_reason,

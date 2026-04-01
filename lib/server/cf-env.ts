@@ -26,6 +26,9 @@ export type PaymentApiEnv = ScanApiEnv & {
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   KIT_API_KEY: string;
+  GHOST_ADMIN_API_URL: string;
+  GHOST_ADMIN_API_KEY: string;
+  GHOST_ADMIN_API_VERSION: string;
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
@@ -128,6 +131,9 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: pickEnvString(e, 'RESEND_API_KEY'),
       RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
       KIT_API_KEY: pickEnvString(e, 'KIT_API_KEY'),
+      GHOST_ADMIN_API_URL: pickEnvString(e, 'GHOST_ADMIN_API_URL'),
+      GHOST_ADMIN_API_KEY: pickEnvString(e, 'GHOST_ADMIN_API_KEY'),
+      GHOST_ADMIN_API_VERSION: pickEnvString(e, 'GHOST_ADMIN_API_VERSION'),
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
@@ -145,6 +151,9 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
       KIT_API_KEY: process.env['KIT_API_KEY'] ?? '',
+      GHOST_ADMIN_API_URL: process.env['GHOST_ADMIN_API_URL'] ?? '',
+      GHOST_ADMIN_API_KEY: process.env['GHOST_ADMIN_API_KEY'] ?? '',
+      GHOST_ADMIN_API_VERSION: process.env['GHOST_ADMIN_API_VERSION'] ?? '',
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',

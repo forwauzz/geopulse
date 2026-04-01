@@ -21,6 +21,22 @@ This evaluation is based on the current planning assumptions:
 
 **Do not choose first for lean V1: beehiiv or Mailchimp**
 
+## Current implementation status
+
+The recommendation above is still the architectural recommendation.
+
+Current repo truth is now:
+- Kit is implemented as a downstream draft-push adapter
+- Ghost is also implemented as a downstream draft-push adapter
+- GEO-Pulse remains the canonical source of truth
+- neither provider is the on-site blog or canonical article surface
+
+So this document should now be read as:
+- Kit remains the preferred first newsletter-default for the current site-first model
+- Ghost is no longer theoretical; it is the second working adapter in the repo
+- the unresolved decision is not "can we integrate Ghost?"
+- the unresolved decision is whether Ghost should remain only a downstream destination or later become a larger publishing surface decision
+
 ## Why Kit is the best first fit
 
 Kit fits the current GEO-Pulse workflow better than the alternatives because:
@@ -158,12 +174,13 @@ then **Ghost should be the first platform reconsidered**.
 
 ## Next implementation implication
 
-If Kit is accepted as the first target, the first implementation path should be:
+If Kit remains the first target for default newsletter operations, the next implementation path should be:
 
 1. create canonical article in GEO-Pulse
 2. generate newsletter variant from same brief
 3. push newsletter draft/broadcast to Kit via API
-4. store platform post ID / URL back in GEO-Pulse metadata
+4. optionally push the same canonical asset into Ghost when that destination is enabled
+5. store platform post ID / URL back in GEO-Pulse metadata
 
 ## Sources
 

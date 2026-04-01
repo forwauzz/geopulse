@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
 import type { ContentAdminDetailRow } from '@/lib/server/content-admin-data';
 import type { ContentDestinationRow } from '@/lib/server/content-destination-admin-data';
@@ -19,7 +20,7 @@ export type ContentDestinationAdapter = {
   publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult>;
 };
 
-const ADAPTER_PROVIDERS = new Set(['kit']);
+const ADAPTER_PROVIDERS = new Set(['ghost', 'kit']);
 
 function escapeHtml(value: string): string {
   return value
@@ -115,6 +116,54 @@ function getDraftBody(item: ContentAdminDetailRow): string {
   throw new Error('Content item has no markdown body to publish.');
 }
 
+function base64UrlEncode(value: string | Buffer): string {
+  return Buffer.from(value)
+    .toString('base64')
+    .replaceAll('=', '')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_');
+}
+
+function createGhostAdminToken(apiKey: string): string {
+  const [id, secretHex] = apiKey.split(':');
+  if (!id || !secretHex) {
+    throw new Error('GHOST_ADMIN_API_KEY must be in id:secret format.');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlEncode(
+    JSON.stringify({
+      alg: 'HS256',
+      kid: id,
+      typ: 'JWT',
+    })
+  );
+  const payload = base64UrlEncode(
+    JSON.stringify({
+      iat: now,
+      exp: now + 300,
+      aud: '/admin/',
+    })
+  );
+  const unsigned = `${header}.${payload}`;
+  const signature = createHmac('sha256', Buffer.from(secretHex, 'hex'))
+    .update(unsigned)
+    .digest('base64')
+    .replaceAll('=', '')
+    .replaceAll('+', '-')
+    .replaceAll('/', '_');
+
+  return `${unsigned}.${signature}`;
+}
+
+function normalizeGhostAdminBaseUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error('GHOST_ADMIN_API_URL is missing.');
+  }
+  return trimmed.replace(/\/+$/, '');
+}
+
 class KitContentDestinationAdapter implements ContentDestinationAdapter {
   async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
     if (!request.env.KIT_API_KEY) {
@@ -171,10 +220,80 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
   }
 }
 
+class GhostContentDestinationAdapter implements ContentDestinationAdapter {
+  async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
+    if (!request.env.GHOST_ADMIN_API_URL) {
+      throw new Error('GHOST_ADMIN_API_URL is missing.');
+    }
+    if (!request.env.GHOST_ADMIN_API_KEY) {
+      throw new Error('GHOST_ADMIN_API_KEY is missing.');
+    }
+
+    const markdown = getDraftBody(request.item);
+    const html = markdownToHtml(markdown);
+    const previewText = buildPreviewText(markdown);
+    const adminBaseUrl = normalizeGhostAdminBaseUrl(request.env.GHOST_ADMIN_API_URL);
+    const version = (request.env.GHOST_ADMIN_API_VERSION || 'v6.0').trim() || 'v6.0';
+    const token = createGhostAdminToken(request.env.GHOST_ADMIN_API_KEY);
+
+    const response = await fetch(`${adminBaseUrl}/ghost/api/admin/posts/?source=html`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Accept-Version': version,
+        Authorization: `Ghost ${token}`,
+      },
+      body: JSON.stringify({
+        posts: [
+          {
+            title: request.item.title,
+            slug: request.item.slug,
+            html,
+            status: 'draft',
+            custom_excerpt: previewText,
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ghost publish failed (${response.status}): ${errorText}`);
+    }
+
+    const json = (await response.json()) as {
+      posts?: Array<{
+        id?: string;
+        url?: string | null;
+        updated_at?: string | null;
+      }>;
+    };
+
+    const post = json.posts?.[0];
+    const providerPublicationId = post?.id?.trim() ?? '';
+    if (!providerPublicationId) {
+      throw new Error('Ghost publish succeeded but no post id was returned.');
+    }
+
+    return {
+      providerPublicationId,
+      destinationUrl: post?.url ?? null,
+      status: 'drafted',
+      metadata: {
+        provider: 'ghost',
+        updated_at: post?.updated_at ?? null,
+      },
+    };
+  }
+}
+
 export function resolveContentDestinationAdapter(
   destination: ContentDestinationRow
 ): ContentDestinationAdapter {
   switch (destination.provider_name) {
+    case 'ghost':
+      return new GhostContentDestinationAdapter();
     case 'kit':
       return new KitContentDestinationAdapter();
     default:

@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Agent Relay Board</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #0f0f0f;
+    color: #e8e8e8;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  .header {
+    text-align: center;
+    margin-bottom: 36px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: -0.3px;
+  }
+
+  .header p {
+    font-size: 13px;
+    color: #666;
+    margin-top: 6px;
+  }
+
+  .setup-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    max-width: 900px;
+    margin: 0 auto 28px;
+  }
+
+  .agent-config {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .agent-config label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #888;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .agent-config select, .agent-config input {
+    width: 100%;
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 6px;
+    color: #e8e8e8;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .agent-config select:focus, .agent-config input:focus {
+    border-color: #555;
+  }
+
+  .problem-section {
+    max-width: 900px;
+    margin: 0 auto 28px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #888;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    background: #222;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 10px;
+    color: #666;
+  }
+
+  textarea {
+    width: 100%;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    color: #e8e8e8;
+    padding: 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.15s;
+  }
+
+  textarea:focus {
+    border-color: #444;
+  }
+
+  .btn-primary {
+    display: block;
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto 36px;
+    background: #fff;
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 13px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-primary:disabled { opacity: 0.3; cursor: default; }
+
+  /* TURNS */
+  .turns-container {
+    max-width: 900px;
+    margin: 0 auto;
+    display: none;
+  }
+
+  .turn {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    opacity: 0.35;
+    transition: opacity 0.2s;
+  }
+
+  .turn.active {
+    opacity: 1;
+    border-color: #3a3a3a;
+  }
+
+  .turn.done {
+    opacity: 0.7;
+  }
+
+  .turn-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid #222;
+    background: #161616;
+  }
+
+  .turn-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .turn-number {
+    background: #222;
+    border: 1px solid #333;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #aaa;
+    flex-shrink: 0;
+  }
+
+  .turn.active .turn-number {
+    background: #fff;
+    color: #000;
+    border-color: #fff;
+  }
+
+  .turn.done .turn-number {
+    background: #1a3a1a;
+    border-color: #2a5a2a;
+    color: #5a9a5a;
+  }
+
+  .turn-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ddd;
+  }
+
+  .turn-subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-top: 2px;
+  }
+
+  .agent-pill {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+  }
+
+  .agent-pill.agent1 { background: #1a1f3a; border-color: #2a3a6a; color: #7a9adf; }
+  .agent-pill.agent2 { background: #1f1a3a; border-color: #3a2a6a; color: #a07adf; }
+
+  .turn-body {
+    padding: 18px;
+  }
+
+  .prompt-box {
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: #ccc;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    font-family: "SF Mono", "Monaco", "Fira Code", monospace;
+  }
+
+  .action-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    align-items: center;
+  }
+
+  .btn-copy {
+    background: #222;
+    border: 1px solid #333;
+    color: #ddd;
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-copy:hover { background: #2a2a2a; border-color: #444; }
+  .btn-copy.copied { background: #1a3a1a; border-color: #2a5a2a; color: #5aaa5a; }
+
+  .send-hint {
+    font-size: 12px;
+    color: #555;
+  }
+
+  .response-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #666;
+    margin-bottom: 8px;
+  }
+
+  .btn-next {
+    background: #fff;
+    color: #000;
+    border: none;
+    border-radius: 7px;
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    margin-top: 12px;
+  }
+
+  .btn-next:hover { opacity: 0.85; }
+
+  /* TRANSCRIPT */
+  .transcript-section {
+    max-width: 900px;
+    margin: 28px auto 0;
+    display: none;
+  }
+
+  .transcript-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .transcript-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .btn-export {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    color: #aaa;
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-export:hover { background: #222; color: #ddd; }
+
+  .transcript-entry {
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .transcript-entry-header {
+    padding: 10px 16px;
+    background: #161616;
+    border-bottom: 1px solid #222;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+  }
+
+  .transcript-entry-body {
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #ccc;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .verdict-box {
+    background: #1a2a1a;
+    border: 1px solid #2a4a2a;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: #8aca8a;
+    line-height: 1.6;
+  }
+
+  .verdict-box strong {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #5a9a5a;
+    margin-bottom: 6px;
+  }
+
+  .btn-reset {
+    display: block;
+    width: 100%;
+    max-width: 900px;
+    margin: 20px auto 0;
+    background: transparent;
+    color: #555;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    padding: 11px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-reset:hover { color: #aaa; border-color: #444; }
+
+  .progress-bar {
+    max-width: 900px;
+    margin: 0 auto 28px;
+    display: none;
+  }
+
+  .progress-track {
+    background: #1a1a1a;
+    border-radius: 100px;
+    height: 4px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    background: #fff;
+    height: 100%;
+    border-radius: 100px;
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+
+  .progress-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+
+  .progress-label {
+    font-size: 10px;
+    color: #444;
+    font-weight: 500;
+    text-align: center;
+    flex: 1;
+  }
+
+  .progress-label.done { color: #5a9a5a; }
+  .progress-label.current { color: #aaa; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Multi-Agent Relay Board</h1>
+  <p>Run a structured AI meeting using your existing subscriptions — no API keys needed</p>
+</div>
+
+<!-- AGENT CONFIG -->
+<div class="setup-grid">
+  <div class="agent-config">
+    <label>Agent 1 — Proposer</label>
+    <select id="agent1-select">
+      <option value="Claude">Claude (claude.ai)</option>
+      <option value="ChatGPT">ChatGPT (chatgpt.com)</option>
+      <option value="Gemini">Gemini (gemini.google.com)</option>
+      <option value="Custom">Custom...</option>
+    </select>
+    <input type="text" id="agent1-custom" placeholder="Enter agent name" style="margin-top:8px;display:none;" />
+  </div>
+  <div class="agent-config">
+    <label>Agent 2 — Critic</label>
+    <select id="agent2-select">
+      <option value="ChatGPT">ChatGPT (chatgpt.com)</option>
+      <option value="Claude">Claude (claude.ai)</option>
+      <option value="Gemini">Gemini (gemini.google.com)</option>
+      <option value="Custom">Custom...</option>
+    </select>
+    <input type="text" id="agent2-custom" placeholder="Enter agent name" style="margin-top:8px;display:none;" />
+  </div>
+</div>
+
+<!-- PROBLEM INPUT -->
+<div class="problem-section">
+  <div class="section-label">
+    Problem Statement
+    <span class="badge">Paste or type your idea / question / challenge</span>
+  </div>
+  <textarea id="problem-input" rows="5" placeholder="Example: We're building a healthcare app for rural clinicians. We need a way to capture patient notes offline, then sync when connectivity is restored. What's the best architecture?"></textarea>
+</div>
+
+<button class="btn-primary" id="start-btn" onclick="startMeeting()">Start Meeting →</button>
+
+<!-- PROGRESS -->
+<div class="progress-bar" id="progress-bar">
+  <div class="progress-track">
+    <div class="progress-fill" id="progress-fill"></div>
+  </div>
+  <div class="progress-labels">
+    <div class="progress-label" id="pl-0">Proposal</div>
+    <div class="progress-label" id="pl-1">Critique</div>
+    <div class="progress-label" id="pl-2">Revision</div>
+    <div class="progress-label" id="pl-3">Final Verdict</div>
+  </div>
+</div>
+
+<!-- TURNS -->
+<div class="turns-container" id="turns-container"></div>
+
+<!-- TRANSCRIPT -->
+<div class="transcript-section" id="transcript-section">
+  <div class="transcript-header">
+    <h2>Full Meeting Transcript</h2>
+    <button class="btn-export" onclick="exportTranscript()">Export as .txt</button>
+  </div>
+  <div id="transcript-body"></div>
+</div>
+
+<button class="btn-reset" id="reset-btn" style="display:none;" onclick="resetAll()">↺ Start a new meeting</button>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let problem = "";
+  let responses = {};
+  let currentTurn = 0;
+  let agent1Name = "Claude";
+  let agent2Name = "ChatGPT";
+
+  const turns = [
+    {
+      id: "proposal",
+      turnLabel: "Turn 1 of 4",
+      title: "Initial Proposal",
+      subtitle: "Agent 1 proposes a solution to the problem",
+      agentKey: 1,
+      role: "Proposer",
+      buildPrompt: () => `You are a solution architect. Your job is to propose concrete, specific solutions.
+
+PROBLEM:
+${problem}
+
+Propose a clear, specific solution. Include:
+- What you'd build or do
+- Why this approach
+- Key assumptions you're making
+- Any major risks you see upfront
+
+End your response with a "Key Assumptions" section.`,
+      responseKey: "proposal"
+    },
+    {
+      id: "critique",
+      turnLabel: "Turn 2 of 4",
+      title: "Critique",
+      subtitle: "Agent 2 critiques the proposal",
+      agentKey: 2,
+      role: "Critic",
+      buildPrompt: () => `You are a critical reviewer. Your job is to find flaws, risks, gaps, and missing edge cases. Be direct and specific. Do not suggest a full redesign — only critique what exists.
+
+ORIGINAL PROBLEM:
+${problem}
+
+PROPOSED SOLUTION:
+${responses.proposal}
+
+Critique this proposal. For each issue, state:
+- What's wrong or missing
+- Why it matters
+- How severe (High / Medium / Low)
+
+End your response with a VERDICT line:
+VERDICT: [Approved / Approved with Conditions / Rejected]`,
+      responseKey: "critique"
+    },
+    {
+      id: "revision",
+      turnLabel: "Turn 3 of 4",
+      title: "Revision",
+      subtitle: "Agent 1 revises the proposal based on the critique",
+      agentKey: 1,
+      role: "Proposer",
+      buildPrompt: () => `You are a solution architect revising your original proposal based on a critique you received.
+
+ORIGINAL PROBLEM:
+${problem}
+
+YOUR ORIGINAL PROPOSAL:
+${responses.proposal}
+
+CRITIQUE RECEIVED:
+${responses.critique}
+
+Revise your proposal. For each change you make, state clearly:
+- What you changed
+- Why (which critique point it addresses)
+- What you intentionally kept and why
+
+End with an updated "Key Assumptions" section.`,
+      responseKey: "revision"
+    },
+    {
+      id: "final",
+      turnLabel: "Turn 4 of 4",
+      title: "Final Verdict",
+      subtitle: "Agent 2 gives a final assessment of the revised proposal",
+      agentKey: 2,
+      role: "Critic",
+      buildPrompt: () => `You are a critical reviewer giving a final assessment. Be direct.
+
+ORIGINAL PROBLEM:
+${problem}
+
+ORIGINAL PROPOSAL:
+${responses.proposal}
+
+YOUR CRITIQUE:
+${responses.critique}
+
+REVISED PROPOSAL:
+${responses.revision}
+
+Assess whether the revision adequately addressed your concerns. Then give your final verdict:
+
+VERDICT: [Approved / Approved with Conditions / Rejected]
+
+List any remaining risks the team must acknowledge before proceeding. Be concise.`,
+      responseKey: "final"
+    }
+  ];
+
+  // ── Setup ──────────────────────────────────────────────────────────────────
+  document.getElementById("agent1-select").addEventListener("change", function() {
+    const custom = document.getElementById("agent1-custom");
+    custom.style.display = this.value === "Custom" ? "block" : "none";
+  });
+
+  document.getElementById("agent2-select").addEventListener("change", function() {
+    const custom = document.getElementById("agent2-custom");
+    custom.style.display = this.value === "Custom" ? "block" : "none";
+  });
+
+  function getAgentName(num) {
+    const sel = document.getElementById(`agent${num}-select`);
+    if (sel.value === "Custom") {
+      return document.getElementById(`agent${num}-custom`).value || `Agent ${num}`;
+    }
+    return sel.value;
+  }
+
+  // ── Start ──────────────────────────────────────────────────────────────────
+  function startMeeting() {
+    problem = document.getElementById("problem-input").value.trim();
+    if (!problem) {
+      alert("Please enter a problem statement first.");
+      return;
+    }
+
+    agent1Name = getAgentName(1);
+    agent2Name = getAgentName(2);
+
+    if (agent1Name === agent2Name) {
+      const ok = confirm(`Both agents are set to ${agent1Name}. Continue anyway? (You can still use two separate chat windows.)`);
+      if (!ok) return;
+    }
+
+    document.getElementById("start-btn").disabled = true;
+    document.getElementById("progress-bar").style.display = "block";
+    document.getElementById("turns-container").style.display = "block";
+
+    renderTurns();
+    activateTurn(0);
+  }
+
+  // ── Render all turns (locked) ──────────────────────────────────────────────
+  function renderTurns() {
+    const container = document.getElementById("turns-container");
+    container.innerHTML = "";
+
+    turns.forEach((turn, i) => {
+      const agentName = turn.agentKey === 1 ? agent1Name : agent2Name;
+      const agentClass = turn.agentKey === 1 ? "agent1" : "agent2";
+
+      const div = document.createElement("div");
+      div.className = "turn";
+      div.id = `turn-${i}`;
+      div.innerHTML = `
+        <div class="turn-header">
+          <div class="turn-meta">
+            <div class="turn-number">${i + 1}</div>
+            <div>
+              <div class="turn-title">${turn.title}</div>
+              <div class="turn-subtitle">${turn.subtitle}</div>
+            </div>
+          </div>
+          <div class="agent-pill ${agentClass}">${agentName} · ${turn.role}</div>
+        </div>
+        <div class="turn-body" id="turn-body-${i}" style="display:none;"></div>
+      `;
+      container.appendChild(div);
+    });
+  }
+
+  // ── Activate a turn ────────────────────────────────────────────────────────
+  function activateTurn(index) {
+    currentTurn = index;
+    const turn = turns[index];
+    const agentName = turn.agentKey === 1 ? agent1Name : agent2Name;
+    const prompt = turn.buildPrompt();
+
+    // Update turn UI
+    const turnEl = document.getElementById(`turn-${index}`);
+    turnEl.classList.add("active");
+
+    const body = document.getElementById(`turn-body-${index}`);
+    body.style.display = "block";
+    body.innerHTML = `
+      <div style="font-size:12px;color:#666;margin-bottom:12px;">
+        Open <strong style="color:#aaa;">${agentName}</strong> in a new tab → paste the prompt below → copy the full response → paste it back here.
+      </div>
+      <div class="response-label">Prompt to send</div>
+      <div class="prompt-box" id="prompt-box-${index}">${escapeHtml(prompt)}</div>
+      <div class="action-row">
+        <button class="btn-copy" onclick="copyPrompt(${index})">📋 Copy Prompt</button>
+        <span class="send-hint">→ Paste into ${agentName} → get the response → paste it below</span>
+      </div>
+      <div class="response-label">${agentName}'s Response</div>
+      <textarea id="response-${index}" rows="8" placeholder="Paste ${agentName}'s full response here..."></textarea>
+      <button class="btn-next" onclick="submitResponse(${index})">${index < 3 ? "Save & Continue →" : "Finish Meeting ✓"}</button>
+    `;
+
+    // Scroll to turn
+    setTimeout(() => {
+      turnEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+
+    updateProgress(index);
+  }
+
+  // ── Submit response ────────────────────────────────────────────────────────
+  function submitResponse(index) {
+    const response = document.getElementById(`response-${index}`).value.trim();
+    if (!response) {
+      alert("Please paste the agent's response before continuing.");
+      return;
+    }
+
+    // Save response
+    responses[turns[index].responseKey] = response;
+
+    // Mark turn done
+    const turnEl = document.getElementById(`turn-${index}`);
+    turnEl.classList.remove("active");
+    turnEl.classList.add("done");
+
+    // Update turn number to checkmark feel
+    turnEl.querySelector(".turn-number").textContent = "✓";
+
+    if (index < turns.length - 1) {
+      activateTurn(index + 1);
+    } else {
+      finishMeeting();
+    }
+  }
+
+  // ── Finish ─────────────────────────────────────────────────────────────────
+  function finishMeeting() {
+    updateProgress(4);
+
+    const transcriptSection = document.getElementById("transcript-section");
+    transcriptSection.style.display = "block";
+    document.getElementById("reset-btn").style.display = "block";
+
+    const body = document.getElementById("transcript-body");
+
+    const labels = [
+      { key: "proposal",  title: "Initial Proposal",  agentKey: 1 },
+      { key: "critique",  title: "Critique",           agentKey: 2 },
+      { key: "revision",  title: "Revised Proposal",   agentKey: 1 },
+      { key: "final",     title: "Final Verdict",      agentKey: 2 },
+    ];
+
+    body.innerHTML = "";
+
+    // Problem
+    body.innerHTML += `
+      <div class="transcript-entry">
+        <div class="transcript-entry-header">📋 Problem Statement</div>
+        <div class="transcript-entry-body">${escapeHtml(problem)}</div>
+      </div>
+    `;
+
+    labels.forEach(({ key, title, agentKey }) => {
+      const agentName = agentKey === 1 ? agent1Name : agent2Name;
+      const agentClass = agentKey === 1 ? "agent1" : "agent2";
+      body.innerHTML += `
+        <div class="transcript-entry">
+          <div class="transcript-entry-header">
+            <span class="agent-pill ${agentClass}" style="font-size:10px;">${agentName}</span>
+            ${title}
+          </div>
+          <div class="transcript-entry-body">${escapeHtml(responses[key])}</div>
+        </div>
+      `;
+    });
+
+    // Extract verdict
+    const verdictMatch = responses.final.match(/VERDICT\s*[:：]\s*(.+)/i);
+    if (verdictMatch) {
+      body.innerHTML += `
+        <div class="verdict-box">
+          <strong>Final Verdict</strong>
+          ${escapeHtml(verdictMatch[1].trim())}
+        </div>
+      `;
+    }
+
+    transcriptSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // ── Progress ───────────────────────────────────────────────────────────────
+  function updateProgress(step) {
+    const pct = (step / 4) * 100;
+    document.getElementById("progress-fill").style.width = pct + "%";
+
+    const labels = ["pl-0", "pl-1", "pl-2", "pl-3"];
+    labels.forEach((id, i) => {
+      const el = document.getElementById(id);
+      el.className = "progress-label";
+      if (i < step) el.classList.add("done");
+      else if (i === step) el.classList.add("current");
+    });
+  }
+
+  // ── Copy ───────────────────────────────────────────────────────────────────
+  function copyPrompt(index) {
+    const text = document.getElementById(`prompt-box-${index}`).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.querySelector(`#turn-body-${index} .btn-copy`);
+      btn.textContent = "✓ Copied!";
+      btn.classList.add("copied");
+      setTimeout(() => {
+        btn.textContent = "📋 Copy Prompt";
+        btn.classList.remove("copied");
+      }, 2000);
+    });
+  }
+
+  // ── Export ─────────────────────────────────────────────────────────────────
+  function exportTranscript() {
+    const lines = [];
+    lines.push("MULTI-AGENT MEETING TRANSCRIPT");
+    lines.push("================================");
+    lines.push(`Date: ${new Date().toLocaleString()}`);
+    lines.push(`Agent 1 (Proposer): ${agent1Name}`);
+    lines.push(`Agent 2 (Critic): ${agent2Name}`);
+    lines.push("");
+    lines.push("PROBLEM");
+    lines.push("-------");
+    lines.push(problem);
+    lines.push("");
+
+    const labels = [
+      { key: "proposal", title: "PROPOSAL", agent: agent1Name },
+      { key: "critique", title: "CRITIQUE", agent: agent2Name },
+      { key: "revision", title: "REVISION", agent: agent1Name },
+      { key: "final",    title: "FINAL VERDICT", agent: agent2Name },
+    ];
+
+    labels.forEach(({ key, title, agent }) => {
+      lines.push(`${title} (${agent})`);
+      lines.push("-".repeat(title.length + agent.length + 3));
+      lines.push(responses[key]);
+      lines.push("");
+    });
+
+    const blob = new Blob([lines.join("\n")], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `agent-meeting-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ── Reset ──────────────────────────────────────────────────────────────────
+  function resetAll() {
+    problem = "";
+    responses = {};
+    currentTurn = 0;
+
+    document.getElementById("problem-input").value = "";
+    document.getElementById("start-btn").disabled = false;
+    document.getElementById("turns-container").style.display = "none";
+    document.getElementById("turns-container").innerHTML = "";
+    document.getElementById("progress-bar").style.display = "none";
+    document.getElementById("transcript-section").style.display = "none";
+    document.getElementById("reset-btn").style.display = "none";
+    document.getElementById("progress-fill").style.width = "0%";
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // ── Utils ──────────────────────────────────────────────────────────────────
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/\n/g, "<br>");
+  }
+</script>
+</body>
+</html>
