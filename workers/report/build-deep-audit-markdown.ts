@@ -1,6 +1,7 @@
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
   customerFacingFinding,
+  deriveCrawlTrustNotice,
   deriveDemandCoverageSignals,
   parseIssues,
   scoreNarrative,
@@ -93,6 +94,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0];
   const repeatedPagePatterns = summarizePageIssuePatterns(payload.pages);
   const demandCoverageSignals = deriveDemandCoverageSignals(allIssues);
+  const crawlTrustNotice = deriveCrawlTrustNotice(payload.coverageSummary);
 
   lines.push('## Executive Summary');
   lines.push('');
@@ -102,6 +104,11 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   const grade = payload.aggregateLetterGrade ?? '—';
   lines.push(scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName, firstMove));
   lines.push('');
+
+  if (crawlTrustNotice) {
+    lines.push('> **Coverage note:** ' + crawlTrustNotice.summary);
+    lines.push('');
+  }
 
   lines.push('## At a Glance');
   lines.push('');
@@ -115,6 +122,9 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     lines.push(`- **First recommended move:** ${markdownInline(payload.immediateWins[0].what)}`);
   } else if (firstMove) {
     lines.push(`- **First recommended move:** ${markdownInline(firstMove)}`);
+  }
+  if (crawlTrustNotice) {
+    lines.push(`- **Coverage warning:** ${crawlTrustNotice.title}`);
   }
   lines.push('');
 

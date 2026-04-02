@@ -2,6 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB }
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
   customerFacingFinding,
+  deriveCrawlTrustNotice,
   deriveDemandCoverageSignals,
   parseCoverageSummary,
   parseIssues,
@@ -230,6 +231,46 @@ class PdfBuilder {
       }
     }
     this.y -= 8;
+  }
+
+  drawCoverageNotice(summary: string): void {
+    this.ensureSpace(48);
+    this.page.drawRectangle({
+      x: MARGIN,
+      y: this.y - 28,
+      width: MAX_W,
+      height: 40,
+      color: rgb(0.99, 0.96, 0.88),
+      borderColor: rgb(0.86, 0.72, 0.32),
+      borderWidth: 0.5,
+    });
+    this.page.drawText('Coverage note', {
+      x: MARGIN + 8,
+      y: this.y - 2,
+      size: 9,
+      font: this.fontBold,
+      color: rgb(0.45, 0.32, 0.08),
+    });
+    this.page.drawText(wrapLine(summary, 90)[0] ?? '', {
+      x: MARGIN + 8,
+      y: this.y - 16,
+      size: 8,
+      font: this.font,
+      color: rgb(0.45, 0.32, 0.08),
+    });
+    const second = wrapLine(summary, 90)[1];
+    if (second) {
+      this.page.drawText(second, {
+        x: MARGIN + 8,
+        y: this.y - 28,
+        size: 8,
+        font: this.font,
+        color: rgb(0.45, 0.32, 0.08),
+      });
+      this.y -= 48;
+      return;
+    }
+    this.y -= 44;
   }
 
   drawAtAGlance(input: {
@@ -559,6 +600,7 @@ export async function buildDeepAuditPdf(input: {
   const topFailed = (highlightedIssues.length > 0 ? highlightedIssues : failedSorted).slice(0, 5);
   const topIssueName = topFailed[0]?.check ?? topFailed[0]?.checkId ?? '';
   const firstMove = topFailed[0]?.fix ?? '';
+  const crawlTrustNotice = deriveCrawlTrustNotice(input.coverageSummary);
 
   const now = new Date().toISOString().split('T')[0] ?? '';
   const scanIdShort = (input.scanId ?? '').slice(0, 8);
@@ -573,6 +615,9 @@ export async function buildDeepAuditPdf(input: {
 
   const narrative = scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName, firstMove);
   pdf.drawExecutiveSummary(narrative, topFailed.slice(0, 3));
+  if (crawlTrustNotice) {
+    pdf.drawCoverageNotice(crawlTrustNotice.summary);
+  }
   pdf.drawAtAGlance({
     score,
     grade,

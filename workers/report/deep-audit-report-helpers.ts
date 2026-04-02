@@ -27,6 +27,11 @@ export type DemandCoverageSignal = {
   readonly firstMove: string | null;
 };
 
+export type CrawlTrustNotice = {
+  readonly title: string;
+  readonly summary: string;
+};
+
 function normalizeIssueRow(raw: unknown): IssueRow | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const row = raw as IssueRow;
@@ -64,6 +69,48 @@ export function issueStatusLabel(row: IssueRow): string {
 export function parseCoverageSummary(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   return raw as Record<string, unknown>;
+}
+
+export function deriveCrawlTrustNotice(rawCoverage: unknown): CrawlTrustNotice | null {
+  const coverage = parseCoverageSummary(rawCoverage);
+  if (!coverage) return null;
+
+  const pagesFetched =
+    typeof coverage['pages_fetched'] === 'number' ? (coverage['pages_fetched'] as number) : null;
+  const urlsPlanned =
+    typeof coverage['urls_planned'] === 'number' ? (coverage['urls_planned'] as number) : null;
+  const browserRenderEnabled =
+    typeof coverage['browser_render_enabled'] === 'boolean'
+      ? (coverage['browser_render_enabled'] as boolean)
+      : null;
+
+  if (pagesFetched !== null && pagesFetched <= 1) {
+    return {
+      title: 'Limited crawl coverage',
+      summary:
+        urlsPlanned !== null && urlsPlanned <= 1
+          ? 'This audit only planned and fetched one page, so treat the findings as page-level rather than full-site conclusions.'
+          : 'This audit only fetched one page, so treat the findings as page-level rather than full-site conclusions.',
+    };
+  }
+
+  if (pagesFetched !== null && pagesFetched <= 3) {
+    return {
+      title: 'Thin crawl coverage',
+      summary:
+        'This audit covered only a small number of pages, so it is better read as a directional sample than a complete site-wide crawl.',
+    };
+  }
+
+  if (browserRenderEnabled === false) {
+    return {
+      title: 'Fetch-only crawl path',
+      summary:
+        'Browser rendering was not available in this run, so heavily client-rendered pages may be under-observed.',
+    };
+  }
+
+  return null;
 }
 
 function readinessSummary(score: number): string {
