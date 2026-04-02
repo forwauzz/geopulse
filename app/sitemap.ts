@@ -10,18 +10,7 @@ function withBase(baseUrl: string, path: string): string {
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const env = await getPaymentApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Server misconfigured: missing Supabase service role.');
-  }
-
   const baseUrl = (env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/').replace(/\/+$/, '');
-  const supabase = createServiceRoleClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
-  );
-  const articles = await createPublicContentData(supabase).getPublishedArticles();
-  const topicGroups = groupArticlesByTopic(articles);
-
   const staticEntries: MetadataRoute.Sitemap = [
     {
       url: withBase(baseUrl, '/'),
@@ -42,6 +31,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     },
   ];
+
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    return staticEntries;
+  }
+
+  const supabase = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const articles = await createPublicContentData(supabase).getPublishedArticles();
+  const topicGroups = groupArticlesByTopic(articles);
 
   const articleEntries: MetadataRoute.Sitemap = articles.map((article) => ({
     url: withBase(baseUrl, `/blog/${article.slug}`),
