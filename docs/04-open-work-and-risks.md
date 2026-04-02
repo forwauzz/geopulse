@@ -20,6 +20,15 @@ Still open:
 - update Turnstile, Supabase Auth, and Stripe webhook/return assumptions to the custom domain
 - collect operator evidence for the custom-domain cutover before final `P4-006`
 
+### Deployment safety gate (new P0 stream)
+Still open:
+- implement Cloudflare Workflows deploy guard for pre-deploy config validation and post-deploy canary checks
+- prioritize Turnstile/domain drift detection so key-hostname mismatches fail before customer impact
+- add workflow alerting + incident payloads for failed gate steps
+
+Plan reference:
+- `docs/10-cloudflare-workflows-deploy-guard-plan.md`
+
 ## Engineering Work Still Open
 
 ### MA-005

@@ -11,6 +11,8 @@ Read these in order:
 6. `docs/06-environment-and-secrets.md`
 7. `docs/07-deploy-and-ops-runbook.md`
 8. `docs/08-architecture-flows.md`
+9. `docs/09-agency-pilot-lifter-plan.md`
+10. `docs/10-cloudflare-workflows-deploy-guard-plan.md`
 
 Supporting source files used to build this set:
 - `agents/ORCHESTRATOR.md`
