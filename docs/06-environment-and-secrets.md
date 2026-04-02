@@ -43,6 +43,10 @@ Required:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+- `DISTRIBUTION_ENGINE_UI_ENABLED`
+- `DISTRIBUTION_ENGINE_WRITE_ENABLED`
+- `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
+- `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
 - `STRIPE_PRICE_ID_DEEP_AUDIT`
 - `ADMIN_EMAIL`
 - `DEEP_AUDIT_R2_PUBLIC_BASE`
@@ -191,6 +195,27 @@ If a page says `Could not load analytics`, first verify the active DB has the at
   - no provider-side connectivity or send-permission probe yet
   - no provider adapter beyond Kit and Ghost yet
 
+### Distribution engine admin shell
+- the generalized distribution-engine admin page at `/dashboard/distribution` is gated by:
+  - `DISTRIBUTION_ENGINE_UI_ENABLED=true` for the read-only shell
+  - `DISTRIBUTION_ENGINE_WRITE_ENABLED=true` for writable account / asset / job controls
+- the first background dispatch lane is separately gated by:
+  - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED=true` to let the Worker cron process due jobs
+  - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT` to cap one cron sweep
+- recommended default:
+  - keep all three distribution-engine flags `false` in production until the new control plane and background runtime are intentionally exposed
+- current behavior:
+  - `UI=false` hides the nav entry and returns a feature-flag-off message on the route
+  - `UI=true` and `WRITE=false` exposes the read-only shell only
+  - `UI=true` and `WRITE=true` exposes the writable admin forms too
+  - `BACKGROUND=true` still does nothing unless both `UI=true` and `WRITE=true` are also set
+  - when the background lane is enabled, the existing Worker cron enqueues at most `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT` due jobs into `DISTRIBUTION_QUEUE`
+  - a dedicated Worker queue consumer then processes those jobs with provider-aware retry decisions
+  - retryable provider failures move the job back to `queued` / `scheduled` so Queue retry can re-attempt it
+  - permanent failures are acked without retry, and DLQ-exhausted jobs are explicitly marked `failed`
+  - the writable admin shell now also supports manual token storage and account-status updates for generalized distribution accounts
+  - current truth: this token surface is the first control-plane foundation only; the shipped newsletter adapters still read provider credentials from env today
+
 ### Internal benchmarks
 - Supabase URL + service role key
 - `BENCHMARK_EXECUTION_PROVIDER=gemini` only if you want live benchmark execution
@@ -262,6 +287,26 @@ Before handing off to another team, verify:
 5. retrieval drilldown opens when retrieval rows exist
 6. report page can fetch markdown and PDF without CSP errors
 
+## Turnstile troubleshooting
+
+If landing-page scan fails before `/api/scan` with browser console errors from
+`challenges.cloudflare.com` and `[Cloudflare Turnstile] Error: 110200`, treat it as
+hostname mismatch for the configured site key.
+
+Required checks:
+1. In Cloudflare Turnstile widget settings, confirm allowed hostnames include every active frontend host:
+- `getgeopulse.com`
+- `www.getgeopulse.com` (if used)
+- `geo-pulse.<account>.workers.dev` (if direct Workers URL is used)
+- any preview/build hostname you actually test against
+2. Confirm Worker/Public var `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is the site key from that same widget.
+3. Confirm Worker secret `TURNSTILE_SECRET_KEY` belongs to the same widget pair.
+4. Redeploy after changing public vars so the client bundle picks up the new site key.
+
+Notes:
+- `110200` is client-side domain rejection, not a backend `/api/scan` validation failure.
+- `400020` generally indicates an invalid site key value.
+
 ## Current production checklist
 
 To match the current repo/runtime features in Cloudflare production, make sure these are present:
@@ -271,6 +316,10 @@ To match the current repo/runtime features in Cloudflare production, make sure t
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+- `DISTRIBUTION_ENGINE_UI_ENABLED`
+- `DISTRIBUTION_ENGINE_WRITE_ENABLED`
+- `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
+- `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
 - `ADMIN_EMAIL`
 - `STRIPE_PRICE_ID_DEEP_AUDIT`
 - `GEMINI_MODEL`

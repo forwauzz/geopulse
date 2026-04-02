@@ -1,6 +1,6 @@
 # Current State
 
-Last consolidated: 2026-03-31
+Last consolidated: 2026-04-02
 
 ## Product Status
 
@@ -51,7 +51,17 @@ Current truth:
 - the blog renderer now supports captioned images and standalone-link video embeds without changing the text-first canonical article model
 - authenticated dashboard routes now use a dedicated left-side navigation shell rather than relying on top-nav duplication
 - the repo now has a first-pass product marketing context, founder voice draft, social-research synthesis, blog LLM-readiness spec, content-machine blueprint, and content-writing skill spec
-- the repo now also has a dedicated distribution-engine planning document that freezes the next future implementation order as schema-first, asset-model second, adapter work later
+- the repo now also has a dedicated distribution-engine planning document that froze the implementation order as schema-first, repository/admin second, orchestration third, adapter expansion later
+- the first generalized distribution-engine schema slice is now in repo too: `supabase/migrations/020_distribution_engine_foundation.sql` adds accounts, tokens, assets, media, jobs, and attempts beside the existing content-machine delivery tables
+- the second generalized distribution-engine slice is now in repo too: `lib/server/distribution-engine-repository.ts` and `lib/server/distribution-engine-admin-data.ts` provide typed repository and admin-summary helpers over the new schema
+- the third generalized distribution-engine slice is now in repo too: a first admin shell exists at `/dashboard/distribution`, summarizing accounts, assets, jobs, and attempt/error state
+- the fourth generalized distribution-engine slice is now in repo too: writable account / asset / job controls plus a manual dispatch trigger exist behind explicit feature flags instead of being exposed by default
+- the fifth generalized distribution-engine slice is now in repo too: a bounded dispatcher can process due distribution jobs, persist attempts, and reuse the current content-destination adapter seam for supported newsletter/content providers
+- the sixth generalized distribution-engine slice is now in repo too: the existing Worker cron can now enqueue due distribution jobs into a dedicated queue-backed runtime when the dedicated distribution runtime flag is enabled
+- the seventh generalized distribution-engine slice is now in repo too: `/dashboard/distribution` can now store account-token rows, update connection status, and show first-pass token health directly in the account table
+- the distribution-engine UI is feature-flagged with `DISTRIBUTION_ENGINE_UI_ENABLED` and `DISTRIBUTION_ENGINE_WRITE_ENABLED`, so unfinished admin capability is not exposed accidentally
+- the background dispatch lane is separately gated with `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED` plus a bounded per-sweep limit, so queue rollout can stay dark until intentionally enabled
+- what remains for the generalized distribution engine is deeper provider-aware retry/backoff hardening, broader provider/runtime support, account-connection/token lifecycle management, richer media handling, and generalized social/video adapters
 - the implementation direction remains site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
 - a new planning-only agency pilot stream is now documented in `docs/09-agency-pilot-lifter-plan.md`
 - that plan freezes the first target as one internal pilot agency (`lifter.ca`) with:
@@ -365,6 +375,44 @@ Current truth:
   - the view shows article-level failures so launch prep is operational, not guesswork
 - dashboard admin navigation now links to the content inventory
 
+### Generalized distribution engine foundation
+- generalized schema foundation for:
+  - `distribution_accounts`
+  - `distribution_account_tokens`
+  - `distribution_assets`
+  - `distribution_asset_media`
+  - `distribution_jobs`
+  - `distribution_job_attempts`
+- typed server-side repository helpers for accounts, tokens, assets, media, jobs, and attempts
+- admin summary data helper for the generalized distribution model
+- first admin route at `/dashboard/distribution`
+- feature-flagged writable controls for:
+  - account create/update
+  - token save / connection-state update
+  - asset seeding
+  - job creation
+- feature-flagged manual dispatch trigger for due jobs
+- bounded dispatch runtime:
+  - loads dispatchable jobs
+  - records job attempts
+  - updates final status and provider metadata
+  - reuses the current content-destination adapter seam for supported content/newsletter providers
+- explicit rollout flags:
+  - `DISTRIBUTION_ENGINE_UI_ENABLED`
+  - `DISTRIBUTION_ENGINE_WRITE_ENABLED`
+  - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
+  - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
+- first background cron dispatch:
+  - the Worker scheduled runtime can enqueue due jobs into `DISTRIBUTION_QUEUE`
+  - one sweep is capped by `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
+  - a dedicated queue consumer now executes one queued job at a time with provider-aware retry decisions plus DLQ terminal marking
+  - the background lane stays dark unless the dedicated runtime flag is enabled
+- current limitation:
+  - only `content_item` sourced assets flow through the current runtime
+  - retry policy is now provider-aware at the permanent-vs-retryable level, but not yet tuned with provider-specific backoff windows
+  - token storage/admin connection state now exists, but the runtime still uses provider env secrets for the currently shipped newsletter adapters
+  - broader account OAuth/token refresh, media pipelines, and generalized social/video adapters are still unshipped
+
 ## Current Blockers
 
 These still block launch closure:
@@ -383,6 +431,7 @@ Current domain truth:
 - The results/report UX now reflects real payment/report state instead of optimistic query-string messaging.
 - The share/report action layer now better matches reality: share snapshot is a real action, and delivered-report copy no longer overpromises direct access.
 - Launch readiness is still gated by operational security closure, not by missing core product code.
+- The broader distribution engine is no longer planning-only: the repo now contains its schema foundation, repository seam, feature-flagged admin shell, writable controls, a bounded manual dispatch path, and a feature-flagged queue-backed background runtime with retry/DLQ handling, but not the final hardened orchestration model.
 - Deep-audit core scale plumbing is implemented; remaining launch risk is operational/security closure, not DA-004 core code.
 - Retrieval analytics are implemented for deterministic and Promptfoo-backed runs, but RAGAS runtime remains intentionally unshipped.
 - The first live `law_firms` benchmark lane is operationally real, but its current frame is over-mixed: many domain/query pairs are low-fit by design because the cohort mixes enterprise firms, immigration, divorce, PI, and employment specialists under one broad query set.

@@ -100,3 +100,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 # wrangler preview / npm run preview: use the URL Wrangler prints, e.g. http://127.0.0.1:8787
 NEXT_PUBLIC_APP_URL=http://127.0.0.1:8787
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
+# Distribution engine admin shell flags. Keep false until intentionally testing the new UI.
+DISTRIBUTION_ENGINE_UI_ENABLED=false
+DISTRIBUTION_ENGINE_WRITE_ENABLED=false
+# Background cron dispatch flag. Keep false until the new runtime path is intentionally enabled.
+DISTRIBUTION_ENGINE_BACKGROUND_ENABLED=false
+# Bounded number of due jobs the cron dispatcher will process per sweep.
+DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT=20

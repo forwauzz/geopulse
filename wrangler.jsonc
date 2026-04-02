@@ -36,6 +36,10 @@
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
     "NEXT_PUBLIC_APP_URL": "https://getgeopulse.com/",
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACySl18X8egdbFEN",
+    "DISTRIBUTION_ENGINE_UI_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_WRITE_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_BACKGROUND_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT": "20",
     "ADMIN_EMAIL": "uzziel@getgeopulse.com",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
@@ -114,6 +118,10 @@
       {
         "binding": "SCAN_QUEUE",
         "queue": "geo-pulse-scan-queue"
+      },
+      {
+        "binding": "DISTRIBUTION_QUEUE",
+        "queue": "geo-pulse-distribution-queue"
       }
     ],
     "consumers": [
@@ -126,6 +134,19 @@
       },
       {
         "queue": "geo-pulse-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 1
+      },
+      {
+        "queue": "geo-pulse-distribution-queue",
+        "max_batch_size": 5,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "dead_letter_queue": "geo-pulse-distribution-dlq"
+      },
+      {
+        "queue": "geo-pulse-distribution-dlq",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 1

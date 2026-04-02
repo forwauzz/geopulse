@@ -41,6 +41,20 @@ function messageFromScanError(data: unknown): string {
   return `${prefix}${detail || 'Scan failed'}`;
 }
 
+function turnstileErrorMessage(errorCode: string | number | undefined): string {
+  const code = String(errorCode ?? '').trim();
+  if (code === '110200') {
+    return 'Verification is blocked for this domain. The Turnstile widget must allow this hostname.';
+  }
+  if (code === '110100' || code === '110110' || code === '400020') {
+    return 'Verification is misconfigured (invalid site key). Contact support.';
+  }
+  if (code === '400070') {
+    return 'Verification is misconfigured (site key disabled). Contact support.';
+  }
+  return code ? `Verification failed (${code}). Refresh and try again.` : 'Verification failed. Refresh and try again.';
+}
+
 export function ScanForm({ siteKey, defaultUrl, agencyAccountId, agencyClientId }: ScanFormProps) {
   const router = useRouter();
   const [url, setUrl] = useState(defaultUrl ?? '');
@@ -135,7 +149,18 @@ export function ScanForm({ siteKey, defaultUrl, agencyAccountId, agencyClientId 
       </div>
       {bypassTurnstile ? null : (
         <div className="min-h-[65px] flex justify-center">
-          <Turnstile siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(null)} />
+          <Turnstile
+            siteKey={siteKey}
+            onSuccess={(nextToken) => {
+              setToken(nextToken);
+              setError(null);
+            }}
+            onExpire={() => setToken(null)}
+            onError={(code) => {
+              setToken(null);
+              setError(turnstileErrorMessage(code));
+            }}
+          />
         </div>
       )}
       {error ? <p className="text-center text-sm text-error">{error}</p> : null}

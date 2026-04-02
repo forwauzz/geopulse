@@ -7,6 +7,10 @@ export type ScanApiEnv = {
   SCAN_CACHE: KVNamespace | undefined;
   NEXT_PUBLIC_SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  DISTRIBUTION_ENGINE_UI_ENABLED: string;
+  DISTRIBUTION_ENGINE_WRITE_ENABLED: string;
+  DISTRIBUTION_ENGINE_BACKGROUND_ENABLED?: string;
+  DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT?: string;
   TURNSTILE_SECRET_KEY: string;
   GEMINI_API_KEY: string;
   GEMINI_MODEL: string;
@@ -20,6 +24,7 @@ export type ScanApiEnv = {
 
 export type PaymentApiEnv = ScanApiEnv & {
   SCAN_QUEUE: Queue | undefined;
+  DISTRIBUTION_QUEUE?: Queue | undefined;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRICE_ID_DEEP_AUDIT: string;
@@ -74,11 +79,36 @@ function resolveScanQueue(e: Record<string, unknown>): Queue | undefined {
   return undefined;
 }
 
+function resolveQueueBinding(e: Record<string, unknown>, key: string): Queue | undefined {
+  const direct = e[key];
+  if (direct && typeof (direct as Queue).send === 'function') {
+    return direct as Queue;
+  }
+  try {
+    const { env: syncEnv } = getCloudflareContext({ async: false });
+    const q = (syncEnv as unknown as Record<string, unknown>)[key];
+    if (q && typeof (q as Queue).send === 'function') {
+      return q as Queue;
+    }
+  } catch {
+    /* sync context unavailable */
+  }
+  return undefined;
+}
+
 function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
   return {
     SCAN_CACHE: e['SCAN_CACHE'] as KVNamespace | undefined,
     NEXT_PUBLIC_SUPABASE_URL: String(e['NEXT_PUBLIC_SUPABASE_URL'] ?? ''),
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
+    DISTRIBUTION_ENGINE_UI_ENABLED: String(e['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? ''),
+    DISTRIBUTION_ENGINE_WRITE_ENABLED: String(e['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? ''),
+    DISTRIBUTION_ENGINE_BACKGROUND_ENABLED: String(
+      e['DISTRIBUTION_ENGINE_BACKGROUND_ENABLED'] ?? ''
+    ),
+    DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT: String(
+      e['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? ''
+    ),
     TURNSTILE_SECRET_KEY: String(e['TURNSTILE_SECRET_KEY'] ?? ''),
     GEMINI_API_KEY: String(e['GEMINI_API_KEY'] ?? ''),
     GEMINI_MODEL: String(e['GEMINI_MODEL'] ?? 'gemini-2.0-flash'),
@@ -102,6 +132,12 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       SCAN_CACHE: undefined,
       NEXT_PUBLIC_SUPABASE_URL: process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
+      DISTRIBUTION_ENGINE_UI_ENABLED: process.env['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? '',
+      DISTRIBUTION_ENGINE_WRITE_ENABLED: process.env['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? '',
+      DISTRIBUTION_ENGINE_BACKGROUND_ENABLED:
+        process.env['DISTRIBUTION_ENGINE_BACKGROUND_ENABLED'] ?? '',
+      DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT:
+        process.env['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? '',
       TURNSTILE_SECRET_KEY: process.env['TURNSTILE_SECRET_KEY'] ?? '',
       GEMINI_API_KEY: process.env['GEMINI_API_KEY'] ?? '',
       GEMINI_MODEL: process.env['GEMINI_MODEL'] ?? 'gemini-2.0-flash',
@@ -126,6 +162,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
     return {
       ...base,
       SCAN_QUEUE: resolveScanQueue(e),
+      DISTRIBUTION_QUEUE: resolveQueueBinding(e, 'DISTRIBUTION_QUEUE'),
       STRIPE_SECRET_KEY: pickEnvString(e, 'STRIPE_SECRET_KEY'),
       STRIPE_WEBHOOK_SECRET: pickEnvString(e, 'STRIPE_WEBHOOK_SECRET'),
       STRIPE_PRICE_ID_DEEP_AUDIT: pickEnvString(e, 'STRIPE_PRICE_ID_DEEP_AUDIT'),
@@ -147,6 +184,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
     return {
       ...(await getScanApiEnv()),
       SCAN_QUEUE: undefined,
+      DISTRIBUTION_QUEUE: undefined,
       STRIPE_SECRET_KEY: process.env['STRIPE_SECRET_KEY'] ?? '',
       STRIPE_WEBHOOK_SECRET: process.env['STRIPE_WEBHOOK_SECRET'] ?? '',
       STRIPE_PRICE_ID_DEEP_AUDIT: process.env['STRIPE_PRICE_ID_DEEP_AUDIT'] ?? '',

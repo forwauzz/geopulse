@@ -20,6 +20,29 @@ export type ContentDestinationAdapter = {
   publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult>;
 };
 
+export class ContentDestinationPublishError extends Error {
+  readonly providerName: string;
+  readonly statusCode: number | null;
+  readonly retryable: boolean;
+
+  constructor(args: {
+    readonly message: string;
+    readonly providerName: string;
+    readonly statusCode?: number | null;
+    readonly retryable: boolean;
+  }) {
+    super(args.message);
+    this.name = 'ContentDestinationPublishError';
+    this.providerName = args.providerName;
+    this.statusCode = args.statusCode ?? null;
+    this.retryable = args.retryable;
+  }
+}
+
+function isRetryableHttpStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
 const ADAPTER_PROVIDERS = new Set(['buttondown', 'ghost', 'kit']);
 
 function escapeHtml(value: string): string {
@@ -113,7 +136,11 @@ function getDraftBody(item: ContentAdminDetailRow): string {
   if (item.brief_markdown && item.brief_markdown.trim().length > 0) {
     return item.brief_markdown;
   }
-  throw new Error('Content item has no markdown body to publish.');
+  throw new ContentDestinationPublishError({
+    message: 'Content item has no markdown body to publish.',
+    providerName: 'generic',
+    retryable: false,
+  });
 }
 
 function base64UrlEncode(value: string | Buffer): string {
@@ -127,7 +154,11 @@ function base64UrlEncode(value: string | Buffer): string {
 function createGhostAdminToken(apiKey: string): string {
   const [id, secretHex] = apiKey.split(':');
   if (!id || !secretHex) {
-    throw new Error('GHOST_ADMIN_API_KEY must be in id:secret format.');
+    throw new ContentDestinationPublishError({
+      message: 'GHOST_ADMIN_API_KEY must be in id:secret format.',
+      providerName: 'ghost',
+      retryable: false,
+    });
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -159,7 +190,11 @@ function createGhostAdminToken(apiKey: string): string {
 function normalizeGhostAdminBaseUrl(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
-    throw new Error('GHOST_ADMIN_API_URL is missing.');
+    throw new ContentDestinationPublishError({
+      message: 'GHOST_ADMIN_API_URL is missing.',
+      providerName: 'ghost',
+      retryable: false,
+    });
   }
   return trimmed.replace(/\/+$/, '');
 }
@@ -167,7 +202,11 @@ function normalizeGhostAdminBaseUrl(value: string): string {
 class KitContentDestinationAdapter implements ContentDestinationAdapter {
   async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
     if (!request.env.KIT_API_KEY) {
-      throw new Error('KIT_API_KEY is missing.');
+      throw new ContentDestinationPublishError({
+        message: 'KIT_API_KEY is missing.',
+        providerName: 'kit',
+        retryable: false,
+      });
     }
 
     const markdown = getDraftBody(request.item);
@@ -194,7 +233,12 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Kit publish failed (${response.status}): ${errorText}`);
+      throw new ContentDestinationPublishError({
+        message: `Kit publish failed (${response.status}): ${errorText}`,
+        providerName: 'kit',
+        statusCode: response.status,
+        retryable: isRetryableHttpStatus(response.status),
+      });
     }
 
     const json = (await response.json()) as {
@@ -205,7 +249,11 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
 
     const providerPublicationId = json.id != null ? String(json.id) : '';
     if (!providerPublicationId) {
-      throw new Error('Kit publish succeeded but no broadcast id was returned.');
+      throw new ContentDestinationPublishError({
+        message: 'Kit publish succeeded but no broadcast id was returned.',
+        providerName: 'kit',
+        retryable: false,
+      });
     }
 
     return {
@@ -223,7 +271,11 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
 class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
   async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
     if (!request.env.BUTTONDOWN_API_KEY) {
-      throw new Error('BUTTONDOWN_API_KEY is missing.');
+      throw new ContentDestinationPublishError({
+        message: 'BUTTONDOWN_API_KEY is missing.',
+        providerName: 'buttondown',
+        retryable: false,
+      });
     }
 
     const markdown = getDraftBody(request.item);
@@ -255,7 +307,12 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Buttondown publish failed (${response.status}): ${errorText}`);
+      throw new ContentDestinationPublishError({
+        message: `Buttondown publish failed (${response.status}): ${errorText}`,
+        providerName: 'buttondown',
+        statusCode: response.status,
+        retryable: isRetryableHttpStatus(response.status),
+      });
     }
 
     const json = (await response.json()) as {
@@ -267,7 +324,11 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
 
     const providerPublicationId = json.id?.trim() ?? '';
     if (!providerPublicationId) {
-      throw new Error('Buttondown publish succeeded but no email id was returned.');
+      throw new ContentDestinationPublishError({
+        message: 'Buttondown publish succeeded but no email id was returned.',
+        providerName: 'buttondown',
+        retryable: false,
+      });
     }
 
     return {
@@ -286,10 +347,18 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
 class GhostContentDestinationAdapter implements ContentDestinationAdapter {
   async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
     if (!request.env.GHOST_ADMIN_API_URL) {
-      throw new Error('GHOST_ADMIN_API_URL is missing.');
+      throw new ContentDestinationPublishError({
+        message: 'GHOST_ADMIN_API_URL is missing.',
+        providerName: 'ghost',
+        retryable: false,
+      });
     }
     if (!request.env.GHOST_ADMIN_API_KEY) {
-      throw new Error('GHOST_ADMIN_API_KEY is missing.');
+      throw new ContentDestinationPublishError({
+        message: 'GHOST_ADMIN_API_KEY is missing.',
+        providerName: 'ghost',
+        retryable: false,
+      });
     }
 
     const markdown = getDraftBody(request.item);
@@ -322,7 +391,12 @@ class GhostContentDestinationAdapter implements ContentDestinationAdapter {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Ghost publish failed (${response.status}): ${errorText}`);
+      throw new ContentDestinationPublishError({
+        message: `Ghost publish failed (${response.status}): ${errorText}`,
+        providerName: 'ghost',
+        statusCode: response.status,
+        retryable: isRetryableHttpStatus(response.status),
+      });
     }
 
     const json = (await response.json()) as {
@@ -336,7 +410,11 @@ class GhostContentDestinationAdapter implements ContentDestinationAdapter {
     const post = json.posts?.[0];
     const providerPublicationId = post?.id?.trim() ?? '';
     if (!providerPublicationId) {
-      throw new Error('Ghost publish succeeded but no post id was returned.');
+      throw new ContentDestinationPublishError({
+        message: 'Ghost publish succeeded but no post id was returned.',
+        providerName: 'ghost',
+        retryable: false,
+      });
     }
 
     return {
@@ -362,7 +440,11 @@ export function resolveContentDestinationAdapter(
     case 'kit':
       return new KitContentDestinationAdapter();
     default:
-      throw new Error(`No content destination adapter exists for ${destination.provider_name}.`);
+      throw new ContentDestinationPublishError({
+        message: `No content destination adapter exists for ${destination.provider_name}.`,
+        providerName: destination.provider_name,
+        retryable: false,
+      });
   }
 }
 
