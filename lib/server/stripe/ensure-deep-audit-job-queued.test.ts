@@ -15,6 +15,8 @@ function envWithQueue(send: () => Promise<void>): PaymentApiEnv {
     SCAN_CACHE: undefined,
     NEXT_PUBLIC_SUPABASE_URL: '',
     SUPABASE_SERVICE_ROLE_KEY: '',
+    DISTRIBUTION_ENGINE_UI_ENABLED: '',
+    DISTRIBUTION_ENGINE_WRITE_ENABLED: '',
     TURNSTILE_SECRET_KEY: '',
     GEMINI_API_KEY: '',
     GEMINI_MODEL: 'gemini-2.0-flash',

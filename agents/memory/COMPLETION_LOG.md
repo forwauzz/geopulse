@@ -5,6 +5,421 @@
 
 ---
 
+### 2026-04-02 - Distribution engine token admin slice
+
+Added the first writable token/account-connection admin surface on top of the generalized distribution schema.
+
+Files updated:
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `app/dashboard/distribution/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a write-gated admin action for saving one `distribution_account_tokens` row
+- updated that action to keep the linked account status in sync and stamp verification metadata when marked connected
+- added a writable token form to `/dashboard/distribution`
+- added first-pass token health visibility to the account table:
+  - no token
+  - no expiry
+  - expiring soon
+  - expired / needs attention
+
+What was not implemented:
+- no provider-native OAuth handshake yet
+- no token encryption/key-management layer beyond storing the provided token payload in the existing encrypted-value column
+- no runtime switch from env-based newsletter credentials to stored account tokens yet
+
+Verification:
+- `npm run type-check`
+- `npm run build`
+
+---
+
+### 2026-04-02 - Distribution engine retry / DLQ hardening slice
+
+Hardened the dedicated distribution queue runtime with provider-aware retry decisions and explicit DLQ terminal handling.
+
+Files updated:
+- `lib/server/content-destination-adapters.ts`
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `workers/queue/distribution-job-queue-consumer.ts`
+- `workers/queue/distribution-job-queue-consumer.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a typed provider publish error shape so adapters can report:
+  - provider name
+  - HTTP status when available
+  - retryable vs permanent failure
+- changed distribution dispatch failure handling so retryable failures:
+  - persist a job attempt with provider status code
+  - move the job back to `queued` / `scheduled`
+  - leave `completed_at` unset so queue retry can re-attempt it
+- changed the queue consumer so permanent failures are acked without retry while retryable failures call Queue retry
+- changed the distribution DLQ path so exhausted messages now mark the underlying job `failed` and append a final attempt row instead of only logging receipt
+
+What was not implemented:
+- no provider-specific backoff windows yet beyond retryable-vs-permanent classification
+- no DLQ replay workflow yet for distribution jobs
+- no token refresh flow yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-schedule.test.ts lib/server/distribution-job-dispatcher.test.ts workers/queue/distribution-job-queue-consumer.test.ts`
+- `npm run build`
+
+---
+
+### 2026-04-02 - Distribution engine queue consumer slice
+
+Moved the first background distribution runtime from cron-inline dispatch to a dedicated queue-backed execution path.
+
+Files added:
+- `lib/queue/distribution-job.ts`
+- `workers/queue/distribution-job-queue-consumer.ts`
+- `workers/queue/distribution-job-queue-consumer.test.ts`
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-engine-repository.ts`
+- `lib/server/distribution-job-schedule.ts`
+- `lib/server/distribution-job-schedule.test.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `lib/server/cf-env.ts`
+- `workers/cloudflare-entry.ts`
+- `wrangler.jsonc`
+- `cloudflare-env.d.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added an explicit distribution queue payload contract
+- extracted single-job dispatch so the same delivery path can be used by:
+  - manual bounded dispatch
+  - queue-consumer execution
+- changed the scheduled background helper so it now enqueues due jobs into `DISTRIBUTION_QUEUE` instead of dispatching them inline
+- added a dedicated Worker queue consumer for distribution jobs plus a dedicated distribution DLQ
+- wired the Worker queue handler to route report-queue batches and distribution-queue batches separately
+
+What was not implemented:
+- no provider-aware retry/backoff policy yet beyond Cloudflare Queue retries
+- no DLQ replay workflow yet for distribution jobs
+- no token refresh flow yet
+- no generalized social/video adapter runtime yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-schedule.test.ts lib/server/distribution-job-dispatcher.test.ts workers/queue/distribution-job-queue-consumer.test.ts`
+- `npm run build`
+
+---
+
+### 2026-04-02 - Distribution engine background cron dispatch slice
+
+Added the first background execution path for generalized distribution jobs by wiring the bounded dispatcher into the Worker cron.
+
+Files added:
+- `lib/server/distribution-job-schedule.ts`
+- `lib/server/distribution-job-schedule.test.ts`
+
+Files updated:
+- `workers/cloudflare-entry.ts`
+- `lib/server/cf-env.ts`
+- `cloudflare-env.d.ts`
+- `app/dashboard/distribution/page.tsx`
+- `wrangler.jsonc`
+- `.dev.vars.example`
+- `.env.local.example`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a dedicated distribution schedule helper that:
+  - parses a background-runtime flag and per-sweep batch limit
+  - requires the existing UI and write flags before dispatch will run
+  - logs skipped, started, completed, and failed background sweeps
+- wired the existing Worker `scheduled()` runtime to invoke the distribution scheduler after the benchmark sweep
+- added explicit rollout vars:
+  - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
+  - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
+- kept the runtime bounded:
+  - the cron path reuses the existing dispatcher instead of adding a second delivery implementation
+  - one sweep is capped by the configured batch limit
+
+What was not implemented:
+- no dedicated Cloudflare Queue consumer for distribution jobs yet
+- no richer retry/backoff policy beyond the current bounded cron loop
+- no token refresh flow yet
+- no generalized social/video adapter runtime yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-schedule.test.ts lib/server/distribution-job-dispatcher.test.ts`
+- `npm run build`
+
+---
+
+### 2026-04-02 - Distribution engine documentation normalization slice
+
+Normalized the top-level state docs so the broader repo narrative now matches the implemented distribution-engine slices.
+
+Files updated:
+- `docs/01-current-state.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- updated the public current-state summary so the distribution engine is described as an implemented foundation, not a planning-only stream
+- added explicit repo-level truth for:
+  - generalized schema foundation
+  - typed repository/admin data seam
+  - `/dashboard/distribution`
+  - feature-flagged writable admin controls
+  - bounded manual dispatch
+- tightened the open-work doc so the remaining distribution-engine risks focus on what is actually still unshipped
+- aligned the orchestrator state file with the same implementation truth and remaining scope
+
+What was not implemented:
+- no new product/runtime code
+- no new verification lane beyond documentation consistency and diff hygiene
+
+Verification:
+- `git diff --check -- docs/01-current-state.md agents/memory/PROJECT_STATE.md`
+
+---
+
+### 2026-04-02 - Distribution engine dispatch orchestration slice
+
+Added the first bounded execution path for generalized distribution jobs.
+
+Files added:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+
+Files updated:
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `lib/server/distribution-engine-repository.ts`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added a first bounded dispatcher that:
+  - loads due `distribution_jobs`
+  - marks them `processing`
+  - resolves the linked account and asset
+  - records `distribution_job_attempts`
+  - updates final job status / destination URL / provider post id / last error
+- kept the runtime intentionally narrow:
+  - current dispatch only supports `content_item` sourced assets
+  - current dispatch reuses the existing content-destination adapter seam for currently supported providers
+  - unsupported source/provider/runtime shapes fail explicitly and persist attempt history instead of silently no-oping
+- exposed a manual admin trigger button, still behind `DISTRIBUTION_ENGINE_WRITE_ENABLED`, so due jobs can be dispatched without waiting for a dedicated worker consumer
+
+What was not implemented:
+- no dedicated Cloudflare Queue consumer for distribution jobs yet
+- no scheduled cron dispatcher yet
+- no token refresh flow yet
+- no generalized social/video adapter runtime yet
+- no media upload/render pipeline yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-repository.test.ts lib/server/distribution-engine-admin-data.test.ts lib/server/distribution-job-dispatcher.test.ts lib/server/content-destination-health.test.ts lib/server/content-destination-adapters.test.ts`
+- `npm run build`
+
+---
+
+### 2026-04-02 - Distribution engine writable admin controls slice
+
+Added the first writable distribution-engine admin controls and gated the UI explicitly behind environment feature flags.
+
+Files added:
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `lib/server/distribution-engine-flags.ts`
+
+Files updated:
+- `app/dashboard/distribution/page.tsx`
+- `app/dashboard/content/page.tsx`
+- `lib/server/cf-env.ts`
+- `wrangler.jsonc`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `.dev.vars.example`
+- `scripts/content-push-buttondown.ts`
+- `lib/server/content-destination-health.test.ts`
+- `lib/server/content-destination-adapters.test.ts`
+- `lib/server/stripe/checkout-completed.test.ts`
+- `lib/server/stripe/ensure-deep-audit-job-queued.test.ts`
+
+What was implemented:
+- added two environment-backed distribution-engine flags:
+  - `DISTRIBUTION_ENGINE_UI_ENABLED`
+  - `DISTRIBUTION_ENGINE_WRITE_ENABLED`
+- wired the distribution admin route and nav entry to respect the UI flag
+- kept writable account / asset / job forms behind the stricter write flag
+- enforced the same write flag server-side in the new admin actions, so hidden UI alone is not the only control
+- added first writable admin actions for:
+  - saving distribution accounts
+  - seeding typed distribution assets
+  - creating distribution jobs
+
+What was not implemented:
+- no OAuth/connect handshake yet
+- no token-write UI yet
+- no media upload UI yet
+- no queue dispatcher or consumer yet
+- no generalized publish adapter runtime yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-admin-data.test.ts lib/server/distribution-engine-repository.test.ts lib/server/content-destination-health.test.ts lib/server/content-destination-adapters.test.ts`
+- `npm run build`
+
+---
+
+### 2026-04-02 - Distribution engine admin shell slice
+
+Added the first read-only admin/account shell on top of the new generalized distribution repository.
+
+Files added:
+- `lib/server/distribution-engine-admin-data.ts`
+- `lib/server/distribution-engine-admin-data.test.ts`
+- `app/dashboard/distribution/page.tsx`
+
+Files updated:
+- `app/dashboard/content/page.tsx`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added a dedicated admin data helper that summarizes:
+  - connected accounts plus token counts/latest expiry
+  - typed assets plus media counts
+  - jobs plus attempt counts/latest error
+- added a first admin route at `/dashboard/distribution`
+- kept the route intentionally read-only so the new schema can be inspected before account-connect actions and queue mutators exist
+- linked the existing content admin page to the new distribution-engine admin shell
+
+What was not implemented:
+- no writable admin actions yet for creating accounts, assets, or jobs
+- no OAuth/connect flow yet
+- no queue dispatcher or consumer yet
+- no generalized adapter runtime yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-admin-data.test.ts lib/server/distribution-engine-repository.test.ts`
+- `npm run build`
+
+---
+
+### 2026-04-02 - Distribution engine Phase B repository seam slice
+
+Added the first typed server-side repository/helpers for the new generalized distribution-engine tables.
+
+Files added:
+- `lib/server/distribution-engine-repository.ts`
+- `lib/server/distribution-engine-repository.test.ts`
+
+Files updated:
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added a dedicated repository seam for the new generalized distribution tables:
+  - accounts
+  - account tokens
+  - assets
+  - asset media
+  - jobs
+  - job attempts
+- added typed row and input contracts so future admin, queue, and adapter slices can reuse one server-side contract instead of calling the new tables ad hoc
+- added first repository operations for:
+  - listing and upserting connected accounts
+  - upserting account tokens
+  - listing and upserting typed assets
+  - replacing/listing asset media
+  - creating/updating jobs
+  - listing dispatchable jobs
+  - creating/listing job attempts
+
+What was not implemented:
+- no admin UI surface yet for the generalized distribution-engine tables
+- no account OAuth/connect flow yet
+- no queue consumer or scheduled dispatcher yet
+- no generalized adapter runtime yet
+- no live runtime paths were switched to the new repository in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-repository.test.ts`
+
+---
+
+### 2026-04-02 - Distribution engine Phase A schema foundation slice
+
+Started the first real implementation slice for the distribution engine by adding the generalized relational schema foundation.
+
+Files added:
+- `supabase/migrations/020_distribution_engine_foundation.sql`
+
+Files updated:
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added generalized distribution-account state with explicit provider and connection status:
+  - `public.distribution_accounts`
+  - `public.distribution_account_tokens`
+- added typed downstream asset and media records:
+  - `public.distribution_assets`
+  - `public.distribution_asset_media`
+- added queued delivery and retry-history records:
+  - `public.distribution_jobs`
+  - `public.distribution_job_attempts`
+- added indexes, `updated_at` triggers, RLS enablement, and table/column comments for the new schema
+- kept the new schema intentionally separate from the current `content_distribution_*` tables so the existing newsletter/content machine path does not need to mutate immediately
+
+What was decided in-schema:
+- typed asset support now exists for:
+  - `newsletter_email`
+  - `link_post`
+  - `thread_post`
+  - `single_image_post`
+  - `carousel_post`
+  - `short_video_post`
+  - `long_video_post`
+- provider/account groundwork now explicitly covers:
+  - newsletter providers
+  - text-first social destinations
+  - media-heavy platforms
+- asset origin is modeled to support:
+  - canonical `content_item` sources now
+  - future benchmark-insight derived assets later
+
+What was not implemented:
+- no repository/helper layer yet for the new tables
+- no admin UI or account-connection flow yet
+- no queue worker/orchestration yet
+- no new generalized provider adapter yet
+- no migration was applied to a live database in this slice
+
+Verification:
+- schema-only slice
+- no runtime behavior changed
+
+---
+
 ### 2026-03-31 - Distribution engine planning slice
 
 Added the first explicit distribution-engine planning document on branch `planning/content-machine-v1`.

@@ -44,11 +44,19 @@ Still open:
 - add an explicit pre-publish LLM-readiness check before on-site publish
 
 ### Distribution engine planning -> implementation gap
-Planned, not active implementation yet:
-- draft schema for generalized distribution accounts, assets, media, jobs, and job attempts
+Phase A plus the first implementation slices are now in repo; later implementation still open:
+- generalized schema foundation now exists in `supabase/migrations/020_distribution_engine_foundation.sql`
+- typed server-side helper/repository foundation now exists in `lib/server/distribution-engine-repository.ts`
+- first feature-flagged admin shell now exists at `/dashboard/distribution`
+- writable account / asset / job controls now exist behind `DISTRIBUTION_ENGINE_WRITE_ENABLED`
+- first bounded manual dispatch/runtime seam now exists in `lib/server/distribution-job-dispatcher.ts`
+- first background queue-backed dispatch lane now exists in `lib/server/distribution-job-schedule.ts`, `workers/queue/distribution-job-queue-consumer.ts`, and `workers/cloudflare-entry.ts`
+- first writable token/account-status admin surface now exists at `/dashboard/distribution`
+- what remains after the current schema + admin + bounded-dispatch slices:
 - expand the current destination model beyond newsletter-first assumptions
 - add account connection and token lifecycle handling for social/video platforms
-- add queued delivery orchestration for draft, scheduled, and publish-now modes
+- deepen provider-specific retry/backoff behavior now that the first dedicated queue consumer and DLQ terminal-marking path exist
+- move from manual token entry into provider-native OAuth/account connection flows
 - add R2-backed media asset handling for image, carousel, and video destinations
 - add generalized adapters for text-first social platforms before media-heavy platforms
 - do not begin by wiring platform adapters directly into the current newsletter-only delivery shape

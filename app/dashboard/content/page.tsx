@@ -11,6 +11,7 @@ import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
 import { buildContentLaunchReadiness } from '@/lib/server/content-launch-readiness';
+import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +76,7 @@ export default async function ContentAdminPage() {
 
   const contentAdminData = createContentAdminData(adminContext.adminDb);
   const destinationAdminData = createContentDestinationAdminData(adminContext.adminDb);
+  const distributionFlags = resolveDistributionEngineFlags(adminContext.env);
 
   try {
     const [env, items, destinations] = await Promise.all([
@@ -157,6 +159,14 @@ export default async function ContentAdminPage() {
             >
               Logs
             </Link>
+            {distributionFlags.uiEnabled ? (
+              <Link
+                href="/dashboard/distribution"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Distribution engine
+              </Link>
+            ) : null}
             <Link
               href="/dashboard/content/launch"
               className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
