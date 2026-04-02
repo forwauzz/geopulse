@@ -232,8 +232,38 @@ class PdfBuilder {
     this.y -= 8;
   }
 
+  drawAtAGlance(input: {
+    score: number;
+    grade: string;
+    passedChecks: number;
+    totalChecks: number;
+    topIssue?: IssueRow;
+    firstMove?: string;
+  }): void {
+    this.drawSectionTitle('At a Glance');
+    const rows: string[] = [
+      `Overall score: ${String(input.score)}/100 (${input.grade})`,
+      `Checks passed: ${String(input.passedChecks)} of ${String(input.totalChecks)}`,
+    ];
+    if (input.topIssue) {
+      rows.push(`Top blocker: ${input.topIssue.check ?? input.topIssue.checkId ?? 'Check'}`);
+      rows.push(`Primary owner: ${ownerLabel(input.topIssue)}`);
+    }
+    if (input.firstMove) {
+      rows.push(`First recommended move: ${input.firstMove}`);
+    }
+
+    for (const row of rows) {
+      this.ensureSpace(24);
+      this.page.drawRectangle({ x: MARGIN, y: this.y - 4, width: MAX_W, height: 18, color: ROW_ALT });
+      this.page.drawText(row, { x: MARGIN + 8, y: this.y, size: 9, font: this.font, color: INK });
+      this.y -= 24;
+    }
+    this.y -= 8;
+  }
+
   drawScoreBreakdown(issues: IssueRow[]): void {
-    this.drawSectionTitle('Score Breakdown — All Checks');
+    this.drawSectionTitle('Detailed Check Reference');
     this.y -= 4;
 
     this.ensureSpace(16);
@@ -276,6 +306,12 @@ class PdfBuilder {
   drawActionPlan(failedIssues: IssueRow[]): void {
     if (failedIssues.length === 0) return;
     this.drawSectionTitle('Priority Action Plan');
+    this.drawText(
+      'Focus on these actions first before moving into lower-signal cleanup or broad content expansion.',
+      9,
+      false,
+      MUTED
+    );
     this.y -= 4;
 
     for (let i = 0; i < failedIssues.length; i += 1) {
@@ -519,6 +555,7 @@ export async function buildDeepAuditPdf(input: {
   const failedSorted = allIssues
     .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const strongestFailed = failedSorted[0];
   const topFailed = (highlightedIssues.length > 0 ? highlightedIssues : failedSorted).slice(0, 5);
   const topIssueName = topFailed[0]?.check ?? topFailed[0]?.checkId ?? '';
   const firstMove = topFailed[0]?.fix ?? '';
@@ -536,13 +573,20 @@ export async function buildDeepAuditPdf(input: {
 
   const narrative = scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName, firstMove);
   pdf.drawExecutiveSummary(narrative, topFailed.slice(0, 3));
+  pdf.drawAtAGlance({
+    score,
+    grade,
+    passedChecks,
+    totalChecks,
+    topIssue: strongestFailed,
+    firstMove: topFailed[0]?.fix ?? '',
+  });
   if (input.categoryScores && input.categoryScores.length > 0) {
     pdf.drawCategoryBreakdown(input.categoryScores);
   }
-  pdf.drawCoverageSummary(input.coverageSummary);
-  pdf.drawDemandCoverage(allIssues);
-  pdf.drawScoreBreakdown(allIssues);
   pdf.drawActionPlan(failedSorted);
+  pdf.drawDemandCoverage(allIssues);
+  pdf.drawCoverageSummary(input.coverageSummary);
 
   const summaries = input.pageSummaries?.length ? input.pageSummaries : null;
   if (summaries && summaries.length > 1) {
@@ -562,6 +606,7 @@ export async function buildDeepAuditPdf(input: {
     );
   }
 
+  pdf.drawScoreBreakdown(allIssues);
   pdf.drawTechnicalAppendix(input.technicalAppendix, input.coverageSummary);
   pdf.drawDisclaimer();
   return pdf.save();
