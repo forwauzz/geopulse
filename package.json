@@ -8,6 +8,7 @@
     "build:worker": "node scripts/opennext-build.cjs",
     "cf:queues:check": "node scripts/check-cloudflare-queues.cjs",
     "deploy:guard": "npm run cf:queues:check",
+    "deploy:upload": "npm run deploy:guard && wrangler versions upload",
     "deploy": "npm run deploy:guard && node scripts/opennext-build.cjs && wrangler deploy",
     "preview": "node scripts/opennext-build.cjs && wrangler dev",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",

@@ -67,6 +67,7 @@ Use this sequence in each environment (`dev`, `staging`, `prod`):
 Notes:
 - `npm run deploy:guard` validates queue names declared in `wrangler.jsonc` against `wrangler queues list --json`.
 - If a queue is missing, the script fails and prints exact create commands.
+- For Git-connected Workers Builds, set Deploy command to `npm run deploy:upload` so queue checks run before `wrangler versions upload`.
 
 ## Post-deploy checks
 
