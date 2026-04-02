@@ -28,7 +28,9 @@ describe('report viewer helpers', () => {
 
   it('splits markdown into top-level sections and opens key sections by default', () => {
     expect(
-      splitMarkdownSections('## Executive Summary\nhello\n\n## Priority Action Plan\nworld')
+      splitMarkdownSections(
+        '## Executive Summary\nhello\n\n## At a Glance\nquick\n\n## Immediate Wins\nwins\n\n## Priority Action Plan\nworld\n\n## Detailed Check Reference\nref\n\n## Technical Appendix\nappendix'
+      )
     ).toEqual([
       {
         id: 'executive-summary',
@@ -37,10 +39,34 @@ describe('report viewer helpers', () => {
         defaultOpen: true,
       },
       {
+        id: 'at-a-glance',
+        title: 'At a Glance',
+        content: '## At a Glance\nquick',
+        defaultOpen: true,
+      },
+      {
+        id: 'immediate-wins',
+        title: 'Immediate Wins',
+        content: '## Immediate Wins\nwins',
+        defaultOpen: true,
+      },
+      {
         id: 'priority-action-plan',
         title: 'Priority Action Plan',
         content: '## Priority Action Plan\nworld',
         defaultOpen: true,
+      },
+      {
+        id: 'detailed-check-reference',
+        title: 'Detailed Check Reference',
+        content: '## Detailed Check Reference\nref',
+        defaultOpen: false,
+      },
+      {
+        id: 'technical-appendix',
+        title: 'Technical Appendix',
+        content: '## Technical Appendix\nappendix',
+        defaultOpen: false,
       },
     ]);
   });

@@ -88,6 +88,9 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   const failedSorted = topIssues
     .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const strongestFailed = allIssues
+    .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))[0];
   const repeatedPagePatterns = summarizePageIssuePatterns(payload.pages);
   const demandCoverageSignals = deriveDemandCoverageSignals(allIssues);
 
@@ -100,6 +103,21 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   lines.push(scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName, firstMove));
   lines.push('');
 
+  lines.push('## At a Glance');
+  lines.push('');
+  lines.push(`- **Overall score:** ${payload.aggregateScore ?? '—'}/100 (${payload.aggregateLetterGrade ?? '—'})`);
+  lines.push(`- **Checks passed:** ${String(passedChecks)} of ${String(totalChecks)}`);
+  if (strongestFailed) {
+    lines.push(`- **Top blocker:** ${strongestFailed.check ?? strongestFailed.checkId ?? 'Check'}`);
+    lines.push(`- **Primary owner:** ${ownerLabel(strongestFailed)}`);
+  }
+  if (payload.immediateWins[0]?.what) {
+    lines.push(`- **First recommended move:** ${markdownInline(payload.immediateWins[0].what)}`);
+  } else if (firstMove) {
+    lines.push(`- **First recommended move:** ${markdownInline(firstMove)}`);
+  }
+  lines.push('');
+
   if (payload.immediateWins.length > 0) {
     lines.push('## Immediate Wins');
     lines.push('');
@@ -110,6 +128,42 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
       lines.push(`   - **Why:** ${markdownInline(win.why)}`);
       lines.push(`   - **How:** ${markdownInline(win.how)}`);
       lines.push(`   - **Effort:** ${win.effort}`);
+    }
+    lines.push('');
+  }
+
+  if (failedSorted.length > 0) {
+    lines.push('## Priority Action Plan');
+    lines.push('');
+    lines.push('Focus on these actions first before moving into lower-signal cleanup or broad content expansion.');
+    lines.push('');
+    for (let i = 0; i < failedSorted.length; i += 1) {
+      const row = failedSorted[i]!;
+      const title = row.check ?? row.checkId ?? 'Check';
+      const sev = severityLabel(row.weight);
+      const finding = customerFacingFinding(row);
+      lines.push(`${String(i + 1)}. **${title}** [${sev}]`);
+      lines.push(`   - **Owner:** ${ownerLabel(row)}`);
+      if (finding) lines.push(`   - **Why it matters:** ${finding}`);
+      if (row.fix) lines.push(`   - **First move:** ${row.fix}`);
+    }
+    lines.push('');
+  }
+
+  if (demandCoverageSignals.length > 0) {
+    lines.push('## Question-Answer Readiness');
+    lines.push('');
+    lines.push(
+      'This section summarizes whether key pages are currently shaped to answer likely buyer questions clearly enough for machine retrieval and reuse.'
+    );
+    lines.push('');
+    for (let i = 0; i < demandCoverageSignals.length; i += 1) {
+      const signal = demandCoverageSignals[i]!;
+      lines.push(`${String(i + 1)}. **${signal.title}** [${signal.status}]`);
+      lines.push(`   - ${signal.summary}`);
+      if (signal.firstMove) {
+        lines.push(`   - **First move:** ${signal.firstMove}`);
+      }
     }
     lines.push('');
   }
@@ -162,41 +216,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     lines.push('');
   }
 
-  if (demandCoverageSignals.length > 0) {
-    lines.push('## Question-Answer Readiness');
-    lines.push('');
-    lines.push(
-      'This section summarizes whether key pages are currently shaped to answer likely buyer questions clearly enough for machine retrieval and reuse.'
-    );
-    lines.push('');
-    for (let i = 0; i < demandCoverageSignals.length; i += 1) {
-      const signal = demandCoverageSignals[i]!;
-      lines.push(`${String(i + 1)}. **${signal.title}** [${signal.status}]`);
-      lines.push(`   - ${signal.summary}`);
-      if (signal.firstMove) {
-        lines.push(`   - **First move:** ${signal.firstMove}`);
-      }
-    }
-    lines.push('');
-  }
-
-  if (failedSorted.length > 0) {
-    lines.push('## Priority Action Plan');
-    lines.push('');
-    for (let i = 0; i < failedSorted.length; i += 1) {
-      const row = failedSorted[i]!;
-      const title = row.check ?? row.checkId ?? 'Check';
-      const sev = severityLabel(row.weight);
-      const finding = customerFacingFinding(row);
-      lines.push(`${String(i + 1)}. **${title}** [${sev}]`);
-      lines.push(`   - **Owner:** ${ownerLabel(row)}`);
-      if (finding) lines.push(`   - **Why it matters:** ${finding}`);
-      if (row.fix) lines.push(`   - **First move:** ${row.fix}`);
-    }
-    lines.push('');
-  }
-
-  lines.push('## Score Breakdown — All Checks');
+  lines.push('## Detailed Check Reference');
   lines.push('');
   lines.push('| Check | Status | Weight | Finding |');
   lines.push('|-------|--------|--------|---------|');

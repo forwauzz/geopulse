@@ -48,6 +48,30 @@ export type MarkdownSection = {
   defaultOpen: boolean;
 };
 
+function shouldOpenByDefault(title: string): boolean {
+  const titleLower = title.toLowerCase();
+  if (
+    titleLower.includes('executive summary') ||
+    titleLower.includes('at a glance') ||
+    titleLower.includes('immediate wins') ||
+    titleLower.includes('priority action plan') ||
+    titleLower.includes('question-answer readiness')
+  ) {
+    return true;
+  }
+
+  if (
+    titleLower.includes('detailed check reference') ||
+    titleLower.includes('page-level reference') ||
+    titleLower.includes('technical appendix') ||
+    titleLower.includes('coverage summary')
+  ) {
+    return false;
+  }
+
+  return false;
+}
+
 export const CATEGORY_LABELS: Record<string, string> = {
   ai_readiness: 'AI Readiness',
   extractability: 'Extractability',
@@ -97,8 +121,7 @@ export function splitMarkdownSections(md: string): MarkdownSection[] {
       id: slugify(title),
       title,
       content,
-      defaultOpen:
-        titleLower.includes('executive summary') || titleLower.includes('priority action plan'),
+      defaultOpen: shouldOpenByDefault(title),
     });
   };
 

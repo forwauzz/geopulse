@@ -147,6 +147,9 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('section docs');
     expect(md).toContain('The site has meaningful readiness gaps');
     expect(md).toContain('Start with Update robots.txt to allow AI crawlers');
+    expect(md).toContain('## At a Glance');
+    expect(md).toContain('**Top blocker:** AI crawler access (robots.txt)');
+    expect(md).toContain('**Primary owner:** Engineering');
     expect(md).toContain('## Immediate Wins');
     expect(md).toContain('**Who:** Engineering');
     expect(md).toContain('**Effort:** Quick');
