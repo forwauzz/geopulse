@@ -7,10 +7,74 @@ const projectRoot = process.cwd();
 const wranglerConfigPath = path.join(projectRoot, "wrangler.jsonc");
 
 function stripJsonc(jsoncText) {
-  return jsoncText
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "")
-    .replace(/,\s*([}\]])/g, "$1");
+  // Remove comments/trailing commas while preserving string literals.
+  let out = "";
+  let i = 0;
+  let inString = false;
+  let escaped = false;
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  while (i < jsoncText.length) {
+    const ch = jsoncText[i];
+    const next = jsoncText[i + 1];
+
+    if (inLineComment) {
+      if (ch === "\n") {
+        inLineComment = false;
+        out += ch;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (inBlockComment) {
+      if (ch === "*" && next === "/") {
+        inBlockComment = false;
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (inString) {
+      out += ch;
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+
+    if (ch === "/" && next === "/") {
+      inLineComment = true;
+      i += 2;
+      continue;
+    }
+
+    if (ch === "/" && next === "*") {
+      inBlockComment = true;
+      i += 2;
+      continue;
+    }
+
+    out += ch;
+    i += 1;
+  }
+
+  return out.replace(/,\s*([}\]])/g, "$1");
 }
 
 function readWranglerConfig() {
@@ -161,11 +225,13 @@ async function listCloudflareQueuesWithApi() {
 }
 
 async function listCloudflareQueues() {
-  const preferApi =
-    process.env.CLOUDFLARE_API_TOKEN ||
-    process.env.CF_API_TOKEN ||
+  const hasApiToken = Boolean(process.env.CLOUDFLARE_API_TOKEN || process.env.CF_API_TOKEN);
+  const hasAccountId = Boolean(
     process.env.CLOUDFLARE_ACCOUNT_ID ||
-    process.env.CF_ACCOUNT_ID;
+      process.env.CF_ACCOUNT_ID ||
+      process.env.CLOUDFLARE_ACCOUNT
+  );
+  const preferApi = hasApiToken && hasAccountId;
 
   if (preferApi) {
     return listCloudflareQueuesWithApi();
