@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {
   importContentMachineDrafts,
+  publishReadyArticles,
   seedTopicPagesFromClusters,
   updateContentDestinationConfig,
 } from './actions';
@@ -9,6 +10,7 @@ import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
+import { buildContentLaunchReadiness } from '@/lib/server/content-launch-readiness';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,10 +82,28 @@ export default async function ContentAdminPage() {
       contentAdminData.getRecentContentItems(),
       destinationAdminData.getDestinations(),
     ]);
+    const launchReadiness = await buildContentLaunchReadiness(contentAdminData);
     const resolvedDestinations = destinations.map((destination) => ({
       ...destination,
       health: evaluateContentDestinationHealth(destination, env),
     }));
+    const readyToPublishCount = launchReadiness.articles.filter(
+      (article) => article.status !== 'published' && article.readinessPassed
+    ).length;
+    const publishedThisWeekCount = items.filter((item) => {
+      if (item.status !== 'published' || !item.published_at) return false;
+      const publishedAt = new Date(item.published_at).getTime();
+      return Date.now() - publishedAt <= 7 * 24 * 60 * 60 * 1000;
+    }).length;
+    const destinationPushReadyCount = resolvedDestinations.filter(
+      (destination) => destination.enabled && destination.health.readyToPush
+    ).length;
+    const blockedArticleCount = launchReadiness.articles.filter(
+      (article) => article.status !== 'published' && !article.readinessPassed
+    ).length;
+    const nextBlockedArticles = launchReadiness.articles
+      .filter((article) => article.status !== 'published' && !article.readinessPassed)
+      .slice(0, 3);
 
     return (
       <main className="mx-auto max-w-6xl px-6 py-16">
@@ -115,6 +135,14 @@ export default async function ContentAdminPage() {
                 className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
               >
                 Seed topic pages
+              </button>
+            </form>
+            <form action={publishReadyArticles}>
+              <button
+                type="submit"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Publish ready articles
               </button>
             </form>
             <Link
@@ -188,6 +216,156 @@ export default async function ContentAdminPage() {
           or refreshes one canonical <code>research_note</code> record per article topic cluster so
           topic-page intro copy can be edited from the existing content admin flow.
         </div>
+        <div className="mt-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
+          <strong className="text-on-background">Publish-ready batch action:</strong> the publish
+          button promotes all non-published article rows that already satisfy the existing publish
+          checks. Current eligible inventory: <code>{readyToPublishCount}</code>.
+        </div>
+
+        <section className="mt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-headline text-xl font-bold text-on-background">
+                Weekly operator view
+              </h2>
+              <p className="mt-1 max-w-3xl font-body text-sm text-on-surface-variant">
+                Use this as the once-a-week control panel for publishing, destination pushes, and
+                launch progress without needing CLI work.
+              </p>
+            </div>
+            <Link
+              href="/dashboard/content/launch"
+              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+            >
+              Open launch checklist
+            </Link>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-4">
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Ready to publish
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {readyToPublishCount}
+              </p>
+              <p className="mt-2 font-body text-xs text-on-surface-variant">
+                Articles that already pass editorial publish checks.
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Published this week
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {publishedThisWeekCount}
+              </p>
+              <p className="mt-2 font-body text-xs text-on-surface-variant">
+                Recently published canonical pieces on the GEO-Pulse site.
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Destinations ready
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {destinationPushReadyCount}
+              </p>
+              <p className="mt-2 font-body text-xs text-on-surface-variant">
+                Enabled downstream destinations that can accept pushes today.
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Launch status
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {launchReadiness.summary.meetsLaunchThreshold ? 'Ready' : 'In progress'}
+              </p>
+              <p className="mt-2 font-body text-xs text-on-surface-variant">
+                {launchReadiness.summary.readyArticleCount} ready articles,{' '}
+                {launchReadiness.summary.publishedTopicPageCount} published topic pages,{' '}
+                {launchReadiness.summary.connectedPublishedTopicCount} connected topics.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1.35fr,0.95fr]">
+            <div className="rounded-xl bg-surface-container-lowest px-5 py-5 shadow-float">
+              <h3 className="font-headline text-lg font-semibold text-on-background">
+                Weekly checklist
+              </h3>
+              <div className="mt-4 space-y-4 font-body text-sm text-on-surface-variant">
+                <div>
+                  <p className="font-medium text-on-background">1. Publish canonical content</p>
+                  <p className="mt-1">
+                    {readyToPublishCount > 0
+                      ? `${readyToPublishCount} article${readyToPublishCount === 1 ? '' : 's'} can be published now from this page.`
+                      : 'No article is currently publish-ready, so the next step is draft/import or editorial cleanup.'}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium text-on-background">2. Review blocked articles</p>
+                  <p className="mt-1">
+                    {blockedArticleCount > 0
+                      ? `${blockedArticleCount} article${blockedArticleCount === 1 ? '' : 's'} are still blocked by editorial readiness checks.`
+                      : 'No non-published articles are currently blocked by the editorial checklist.'}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium text-on-background">3. Push downstream only after canonical publish</p>
+                  <p className="mt-1">
+                    {destinationPushReadyCount > 0
+                      ? `${destinationPushReadyCount} destination${destinationPushReadyCount === 1 ? '' : 's'} are ready for newsletter or syndication pushes.`
+                      : 'No downstream destination is currently ready to receive pushes.'}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-medium text-on-background">4. Check launch threshold</p>
+                  <p className="mt-1">
+                    {launchReadiness.summary.meetsLaunchThreshold
+                      ? 'The current published inventory meets the launch threshold for the content machine.'
+                      : 'The content machine still needs more connected published inventory before it is fully launch-ready.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-surface-container-lowest px-5 py-5 shadow-float">
+              <h3 className="font-headline text-lg font-semibold text-on-background">
+                Attention needed
+              </h3>
+              {nextBlockedArticles.length === 0 ? (
+                <p className="mt-4 font-body text-sm text-on-surface-variant">
+                  No immediate editorial blockers. Use this week for publishing, downstream pushes,
+                  attribution review, or benchmark work.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-4">
+                  {nextBlockedArticles.map((article) => (
+                    <div
+                      key={article.content_id}
+                      className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3"
+                    >
+                      <Link
+                        href={`/dashboard/content/${article.content_id}`}
+                        className="font-body text-sm font-semibold text-on-background hover:text-primary"
+                      >
+                        {article.title}
+                      </Link>
+                      <p className="mt-2 font-body text-xs uppercase tracking-widest text-on-surface-variant">
+                        Missing checks
+                      </p>
+                      <p className="mt-1 font-body text-sm text-on-surface-variant">
+                        {article.failedChecks.join(', ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
 
         <section className="mt-12">
           <div className="flex flex-wrap items-end justify-between gap-4">
