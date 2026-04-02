@@ -146,7 +146,7 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('50/100');
     expect(md).toContain('section docs');
     expect(md).toContain('The site has meaningful readiness gaps');
-    expect(md).toContain('Start with Update robots.txt to allow AI crawlers');
+    expect(md).toContain('Start with Allow AI crawlers to fetch priority pages in robots.txt');
     expect(md).toContain('## At a Glance');
     expect(md).toContain('**Top blocker:** AI crawler access (robots.txt)');
     expect(md).toContain('**Primary owner:** Engineering');
@@ -365,6 +365,31 @@ describe('buildDeepAuditMarkdown', () => {
 
     const md = buildDeepAuditMarkdown(payload);
     expect(md).toContain('not strong enough to treat as a confirmed diagnosis');
+  });
+
+  it('flags thin crawl coverage near the top of the report', () => {
+    const payload = buildDeepAuditReportPayload({
+      scanId: 's-thin',
+      runId: 'r-thin',
+      domain: 'example.com',
+      seedUrl: 'https://example.com/',
+      aggregateScore: 53,
+      aggregateLetterGrade: 'C',
+      pages: [],
+      coverageSummary: {
+        pages_fetched: 1,
+        urls_planned: 1,
+        browser_render_enabled: false,
+        robots_status: 202,
+      },
+      highlightedIssues: [],
+      allIssues: [],
+      generatedAt: '2026-03-25T12:00:00.000Z',
+    });
+
+    const md = buildDeepAuditMarkdown(payload);
+    expect(md).toContain('> **Coverage note:** This audit only planned and fetched one page');
+    expect(md).toContain('**Coverage warning:** Limited crawl coverage');
   });
 });
 

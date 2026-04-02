@@ -19,6 +19,21 @@ function normalizeSentence(value: string | undefined, fallback: string): string 
 }
 
 function deriveWhat(issue: IssueRow): string {
+  const actionByCheck: Record<string, string> = {
+    'ai-crawler-access': 'Allow AI crawlers to fetch priority pages in robots.txt.',
+    'robots-meta': 'Remove restrictive robots meta directives from priority pages.',
+    'json-ld': 'Add schema markup to describe the business, services, and key pages.',
+    'llms-txt': 'Publish an llms.txt file that points crawlers to priority content.',
+    'llm-qa-pattern': 'Rewrite key service pages to answer likely buyer questions directly.',
+    'llm-extractability': 'Strengthen above-the-fold summaries so the main answer is easy to extract.',
+    'internal-links': 'Add stronger internal links between commercial pages and supporting proof pages.',
+    freshness: 'Add visible update signals and refresh important commercial pages.',
+    'eeat-signals': 'Add visible trust signals such as author, reviewer, or business credibility cues.',
+  };
+  const checkKey = issue.checkId ?? issue.check ?? '';
+  if (actionByCheck[checkKey]) {
+    return actionByCheck[checkKey]!;
+  }
   if (issue.fix && issue.fix.trim().length > 0) return normalizeSentence(issue.fix, 'Address this issue.');
   const label = issue.check ?? issue.checkId ?? 'this issue';
   return `Address ${label}.`;
@@ -56,6 +71,30 @@ function deriveWhy(issue: IssueRow): string {
 }
 
 function deriveHow(issue: IssueRow): string {
+  const implementationStepByCheck: Record<string, string> = {
+    'ai-crawler-access':
+      'Update robots.txt and confirm key commercial URLs are not disallowed to major AI crawlers or general fetchers.',
+    'robots-meta':
+      'Remove noindex or nofollow directives from pages that should be discoverable, then recheck the rendered HTML output.',
+    'json-ld':
+      'Start with Organization or LocalBusiness markup on core pages, then add service-specific schema where the page content supports it.',
+    'llms-txt':
+      'Publish a root-level llms.txt file with the main site sections and the highest-priority URLs for machine retrieval.',
+    'llm-qa-pattern':
+      'Convert weak service-page sections into direct question-and-answer blocks using the actual buyer language the page should satisfy.',
+    'llm-extractability':
+      'Rewrite the first paragraph after the main heading so it states the page purpose and answer plainly within the opening lines.',
+    'internal-links':
+      'Add contextual links from top-level service pages to supporting proof, FAQ, and trust pages using descriptive anchor text.',
+    freshness:
+      'Add visible updated dates and refresh stale claims, statistics, or references on the pages most tied to conversion intent.',
+    'eeat-signals':
+      'Add named authors, reviewers, credentials, and business identity details where claims depend on trust or expertise.',
+  };
+  const checkKey = issue.checkId ?? issue.check ?? '';
+  if (implementationStepByCheck[checkKey]) {
+    return implementationStepByCheck[checkKey]!;
+  }
   if (issue.fix && issue.fix.trim().length > 0) {
     return `Start with this implementation step: ${normalizeSentence(issue.fix, 'Address this issue.')}`;
   }

@@ -85,6 +85,31 @@ export type DeepAuditCrawlResult =
 
 type SeedFetchOk = { ok: true; html: string; finalUrl: string };
 
+function extractSeedHtmlTitle(html: string): string {
+  const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  return (match?.[1] ?? '').trim();
+}
+
+function summarizeSeedHtml(html: string): {
+  htmlBytes: number;
+  anchorCount: number;
+  hasBodyTag: boolean;
+  hasScriptTag: boolean;
+  hasNoscriptTag: boolean;
+  title: string;
+  preview: string;
+} {
+  return {
+    htmlBytes: html.length,
+    anchorCount: (html.match(/<a\b/gi) ?? []).length,
+    hasBodyTag: /<body\b/i.test(html),
+    hasScriptTag: /<script\b/i.test(html),
+    hasNoscriptTag: /<noscript\b/i.test(html),
+    title: extractSeedHtmlTitle(html),
+    preview: html.replace(/\s+/g, ' ').trim().slice(0, 240),
+  };
+}
+
 /**
  * Run bounded same-origin crawl, persist scan_pages rows, update scan_runs timestamps.
  * May return `phase: 'partial'` when more URLs remain; consumer must re-enqueue the same queue message.
@@ -278,10 +303,18 @@ async function startChunkedCrawl(
   candidateUrls.push(seedFetch.finalUrl);
 
   const links = extractSameOriginLinks(seedFetch.html, seedFetch.finalUrl, 500);
+  const seedHtmlSummary = summarizeSeedHtml(seedFetch.html);
   structuredLog('deep_audit_seed_discovery', {
     runId,
     seed_url: seedUrl,
     seed_final_url: seedFetch.finalUrl,
+    seed_html_bytes: seedHtmlSummary.htmlBytes,
+    seed_html_anchor_count: seedHtmlSummary.anchorCount,
+    seed_html_has_body: seedHtmlSummary.hasBodyTag,
+    seed_html_has_script: seedHtmlSummary.hasScriptTag,
+    seed_html_has_noscript: seedHtmlSummary.hasNoscriptTag,
+    seed_html_title: seedHtmlSummary.title,
+    seed_html_preview: seedHtmlSummary.preview,
     sitemap_urls_considered: smList.length,
     sitemap_candidate_count: sitemapNorms.size,
     same_origin_links_extracted: links.length,
