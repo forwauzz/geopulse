@@ -22,6 +22,7 @@ const ARTICLES: PublicContentListRow[] = [
     published_at: '2026-03-31T12:00:00.000Z',
     updated_at: '2026-03-31T12:00:00.000Z',
     excerpt: 'One',
+    metadata: {},
   },
   {
     id: '2',
@@ -36,6 +37,7 @@ const ARTICLES: PublicContentListRow[] = [
     published_at: '2026-03-31T12:00:00.000Z',
     updated_at: '2026-03-31T12:00:00.000Z',
     excerpt: 'Two',
+    metadata: {},
   },
   {
     id: '3',
@@ -50,6 +52,7 @@ const ARTICLES: PublicContentListRow[] = [
     published_at: '2026-03-31T12:00:00.000Z',
     updated_at: '2026-03-31T12:00:00.000Z',
     excerpt: 'Three',
+    metadata: {},
   },
 ];
 

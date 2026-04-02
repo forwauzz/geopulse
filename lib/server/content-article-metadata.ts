@@ -2,6 +2,8 @@ export type ArticleMetadataFields = {
   readonly authorName: string | null;
   readonly authorRole: string | null;
   readonly authorUrl: string | null;
+  readonly heroImageUrl: string | null;
+  readonly heroImageAlt: string | null;
 };
 
 function readString(value: unknown): string | null {
@@ -14,6 +16,8 @@ export function parseArticleMetadata(metadata: Record<string, unknown> | null | 
     authorName: readString(safe['author_name']),
     authorRole: readString(safe['author_role']),
     authorUrl: readString(safe['author_url']),
+    heroImageUrl: readString(safe['hero_image_url']),
+    heroImageAlt: readString(safe['hero_image_alt']),
   };
 }
 
@@ -32,6 +36,12 @@ export function mergeArticleMetadata(
   if (fields.authorUrl) next['author_url'] = fields.authorUrl;
   else delete next['author_url'];
 
+  if (fields.heroImageUrl) next['hero_image_url'] = fields.heroImageUrl;
+  else delete next['hero_image_url'];
+
+  if (fields.heroImageAlt) next['hero_image_alt'] = fields.heroImageAlt;
+  else delete next['hero_image_alt'];
+
   return next;
 }
 
@@ -44,6 +54,7 @@ export function buildArticleStructuredData(input: {
   readonly authorName: string | null;
   readonly authorRole: string | null;
   readonly authorUrl: string | null;
+  readonly heroImageUrl?: string | null;
 }) {
   const authorName = input.authorName ?? 'GEO-Pulse';
   const authorUrl = input.authorUrl ?? input.canonicalUrl;
@@ -67,5 +78,6 @@ export function buildArticleStructuredData(input: {
       name: 'GEO-Pulse',
       url: authorUrl,
     },
+    ...(input.heroImageUrl ? { image: [input.heroImageUrl] } : {}),
   };
 }

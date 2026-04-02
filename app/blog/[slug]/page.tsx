@@ -2,14 +2,14 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { BlogArticleBody } from '@/components/blog-article-body';
-import { getPaymentApiEnv, getScanApiEnv } from '@/lib/server/cf-env';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   buildArticleStructuredData,
   parseArticleMetadata,
 } from '@/lib/server/content-article-metadata';
 import { buildTopicHref, getRelatedArticles } from '@/lib/server/content-navigation';
+import { createPublicContentClient } from '@/lib/server/public-content-client';
 import { createPublicContentData } from '@/lib/server/public-content-data';
-import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,15 +58,7 @@ function getPublicSourceLinks(sourceLinks: readonly string[]): string[] {
 }
 
 async function loadPublicContentData() {
-  const env = await getScanApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Server misconfigured: missing Supabase service role.');
-  }
-
-  const supabase = createServiceRoleClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const supabase = await createPublicContentClient();
   return createPublicContentData(supabase);
 }
 
@@ -85,12 +77,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     extractLeadParagraph(article.draft_markdown) ??
     article.primary_problem ??
     'Operator-grade guidance about AI search readiness.';
+  const articleMetadata = parseArticleMetadata(article.metadata);
+  const canonicalUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, article.canonical_url, article.slug);
 
   return {
     title: `${article.title} | GEO-Pulse`,
     description,
     alternates: {
-      canonical: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, article.canonical_url, article.slug),
+      canonical: canonicalUrl,
+    },
+    openGraph: {
+      title: `${article.title} | GEO-Pulse`,
+      description,
+      url: canonicalUrl,
+      type: 'article',
+      images: articleMetadata.heroImageUrl
+        ? [
+            {
+              url: articleMetadata.heroImageUrl,
+              alt: articleMetadata.heroImageAlt ?? article.title,
+            },
+          ]
+        : [],
     },
   };
 }
@@ -119,6 +127,7 @@ export default async function BlogArticlePage({ params }: Props) {
     authorName: articleMetadata.authorName,
     authorRole: articleMetadata.authorRole,
     authorUrl: articleMetadata.authorUrl,
+    heroImageUrl: articleMetadata.heroImageUrl,
   });
   const relatedArticles = getRelatedArticles(articles, article.slug, article.topic_cluster, 3);
   const bodyRelatedArticles = relatedArticles.slice(0, 2);
@@ -152,6 +161,15 @@ export default async function BlogArticlePage({ params }: Props) {
         <h1 className="mt-4 max-w-4xl font-headline text-4xl font-bold leading-tight text-on-background md:text-5xl">
           {article.title}
         </h1>
+        {articleMetadata.heroImageUrl ? (
+          <div className="mt-6 overflow-hidden rounded-2xl bg-surface-container-low shadow-float">
+            <img
+              src={articleMetadata.heroImageUrl}
+              alt={articleMetadata.heroImageAlt ?? article.title}
+              className="aspect-[16/8] w-full object-cover"
+            />
+          </div>
+        ) : null}
         {article.primary_problem ? (
           <p className="mt-4 max-w-3xl font-body text-lg font-medium leading-relaxed text-on-background">
             {article.primary_problem}
