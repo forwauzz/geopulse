@@ -15,6 +15,7 @@ export type PublicContentListRow = {
   readonly published_at: string | null;
   readonly updated_at: string;
   readonly excerpt: string | null;
+  readonly metadata: Record<string, unknown>;
 };
 
 export type PublicContentDetailRow = {
@@ -58,7 +59,7 @@ export function createPublicContentData(supabase: SupabaseLike) {
       const { data, error } = await supabase
         .from('content_items')
         .select(
-          'id,content_id,slug,title,target_persona,primary_problem,topic_cluster,cta_goal,canonical_url,published_at,updated_at,draft_markdown'
+          'id,content_id,slug,title,target_persona,primary_problem,topic_cluster,cta_goal,canonical_url,published_at,updated_at,draft_markdown,metadata'
         )
         .eq('content_type', 'article')
         .eq('status', 'published')
@@ -81,6 +82,7 @@ export function createPublicContentData(supabase: SupabaseLike) {
         published_at: (row.published_at as string | null) ?? null,
         updated_at: String(row.updated_at),
         excerpt: buildExcerpt((row.draft_markdown as string | null) ?? null),
+        metadata: (row.metadata as Record<string, unknown> | null) ?? {},
       }));
     },
 
@@ -122,4 +124,3 @@ export function createPublicContentData(supabase: SupabaseLike) {
     },
   };
 }
-

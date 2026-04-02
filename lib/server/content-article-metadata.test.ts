@@ -12,11 +12,15 @@ describe('content article metadata helpers', () => {
         author_name: 'Carine Tamon',
         author_role: 'Founder',
         author_url: 'https://getgeopulse.com/about',
+        hero_image_url: 'https://cdn.example.com/hero.jpg',
+        hero_image_alt: 'Article hero image',
       })
     ).toEqual({
       authorName: 'Carine Tamon',
       authorRole: 'Founder',
       authorUrl: 'https://getgeopulse.com/about',
+      heroImageUrl: 'https://cdn.example.com/hero.jpg',
+      heroImageAlt: 'Article hero image',
     });
   });
 
@@ -28,12 +32,16 @@ describe('content article metadata helpers', () => {
           authorName: 'Carine Tamon',
           authorRole: 'Founder',
           authorUrl: null,
+          heroImageUrl: 'https://cdn.example.com/hero.jpg',
+          heroImageAlt: 'Article hero image',
         }
       )
     ).toEqual({
       existing: true,
       author_name: 'Carine Tamon',
       author_role: 'Founder',
+      hero_image_url: 'https://cdn.example.com/hero.jpg',
+      hero_image_alt: 'Article hero image',
     });
   });
 
@@ -48,10 +56,12 @@ describe('content article metadata helpers', () => {
         authorName: 'Carine Tamon',
         authorRole: 'Founder',
         authorUrl: 'https://getgeopulse.com/about',
+        heroImageUrl: 'https://cdn.example.com/hero.jpg',
       })
     ).toMatchObject({
       '@type': 'Article',
       headline: 'How to Audit Your Site for AI Search Readiness',
+      image: ['https://cdn.example.com/hero.jpg'],
       author: {
         '@type': 'Person',
         name: 'Carine Tamon',

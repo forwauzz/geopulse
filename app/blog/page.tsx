@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { getScanApiEnv } from '@/lib/server/cf-env';
 import {
   buildTopicAnchor,
   buildTopicHref,
   groupArticlesByTopic,
 } from '@/lib/server/content-navigation';
+import { parseArticleMetadata } from '@/lib/server/content-article-metadata';
+import { createPublicContentClient } from '@/lib/server/public-content-client';
 import { createPublicContentData } from '@/lib/server/public-content-data';
-import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,15 +35,7 @@ function formatLabel(value: string | null): string {
 }
 
 export default async function BlogIndexPage() {
-  const env = await getScanApiEnv();
-  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('Server misconfigured: missing Supabase service role.');
-  }
-
-  const supabase = createServiceRoleClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const supabase = await createPublicContentClient();
   const articles = await createPublicContentData(supabase).getPublishedArticles();
   const topicGroups = groupArticlesByTopic(articles);
 
@@ -145,8 +137,21 @@ export default async function BlogIndexPage() {
                   {group.articles.map((article) => (
                     <article
                       key={article.content_id}
-                      className="rounded-2xl bg-surface-container-lowest p-8 shadow-float"
+                      className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-float"
                     >
+                      {(() => {
+                        const articleMetadata = parseArticleMetadata((article as { metadata?: Record<string, unknown> }).metadata);
+                        return articleMetadata.heroImageUrl ? (
+                          <div className="aspect-[16/8] w-full overflow-hidden bg-surface-container-low">
+                            <img
+                              src={articleMetadata.heroImageUrl}
+                              alt={articleMetadata.heroImageAlt ?? article.title}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ) : null;
+                      })()}
+                      <div className="p-8">
                       <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-on-surface-variant">
                         <span>{formatDate(article.published_at)}</span>
                         <span>&bull;</span>
@@ -178,6 +183,7 @@ export default async function BlogIndexPage() {
                         >
                           Read article
                         </Link>
+                      </div>
                       </div>
                     </article>
                   ))}

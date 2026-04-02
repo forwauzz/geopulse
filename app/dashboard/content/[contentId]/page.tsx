@@ -248,6 +248,26 @@ export default async function ContentItemDetailPage({ params }: Props) {
                 className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
               />
             </label>
+            <label className="block md:col-span-2">
+              <span className="text-xs uppercase tracking-widest text-on-surface-variant">
+                Hero image URL
+              </span>
+              <input
+                name="heroImageUrl"
+                defaultValue={articleMetadata.heroImageUrl ?? ''}
+                className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+              />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="text-xs uppercase tracking-widest text-on-surface-variant">
+                Hero image alt text
+              </span>
+              <input
+                name="heroImageAlt"
+                defaultValue={articleMetadata.heroImageAlt ?? ''}
+                className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-background outline-none"
+              />
+            </label>
             {isTopicPage ? (
               <>
                 <label className="block md:col-span-2">
@@ -468,6 +488,10 @@ export default async function ContentItemDetailPage({ params }: Props) {
                   {articleMetadata.authorName ?? '-'}
                   {articleMetadata.authorRole ? ` / ${articleMetadata.authorRole}` : ''}
                 </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Hero image</p>
+                <p className="mt-1 break-all text-on-background">{articleMetadata.heroImageUrl ?? '-'}</p>
               </div>
             </div>
           </section>

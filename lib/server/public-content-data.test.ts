@@ -32,6 +32,9 @@ describe('createPublicContentData', () => {
                   published_at: '2026-03-31T12:00:00.000Z',
                   updated_at: '2026-03-31T12:30:00.000Z',
                   draft_markdown: '# Heading\n\nThis is the article body.',
+                  metadata: {
+                    hero_image_url: 'https://cdn.example.com/hero.jpg',
+                  },
                 },
               ],
               error: null,
@@ -57,6 +60,9 @@ describe('createPublicContentData', () => {
         published_at: '2026-03-31T12:00:00.000Z',
         updated_at: '2026-03-31T12:30:00.000Z',
         excerpt: 'Heading This is the article body.',
+        metadata: {
+          hero_image_url: 'https://cdn.example.com/hero.jpg',
+        },
       },
     ]);
   });

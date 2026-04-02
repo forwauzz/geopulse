@@ -130,6 +130,8 @@ export async function updateContentItem(formData: FormData) {
   const authorName = String(formData.get('authorName') ?? '').trim();
   const authorRole = String(formData.get('authorRole') ?? '').trim();
   const authorUrl = String(formData.get('authorUrl') ?? '').trim();
+  const heroImageUrl = String(formData.get('heroImageUrl') ?? '').trim();
+  const heroImageAlt = String(formData.get('heroImageAlt') ?? '').trim();
   const topicPageDefinition = String(formData.get('topicPageDefinition') ?? '');
   const topicPageWhyItMatters = String(formData.get('topicPageWhyItMatters') ?? '');
   const topicPagePracticalTakeaway = String(formData.get('topicPagePracticalTakeaway') ?? '');
@@ -186,6 +188,8 @@ export async function updateContentItem(formData: FormData) {
     authorName: authorName || null,
     authorRole: authorRole || null,
     authorUrl: authorUrl || null,
+    heroImageUrl: heroImageUrl || null,
+    heroImageAlt: heroImageAlt || null,
   });
 
   if (existingItem.content_type === 'research_note' && existingItem.slug?.startsWith('topic-')) {
