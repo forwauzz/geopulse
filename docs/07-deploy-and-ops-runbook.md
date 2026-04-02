@@ -42,12 +42,31 @@ Recommended sequence:
 Important implementation truth:
 - Git-connected Workers Builds does not rely on the local `wrangler build.command` in the same way local deploy does.
 - The repo playbook states dashboard build/deploy settings must match the OpenNext worker build path.
+- Wrangler validates bindings against live Cloudflare resources during upload/deploy. Missing queues will fail deploy even when `npm run build:worker` succeeds.
 
 If a deploy behaves differently than local build:
 1. confirm dashboard build command matches the playbook
 2. confirm worker vars and secrets exist in the target environment
 3. confirm R2 bucket binding and queue bindings exist
 4. confirm compatibility date/flags still match repo config
+
+### Queue provisioning and deploy guard
+
+Use this sequence in each environment (`dev`, `staging`, `prod`):
+
+1. Ensure required queues exist in Cloudflare:
+   - `npx wrangler queues create geo-pulse-scan-queue`
+   - `npx wrangler queues create geo-pulse-dlq`
+   - `npx wrangler queues create geo-pulse-distribution-queue`
+   - `npx wrangler queues create geo-pulse-distribution-dlq`
+2. Run queue preflight from repo config:
+   - `npm run deploy:guard`
+3. Deploy:
+   - `npm run deploy`
+
+Notes:
+- `npm run deploy:guard` validates queue names declared in `wrangler.jsonc` against `wrangler queues list --json`.
+- If a queue is missing, the script fails and prints exact create commands.
 
 ## Post-deploy checks
 
