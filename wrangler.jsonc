@@ -49,7 +49,6 @@
     // Recurring benchmark lane config.
     // Keep disabled here until production values are finalized.
     "BENCHMARK_SCHEDULE_ENABLED": "false",
-    "BENCHMARK_SCHEDULE_QUERY_SET_ID": "",
     "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite",
     "BENCHMARK_SCHEDULE_RUN_MODES": "ungrounded_inference,grounded_site",
     "BENCHMARK_SCHEDULE_VERTICAL": "law_firms",
@@ -65,10 +64,8 @@
     "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
     "DEEP_AUDIT_BROWSER_RENDER_MODE": "auto",
     "DEEP_AUDIT_INTERNAL_REWRITE_ENABLED": "false",
-    "DEEP_AUDIT_INTERNAL_REWRITE_MODEL": "",
 
     "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
-    "MARKETING_REPORT_TO": "",
 
     // Optional destination/provider defaults.
     "GHOST_ADMIN_API_VERSION": "v6.0"

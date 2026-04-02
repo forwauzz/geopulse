@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
+  buildDisplayIssues,
+  buildSummaryFacts,
   CATEGORY_ICONS,
   CATEGORY_LABELS,
   categoryScoreTone,
@@ -88,9 +90,16 @@ export function TocSidebar({
 
 export function ReportSummary({ scan }: { scan: ScanResponse }) {
   const score = clampScore(scan.score);
-  const issues = Array.isArray(scan.topIssues) ? scan.topIssues : [];
-  const sortedIssues = [...issues].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const displayIssues = buildDisplayIssues(scan);
   const categoryScores = Array.isArray(scan.categoryScores) ? scan.categoryScores : [];
+  const summaryFacts = buildSummaryFacts(scan);
+
+  function summaryFactClasses(tone: 'default' | 'danger' | 'warning' | 'success' = 'default'): string {
+    if (tone === 'danger') return 'border-red-200 bg-red-50 text-red-900';
+    if (tone === 'warning') return 'border-amber-200 bg-amber-50 text-amber-900';
+    if (tone === 'success') return 'border-green-200 bg-green-50 text-green-900';
+    return 'border-outline-variant/20 bg-surface-container-low text-on-background';
+  }
 
   return (
     <section className="space-y-6 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-float md:p-8">
@@ -118,6 +127,24 @@ export function ReportSummary({ scan }: { scan: ScanResponse }) {
               highest-impact fixes, and then expand the full report sections below.
             </p>
           </div>
+
+          {summaryFacts.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {summaryFacts.map((fact) => (
+                <div
+                  key={`${fact.label}-${fact.value}`}
+                  className={`rounded-xl border px-4 py-3 ${summaryFactClasses(fact.tone)}`}
+                >
+                  <div className="font-label text-[10px] font-semibold uppercase tracking-widest opacity-75">
+                    {fact.label}
+                  </div>
+                  <div className="mt-2 font-body text-sm font-semibold leading-snug">
+                    {fact.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {categoryScores.map((category) => {
@@ -151,48 +178,62 @@ export function ReportSummary({ scan }: { scan: ScanResponse }) {
             Top issues
           </h2>
           <span className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
-            {sortedIssues.length} surfaced
+            {displayIssues.length} shown
           </span>
         </div>
-        {sortedIssues.length === 0 ? (
+        {displayIssues.length === 0 ? (
           <div className="rounded-xl bg-surface-container-low px-4 py-5 font-body text-sm text-on-surface-variant">
             No priority issues were surfaced in the current scan output.
           </div>
         ) : (
           <div className="grid gap-3">
-            {sortedIssues.map((issue, index) => {
-              const severity = issueSeverity(issue.weight);
+            {displayIssues.map((issue, index) => {
               return (
                 <article
-                  key={`${issue.checkId ?? issue.check ?? 'issue'}-${index}`}
-                  className="rounded-xl bg-surface-container-low p-4"
+                  key={`${issue.title}-${index}`}
+                  className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${issueSeverityClasses(
-                        severity
+                        issue.severity
                       )}`}
                     >
-                      {severity}
+                      {issue.severity}
                     </span>
                     <span className="font-semibold text-on-background">
-                      {issue.check ?? issue.checkId ?? 'Check'}
+                      {issue.title}
                     </span>
                     {issue.status ? (
                       <span className="rounded bg-surface-container-high px-2 py-0.5 font-label text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
                         {issue.status}
                       </span>
                     ) : null}
+                    {issue.owner ? (
+                      <span className="rounded border border-outline-variant/20 px-2 py-0.5 font-label text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                        {issue.owner}
+                      </span>
+                    ) : null}
                   </div>
-                  {issue.finding ? (
-                    <p className="mt-2 font-body text-sm text-on-surface-variant">
-                      {issue.finding}
-                    </p>
+                  {issue.problem ? (
+                    <div className="mt-3">
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
+                        Problem
+                      </div>
+                      <p className="mt-1 font-body text-sm text-on-surface-variant">
+                        {issue.problem}
+                      </p>
+                    </div>
                   ) : null}
-                  {issue.fix ? (
-                    <p className="mt-3 rounded-lg bg-surface-container-high px-3 py-2 font-body text-sm text-on-background/90">
-                      <span className="font-semibold">Fix:</span> {issue.fix}
-                    </p>
+                  {issue.firstMove ? (
+                    <div className="mt-3 rounded-lg bg-surface-container-high px-3 py-3">
+                      <div className="font-label text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
+                        First move
+                      </div>
+                      <p className="mt-1 font-body text-sm text-on-background/90">
+                        {issue.firstMove}
+                      </p>
+                    </div>
                   ) : null}
                 </article>
               );

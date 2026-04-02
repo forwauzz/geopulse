@@ -8,6 +8,7 @@ export type Issue = {
   status?: string;
   category?: string;
   confidence?: string;
+  teamOwner?: string;
 };
 
 export type CategoryScore = {
@@ -46,6 +47,21 @@ export type MarkdownSection = {
   title: string;
   content: string;
   defaultOpen: boolean;
+};
+
+export type SummaryFact = {
+  label: string;
+  value: string;
+  tone?: 'default' | 'danger' | 'warning' | 'success';
+};
+
+export type DisplayIssue = {
+  title: string;
+  severity: 'High' | 'Medium' | 'Low';
+  status: string | null;
+  owner: string | null;
+  problem: string | null;
+  firstMove: string | null;
 };
 
 function shouldOpenByDefault(title: string): boolean {
@@ -173,4 +189,78 @@ export function scoreNarrative(score: number): string {
   if (score >= 55) return 'Mixed readiness. Key signals are missing or inconsistent.';
   if (score >= 35) return 'Low readiness. Address the critical gaps first.';
   return 'Critical readiness gaps. Prioritize the fixes below.';
+}
+
+export function buildSummaryFacts(scan: ScanResponse): SummaryFact[] {
+  const issues = Array.isArray(scan.topIssues) ? [...scan.topIssues] : [];
+  const sortedIssues = issues.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
+  const topIssue = sortedIssues[0];
+  const openIssues = sortedIssues.filter((issue) => {
+    const status = issue.status?.toUpperCase();
+    return status !== 'PASS' && status !== 'NOT_EVALUATED';
+  }).length;
+
+  const facts: SummaryFact[] = [
+    {
+      label: 'Open issues',
+      value: String(openIssues),
+      tone: openIssues >= 3 ? 'danger' : openIssues >= 1 ? 'warning' : 'success',
+    },
+  ];
+
+  if (topIssue) {
+    facts.push({
+      label: 'Top blocker',
+      value: topIssue.check ?? topIssue.checkId ?? 'Check',
+      tone: 'danger',
+    });
+    if (topIssue.teamOwner) {
+      facts.push({
+        label: 'Primary owner',
+        value: topIssue.teamOwner,
+        tone: 'default',
+      });
+    }
+  }
+
+  if (topIssue?.fix) {
+    facts.push({
+      label: 'First move',
+      value: topIssue.fix,
+      tone: 'default',
+    });
+  }
+
+  if (scan.categoryScores?.length) {
+    const weakestCategory = [...scan.categoryScores].sort((a, b) => a.score - b.score)[0];
+    if (weakestCategory) {
+      facts.push({
+        label: 'Weakest category',
+        value: CATEGORY_LABELS[weakestCategory.category] ?? weakestCategory.category,
+        tone: weakestCategory.score < 45 ? 'danger' : 'warning',
+      });
+    }
+  }
+
+  return facts.slice(0, 5);
+}
+
+export function buildDisplayIssues(scan: ScanResponse): DisplayIssue[] {
+  const issues = Array.isArray(scan.topIssues) ? [...scan.topIssues] : [];
+
+  return issues
+    .filter((issue) => {
+      const status = issue.status?.toUpperCase();
+      return status !== 'PASS' && status !== 'NOT_EVALUATED';
+    })
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+    .slice(0, 3)
+    .map((issue) => ({
+      title: issue.check ?? issue.checkId ?? 'Check',
+      severity: issueSeverity(issue.weight),
+      status: issue.status ?? null,
+      owner: issue.teamOwner ?? null,
+      problem: issue.finding ?? null,
+      firstMove: issue.fix ?? null,
+    }));
 }

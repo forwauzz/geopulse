@@ -25,6 +25,15 @@ Cloudflare production config should be treated in two buckets:
 - they persist across deploys
 - you do not need to re-add them after every push unless you rotate them
 
+Important:
+- do not keep optional or environment-specific vars as empty strings in `wrangler.jsonc`
+- if a value is intentionally managed in the Cloudflare dashboard, omit it from `wrangler.jsonc` rather than setting it to `""`
+- otherwise a deploy can reapply the empty value and create confusing runtime drift
+- this is especially relevant for:
+  - `DEEP_AUDIT_INTERNAL_REWRITE_MODEL`
+  - `BENCHMARK_SCHEDULE_QUERY_SET_ID`
+  - `MARKETING_REPORT_TO`
+
 ## Public non-secret config
 
 These values are safe to expose to the client or bundle into worker config.

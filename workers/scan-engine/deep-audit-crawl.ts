@@ -224,6 +224,7 @@ async function startChunkedCrawl(
     const sx = await fetchSitemapXml(smUrl, 5_000_000);
     if (!sx.ok) return;
     const locs = parseSitemapLocs(sx.text, MAX_LOCS_PER_SITEMAP);
+    let accepted = 0;
     for (const loc of locs) {
       if (!sameHostname(loc, hostLower)) continue;
       try {
@@ -235,7 +236,15 @@ async function startChunkedCrawl(
       const n = normalizeUrlKey(loc);
       if (n) sitemapNorms.add(n);
       candidateUrls.push(loc);
+      accepted += 1;
     }
+    structuredLog('deep_audit_sitemap_ingested', {
+      runId,
+      sitemap_url: smUrl,
+      locs_parsed: locs.length,
+      accepted_urls: accepted,
+      sitemap_norms: sitemapNorms.size,
+    });
   };
 
   const smList =
@@ -269,6 +278,15 @@ async function startChunkedCrawl(
   candidateUrls.push(seedFetch.finalUrl);
 
   const links = extractSameOriginLinks(seedFetch.html, seedFetch.finalUrl, 500);
+  structuredLog('deep_audit_seed_discovery', {
+    runId,
+    seed_url: seedUrl,
+    seed_final_url: seedFetch.finalUrl,
+    sitemap_urls_considered: smList.length,
+    sitemap_candidate_count: sitemapNorms.size,
+    same_origin_links_extracted: links.length,
+    same_origin_link_sample: links.slice(0, 10).join(', '),
+  });
   for (const l of links) {
     try {
       const p = new URL(l).pathname;
@@ -290,6 +308,16 @@ async function startChunkedCrawl(
 
   const ordered = prioritizeUrlsBySection(seedFetch.finalUrl, allowed, limit);
   const seedNormFinal = normalizeUrlKey(seedFetch.finalUrl);
+  structuredLog('deep_audit_frontier_planned', {
+    runId,
+    candidate_urls_total: candidateUrls.length,
+    merged_urls_total: merged.length,
+    allowed_urls_total: allowed.length,
+    ordered_urls_total: ordered.length,
+    ordered_url_sample: ordered.slice(0, 10).join(', '),
+    chunk_size: chunkSize,
+    page_limit: limit,
+  });
 
   const end = Math.min(chunkSize, ordered.length);
   const sliceRes = await processUrlSlice(supabase, llm, {

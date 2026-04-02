@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildDisplayIssues,
+  buildSummaryFacts,
   categoryScoreTone,
   clampScore,
   extractToc,
@@ -82,5 +84,108 @@ describe('report viewer helpers', () => {
     expect(issueSeverity(1)).toBe('Low');
     expect(issueSeverityClasses('High')).toContain('bg-red-100');
     expect(scoreNarrative(92)).toContain('Excellent readiness');
+  });
+
+  it('builds compact summary facts for the interactive report header', () => {
+    expect(
+      buildSummaryFacts({
+        scanId: 'scan-1',
+        url: 'https://example.com',
+        domain: 'example.com',
+        score: 42,
+        letterGrade: 'F',
+        topIssues: [
+          {
+            check: 'AI crawler access (robots.txt)',
+            status: 'FAIL',
+            weight: 10,
+            teamOwner: 'Engineering',
+            fix: 'Update robots.txt to allow AI crawlers.',
+          },
+          {
+            check: 'Schema.org type coverage',
+            status: 'FAIL',
+            weight: 8,
+          },
+        ],
+        categoryScores: [
+          { category: 'trust', score: 62, letterGrade: 'C', checkCount: 3 },
+          { category: 'ai_readiness', score: 30, letterGrade: 'F', checkCount: 4 },
+        ],
+      })
+    ).toEqual([
+      { label: 'Open issues', value: '2', tone: 'warning' },
+      { label: 'Top blocker', value: 'AI crawler access (robots.txt)', tone: 'danger' },
+      { label: 'Primary owner', value: 'Engineering', tone: 'default' },
+      { label: 'First move', value: 'Update robots.txt to allow AI crawlers.', tone: 'default' },
+      { label: 'Weakest category', value: 'AI Readiness', tone: 'danger' },
+    ]);
+  });
+
+  it('builds a trimmed top-issues list for the interactive summary', () => {
+    expect(
+      buildDisplayIssues({
+        scanId: 'scan-1',
+        url: 'https://example.com',
+        domain: 'example.com',
+        score: 42,
+        letterGrade: 'F',
+        topIssues: [
+          {
+            check: 'AI crawler access (robots.txt)',
+            status: 'FAIL',
+            weight: 10,
+            teamOwner: 'Engineering',
+            finding: 'robots.txt blocks known AI crawlers.',
+            fix: 'Update robots.txt to allow AI crawlers.',
+          },
+          {
+            check: 'Schema.org type coverage',
+            status: 'FAIL',
+            weight: 8,
+            finding: 'No Schema.org @type values found.',
+          },
+          {
+            check: 'Freshness signals',
+            status: 'WARNING',
+            weight: 5,
+            finding: 'Important pages do not show clear update cues.',
+            fix: 'Add visible updated dates to key pages.',
+          },
+          {
+            check: 'Title tags',
+            status: 'PASS',
+            weight: 4,
+            finding: 'Looks good.',
+          },
+        ],
+        categoryScores: [],
+      })
+    ).toEqual([
+      {
+        title: 'AI crawler access (robots.txt)',
+        severity: 'High',
+        status: 'FAIL',
+        owner: 'Engineering',
+        problem: 'robots.txt blocks known AI crawlers.',
+        firstMove: 'Update robots.txt to allow AI crawlers.',
+      },
+      {
+        title: 'Schema.org type coverage',
+        severity: 'High',
+        status: 'FAIL',
+        owner: null,
+        problem: 'No Schema.org @type values found.',
+        firstMove: null,
+      },
+      {
+        title: 'Freshness signals',
+        severity: 'Medium',
+        status: 'WARNING',
+        owner: null,
+        problem: 'Important pages do not show clear update cues.',
+        firstMove: 'Add visible updated dates to key pages.',
+      },
+    ]);
   });
 });
