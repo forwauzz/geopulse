@@ -30,6 +30,16 @@ import {
   parseRobotsTxt,
   parseSitemapLocs,
 } from './robots-and-sitemap';
+import {
+  DEFAULT_CHUNK_SIZE,
+  MAX_CHUNK_SIZE,
+  mergeBrowserRenderStats,
+  mergeConfig,
+  parseCrawlPending,
+  planPendingContinuation,
+  type BrowserRenderStats,
+  type CrawlPendingState,
+} from './deep-audit-crawl-state';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,6 +55,7 @@ export type DeepCrawlPageSummary = {
 
 /** Re-export for tests and callers that imported from this module (DA-001). */
 export { extractSameOriginLinks, normalizeUrlKey } from './crawl-url-utils';
+export { parseCrawlPending } from './deep-audit-crawl-state';
 
 function averageScores(scores: number[]): number {
   if (scores.length === 0) return 0;
@@ -67,26 +78,6 @@ const MAX_LOCS_PER_SITEMAP = 200;
 
 /** Re-export for callers that imported `MAX_DEEP_AUDIT_PAGE_LIMIT` from this module. */
 export { MAX_DEEP_AUDIT_PAGE_LIMIT };
-const DEFAULT_CHUNK_SIZE = 25;
-const MAX_CHUNK_SIZE = 40;
-
-export type CrawlPendingState = {
-  readonly ordered_urls: readonly string[];
-  readonly next_index: number;
-  readonly chunk_size: number;
-  readonly crawl_delay_ms: number;
-  readonly sitemap_norms: readonly string[];
-  readonly seed_norm: string;
-  readonly robots_status: number;
-  readonly sitemap_urls_considered: number;
-  readonly chunks_processed: number;
-  readonly started_at: string | null;
-  readonly browser_render_attempted: number;
-  readonly browser_render_succeeded: number;
-  readonly browser_render_failed: number;
-  readonly browser_render_browser_ms_used: number;
-};
-
 export type DeepAuditCrawlResult =
   | { ok: true; phase: 'complete'; pages: readonly DeepCrawlPageSummary[]; aggregateScore: number }
   | { ok: true; phase: 'partial' }
@@ -94,75 +85,29 @@ export type DeepAuditCrawlResult =
 
 type SeedFetchOk = { ok: true; html: string; finalUrl: string };
 
-type BrowserRenderStats = {
-  attempted: number;
-  succeeded: number;
-  failed: number;
-  browserMsUsed: number;
-};
-
-/** Parses crawl_pending; fills defaults for older partial states missing robots metadata. */
-export function parseCrawlPending(raw: unknown): CrawlPendingState | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-  if (!Array.isArray(o['ordered_urls']) || typeof o['next_index'] !== 'number') return null;
-  const urls = o['ordered_urls'] as unknown[];
-  if (!urls.every((u) => typeof u === 'string')) return null;
-  if (typeof o['crawl_delay_ms'] !== 'number') return null;
-  if (!Array.isArray(o['sitemap_norms'])) return null;
-  const sn = o['sitemap_norms'] as unknown[];
-  if (!sn.every((s) => typeof s === 'string')) return null;
-  if (typeof o['seed_norm'] !== 'string') return null;
-  return {
-    ordered_urls: urls as string[],
-    next_index: o['next_index'] as number,
-    chunk_size: typeof o['chunk_size'] === 'number' && o['chunk_size'] > 0 ? (o['chunk_size'] as number) : DEFAULT_CHUNK_SIZE,
-    crawl_delay_ms: o['crawl_delay_ms'] as number,
-    sitemap_norms: sn as string[],
-    seed_norm: o['seed_norm'] as string,
-    robots_status: typeof o['robots_status'] === 'number' ? (o['robots_status'] as number) : 200,
-    sitemap_urls_considered:
-      typeof o['sitemap_urls_considered'] === 'number' ? (o['sitemap_urls_considered'] as number) : 1,
-    chunks_processed:
-      typeof o['chunks_processed'] === 'number' && o['chunks_processed'] > 0 ? (o['chunks_processed'] as number) : 1,
-    started_at: typeof o['started_at'] === 'string' && o['started_at'].length > 0 ? (o['started_at'] as string) : null,
-    browser_render_attempted:
-      typeof o['browser_render_attempted'] === 'number' && o['browser_render_attempted'] >= 0
-        ? (o['browser_render_attempted'] as number)
-        : 0,
-    browser_render_succeeded:
-      typeof o['browser_render_succeeded'] === 'number' && o['browser_render_succeeded'] >= 0
-        ? (o['browser_render_succeeded'] as number)
-        : 0,
-    browser_render_failed:
-      typeof o['browser_render_failed'] === 'number' && o['browser_render_failed'] >= 0
-        ? (o['browser_render_failed'] as number)
-        : 0,
-    browser_render_browser_ms_used:
-      typeof o['browser_render_browser_ms_used'] === 'number' && o['browser_render_browser_ms_used'] >= 0
-        ? (o['browser_render_browser_ms_used'] as number)
-        : 0,
-  };
+function extractSeedHtmlTitle(html: string): string {
+  const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  return (match?.[1] ?? '').trim();
 }
 
-function mergeBrowserRenderStats(base: BrowserRenderStats, delta: BrowserRenderStats): BrowserRenderStats {
+function summarizeSeedHtml(html: string): {
+  htmlBytes: number;
+  anchorCount: number;
+  hasBodyTag: boolean;
+  hasScriptTag: boolean;
+  hasNoscriptTag: boolean;
+  title: string;
+  preview: string;
+} {
   return {
-    attempted: base.attempted + delta.attempted,
-    succeeded: base.succeeded + delta.succeeded,
-    failed: base.failed + delta.failed,
-    browserMsUsed: base.browserMsUsed + delta.browserMsUsed,
+    htmlBytes: html.length,
+    anchorCount: (html.match(/<a\b/gi) ?? []).length,
+    hasBodyTag: /<body\b/i.test(html),
+    hasScriptTag: /<script\b/i.test(html),
+    hasNoscriptTag: /<noscript\b/i.test(html),
+    title: extractSeedHtmlTitle(html),
+    preview: html.replace(/\s+/g, ' ').trim().slice(0, 240),
   };
-}
-
-function mergeConfig(
-  existing: unknown,
-  patch: Record<string, unknown>
-): Record<string, unknown> {
-  const base =
-    existing && typeof existing === 'object' && !Array.isArray(existing)
-      ? { ...(existing as Record<string, unknown>) }
-      : {};
-  return { ...base, ...patch };
 }
 
 /**
@@ -304,6 +249,7 @@ async function startChunkedCrawl(
     const sx = await fetchSitemapXml(smUrl, 5_000_000);
     if (!sx.ok) return;
     const locs = parseSitemapLocs(sx.text, MAX_LOCS_PER_SITEMAP);
+    let accepted = 0;
     for (const loc of locs) {
       if (!sameHostname(loc, hostLower)) continue;
       try {
@@ -315,7 +261,15 @@ async function startChunkedCrawl(
       const n = normalizeUrlKey(loc);
       if (n) sitemapNorms.add(n);
       candidateUrls.push(loc);
+      accepted += 1;
     }
+    structuredLog('deep_audit_sitemap_ingested', {
+      runId,
+      sitemap_url: smUrl,
+      locs_parsed: locs.length,
+      accepted_urls: accepted,
+      sitemap_norms: sitemapNorms.size,
+    });
   };
 
   const smList =
@@ -349,6 +303,23 @@ async function startChunkedCrawl(
   candidateUrls.push(seedFetch.finalUrl);
 
   const links = extractSameOriginLinks(seedFetch.html, seedFetch.finalUrl, 500);
+  const seedHtmlSummary = summarizeSeedHtml(seedFetch.html);
+  structuredLog('deep_audit_seed_discovery', {
+    runId,
+    seed_url: seedUrl,
+    seed_final_url: seedFetch.finalUrl,
+    seed_html_bytes: seedHtmlSummary.htmlBytes,
+    seed_html_anchor_count: seedHtmlSummary.anchorCount,
+    seed_html_has_body: seedHtmlSummary.hasBodyTag,
+    seed_html_has_script: seedHtmlSummary.hasScriptTag,
+    seed_html_has_noscript: seedHtmlSummary.hasNoscriptTag,
+    seed_html_title: seedHtmlSummary.title,
+    seed_html_preview: seedHtmlSummary.preview,
+    sitemap_urls_considered: smList.length,
+    sitemap_candidate_count: sitemapNorms.size,
+    same_origin_links_extracted: links.length,
+    same_origin_link_sample: links.slice(0, 10).join(', '),
+  });
   for (const l of links) {
     try {
       const p = new URL(l).pathname;
@@ -370,6 +341,16 @@ async function startChunkedCrawl(
 
   const ordered = prioritizeUrlsBySection(seedFetch.finalUrl, allowed, limit);
   const seedNormFinal = normalizeUrlKey(seedFetch.finalUrl);
+  structuredLog('deep_audit_frontier_planned', {
+    runId,
+    candidate_urls_total: candidateUrls.length,
+    merged_urls_total: merged.length,
+    allowed_urls_total: allowed.length,
+    ordered_urls_total: ordered.length,
+    ordered_url_sample: ordered.slice(0, 10).join(', '),
+    chunk_size: chunkSize,
+    page_limit: limit,
+  });
 
   const end = Math.min(chunkSize, ordered.length);
   const sliceRes = await processUrlSlice(supabase, llm, {
@@ -429,6 +410,7 @@ async function startChunkedCrawl(
     crawlWallStart,
     crawlDelayMs,
     limit,
+    chunkSize,
     robotsStatus: robotsRes.status,
     sitemapCount: smList.length,
     browserRenderStats: sliceRes.browserRenderStats,
@@ -451,31 +433,25 @@ async function continueChunkedCrawl(
 ): Promise<DeepAuditCrawlResult> {
   const { runId, seedUrl, pending, limit, chunkSize, browserRender } = params;
 
-  const ordered = pending.ordered_urls.slice(0, limit);
+  const continuation = planPendingContinuation(pending, limit, chunkSize);
+  if (!continuation.ok) {
+    await clearCrawlPending(supabase, runId);
+    if (continuation.reason === 'crawl_pending_invalid_chunks_processed') {
+      structuredLog('deep_audit_crawl_pending_invalid', {
+        runId,
+        reason: 'chunks_processed_exceeded_limit',
+        chunks_processed: pending.chunks_processed,
+        max_chunks: Math.max(1, Math.ceil(limit / Math.max(1, chunkSize))) + 2,
+        total: pending.ordered_urls.slice(0, limit).length,
+      });
+    }
+    return { ok: false, reason: continuation.reason };
+  }
+
+  const { ordered, start, end, chunksProcessed } = continuation;
   const sitemapNorms = new Set(pending.sitemap_norms);
   const seedNormFinal = pending.seed_norm;
   const crawlDelayMs = pending.crawl_delay_ms;
-  const start = Math.max(0, pending.next_index);
-  const chunksProcessed = Math.max(1, pending.chunks_processed);
-  const maxChunks = Math.max(1, Math.ceil(limit / Math.max(1, chunkSize))) + 2;
-
-  if (chunksProcessed > maxChunks) {
-    await clearCrawlPending(supabase, runId);
-    structuredLog('deep_audit_crawl_pending_invalid', {
-      runId,
-      reason: 'chunks_processed_exceeded_limit',
-      chunks_processed: chunksProcessed,
-      max_chunks: maxChunks,
-      total: ordered.length,
-    });
-    return { ok: false, reason: 'crawl_pending_invalid_chunks_processed' };
-  }
-
-  if (start >= ordered.length) {
-    await clearCrawlPending(supabase, runId);
-    return { ok: false, reason: 'crawl_pending_exhausted' };
-  }
-  const end = Math.min(start + chunkSize, ordered.length);
 
   const continueSliceRes = await processUrlSlice(supabase, llm, {
     runId,
@@ -541,6 +517,7 @@ async function continueChunkedCrawl(
     crawlWallStart: pending.started_at ? new Date(pending.started_at).getTime() : Date.now(),
     crawlDelayMs,
     limit,
+    chunkSize,
     robotsStatus: pending.robots_status,
     sitemapCount: pending.sitemap_urls_considered,
     chunksProcessed: chunksProcessed + 1,
@@ -773,6 +750,7 @@ async function finalizeDeepCrawl(
     readonly crawlWallStart: number;
     readonly crawlDelayMs: number;
     readonly limit: number;
+    readonly chunkSize: number;
     readonly robotsStatus: number;
     readonly sitemapCount: number;
     readonly chunksProcessed?: number;
@@ -788,6 +766,7 @@ async function finalizeDeepCrawl(
     crawlWallStart,
     crawlDelayMs,
     limit,
+    chunkSize,
     robotsStatus,
     sitemapCount,
     chunksProcessed,
@@ -838,7 +817,7 @@ async function finalizeDeepCrawl(
         urls_planned: ordered.length,
         chunked: true,
         chunks_processed: completedChunks,
-        chunk_size: Math.min(limit, MAX_CHUNK_SIZE),
+        chunk_size: chunkSize,
         urls_remaining: 0,
         browser_render_mode: browserRenderMode,
         browser_render_enabled: browserRenderEnabled,

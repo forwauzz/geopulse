@@ -1,20 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  // GEO-Pulse — Cloudflare Workers configuration
+  // GEO-Pulse Cloudflare Workers configuration
   // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
-  // Stack: Next.js 15 via @opennextjs/cloudflare (NOT @cloudflare/next-on-pages — deprecated)
+  // Stack: Next.js via @opennextjs/cloudflare
 
-  // Local `wrangler deploy` / `wrangler dev`: runs before bundling. Git-connected Workers Builds does NOT use this — set dashboard Build to `npm run build:worker` or Deploy to `npm run deploy` (see PLAYBOOK/cloudflare-workers-builds.md).
+  // Local `wrangler deploy` / `wrangler dev`: runs before bundling.
+  // Git-connected Workers Builds does NOT use this automatically.
   "build": {
     "command": "node scripts/opennext-build.cjs"
   },
 
   "name": "geo-pulse",
   "main": "workers/cloudflare-entry.ts",
-  "compatibility_date": "2025-04-01", // Required for process.env population with OpenNext
-  "compatibility_flags": ["nodejs_compat"], // Required for Supabase client + pdf-lib
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
 
-  // Required by @opennextjs/cloudflare — without this, /_next/static/* returns HTML and CSS/JS MIME errors
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -27,26 +27,54 @@
     }
   ],
 
-  // Non-sensitive config only — secrets go via `wrangler secret put`
+  // Non-sensitive config only.
+  // Values in `vars` are part of the deployed Worker config and persist across deploys.
+  // You do NOT need to re-add these after every push unless you want to change them.
   "vars": {
     "STRIPE_PRICE_ID_DEEP_AUDIT": "price_1TEi0JKknNpProh1sKThObxl",
     "NEXT_PUBLIC_SUPABASE_URL": "https://vynrlgtxqnomxenakafn.supabase.co",
-    // Public anon key (RLS-enforced); same as Supabase Dashboard → Settings → API
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
-    "NEXT_PUBLIC_APP_URL": "https://geo-pulse.uzzielt.workers.dev/",
-    // Public Turnstile site key (secret is TURNSTILE_SECRET_KEY via wrangler secret put)
-    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACvc7UFcxK8LCQjT",
+    "NEXT_PUBLIC_APP_URL": "https://getgeopulse.com/",
+    "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACySl18X8egdbFEN",
+    "DISTRIBUTION_ENGINE_UI_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_WRITE_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_BACKGROUND_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT": "20",
+    "ADMIN_EMAIL": "uzziel@getgeopulse.com",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
-    // Public R2.dev base for deep-audit PDF/MD links (not a secret). Override in .dev.vars locally if needed.
+
+    // Benchmark execution defaults. API key remains a secret.
+    "BENCHMARK_EXECUTION_PROVIDER": "gemini",
+    "BENCHMARK_EXECUTION_MODEL": "gemini-2.5-flash-lite",
+    "BENCHMARK_EXECUTION_ENABLED_MODELS": "gemini-2.5-flash-lite",
+    "BENCHMARK_EXECUTION_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
+
+    // Recurring benchmark lane config.
+    // Keep disabled here until production values are finalized.
+    "BENCHMARK_SCHEDULE_ENABLED": "false",
+    "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite",
+    "BENCHMARK_SCHEDULE_RUN_MODES": "ungrounded_inference,grounded_site",
+    "BENCHMARK_SCHEDULE_VERTICAL": "law_firms",
+    "BENCHMARK_SCHEDULE_SEED_PRIORITIES": "1",
+    "BENCHMARK_SCHEDULE_DOMAINS": "",
+    "BENCHMARK_SCHEDULE_DOMAIN_LIMIT": "20",
+    "BENCHMARK_SCHEDULE_MAX_RUNS": "40",
+    "BENCHMARK_SCHEDULE_MAX_FAILURES": "5",
+    "BENCHMARK_SCHEDULE_WINDOW_HOURS": "12",
+    "BENCHMARK_SCHEDULE_VERSION": "v1",
+
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
-    // Default page cap for new paid deep audits (1–120); same ceiling as crawl Worker.
-    "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "10",
-    // Browser Rendering mode for paid deep audits: off | auto
-    "DEEP_AUDIT_BROWSER_RENDER_MODE": "off"
+    "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
+    "DEEP_AUDIT_BROWSER_RENDER_MODE": "auto",
+    "DEEP_AUDIT_INTERNAL_REWRITE_ENABLED": "false",
+
+    "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
+
+    // Optional destination/provider defaults.
+    "GHOST_ADMIN_API_VERSION": "v6.0"
   },
 
-  // R2 — deep-audit PDF + Markdown (DA-003). Bucket must exist; public URL must match DEEP_AUDIT_R2_PUBLIC_BASE.
   "r2_buckets": [
     {
       "binding": "REPORT_FILES",
@@ -54,19 +82,29 @@
     }
   ],
 
-  // Secrets — set via: wrangler secret put SECRET_NAME
-  // Required secrets (never put these in this file):
+  // Secrets are stored separately from code and persist across deploys.
+  // If set in the Cloudflare dashboard or via `wrangler secret put`, you do NOT need to re-add them on every deploy.
+  // Required core secrets:
   //   SUPABASE_SERVICE_ROLE_KEY
   //   STRIPE_SECRET_KEY
   //   STRIPE_WEBHOOK_SECRET
   //   GEMINI_API_KEY
   //   RESEND_API_KEY
   //   TURNSTILE_SECRET_KEY
-  //   RECONCILE_SECRET (optional — admin reconcile endpoint)
-  //   BROWSER_RENDERING_API_TOKEN (required when DEEP_AUDIT_BROWSER_RENDER_MODE=auto)
-  //   CLOUDFLARE_ACCOUNT_ID (required when DEEP_AUDIT_BROWSER_RENDER_MODE=auto)
+  //
+  // Benchmark secret:
+  //   BENCHMARK_EXECUTION_API_KEY
+  //   Optional if benchmark execution should not fall back to GEMINI_API_KEY.
+  //
+  // Optional feature secrets:
+  //   KIT_API_KEY
+  //   BUTTONDOWN_API_KEY
+  //   GHOST_ADMIN_API_URL
+  //   GHOST_ADMIN_API_KEY
+  //   RECONCILE_SECRET
+  //   BROWSER_RENDERING_API_TOKEN
+  //   CLOUDFLARE_ACCOUNT_ID
 
-  // KV Namespaces
   "kv_namespaces": [
     {
       "binding": "SCAN_CACHE",
@@ -75,12 +113,15 @@
     }
   ],
 
-  // Cloudflare Queues (free: 10,000 ops/day — verify in dashboard, added early 2026)
   "queues": {
     "producers": [
       {
         "binding": "SCAN_QUEUE",
         "queue": "geo-pulse-scan-queue"
+      },
+      {
+        "binding": "DISTRIBUTION_QUEUE",
+        "queue": "geo-pulse-distribution-queue"
       }
     ],
     "consumers": [
@@ -96,11 +137,23 @@
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 1
+      },
+      {
+        "queue": "geo-pulse-distribution-queue",
+        "max_batch_size": 5,
+        "max_batch_timeout": 30,
+        "max_retries": 3,
+        "dead_letter_queue": "geo-pulse-distribution-dlq"
+      },
+      {
+        "queue": "geo-pulse-distribution-dlq",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 1
       }
     ]
   },
 
-  // Rate Limiting (free tier)
   "unsafe": {
     "bindings": [
       {
@@ -115,12 +168,10 @@
     ]
   },
 
-  // Daily ping — keeps Supabase free-tier project from pausing after 7 days idle (see agents/DATABASE.md)
   "triggers": {
-    "crons": ["0 12 * * *"]
+    "crons": ["0 0,12 * * *"]
   },
 
-  // Observability
   "observability": {
     "enabled": true
   }

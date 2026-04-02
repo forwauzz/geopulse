@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { resolveE2EAuthUserFromCookieValue } from '@/lib/supabase/e2e-auth';
 
 type CookieRow = { name: string; value: string; options: CookieOptions };
 
@@ -15,6 +16,11 @@ export async function updateSession(request: NextRequest): Promise<SessionResult
   let supabaseResponse = NextResponse.next({
     request,
   });
+
+  const e2eUser = resolveE2EAuthUserFromCookieValue(request.cookies.get('gp_e2e_auth')?.value);
+  if (e2eUser) {
+    return { response: supabaseResponse, userId: e2eUser.id };
+  }
 
   const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
   const anon = process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'];

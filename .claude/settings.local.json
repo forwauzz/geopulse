@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /c/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse/app/**/*.ts* /c/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse/lib/**/*.ts /c/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse/workers/**/*.ts)",
+      "WebSearch",
+      "Bash(find '/c/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse' -type f -name *roadmap* -o -name *backlog* -o -name *report*rewrite* -o -name *layer-one*)",
+      "Bash(dir \"C:\\\\Users\\\\Carine Tamon\\\\Desktop\\\\CLAUDE WORKSPACE\\\\projects\\\\geopulse\\\\geo-pulse\\\\workers\\\\report\")",
+      "Bash(npm run:*)",
+      "Bash(npx vitest:*)"
+    ]
+  }
+}

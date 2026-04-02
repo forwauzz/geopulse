@@ -20,7 +20,7 @@ export const titleTagCheck: AuditCheck = {
         ? `Title length looks reasonable (${String(len)} characters).`
         : len === 0
           ? 'Missing <title> tag.'
-          : `Title is ${len < MIN ? 'too short' : 'too long'} (${String(len)} characters; aim for ${String(MIN)}–${String(MAX)}).`,
+          : `Title is ${len < MIN ? 'too short' : 'too long'} (${String(len)} characters; aim for ${String(MIN)}-${String(MAX)}).`,
       fix: 'Add a concise, unique title that describes the page.',
     };
   },

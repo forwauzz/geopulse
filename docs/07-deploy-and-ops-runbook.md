@@ -23,6 +23,9 @@ Targeted validation used recently:
 - targeted Vitest for report generation, deep-audit crawl, Browser Rendering, and retrieval eval
 - `npm run eval:smoke`
 - `npm run eval:promptfoo`
+- `npm run eval:promptfoo:write:report -- --site-url https://example.com`
+- `npm run eval:promptfoo:write:retrieval -- --site-url https://example.com`
+- `npm run eval:retrieval:write -- --site-url https://example.com`
 
 ## Local deploy-oriented workflow
 
@@ -39,6 +42,7 @@ Recommended sequence:
 Important implementation truth:
 - Git-connected Workers Builds does not rely on the local `wrangler build.command` in the same way local deploy does.
 - The repo playbook states dashboard build/deploy settings must match the OpenNext worker build path.
+- Wrangler validates bindings against live Cloudflare resources during upload/deploy. Missing queues will fail deploy even when `npm run build:worker` succeeds.
 
 If a deploy behaves differently than local build:
 1. confirm dashboard build command matches the playbook
@@ -46,12 +50,36 @@ If a deploy behaves differently than local build:
 3. confirm R2 bucket binding and queue bindings exist
 4. confirm compatibility date/flags still match repo config
 
+### Queue provisioning and deploy guard
+
+Use this sequence in each environment (`dev`, `staging`, `prod`):
+
+1. Ensure required queues exist in Cloudflare:
+   - `npx wrangler queues create geo-pulse-scan-queue`
+   - `npx wrangler queues create geo-pulse-dlq`
+   - `npx wrangler queues create geo-pulse-distribution-queue`
+   - `npx wrangler queues create geo-pulse-distribution-dlq`
+2. Run queue preflight from repo config:
+   - `npm run deploy:guard`
+3. Deploy:
+   - `npm run deploy`
+
+Notes:
+- `npm run deploy:guard` validates queue names declared in `wrangler.jsonc` against `wrangler queues list --json`.
+- If a queue is missing, the script fails and prints exact create commands.
+- For Git-connected Workers Builds, set Deploy command to `npm run deploy:upload` so queue checks run before `wrangler versions upload`.
+
 ## Post-deploy checks
 
 ### Public app
 - home page loads
+- landing header shows `Sign in` when logged out and does not show `Dashboard`
+- after login, landing header shows `Dashboard` and `Sign out`
 - free scan submits
 - results page renders
+- results page shows the guided journey cards
+- paid path is primary and preview-save remains secondary
+- returning from Stripe does not rely on a `Payment received` query-string banner; status should come from real report state
 - report markdown route loads
 - PDF link opens
 - no CSP error for R2 markdown/PDF fetches
@@ -61,10 +89,18 @@ If a deploy behaves differently than local build:
 - webhook records payment state
 - queue processes report
 - report artifacts land in R2
+- paid report is sent to the email collected in Stripe checkout
 - results report route renders interactive summary + markdown sections
 
 ### Admin pages
+- apply `supabase/migrations/011_eval_run_metadata.sql` before using the new eval analytics view
 - `/dashboard/evals` shows at least one row after `npm run eval:smoke`
+- `/dashboard/evals` shows site-grouped Promptfoo rows after:
+  - `npm run eval:promptfoo:write:report -- --site-url https://example.com`
+  - `npm run eval:promptfoo:write:retrieval -- --site-url https://example.com`
+- retrieval detail tables populate after:
+  - `npm run eval:retrieval:write -- --site-url https://example.com`
+- retrieval runs expose a working drilldown page from `/dashboard/evals`
 - `/dashboard/attribution` loads without a query error
 - empty attribution data is acceptable; query failure is not
 
@@ -87,6 +123,7 @@ Operational dependencies:
 Runbook expectations:
 - do not treat queue success as sufficient; verify the report artifact exists and the UI can fetch it
 - do not treat eval dashboard emptiness as a bug until `npm run eval:smoke` has been executed against the same project
+- for site-history analytics, use the same `--site-url` or `--domain` across repeated Promptfoo runs; otherwise trend lines will fragment across multiple site keys
 
 ## Incident triage shortcuts
 
@@ -107,7 +144,21 @@ Check:
 Check:
 1. `report_eval_runs` contains rows
 2. `npm run eval:smoke` was run against active DB
-3. admin access is correct
+3. `011_eval_run_metadata.sql` was applied if using the new analytics page
+4. admin access is correct
+
+### Evals page shows rows but no site trend
+Check:
+1. repeated evals used the same `domain` / `site_url`
+2. Promptfoo runs were written with `eval:promptfoo:write:report` or `eval:promptfoo:write:retrieval`
+3. framework filter is not hiding the relevant rows
+
+### Retrieval detail tables empty
+Check:
+1. `retrieval_eval_runs` contains the aggregate run row
+2. `npm run eval:retrieval:write` was run against the active DB
+3. the fixture contains both `pages` and `prompts`
+4. `retrieval_eval_prompts`, `retrieval_eval_passages`, and `retrieval_eval_answers` were inserted for the same `run_id`
 
 ### Deep audit stuck or incomplete
 Check:

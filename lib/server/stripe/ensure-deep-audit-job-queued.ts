@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import type { ReportQueueMessageV2 } from '@/lib/queue/report-job';
+import { resolveAgencyModelPolicy } from '@/lib/server/agency-model-policy';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
 import { resolveDefaultDeepAuditPageLimit } from '@/lib/server/deep-audit-page-limit';
+import { structuredError, structuredLog } from '@/lib/server/structured-log';
 
 export type PaymentRow = { id: string; scan_id: string | null };
 
@@ -42,12 +44,17 @@ export async function ensureDeepAuditJobQueued(
     .maybeSingle();
 
   if (report?.id) {
+    structuredLog('deep_audit_queue_skipped_existing_report', {
+      scanId: payment.scan_id,
+      paymentId: payment.id,
+      duplicateEvent,
+    }, 'info');
     return { ok: true, duplicate: true };
   }
 
   const { data: scanRow, error: scanErr } = await supabase
     .from('scans')
-    .select('id,domain')
+    .select('id,domain,agency_account_id,agency_client_id')
     .eq('id', payment.scan_id)
     .maybeSingle();
 
@@ -55,13 +62,38 @@ export async function ensureDeepAuditJobQueued(
     return { ok: false, reason: scanErr?.message ?? 'scan_not_found', status: 500 };
   }
 
+  const modelPolicy = await resolveAgencyModelPolicy({
+    supabase,
+    agencyAccountId: scanRow.agency_account_id ?? null,
+    agencyClientId: scanRow.agency_client_id ?? null,
+    productSurface: 'deep_audit',
+    fallbackProvider: 'gemini',
+    fallbackModelId: env.GEMINI_MODEL,
+  });
+
+  const { error: scanUpdateError } = await supabase
+    .from('scans')
+    .update({
+      requested_model_policy: modelPolicy.requestedModelPolicy,
+      effective_model: modelPolicy.effectiveModel,
+    })
+    .eq('id', payment.scan_id);
+
+  if (scanUpdateError) {
+    return { ok: false, reason: scanUpdateError.message, status: 500 };
+  }
+
   const { data: existingRun } = await supabase
     .from('scan_runs')
-    .select('id')
+    .select('id,config')
     .eq('scan_id', payment.scan_id)
     .maybeSingle();
 
   let scanRunId: string | undefined = existingRun?.id;
+  let existingConfig =
+    existingRun?.config && typeof existingRun.config === 'object'
+      ? { ...(existingRun.config as Record<string, unknown>) }
+      : {};
 
   if (!scanRunId) {
     const pageLimit = resolveDefaultDeepAuditPageLimit(env.DEEP_AUDIT_DEFAULT_PAGE_LIMIT);
@@ -74,6 +106,15 @@ export async function ensureDeepAuditJobQueued(
         config: {
           page_limit: pageLimit,
           render_mode: env.DEEP_AUDIT_BROWSER_RENDER_MODE || 'off',
+          model_policy: {
+            requested_model_policy: modelPolicy.requestedModelPolicy,
+            requested_provider: modelPolicy.requestedProvider,
+            requested_model: modelPolicy.requestedModel,
+            effective_provider: modelPolicy.effectiveProvider,
+            effective_model: modelPolicy.effectiveModel,
+            resolution_source: modelPolicy.source,
+            fallback_reason: modelPolicy.fallbackReason,
+          },
         },
       })
       .select('id')
@@ -92,11 +133,46 @@ export async function ensureDeepAuditJobQueued(
       }
     } else {
       scanRunId = inserted?.id;
+      existingConfig = {
+        page_limit: pageLimit,
+        render_mode: env.DEEP_AUDIT_BROWSER_RENDER_MODE || 'off',
+        model_policy: {
+          requested_model_policy: modelPolicy.requestedModelPolicy,
+          requested_provider: modelPolicy.requestedProvider,
+          requested_model: modelPolicy.requestedModel,
+          effective_provider: modelPolicy.effectiveProvider,
+          effective_model: modelPolicy.effectiveModel,
+          resolution_source: modelPolicy.source,
+          fallback_reason: modelPolicy.fallbackReason,
+        },
+      };
     }
   }
 
   if (!scanRunId) {
     return { ok: false, reason: 'scan_run_missing', status: 500 };
+  }
+
+  const nextConfig = {
+    ...existingConfig,
+    model_policy: {
+      requested_model_policy: modelPolicy.requestedModelPolicy,
+      requested_provider: modelPolicy.requestedProvider,
+      requested_model: modelPolicy.requestedModel,
+      effective_provider: modelPolicy.effectiveProvider,
+      effective_model: modelPolicy.effectiveModel,
+      resolution_source: modelPolicy.source,
+      fallback_reason: modelPolicy.fallbackReason,
+    },
+  };
+
+  const { error: configUpdateError } = await supabase
+    .from('scan_runs')
+    .update({ config: nextConfig })
+    .eq('id', scanRunId);
+
+  if (configUpdateError) {
+    return { ok: false, reason: configUpdateError.message, status: 500 };
   }
 
   const payload: ReportQueueMessageV2 = {
@@ -111,8 +187,21 @@ export async function ensureDeepAuditJobQueued(
   try {
     await env.SCAN_QUEUE.send(JSON.stringify(payload));
   } catch {
+    structuredError('deep_audit_queue_send_failed', {
+      scanId: payment.scan_id,
+      paymentId: payment.id,
+      scanRunId,
+      duplicateEvent,
+    });
     return { ok: false, reason: 'queue_send_failed', status: 500 };
   }
+
+  structuredLog('deep_audit_queue_enqueued', {
+    scanId: payment.scan_id,
+    paymentId: payment.id,
+    scanRunId,
+    duplicateEvent,
+  }, 'info');
 
   return { ok: true, duplicate: duplicateEvent };
 }

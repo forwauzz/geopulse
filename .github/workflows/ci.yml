@@ -41,5 +41,11 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser smoke tests
+        run: npm run test:e2e
+
       - name: Production build (OpenNext + Next — matches Cloudflare)
         run: npm run build:worker

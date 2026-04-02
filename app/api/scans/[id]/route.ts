@@ -1,4 +1,8 @@
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
+import {
+  resolveAgencyFeatureEntitlements,
+  resolveAgencyScanAccess,
+} from '@/lib/server/agency-access';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -31,7 +35,7 @@ export async function GET(
 
       const { data: scan, error: scanErr } = await adminDb
         .from('scans')
-        .select('id,url,domain,score,letter_grade,issues_json,full_results_json,user_id')
+        .select('id,url,domain,score,letter_grade,issues_json,full_results_json,user_id,agency_account_id,agency_client_id')
         .eq('id', id)
         .maybeSingle();
 
@@ -44,11 +48,28 @@ export async function GET(
       if (!scan) {
         return Response.json({ error: { code: 'not_found' } }, { status: 404 });
       }
-      if (scan.user_id !== null && scan.user_id !== user.id) {
+      const agencyAccess = await resolveAgencyScanAccess({
+        supabase: adminDb,
+        userId: user.id,
+        scan: {
+          agencyAccountId: scan.agency_account_id ?? null,
+          agencyClientId: scan.agency_client_id ?? null,
+        },
+      });
+
+      const canAccessAsOwner = scan.user_id === user.id;
+      const canAccessAsAgency = agencyAccess.isMember;
+      const agencyEntitlements = await resolveAgencyFeatureEntitlements({
+        supabase: adminDb,
+        agencyAccountId: scan.agency_account_id ?? null,
+        agencyClientId: scan.agency_client_id ?? null,
+      });
+
+      if (scan.user_id !== null && !(canAccessAsOwner || canAccessAsAgency)) {
         return Response.json({ error: { code: 'forbidden' } }, { status: 403 });
       }
 
-      if (scan.user_id === user.id) {
+      if (canAccessAsOwner || canAccessAsAgency) {
         const [paymentRes, reportRes] = await Promise.all([
           adminDb
             .from('payments')
@@ -83,6 +104,8 @@ export async function GET(
           reportStatus,
           pdfUrl: report?.pdf_url ?? null,
           markdownUrl: report?.markdown_url ?? null,
+          checkoutMode: canAccessAsAgency && !agencyAccess.paymentRequired ? 'agency_bypass' : 'stripe',
+          deepAuditAvailable: canAccessAsAgency ? agencyEntitlements.deepAuditEnabled : true,
         });
       }
       // Guest scan (user_id is null) — fall through to public-share path
@@ -136,5 +159,6 @@ export async function GET(
     reportStatus: data.reportStatus,
     pdfUrl: data.pdfUrl,
     markdownUrl: data.markdownUrl,
+    deepAuditAvailable: true,
   });
 }

@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "build:worker": "node scripts/opennext-build.cjs",
-    "deploy": "node scripts/opennext-build.cjs && wrangler deploy",
+    "cf:queues:check": "node scripts/check-cloudflare-queues.cjs",
+    "deploy:guard": "npm run cf:queues:check",
+    "deploy:upload": "npm run deploy:guard && wrangler versions upload",
+    "deploy": "npm run deploy:guard && node scripts/opennext-build.cjs && wrangler deploy",
     "preview": "node scripts/opennext-build.cjs && wrangler dev",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "db:migrate": "supabase db push",
@@ -14,10 +17,29 @@
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "eval:smoke": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/report-eval-smoke.ts",
     "eval:promptfoo": "npm run eval:promptfoo:report && npm run eval:promptfoo:retrieval",
     "eval:promptfoo:report": "node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.report.yaml --no-progress-bar",
-    "eval:promptfoo:retrieval": "node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.retrieval.yaml --no-progress-bar"
+    "eval:promptfoo:retrieval": "node ./scripts/run-promptfoo.cjs eval -c eval/promptfoo/promptfooconfig.retrieval.yaml --no-progress-bar",
+    "eval:promptfoo:write:report": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/promptfoo-eval-write.ts --framework promptfoo_report",
+    "eval:promptfoo:write:retrieval": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/promptfoo-eval-write.ts --framework promptfoo_retrieval",
+    "eval:retrieval:write": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/retrieval-eval-write.ts",
+    "benchmark:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed.ts",
+    "benchmark:seed:domains": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-domains.ts",
+    "benchmark:seed:query-set": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts",
+    "benchmark:seed:query-set:business-counsel": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts --fixture eval/fixtures/benchmark-law-firms-business-counsel-v1-query-set.json",
+    "benchmark:schedule:preview": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-preview.ts",
+    "benchmark:schedule:capacity": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-capacity.ts",
+    "benchmark:schedule:health": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-health.ts",
+    "benchmark:schedule:run-now": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-run-now.ts",
+    "benchmark:schedule:summary": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-summary.ts",
+    "benchmark:schedule:outliers": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-outliers.ts",
+    "benchmark:schedule:recurrence": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-recurrence.ts",
+    "benchmark:run:diagnostic": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-run-diagnostic.ts",
+    "benchmark:run": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-runner.ts",
+    "report:layer-one:rewrite-prompt": "node ./node_modules/tsx/dist/cli.mjs scripts/layer-one-report-rewrite-prompt.ts"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.1.0",
@@ -38,6 +60,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250409.0",
+    "@playwright/test": "^1.58.2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -51,9 +74,10 @@
     "wrangler": "^4.10.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "^20.20.0 || >=22.22.0"
   },
   "overrides": {
-    "esbuild": "0.27.4"
+    "esbuild": "0.27.4",
+    "cloudflare": "4.4.1"
   }
 }

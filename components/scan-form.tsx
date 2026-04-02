@@ -2,13 +2,31 @@
 
 import { Turnstile } from '@marsidev/react-turnstile';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { scanLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
 
 type ScanFormProps = {
   siteKey: string;
   defaultUrl?: string;
+  agencyAccountId?: string | null;
+  agencyClientId?: string | null;
 };
+
+const E2E_BYPASS_TURNSTILE =
+  process.env['NEXT_PUBLIC_E2E_BYPASS_TURNSTILE'] === '1' &&
+  process.env.NODE_ENV !== 'production';
+
+function isTurnstileBypassEnabled(): boolean {
+  if (!E2E_BYPASS_TURNSTILE) return false;
+  if (typeof window === 'undefined') return true;
+
+  const maybeWindow = window as typeof window & {
+    __GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__?: boolean;
+  };
+  return maybeWindow.__GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__ !== true;
+}
 
 function messageFromScanError(data: unknown): string {
   if (!data || typeof data !== 'object' || !('error' in data)) return 'Scan failed';
@@ -23,12 +41,39 @@ function messageFromScanError(data: unknown): string {
   return `${prefix}${detail || 'Scan failed'}`;
 }
 
-export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
+function turnstileErrorMessage(errorCode: string | number | undefined): string {
+  const code = String(errorCode ?? '').trim();
+  if (code === '110200') {
+    return 'Verification is blocked for this domain. The Turnstile widget must allow this hostname.';
+  }
+  if (code === '110100' || code === '110110' || code === '400020') {
+    return 'Verification is misconfigured (invalid site key). Contact support.';
+  }
+  if (code === '400070') {
+    return 'Verification is misconfigured (site key disabled). Contact support.';
+  }
+  return code ? `Verification failed (${code}). Refresh and try again.` : 'Verification failed. Refresh and try again.';
+}
+
+export function ScanForm({ siteKey, defaultUrl, agencyAccountId, agencyClientId }: ScanFormProps) {
   const router = useRouter();
   const [url, setUrl] = useState(defaultUrl ?? '');
-  const [token, setToken] = useState<string | null>(null);
+  const bypassTurnstile = isTurnstileBypassEnabled();
+  const [token, setToken] = useState<string | null>(
+    bypassTurnstile ? 'e2e-bypass-token' : null
+  );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  useLongWaitEffect(loading, scanLoadingJourney);
+
+  useEffect(() => {
+    setToken((current) => {
+      if (bypassTurnstile) {
+        return current ?? 'e2e-bypass-token';
+      }
+      return current === 'e2e-bypass-token' ? null : current;
+    });
+  }, [bypassTurnstile]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,7 +87,13 @@ export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, turnstileToken: token, ...getAttributionContext() }),
+        body: JSON.stringify({
+          url,
+          turnstileToken: token,
+          agencyAccountId: agencyAccountId ?? null,
+          agencyClientId: agencyClientId ?? null,
+          ...getAttributionContext(),
+        }),
       });
       const data: unknown = await res.json();
       if (!res.ok) {
@@ -96,9 +147,22 @@ export function ScanForm({ siteKey, defaultUrl }: ScanFormProps) {
           ) : 'Run diagnostic'}
         </button>
       </div>
-      <div className="min-h-[65px] flex justify-center">
-        <Turnstile siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(null)} />
-      </div>
+      {bypassTurnstile ? null : (
+        <div className="min-h-[65px] flex justify-center">
+          <Turnstile
+            siteKey={siteKey}
+            onSuccess={(nextToken) => {
+              setToken(nextToken);
+              setError(null);
+            }}
+            onExpire={() => setToken(null)}
+            onError={(code) => {
+              setToken(null);
+              setError(turnstileErrorMessage(code));
+            }}
+          />
+        </div>
+      )}
       {error ? <p className="text-center text-sm text-error">{error}</p> : null}
     </form>
   );

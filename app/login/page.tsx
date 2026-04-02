@@ -18,14 +18,24 @@ export default async function LoginPage({ searchParams }: Props) {
   const err = sp.error;
 
   return (
-    <main className="mx-auto flex min-h-[60vh] max-w-lg flex-col px-6 py-16">
+    <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col px-6 py-16">
       <Link href="/" className="font-body text-sm font-semibold text-tertiary hover:underline">
-        ← Back to GEO-Pulse
+        {'<-'} Back to GEO-Pulse
       </Link>
-      <h1 className="mt-8 font-headline text-3xl font-bold tracking-tight text-on-background md:text-4xl">Sign in</h1>
-      <p className="mt-2 font-body text-on-surface-variant">
-        We&apos;ll email you a magic link — no password. Use the same email as checkout to see your reports.
+      <h1 className="mt-8 font-headline text-3xl font-bold tracking-tight text-on-background md:text-4xl">
+        Sign in
+      </h1>
+      <p className="mt-2 max-w-2xl font-body text-on-surface-variant">
+        Customer accounts can still use a magic link. Agency and pilot accounts can also sign in
+        with an email and password.
       </p>
+      <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+        <p className="font-body text-sm font-semibold text-on-background">Report recovery tip</p>
+        <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">
+          If you already paid for a deep audit, sign in with the Stripe checkout email first. That
+          is how past paid reports are linked into your dashboard.
+        </p>
+      </div>
       {err ? (
         <p className="mt-4 rounded-xl border border-error/30 bg-surface-container-low px-4 py-3 font-body text-sm text-error">
           {decodeURIComponent(err)}

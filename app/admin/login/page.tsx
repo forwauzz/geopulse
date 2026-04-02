@@ -9,7 +9,7 @@ export default async function AdminLoginPage(props: Props) {
   const sp = (await props.searchParams) ?? {};
   const nextRaw = typeof sp.next === 'string' ? sp.next : '';
   const nextPath =
-    nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : '/dashboard/attribution';
+    nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : '/dashboard';
 
   return (
     <main className="mx-auto min-h-[60vh] max-w-lg px-6 py-16">
