@@ -270,6 +270,81 @@ export async function publishContentItem(formData: FormData) {
   revalidatePath(`/blog/${item.slug}`);
 }
 
+export async function publishReadyArticles() {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  const { data, error } = await actionContext.adminDb
+    .from('content_items')
+    .select(
+      'content_id,slug,title,status,content_type,cta_goal,source_type,source_links,draft_markdown,canonical_url,published_at,topic_cluster'
+    )
+    .eq('content_type', 'article')
+    .neq('status', 'published');
+
+  if (error) {
+    throw error;
+  }
+
+  for (const row of (data ?? []) as Array<{
+    content_id: string;
+    slug: string | null;
+    title: string | null;
+    status: string | null;
+    content_type: string;
+    cta_goal: string | null;
+    source_type: string | null;
+    source_links: string[] | null;
+    draft_markdown: string | null;
+    canonical_url: string | null;
+    published_at: string | null;
+    topic_cluster: string | null;
+  }>) {
+    try {
+      assertEditorialReadyForLaunch({
+        title: row.title ?? '',
+        draftMarkdown: row.draft_markdown,
+        sourceLinks: Array.isArray(row.source_links) ? row.source_links : [],
+        ctaGoal: row.cta_goal,
+      });
+
+      const publishFields = prepareContentForPublish({
+        content_type: row.content_type,
+        slug: row.slug,
+        title: row.title,
+        status: row.status,
+        cta_goal: row.cta_goal,
+        source_type: row.source_type,
+        source_links: Array.isArray(row.source_links) ? row.source_links : [],
+        draft_markdown: row.draft_markdown,
+        canonical_url: row.canonical_url,
+        published_at: row.published_at,
+      });
+
+      const { error: updateError } = await actionContext.adminDb
+        .from('content_items')
+        .update({
+          status: 'published',
+          canonical_url: publishFields.canonicalUrl,
+          published_at: publishFields.publishedAt,
+        })
+        .eq('content_id', row.content_id);
+
+      if (updateError) {
+        throw updateError;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  revalidatePath('/dashboard/content');
+  revalidatePath('/dashboard/content/launch');
+  revalidatePath('/blog');
+}
+
 export async function pushContentItemToDestination(formData: FormData) {
   const actionContext = await loadAdminActionContext();
   if (!actionContext.ok) {
