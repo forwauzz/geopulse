@@ -38,6 +38,7 @@ Deferred:
 
 ### Content machine planning -> implementation gap
 Still open:
+- deepen pre-publish quality gates beyond `D5` with stronger semantic validation (claim-to-source traceability, nuanced freshness policy by topic type, and terminology drift controls) before canonical publish
 - expand the current basic content-item detail page into a fuller editing workflow
 - strengthen article-level schema beyond the current first `Article` JSON-LD layer
 - add richer trust metadata beyond the current author-name / role / URL fields
@@ -46,6 +47,7 @@ Still open:
 - deepen the current editorial-readiness checklist if real launch review shows it is too shallow
 - decide later whether the editorial-readiness gate should cover topic pages too, or stay article-only
 - extend structured data beyond the current first article/topic-page coverage
+- run optional public-blog micro-polish slice (`E6`) only if real-usage feedback shows concrete spacing/typography/perf issues after the current passing visual QA lane
 - adjust the first-launch threshold later if real publication cadence shows the current 3-article / 1-topic-hub rule is too weak or too strict
 - expand beyond Kit and Ghost into a broader adapter set without breaking the contract boundary
 - extend provider health past local env/config checks into provider-side connectivity validation when worth the complexity
@@ -61,12 +63,28 @@ Phase A plus the first implementation slices are now in repo; later implementati
 - first bounded manual dispatch/runtime seam now exists in `lib/server/distribution-job-dispatcher.ts`
 - first background queue-backed dispatch lane now exists in `lib/server/distribution-job-schedule.ts`, `workers/queue/distribution-job-queue-consumer.ts`, and `workers/cloudflare-entry.ts`
 - first writable token/account-status admin surface now exists at `/dashboard/distribution`
+- adapter expansion is now being executed as lean maintenance slices (`1A` through `1F`); `1A` is complete as bounded adapter scaffolds + contract tests for `x` and `linkedin`
+- `1B` is now complete too: text-first `x` and `linkedin` runtime wiring is active through the existing adapter/dispatch seam using env-based credentials
+- `1C` is now complete too: dispatcher reads stored `distribution_account_tokens` for `x` / `linkedin` runtime credentials and fails with explicit non-retryable auth/config errors when required rows are missing
+- `1D` is now complete too: `x` / `linkedin` adapters now classify retryability with provider-aware failure rules instead of relying only on generic status mapping
+- `1E` is now complete too: `/dashboard/distribution` now has a bounded quick social seed form that creates one approved social asset + linked job from a selected canonical content item and social account
+- `1F` is now complete too: guardrails/hardening landed on top of that path (dispatchable job defaults and stricter social seed validation)
+- `2A` is now complete too: first provider-native OAuth connect controls and callback/token persistence are shipped for `x` and `linkedin`, gated by `DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED`
+- `2B` is now complete too: dispatch now handles first token lifecycle checks (expiry preflight, X refresh-token rotation, and bounded account status transitions to `token_expired` on lifecycle/auth failures)
+- `2C` is now complete too: retryable provider failures now use provider-specific backoff windows by scheduling the next attempt window (`scheduled_for`) rather than immediate queue retries
+- `2D` is now complete too: `/dashboard/distribution` now surfaces account-level backoff policy controls and job-level next-retry observability from attempt metadata
+- `2E` is now complete too: dispatch token refresh handling now also supports LinkedIn refresh-token flow when available, and the account table now gives explicit reconnect guidance for token-expired LinkedIn accounts
+- `3A` is now complete too: first media foundation controls are shipped in `/dashboard/distribution` (asset-media replace form + preview/readiness visibility), and dispatch now rejects media-required asset types when provider-ready media rows are missing
+- `3B` is now complete too: first provider media publish runtime is wired for LinkedIn `single_image_post` assets, and non-wired media provider/type combinations now fail with explicit bounded errors
+- `3C` is now complete too: LinkedIn `carousel_post` assets now publish through a provider-native media runtime path, including bounded validation for at least two provider-ready carousel/image rows
+- `3D` is now complete too: LinkedIn `short_video_post` assets now publish through a provider-native media runtime path, including bounded validation for at least one provider-ready video row
+- `3E` is now complete too: LinkedIn `long_video_post` assets now publish through a provider-native media runtime path (reusing the bounded LinkedIn video upload/publish flow), including provider-ready video validation
+- `3F` is now complete too: first non-LinkedIn media runtime path is shipped for X `single_image_post` assets, including bounded provider-ready image validation
+- `3G` is now complete too: X `short_video_post` assets now publish through a provider-native media runtime path, including bounded provider-ready video validation
+- `3H` is now complete too: X `long_video_post` assets now publish through a provider-native media runtime path (reusing the bounded X video upload/publish flow), including provider-ready video validation
 - what remains after the current schema + admin + bounded-dispatch slices:
 - expand the current destination model beyond newsletter-first assumptions
-- add account connection and token lifecycle handling for social/video platforms
-- deepen provider-specific retry/backoff behavior now that the first dedicated queue consumer and DLQ terminal-marking path exist
-- move from manual token entry into provider-native OAuth/account connection flows
-- add R2-backed media asset handling for image, carousel, and video destinations
+- expand media handling from the first LinkedIn + X media paths into broader provider/type coverage (additional social providers + richer provider-specific media behaviors where required)
 - add generalized adapters for text-first social platforms before media-heavy platforms
 - do not begin by wiring platform adapters directly into the current newsletter-only delivery shape
 - benchmarking remains the next active implementation stream unless explicitly reprioritized

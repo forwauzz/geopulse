@@ -16,19 +16,36 @@ export function SiteHeaderShell({
 }: SiteHeaderShellProps) {
   const pathname = usePathname();
   const isDashboardRoute = pathname.startsWith('/dashboard');
+  const isBlogRoute = pathname.startsWith('/blog');
+  const headerClassName = isBlogRoute
+    ? 'sticky top-0 z-50 border-b border-white/10 bg-black/95 backdrop-blur'
+    : 'sticky top-0 z-50 bg-surface';
+  const brandTextClassName = isBlogRoute
+    ? 'font-headline text-2xl font-bold text-white'
+    : 'font-headline text-2xl font-bold text-[#0f172a]';
+  const brandIconClassName = isBlogRoute ? 'material-symbols-outlined text-sky-300' : 'material-symbols-outlined text-primary';
+  const primaryNavLinkClassName = isBlogRoute
+    ? 'hidden font-headline text-lg font-semibold text-white md:inline'
+    : 'hidden font-headline text-lg font-semibold text-on-background md:inline';
+  const subtleNavLinkClassName = isBlogRoute
+    ? 'text-xs font-semibold uppercase tracking-widest text-zinc-300 transition-colors hover:text-white'
+    : 'text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background';
+  const dashboardLinkClassName = isBlogRoute
+    ? 'text-sm font-medium text-sky-300 transition-colors hover:text-white'
+    : 'text-sm font-medium text-primary transition-colors hover:text-on-background';
 
   return (
-    <header className="sticky top-0 z-50 bg-surface">
+    <header className={headerClassName}>
       <nav
         className={`mx-auto flex max-w-screen-2xl items-center justify-between px-6 md:px-10 ${
           isDashboardRoute ? 'py-4' : 'py-6'
         }`}
       >
         <Link href="/" className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary" aria-hidden>
+          <span className={brandIconClassName} aria-hidden>
             explore
           </span>
-          <span className="font-headline text-2xl font-bold text-[#0f172a]">GEO-Pulse</span>
+          <span className={brandTextClassName}>GEO-Pulse</span>
         </Link>
 
         <div className="flex items-center gap-4 sm:gap-8 md:gap-10">
@@ -36,7 +53,7 @@ export function SiteHeaderShell({
             <>
               <Link
                 href="/blog"
-                className="hidden text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background md:inline"
+                className={`hidden md:inline ${subtleNavLinkClassName}`}
               >
                 View site
               </Link>
@@ -46,19 +63,19 @@ export function SiteHeaderShell({
             <>
               <Link
                 href="/blog"
-                className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+                className={primaryNavLinkClassName}
               >
                 Blog
               </Link>
               <Link
                 href="/pricing"
-                className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+                className={primaryNavLinkClassName}
               >
                 Pricing
               </Link>
               <Link
                 href="/dashboard"
-                className="text-sm font-medium text-primary transition-colors hover:text-on-background"
+                className={dashboardLinkClassName}
               >
                 Dashboard
               </Link>
@@ -66,13 +83,13 @@ export function SiteHeaderShell({
                 <div className="hidden items-center gap-4 md:flex">
                   <Link
                     href="/dashboard/evals"
-                    className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background"
+                    className={subtleNavLinkClassName}
                   >
                     Evals
                   </Link>
                   <Link
                     href="/dashboard/benchmarks"
-                    className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background"
+                    className={subtleNavLinkClassName}
                   >
                     Benchmarks
                   </Link>
@@ -84,13 +101,13 @@ export function SiteHeaderShell({
             <>
               <Link
                 href="/blog"
-                className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+                className={primaryNavLinkClassName}
               >
                 Blog
               </Link>
               <Link
                 href="/pricing"
-                className="hidden font-headline text-lg font-semibold text-on-background md:inline"
+                className={primaryNavLinkClassName}
               >
                 Pricing
               </Link>
@@ -102,7 +119,7 @@ export function SiteHeaderShell({
               </Link>
               <Link
                 href="/admin/login?next=/dashboard"
-                className="hidden text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background md:inline"
+                className={`hidden md:inline ${subtleNavLinkClassName}`}
               >
                 Admin sign in
               </Link>

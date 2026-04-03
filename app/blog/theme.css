@@ -1,0 +1,17 @@
+.blog-theme a:focus-visible,
+.blog-theme button:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+.blog-theme ::selection {
+  background: rgba(125, 211, 252, 0.35);
+  color: #ffffff;
+}
+
+.blog-theme {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+

@@ -4,6 +4,7 @@ export type ArticleMetadataFields = {
   readonly authorUrl: string | null;
   readonly heroImageUrl: string | null;
   readonly heroImageAlt: string | null;
+  readonly noIndex: boolean;
 };
 
 function readString(value: unknown): string | null {
@@ -18,6 +19,7 @@ export function parseArticleMetadata(metadata: Record<string, unknown> | null | 
     authorUrl: readString(safe['author_url']),
     heroImageUrl: readString(safe['hero_image_url']),
     heroImageAlt: readString(safe['hero_image_alt']),
+    noIndex: safe['noindex'] === true,
   };
 }
 
@@ -41,6 +43,9 @@ export function mergeArticleMetadata(
 
   if (fields.heroImageAlt) next['hero_image_alt'] = fields.heroImageAlt;
   else delete next['hero_image_alt'];
+
+  if (fields.noIndex) next['noindex'] = true;
+  else delete next['noindex'];
 
   return next;
 }

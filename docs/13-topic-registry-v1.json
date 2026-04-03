@@ -1,0 +1,255 @@
+{
+  "version": "v1",
+  "updated_at": "2026-04-03",
+  "taxonomy_source": "docs/11-topic-taxonomy-v1.md",
+  "intent_order": [
+    "definition",
+    "implementation",
+    "comparison",
+    "checklist",
+    "case_pattern"
+  ],
+  "topic_count": 100,
+  "pillars": [
+    {
+      "pillar_id": "01",
+      "pillar_slug": "ai-search-readiness-foundations",
+      "pillar_title": "AI Search Readiness Foundations",
+      "topics": [
+        { "intent": "definition", "slug": "what-is-ai-search-readiness-for-b2b-sites", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-run-an-ai-search-readiness-baseline", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "ai-search-readiness-vs-classic-seo-a-practical-split", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "ai-search-readiness-checklist-for-operators", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "common-readiness-failure-patterns-we-see-first", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "02",
+      "pillar_slug": "crawlable-vs-extractable",
+      "pillar_title": "Crawlable vs Extractable",
+      "topics": [
+        { "intent": "definition", "slug": "crawlable-vs-extractable-what-the-difference-means", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-make-pages-easier-for-llm-extraction", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "technical-indexability-vs-answer-usability", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "extractability-audit-checklist-for-content-pages", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "why-crawlable-pages-still-fail-in-ai-answers", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "03",
+      "pillar_slug": "schema-strategy",
+      "pillar_title": "Schema Strategy (Not Schema-Only)",
+      "topics": [
+        { "intent": "definition", "slug": "why-schema-is-necessary-but-not-sufficient", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-add-schema-without-faking-confidence", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "faq-schema-vs-article-schema-when-to-use-each", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "schema-quality-checklist-for-geo-teams", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "schema-present-but-page-still-unclear-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "04",
+      "pillar_slug": "topic-clusters-and-internal-linking",
+      "pillar_title": "Topic Clusters and Internal Linking",
+      "topics": [
+        { "intent": "definition", "slug": "what-topic-clustering-signals-to-answer-engines", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-build-a-topic-cluster-map-that-scales", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "hub-and-spoke-vs-flat-blog-architecture", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "internal-linking-checklist-for-ai-context", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "scattered-content-graphs-and-context-loss", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "05",
+      "pillar_slug": "entity-clarity-and-brand-consistency",
+      "pillar_title": "Entity Clarity and Brand Consistency",
+      "topics": [
+        { "intent": "definition", "slug": "what-entity-boundary-drift-looks-like", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-standardize-brand-naming-across-pages", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "brand-consistency-vs-brand-voice-what-affects-parsing", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "entity-clarity-checklist-for-core-site-pages", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "inconsistent-naming-that-lowers-citation-confidence", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "06",
+      "pillar_slug": "trust-signals-and-evidence-hygiene",
+      "pillar_title": "Trust Signals and Evidence Hygiene",
+      "topics": [
+        { "intent": "definition", "slug": "which-trust-signals-machines-and-humans-both-read", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-add-author-org-and-proof-signals-cleanly", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "testimonial-style-proof-vs-verifiable-proof", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "trust-signal-checklist-for-published-articles", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "high-claims-low-proof-content-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "07",
+      "pillar_slug": "answer-first-content-design",
+      "pillar_title": "Answer-First Content Design",
+      "topics": [
+        { "intent": "definition", "slug": "what-answer-blocks-are-and-why-they-work", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-write-bluf-openings-for-ai-and-human-readers", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "narrative-posts-vs-answer-first-posts", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "answer-block-checklist-for-each-article", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "long-intro-low-utility-content-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "08",
+      "pillar_slug": "canonicalization-and-url-governance",
+      "pillar_title": "Canonicalization and URL Governance",
+      "topics": [
+        { "intent": "definition", "slug": "canonical-urls-for-content-machines-explained", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-prevent-duplicate-canonical-conflicts", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "canonical-tags-vs-redirects-for-content-consolidation", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "url-governance-checklist-for-blog-scale", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "multiple-urls-for-one-topic-and-signal-splitting", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "09",
+      "pillar_slug": "metadata-and-structured-data-ops",
+      "pillar_title": "Metadata and Structured Data Operations",
+      "topics": [
+        { "intent": "definition", "slug": "which-metadata-fields-actually-help-discovery", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-operationalize-article-metadata-at-scale", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "minimal-metadata-vs-rich-metadata-for-ops", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "metadata-ops-checklist-before-publish", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "published-pages-with-incomplete-metadata-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "10",
+      "pillar_slug": "freshness-and-update-cadence",
+      "pillar_title": "Freshness and Update Cadence",
+      "topics": [
+        { "intent": "definition", "slug": "what-freshness-signals-mean-in-practice", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-run-a-weekly-content-refresh-loop", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "new-post-volume-vs-systematic-content-updates", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "content-freshness-checklist-for-evergreen-pages", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "high-traffic-stale-guides-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "11",
+      "pillar_slug": "docs-style-information-architecture",
+      "pillar_title": "Docs-Style Information Architecture",
+      "topics": [
+        { "intent": "definition", "slug": "why-docs-style-navigation-improves-discoverability", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-design-left-nav-topic-hubs-and-breadcrumbs", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "magazine-blog-vs-docs-style-blog-ia", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "docs-ia-checklist-for-topic-findability", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "content-rich-but-hard-to-navigate-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "12",
+      "pillar_slug": "video-and-rich-media",
+      "pillar_title": "Video and Rich Media for Canonical Posts",
+      "topics": [
+        { "intent": "definition", "slug": "when-video-improves-a-canonical-article", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-embed-video-without-harming-extractability", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "inline-video-vs-linked-video-in-guides", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "rich-media-checklist-for-blog-and-newsletter", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "media-heavy-pages-without-clear-takeaways-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "13",
+      "pillar_slug": "newsletter-downstream-distribution",
+      "pillar_title": "Newsletter as Downstream Distribution",
+      "topics": [
+        { "intent": "definition", "slug": "canonical-site-first-newsletter-second-explained", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-map-article-assets-to-newsletter-variants", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "newsletter-first-vs-site-first-publishing-workflows", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "newsletter-push-checklist-with-canonical-guardrails", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "channel-variant-drift-from-canonical-source", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "14",
+      "pillar_slug": "social-distribution-patterns",
+      "pillar_title": "Social Distribution Patterns (X and LinkedIn)",
+      "topics": [
+        { "intent": "definition", "slug": "what-to-repurpose-from-articles-for-social-posts", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-package-link-image-and-video-social-assets", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "thread-style-vs-single-post-distribution", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "social-asset-checklist-before-queueing", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "high-impressions-low-qualified-traffic-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "15",
+      "pillar_slug": "benchmark-methodology-literacy",
+      "pillar_title": "Benchmark Methodology Literacy",
+      "topics": [
+        { "intent": "definition", "slug": "what-citation-rate-share-of-voice-and-coverage-mean", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-read-benchmark-runs-without-overclaiming", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "citation-volume-vs-citation-quality", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "benchmark-interpretation-checklist-for-teams", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "metric-misreadings-that-lead-to-bad-priorities", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "16",
+      "pillar_slug": "grounded-vs-ungrounded",
+      "pillar_title": "Grounded vs Ungrounded Interpretations",
+      "topics": [
+        { "intent": "definition", "slug": "grounded-vs-ungrounded-modes-explained", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-use-grounded-evidence-in-content-decisioning", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "domain-level-mentions-vs-page-level-provenance", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "grounding-quality-checklist-for-internal-reviews", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "correct-domain-wrong-page-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "17",
+      "pillar_slug": "vertical-strategy-agencies",
+      "pillar_title": "Vertical Strategy: Agencies",
+      "topics": [
+        { "intent": "definition", "slug": "ai-visibility-priorities-for-agencies", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-agencies-should-operationalize-weekly-readiness-reviews", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "single-brand-vs-multi-client-geo-operating-model", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "agency-geo-service-delivery-checklist", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "agency-reporting-without-methodology-guardrails", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "18",
+      "pillar_slug": "vertical-strategy-ecommerce",
+      "pillar_title": "Vertical Strategy: Ecommerce",
+      "topics": [
+        { "intent": "definition", "slug": "ecommerce-ai-readiness-basics-beyond-product-seo", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-improve-product-page-extractability-at-scale", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "catalog-depth-vs-citation-clarity-tradeoffs", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "ecommerce-geo-checklist-for-category-and-product-pages", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "large-catalog-low-context-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "19",
+      "pillar_slug": "vertical-strategy-legal-professional-services",
+      "pillar_title": "Vertical Strategy: Legal and Professional Services",
+      "topics": [
+        { "intent": "definition", "slug": "why-intent-cohort-fit-matters-for-legal-benchmarks", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-build-service-line-specific-content-clusters", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "broad-vertical-content-vs-subcohort-content-strategy", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "professional-services-trust-and-clarity-checklist", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "mixed-intent-content-that-confuses-buyers-and-models", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    },
+    {
+      "pillar_id": "20",
+      "pillar_slug": "content-operations-and-governance",
+      "pillar_title": "Content Operations and Governance",
+      "topics": [
+        { "intent": "definition", "slug": "what-a-lean-content-governance-model-looks-like", "status": "planned", "planned_batch": "batch_1" },
+        { "intent": "implementation", "slug": "how-to-run-weekly-content-ops-with-review-gates", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "comparison", "slug": "fully-manual-vs-assisted-editorial-pipelines", "status": "planned", "planned_batch": "batch_2" },
+        { "intent": "checklist", "slug": "publish-governance-checklist-for-100-topic-programs", "status": "planned", "planned_batch": "batch_3" },
+        { "intent": "case_pattern", "slug": "fast-publishing-without-quality-controls-pattern", "status": "planned", "planned_batch": "batch_3" }
+      ]
+    }
+  ]
+}

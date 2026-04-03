@@ -104,6 +104,47 @@ export function evaluateContentDestinationHealth(
     };
   }
 
+  if (destination.provider_name === 'x') {
+    if (!env.X_ACCESS_TOKEN) {
+      return {
+        availabilityStatus: 'not_configured',
+        availabilityReason: 'X_ACCESS_TOKEN is missing, so pushes cannot be sent to X.',
+        readyToPush: false,
+      };
+    }
+
+    return {
+      availabilityStatus: 'available',
+      availabilityReason: 'X adapter is configured and ready for text-first posts.',
+      readyToPush: true,
+    };
+  }
+
+  if (destination.provider_name === 'linkedin') {
+    if (!env.LINKEDIN_ACCESS_TOKEN) {
+      return {
+        availabilityStatus: 'not_configured',
+        availabilityReason:
+          'LINKEDIN_ACCESS_TOKEN is missing, so pushes cannot be sent to LinkedIn.',
+        readyToPush: false,
+      };
+    }
+    if (!env.LINKEDIN_AUTHOR_URN) {
+      return {
+        availabilityStatus: 'not_configured',
+        availabilityReason:
+          'LINKEDIN_AUTHOR_URN is missing, so pushes cannot be sent to LinkedIn.',
+        readyToPush: false,
+      };
+    }
+
+    return {
+      availabilityStatus: 'available',
+      availabilityReason: 'LinkedIn adapter is configured and ready for text-first posts.',
+      readyToPush: true,
+    };
+  }
+
   return {
     availabilityStatus: 'api_unavailable',
     availabilityReason: destination.availability_reason,

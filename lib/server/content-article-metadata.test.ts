@@ -21,6 +21,7 @@ describe('content article metadata helpers', () => {
       authorUrl: 'https://getgeopulse.com/about',
       heroImageUrl: 'https://cdn.example.com/hero.jpg',
       heroImageAlt: 'Article hero image',
+      noIndex: false,
     });
   });
 
@@ -34,6 +35,7 @@ describe('content article metadata helpers', () => {
           authorUrl: null,
           heroImageUrl: 'https://cdn.example.com/hero.jpg',
           heroImageAlt: 'Article hero image',
+          noIndex: true,
         }
       )
     ).toEqual({
@@ -42,6 +44,7 @@ describe('content article metadata helpers', () => {
       author_role: 'Founder',
       hero_image_url: 'https://cdn.example.com/hero.jpg',
       hero_image_alt: 'Article hero image',
+      noindex: true,
     });
   });
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveContentDestinationAdapter } from './content-destination-adapters';
+import { ContentDestinationPublishError, resolveContentDestinationAdapter } from './content-destination-adapters';
 
 const originalFetch = global.fetch;
 
@@ -399,6 +399,512 @@ describe('resolveContentDestinationAdapter', () => {
     expect(init?.headers).toMatchObject({
       'Content-Type': 'application/json',
       'X-Kit-Api-Key': 'kit_test_key',
+    });
+  });
+
+  it('publishes an X post and returns normalized delivery data', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 'x-post-123',
+        },
+      }),
+    } as Response) as typeof fetch;
+
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-x',
+      destination_key: 'x_social',
+      destination_type: 'social',
+      provider_name: 'x',
+      display_name: 'X',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: null,
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-04-02T10:00:00.000Z',
+      updated_at: '2026-04-02T10:00:00.000Z',
+    });
+
+    const result = await adapter.publishDraft({
+      destination: {
+        id: 'dest-x',
+        destination_key: 'x_social',
+        destination_type: 'social',
+        provider_name: 'x',
+        display_name: 'X',
+        enabled: true,
+        is_default: false,
+        requires_paid_plan: false,
+        supports_api_publish: true,
+        supports_scheduling: true,
+        supports_public_archive: true,
+        plan_tier: null,
+        availability_status: 'available',
+        availability_reason: null,
+        metadata: {},
+        created_at: '2026-04-02T10:00:00.000Z',
+        updated_at: '2026-04-02T10:00:00.000Z',
+      },
+      env: {
+        X_ACCESS_TOKEN: 'x_token',
+        X_API_BASE_URL: 'https://api.x.com',
+      } as any,
+      item: {
+        id: 'item-x-1',
+        content_id: 'x-post-content',
+        slug: 'x-post-content',
+        title: 'X Post Title',
+        status: 'draft',
+        content_type: 'article',
+        target_persona: null,
+        primary_problem: null,
+        topic_cluster: null,
+        keyword_cluster: null,
+        cta_goal: 'free_scan',
+        source_type: 'internal_plus_research',
+        source_links: [],
+        brief_markdown: null,
+        draft_markdown: 'This is a draft markdown body.',
+        canonical_url: 'https://getgeopulse.com/blog/x-post-content',
+        metadata: {},
+        published_at: null,
+        created_at: '2026-04-02T10:00:00.000Z',
+        updated_at: '2026-04-02T10:00:00.000Z',
+        deliveries: [],
+      },
+    });
+
+    expect(result).toEqual({
+      providerPublicationId: 'x-post-123',
+      destinationUrl: 'https://x.com/i/web/status/x-post-123',
+      status: 'published',
+      metadata: {
+        provider: 'x',
+      },
+    });
+  });
+
+  it('publishes a LinkedIn post and returns normalized delivery data', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        'x-restli-id': 'urn:li:share:12345',
+      }),
+      json: async () => ({}),
+    } as Response) as typeof fetch;
+
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-linkedin',
+      destination_key: 'linkedin_social',
+      destination_type: 'social',
+      provider_name: 'linkedin',
+      display_name: 'LinkedIn',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: null,
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-04-02T10:00:00.000Z',
+      updated_at: '2026-04-02T10:00:00.000Z',
+    });
+
+    const result = await adapter.publishDraft({
+      destination: {
+        id: 'dest-linkedin',
+        destination_key: 'linkedin_social',
+        destination_type: 'social',
+        provider_name: 'linkedin',
+        display_name: 'LinkedIn',
+        enabled: true,
+        is_default: false,
+        requires_paid_plan: false,
+        supports_api_publish: true,
+        supports_scheduling: true,
+        supports_public_archive: true,
+        plan_tier: null,
+        availability_status: 'available',
+        availability_reason: null,
+        metadata: {},
+        created_at: '2026-04-02T10:00:00.000Z',
+        updated_at: '2026-04-02T10:00:00.000Z',
+      },
+      env: {
+        LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
+        LINKEDIN_AUTHOR_URN: 'urn:li:person:abc123',
+        LINKEDIN_API_BASE_URL: 'https://api.linkedin.com',
+      } as any,
+      item: {
+        id: 'item-linkedin-1',
+        content_id: 'linkedin-post-content',
+        slug: 'linkedin-post-content',
+        title: 'LinkedIn Post Title',
+        status: 'draft',
+        content_type: 'article',
+        target_persona: null,
+        primary_problem: null,
+        topic_cluster: null,
+        keyword_cluster: null,
+        cta_goal: 'free_scan',
+        source_type: 'internal_plus_research',
+        source_links: [],
+        brief_markdown: null,
+        draft_markdown: 'This is a LinkedIn draft markdown body.',
+        canonical_url: 'https://getgeopulse.com/blog/linkedin-post-content',
+        metadata: {},
+        published_at: null,
+        created_at: '2026-04-02T10:00:00.000Z',
+        updated_at: '2026-04-02T10:00:00.000Z',
+        deliveries: [],
+      },
+    });
+
+    expect(result).toEqual({
+      providerPublicationId: 'urn:li:share:12345',
+      destinationUrl: null,
+      status: 'published',
+      metadata: {
+        provider: 'linkedin',
+      },
+    });
+  });
+
+  it('returns a bounded auth/config error for X when token is missing', async () => {
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-x',
+      destination_key: 'x_social',
+      destination_type: 'social',
+      provider_name: 'x',
+      display_name: 'X',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: null,
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-04-02T10:00:00.000Z',
+      updated_at: '2026-04-02T10:00:00.000Z',
+    });
+
+    await expect(
+      adapter.publishDraft({
+        destination: {
+          id: 'dest-x',
+          destination_key: 'x_social',
+          destination_type: 'social',
+          provider_name: 'x',
+          display_name: 'X',
+          enabled: true,
+          is_default: false,
+          requires_paid_plan: false,
+          supports_api_publish: true,
+          supports_scheduling: true,
+          supports_public_archive: true,
+          plan_tier: null,
+          availability_status: 'available',
+          availability_reason: null,
+          metadata: {},
+          created_at: '2026-04-02T10:00:00.000Z',
+          updated_at: '2026-04-02T10:00:00.000Z',
+        },
+        env: {} as any,
+        item: {
+          id: 'item-x-2',
+          content_id: 'x-post-content-2',
+          slug: 'x-post-content-2',
+          title: 'X Post Title',
+          status: 'draft',
+          content_type: 'article',
+          target_persona: null,
+          primary_problem: null,
+          topic_cluster: null,
+          keyword_cluster: null,
+          cta_goal: 'free_scan',
+          source_type: 'internal_plus_research',
+          source_links: [],
+          brief_markdown: null,
+          draft_markdown: 'This is a draft markdown body.',
+          canonical_url: null,
+          metadata: {},
+          published_at: null,
+          created_at: '2026-04-02T10:00:00.000Z',
+          updated_at: '2026-04-02T10:00:00.000Z',
+          deliveries: [],
+        },
+      })
+    ).rejects.toMatchObject({
+      providerName: 'x',
+      retryable: false,
+      message: 'X_ACCESS_TOKEN is missing.',
+    });
+  });
+
+  it('marks X 429 failures as retryable', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => 'rate limited',
+    } as Response) as typeof fetch;
+
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-x',
+      destination_key: 'x_social',
+      destination_type: 'social',
+      provider_name: 'x',
+      display_name: 'X',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: null,
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-04-02T10:00:00.000Z',
+      updated_at: '2026-04-02T10:00:00.000Z',
+    });
+
+    await expect(
+      adapter.publishDraft({
+        destination: {} as any,
+        env: { X_ACCESS_TOKEN: 'x_token' } as any,
+        item: {
+          id: 'item-x-3',
+          content_id: 'x-post-content-3',
+          slug: 'x-post-content-3',
+          title: 'X Post Title',
+          status: 'draft',
+          content_type: 'article',
+          target_persona: null,
+          primary_problem: null,
+          topic_cluster: null,
+          keyword_cluster: null,
+          cta_goal: 'free_scan',
+          source_type: 'internal_plus_research',
+          source_links: [],
+          brief_markdown: null,
+          draft_markdown: 'This is a draft markdown body.',
+          canonical_url: null,
+          metadata: {},
+          published_at: null,
+          created_at: '2026-04-02T10:00:00.000Z',
+          updated_at: '2026-04-02T10:00:00.000Z',
+          deliveries: [],
+        },
+      })
+    ).rejects.toMatchObject({
+      providerName: 'x',
+      statusCode: 429,
+      retryable: true,
+    });
+  });
+
+  it('marks X 401 failures as terminal', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => 'unauthorized',
+    } as Response) as typeof fetch;
+
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-x',
+      destination_key: 'x_social',
+      destination_type: 'social',
+      provider_name: 'x',
+      display_name: 'X',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: null,
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-04-02T10:00:00.000Z',
+      updated_at: '2026-04-02T10:00:00.000Z',
+    });
+
+    await expect(
+      adapter.publishDraft({
+        destination: {} as any,
+        env: { X_ACCESS_TOKEN: 'x_token' } as any,
+        item: {
+          id: 'item-x-4',
+          content_id: 'x-post-content-4',
+          slug: 'x-post-content-4',
+          title: 'X Post Title',
+          status: 'draft',
+          content_type: 'article',
+          target_persona: null,
+          primary_problem: null,
+          topic_cluster: null,
+          keyword_cluster: null,
+          cta_goal: 'free_scan',
+          source_type: 'internal_plus_research',
+          source_links: [],
+          brief_markdown: null,
+          draft_markdown: 'This is a draft markdown body.',
+          canonical_url: null,
+          metadata: {},
+          published_at: null,
+          created_at: '2026-04-02T10:00:00.000Z',
+          updated_at: '2026-04-02T10:00:00.000Z',
+          deliveries: [],
+        },
+      })
+    ).rejects.toMatchObject({
+      providerName: 'x',
+      statusCode: 401,
+      retryable: false,
+    });
+  });
+
+  it('marks LinkedIn throttled 403 failures as retryable', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => 'throttled by rate limit policy',
+    } as Response) as typeof fetch;
+
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-linkedin',
+      destination_key: 'linkedin_social',
+      destination_type: 'social',
+      provider_name: 'linkedin',
+      display_name: 'LinkedIn',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: null,
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-04-02T10:00:00.000Z',
+      updated_at: '2026-04-02T10:00:00.000Z',
+    });
+
+    await expect(
+      adapter.publishDraft({
+        destination: {} as any,
+        env: {
+          LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
+          LINKEDIN_AUTHOR_URN: 'urn:li:person:abc123',
+        } as any,
+        item: {
+          id: 'item-linkedin-2',
+          content_id: 'linkedin-post-content-2',
+          slug: 'linkedin-post-content-2',
+          title: 'LinkedIn Post Title',
+          status: 'draft',
+          content_type: 'article',
+          target_persona: null,
+          primary_problem: null,
+          topic_cluster: null,
+          keyword_cluster: null,
+          cta_goal: 'free_scan',
+          source_type: 'internal_plus_research',
+          source_links: [],
+          brief_markdown: null,
+          draft_markdown: 'This is a LinkedIn draft markdown body.',
+          canonical_url: null,
+          metadata: {},
+          published_at: null,
+          created_at: '2026-04-02T10:00:00.000Z',
+          updated_at: '2026-04-02T10:00:00.000Z',
+          deliveries: [],
+        },
+      })
+    ).rejects.toMatchObject({
+      providerName: 'linkedin',
+      statusCode: 403,
+      retryable: true,
+    });
+  });
+
+  it('marks LinkedIn permission 403 failures as terminal', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => 'member does not have permission',
+    } as Response) as typeof fetch;
+
+    const adapter = resolveContentDestinationAdapter({
+      id: 'dest-linkedin',
+      destination_key: 'linkedin_social',
+      destination_type: 'social',
+      provider_name: 'linkedin',
+      display_name: 'LinkedIn',
+      enabled: true,
+      is_default: false,
+      requires_paid_plan: false,
+      supports_api_publish: true,
+      supports_scheduling: true,
+      supports_public_archive: true,
+      plan_tier: null,
+      availability_status: 'available',
+      availability_reason: null,
+      metadata: {},
+      created_at: '2026-04-02T10:00:00.000Z',
+      updated_at: '2026-04-02T10:00:00.000Z',
+    });
+
+    await expect(
+      adapter.publishDraft({
+        destination: {} as any,
+        env: {
+          LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
+          LINKEDIN_AUTHOR_URN: 'urn:li:person:abc123',
+        } as any,
+        item: {
+          id: 'item-linkedin-3',
+          content_id: 'linkedin-post-content-3',
+          slug: 'linkedin-post-content-3',
+          title: 'LinkedIn Post Title',
+          status: 'draft',
+          content_type: 'article',
+          target_persona: null,
+          primary_problem: null,
+          topic_cluster: null,
+          keyword_cluster: null,
+          cta_goal: 'free_scan',
+          source_type: 'internal_plus_research',
+          source_links: [],
+          brief_markdown: null,
+          draft_markdown: 'This is a LinkedIn draft markdown body.',
+          canonical_url: null,
+          metadata: {},
+          published_at: null,
+          created_at: '2026-04-02T10:00:00.000Z',
+          updated_at: '2026-04-02T10:00:00.000Z',
+          deliveries: [],
+        },
+      })
+    ).rejects.toMatchObject({
+      providerName: 'linkedin',
+      statusCode: 403,
+      retryable: false,
     });
   });
 });

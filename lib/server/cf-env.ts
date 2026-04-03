@@ -5,10 +5,12 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 export type ScanApiEnv = {
   SCAN_CACHE: KVNamespace | undefined;
+  NEXT_PUBLIC_APP_URL: string;
   NEXT_PUBLIC_SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   DISTRIBUTION_ENGINE_UI_ENABLED: string;
   DISTRIBUTION_ENGINE_WRITE_ENABLED: string;
+  DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED?: string;
   DISTRIBUTION_ENGINE_BACKGROUND_ENABLED?: string;
   DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT?: string;
   TURNSTILE_SECRET_KEY: string;
@@ -35,6 +37,17 @@ export type PaymentApiEnv = ScanApiEnv & {
   GHOST_ADMIN_API_URL: string;
   GHOST_ADMIN_API_KEY: string;
   GHOST_ADMIN_API_VERSION: string;
+  X_ACCESS_TOKEN?: string;
+  X_API_BASE_URL?: string;
+  LINKEDIN_ACCESS_TOKEN?: string;
+  LINKEDIN_AUTHOR_URN?: string;
+  LINKEDIN_API_BASE_URL?: string;
+  X_OAUTH_CLIENT_ID?: string;
+  X_OAUTH_CLIENT_SECRET?: string;
+  X_OAUTH_TOKEN_URL?: string;
+  LINKEDIN_OAUTH_CLIENT_ID?: string;
+  LINKEDIN_OAUTH_CLIENT_SECRET?: string;
+  LINKEDIN_OAUTH_TOKEN_URL?: string;
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
@@ -99,10 +112,14 @@ function resolveQueueBinding(e: Record<string, unknown>, key: string): Queue | u
 function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
   return {
     SCAN_CACHE: e['SCAN_CACHE'] as KVNamespace | undefined,
+    NEXT_PUBLIC_APP_URL: String(e['NEXT_PUBLIC_APP_URL'] ?? ''),
     NEXT_PUBLIC_SUPABASE_URL: String(e['NEXT_PUBLIC_SUPABASE_URL'] ?? ''),
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
     DISTRIBUTION_ENGINE_UI_ENABLED: String(e['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_WRITE_ENABLED: String(e['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? ''),
+    DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED: String(
+      e['DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED'] ?? ''
+    ),
     DISTRIBUTION_ENGINE_BACKGROUND_ENABLED: String(
       e['DISTRIBUTION_ENGINE_BACKGROUND_ENABLED'] ?? ''
     ),
@@ -130,10 +147,13 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
   } catch {
     return {
       SCAN_CACHE: undefined,
+      NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       NEXT_PUBLIC_SUPABASE_URL: process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
       DISTRIBUTION_ENGINE_UI_ENABLED: process.env['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_WRITE_ENABLED: process.env['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? '',
+      DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED:
+        process.env['DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_BACKGROUND_ENABLED:
         process.env['DISTRIBUTION_ENGINE_BACKGROUND_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT:
@@ -173,6 +193,17 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       GHOST_ADMIN_API_URL: pickEnvString(e, 'GHOST_ADMIN_API_URL'),
       GHOST_ADMIN_API_KEY: pickEnvString(e, 'GHOST_ADMIN_API_KEY'),
       GHOST_ADMIN_API_VERSION: pickEnvString(e, 'GHOST_ADMIN_API_VERSION'),
+      X_ACCESS_TOKEN: pickEnvString(e, 'X_ACCESS_TOKEN'),
+      X_API_BASE_URL: pickEnvString(e, 'X_API_BASE_URL'),
+      LINKEDIN_ACCESS_TOKEN: pickEnvString(e, 'LINKEDIN_ACCESS_TOKEN'),
+      LINKEDIN_AUTHOR_URN: pickEnvString(e, 'LINKEDIN_AUTHOR_URN'),
+      LINKEDIN_API_BASE_URL: pickEnvString(e, 'LINKEDIN_API_BASE_URL'),
+      X_OAUTH_CLIENT_ID: pickEnvString(e, 'X_OAUTH_CLIENT_ID'),
+      X_OAUTH_CLIENT_SECRET: pickEnvString(e, 'X_OAUTH_CLIENT_SECRET'),
+      X_OAUTH_TOKEN_URL: pickEnvString(e, 'X_OAUTH_TOKEN_URL'),
+      LINKEDIN_OAUTH_CLIENT_ID: pickEnvString(e, 'LINKEDIN_OAUTH_CLIENT_ID'),
+      LINKEDIN_OAUTH_CLIENT_SECRET: pickEnvString(e, 'LINKEDIN_OAUTH_CLIENT_SECRET'),
+      LINKEDIN_OAUTH_TOKEN_URL: pickEnvString(e, 'LINKEDIN_OAUTH_TOKEN_URL'),
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
@@ -195,6 +226,17 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       GHOST_ADMIN_API_URL: process.env['GHOST_ADMIN_API_URL'] ?? '',
       GHOST_ADMIN_API_KEY: process.env['GHOST_ADMIN_API_KEY'] ?? '',
       GHOST_ADMIN_API_VERSION: process.env['GHOST_ADMIN_API_VERSION'] ?? '',
+      X_ACCESS_TOKEN: process.env['X_ACCESS_TOKEN'] ?? '',
+      X_API_BASE_URL: process.env['X_API_BASE_URL'] ?? '',
+      LINKEDIN_ACCESS_TOKEN: process.env['LINKEDIN_ACCESS_TOKEN'] ?? '',
+      LINKEDIN_AUTHOR_URN: process.env['LINKEDIN_AUTHOR_URN'] ?? '',
+      LINKEDIN_API_BASE_URL: process.env['LINKEDIN_API_BASE_URL'] ?? '',
+      X_OAUTH_CLIENT_ID: process.env['X_OAUTH_CLIENT_ID'] ?? '',
+      X_OAUTH_CLIENT_SECRET: process.env['X_OAUTH_CLIENT_SECRET'] ?? '',
+      X_OAUTH_TOKEN_URL: process.env['X_OAUTH_TOKEN_URL'] ?? '',
+      LINKEDIN_OAUTH_CLIENT_ID: process.env['LINKEDIN_OAUTH_CLIENT_ID'] ?? '',
+      LINKEDIN_OAUTH_CLIENT_SECRET: process.env['LINKEDIN_OAUTH_CLIENT_SECRET'] ?? '',
+      LINKEDIN_OAUTH_TOKEN_URL: process.env['LINKEDIN_OAUTH_TOKEN_URL'] ?? '',
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',

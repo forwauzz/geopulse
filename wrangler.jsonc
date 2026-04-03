@@ -38,6 +38,7 @@
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACySl18X8egdbFEN",
     "DISTRIBUTION_ENGINE_UI_ENABLED": "false",
     "DISTRIBUTION_ENGINE_WRITE_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED": "false",
     "DISTRIBUTION_ENGINE_BACKGROUND_ENABLED": "false",
     "DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT": "20",
     "ADMIN_EMAIL": "uzziel@getgeopulse.com",
@@ -53,6 +54,7 @@
     // Recurring benchmark lane config.
     // Keep disabled here until production values are finalized.
     "BENCHMARK_SCHEDULE_ENABLED": "false",
+    "BENCHMARK_SCHEDULE_QUERY_SET_ID": "9910b5ac-ade6-42be-9dca-9b85c04e4469",
     "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite",
     "BENCHMARK_SCHEDULE_RUN_MODES": "ungrounded_inference,grounded_site",
     "BENCHMARK_SCHEDULE_VERTICAL": "law_firms",
@@ -68,6 +70,7 @@
     "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
     "DEEP_AUDIT_BROWSER_RENDER_MODE": "auto",
     "DEEP_AUDIT_INTERNAL_REWRITE_ENABLED": "false",
+    "DEEP_AUDIT_INTERNAL_REWRITE_MODEL": "gemini-2.5-flash-lite-preview-06-17",
 
     "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
 
@@ -101,6 +104,22 @@
   //   BUTTONDOWN_API_KEY
   //   GHOST_ADMIN_API_URL
   //   GHOST_ADMIN_API_KEY
+  //   X_ACCESS_TOKEN
+  //   LINKEDIN_ACCESS_TOKEN
+  //   LINKEDIN_AUTHOR_URN
+  //   X_OAUTH_CLIENT_ID
+  //   X_OAUTH_CLIENT_SECRET
+  //   X_OAUTH_SCOPE
+  //   X_OAUTH_AUTH_URL
+  //   X_OAUTH_TOKEN_URL
+  //   LINKEDIN_OAUTH_CLIENT_ID
+  //   LINKEDIN_OAUTH_CLIENT_SECRET
+  //   LINKEDIN_OAUTH_SCOPE
+  //   LINKEDIN_OAUTH_AUTH_URL
+  //   LINKEDIN_OAUTH_TOKEN_URL
+  //   Optional provider base-url overrides:
+  //   X_API_BASE_URL
+  //   LINKEDIN_API_BASE_URL
   //   RECONCILE_SECRET
   //   BROWSER_RENDERING_API_TOKEN
   //   CLOUDFLARE_ACCOUNT_ID

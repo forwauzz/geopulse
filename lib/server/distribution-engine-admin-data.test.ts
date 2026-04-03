@@ -44,7 +44,10 @@ describe('createDistributionEngineAdminData', () => {
                   external_account_id: 'urn:li:person:1',
                   status: 'connected',
                   default_audience_id: null,
-                  metadata: null,
+                  metadata: {
+                    retry_backoff_profile: 'conservative',
+                    retry_backoff_multiplier: 1.5,
+                  },
                   connected_by_user_id: 'user-1',
                   last_verified_at: '2026-04-02T00:00:00.000Z',
                   created_at: '2026-04-02T00:00:00.000Z',
@@ -124,8 +127,18 @@ describe('createDistributionEngineAdminData', () => {
           order() {
             return Promise.resolve({
               data: [
-                { distribution_asset_id: 'asset-row-1' },
-                { distribution_asset_id: 'asset-row-1' },
+                {
+                  distribution_asset_id: 'asset-row-1',
+                  storage_url: 'https://r2.dev/media-1.png',
+                  provider_ready_status: 'ready',
+                  created_at: '2026-04-02T02:00:00.000Z',
+                },
+                {
+                  distribution_asset_id: 'asset-row-1',
+                  storage_url: 'https://r2.dev/media-2.png',
+                  provider_ready_status: 'pending',
+                  created_at: '2026-04-02T01:00:00.000Z',
+                },
               ],
               error: null,
             });
@@ -179,11 +192,16 @@ describe('createDistributionEngineAdminData', () => {
                   distribution_job_id: 'job-row-1',
                   error_message: 'Rate limited',
                   created_at: '2026-04-02T02:00:00.000Z',
+                  response_summary: {
+                    retry_scheduled_for: '2026-04-02T02:10:00.000Z',
+                    retry_after_ms: 600000,
+                  },
                 },
                 {
                   distribution_job_id: 'job-row-1',
                   error_message: null,
                   created_at: '2026-04-02T01:00:00.000Z',
+                  response_summary: {},
                 },
               ],
               error: null,
@@ -202,7 +220,8 @@ describe('createDistributionEngineAdminData', () => {
         id: 'acct-row-1',
         token_count: 2,
         latest_token_expiry: '2026-04-10T00:00:00.000Z',
-        metadata: {},
+        retry_backoff_profile: 'conservative',
+        retry_backoff_multiplier: 1.5,
       }),
     ]);
 
@@ -210,6 +229,8 @@ describe('createDistributionEngineAdminData', () => {
       expect.objectContaining({
         id: 'asset-row-1',
         media_count: 2,
+        ready_media_count: 1,
+        latest_media_storage_url: 'https://r2.dev/media-1.png',
         metadata: {},
       }),
     ]);
@@ -219,6 +240,8 @@ describe('createDistributionEngineAdminData', () => {
         id: 'job-row-1',
         attempt_count: 2,
         latest_attempt_error: 'Rate limited',
+        latest_retry_scheduled_for: '2026-04-02T02:10:00.000Z',
+        latest_retry_after_ms: 600000,
       }),
     ]);
   });

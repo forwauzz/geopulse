@@ -10,8 +10,9 @@ import { createContentDestinationAdminData } from '@/lib/server/content-destinat
 import { resolveContentDestinationAdapter } from '@/lib/server/content-destination-adapters';
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
 import { mergeArticleMetadata } from '@/lib/server/content-article-metadata';
+import { appendContentPublishCheckSnapshot } from '@/lib/server/content-publish-check-history';
 import { seedTopicPageItems } from '@/lib/server/content-topic-page-admin';
-import { prepareContentForPublish } from '@/lib/server/content-publishing';
+import { evaluateContentPublishChecks, prepareContentForPublish } from '@/lib/server/content-publishing';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
 
 function mergeTopicPageMetadata(
@@ -168,6 +169,15 @@ export async function updateContentItem(formData: FormData) {
     });
   }
 
+  const articleMetadata = mergeArticleMetadata(existingItem.metadata, {
+    authorName: authorName || null,
+    authorRole: authorRole || null,
+    authorUrl: authorUrl || null,
+    heroImageUrl: heroImageUrl || null,
+    heroImageAlt: heroImageAlt || null,
+    noIndex: existingItem.metadata?.['noindex'] === true,
+  });
+
   const publishFields =
     status === 'published' && existingItem.content_type === 'article'
       ? prepareContentForPublish({
@@ -175,22 +185,40 @@ export async function updateContentItem(formData: FormData) {
           slug,
           title,
           status,
+          topic_cluster: topicCluster || existingItem.topic_cluster,
           cta_goal: existingItem.cta_goal,
           source_type: existingItem.source_type,
           source_links: existingItem.source_links,
           draft_markdown: draftMarkdown,
           canonical_url: existingItem.canonical_url,
+          metadata: articleMetadata,
           published_at: existingItem.published_at,
         })
       : null;
 
-  let metadata = mergeArticleMetadata(existingItem.metadata, {
-    authorName: authorName || null,
-    authorRole: authorRole || null,
-    authorUrl: authorUrl || null,
-    heroImageUrl: heroImageUrl || null,
-    heroImageAlt: heroImageAlt || null,
-  });
+  const publishCheckMetadata =
+    existingItem.content_type === 'article'
+      ? appendContentPublishCheckSnapshot(
+          articleMetadata,
+          evaluateContentPublishChecks({
+            content_type: existingItem.content_type,
+            slug,
+            title,
+            status,
+            topic_cluster: topicCluster || existingItem.topic_cluster,
+            cta_goal: existingItem.cta_goal,
+            source_type: existingItem.source_type,
+            source_links: existingItem.source_links,
+            draft_markdown: draftMarkdown,
+            canonical_url: existingItem.canonical_url,
+            metadata: articleMetadata,
+            published_at: existingItem.published_at,
+            updated_at: existingItem.updated_at,
+          })
+        )
+      : articleMetadata;
+
+  let metadata = publishCheckMetadata;
 
   if (existingItem.content_type === 'research_note' && existingItem.slug?.startsWith('topic-')) {
     metadata = mergeTopicPageMetadata(metadata, {
@@ -246,6 +274,9 @@ export async function publishContentItem(formData: FormData) {
     throw new Error('Content item not found.');
   }
 
+  const publishChecks = evaluateContentPublishChecks(item);
+  const metadataWithSnapshot = appendContentPublishCheckSnapshot(item.metadata, publishChecks);
+
   assertEditorialReadyForLaunch({
     title: item.title,
     draftMarkdown: item.draft_markdown,
@@ -261,6 +292,7 @@ export async function publishContentItem(formData: FormData) {
       status: 'published',
       canonical_url: publishFields.canonicalUrl,
       published_at: publishFields.publishedAt,
+      metadata: metadataWithSnapshot,
     })
     .eq('content_id', contentId);
 
@@ -283,7 +315,7 @@ export async function publishReadyArticles() {
   const { data, error } = await actionContext.adminDb
     .from('content_items')
     .select(
-      'content_id,slug,title,status,content_type,cta_goal,source_type,source_links,draft_markdown,canonical_url,published_at,topic_cluster'
+      'content_id,slug,title,status,content_type,topic_cluster,cta_goal,source_type,source_links,draft_markdown,canonical_url,metadata,published_at'
     )
     .eq('content_type', 'article')
     .neq('status', 'published');
@@ -303,6 +335,7 @@ export async function publishReadyArticles() {
     source_links: string[] | null;
     draft_markdown: string | null;
     canonical_url: string | null;
+    metadata: Record<string, unknown> | null;
     published_at: string | null;
     topic_cluster: string | null;
   }>) {
@@ -319,13 +352,31 @@ export async function publishReadyArticles() {
         slug: row.slug,
         title: row.title,
         status: row.status,
+        topic_cluster: row.topic_cluster,
         cta_goal: row.cta_goal,
         source_type: row.source_type,
         source_links: Array.isArray(row.source_links) ? row.source_links : [],
         draft_markdown: row.draft_markdown,
         canonical_url: row.canonical_url,
+        metadata: row.metadata ?? {},
         published_at: row.published_at,
       });
+
+      const checks = evaluateContentPublishChecks({
+        content_type: row.content_type,
+        slug: row.slug,
+        title: row.title,
+        status: row.status,
+        topic_cluster: row.topic_cluster,
+        cta_goal: row.cta_goal,
+        source_type: row.source_type,
+        source_links: Array.isArray(row.source_links) ? row.source_links : [],
+        draft_markdown: row.draft_markdown,
+        canonical_url: row.canonical_url,
+        metadata: row.metadata ?? {},
+        published_at: row.published_at,
+      });
+      const metadataWithSnapshot = appendContentPublishCheckSnapshot(row.metadata ?? {}, checks);
 
       const { error: updateError } = await actionContext.adminDb
         .from('content_items')
@@ -333,6 +384,7 @@ export async function publishReadyArticles() {
           status: 'published',
           canonical_url: publishFields.canonicalUrl,
           published_at: publishFields.publishedAt,
+          metadata: metadataWithSnapshot,
         })
         .eq('content_id', row.content_id);
 

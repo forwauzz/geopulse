@@ -53,6 +53,14 @@ export type ContentAdminDetailRow = {
   readonly deliveries: DeliveryRow[];
 };
 
+export type ContentPublishCheckTrendRow = {
+  readonly content_id: string;
+  readonly title: string;
+  readonly status: string;
+  readonly updated_at: string;
+  readonly metadata: Record<string, unknown>;
+};
+
 type ContentItemRow = Omit<
   ContentAdminListRow,
   'delivery_count' | 'published_delivery_count' | 'latest_delivery_destination' | 'latest_delivery_status'
@@ -66,6 +74,14 @@ type DeliveryRow = {
   readonly status: string;
   readonly published_at: string | null;
   readonly created_at: string;
+};
+
+type PublishCheckTrendRawRow = {
+  readonly content_id: unknown;
+  readonly title: unknown;
+  readonly status: unknown;
+  readonly updated_at: unknown;
+  readonly metadata: unknown;
 };
 
 function readRequiredText(value: unknown): string {
@@ -179,6 +195,27 @@ export function createContentAdminData(supabase: SupabaseLike) {
         metadata: item.metadata ?? {},
         deliveries: (deliveries ?? []) as DeliveryRow[],
       };
+    },
+
+    async getRecentPublishCheckTrendRows(limit = 100): Promise<ContentPublishCheckTrendRow[]> {
+      const { data, error } = await supabase
+        .from('content_items')
+        .select('content_id,title,status,updated_at,metadata')
+        .order('updated_at', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+
+      return ((data ?? []) as PublishCheckTrendRawRow[]).map((row) => ({
+        content_id: readRequiredText(row.content_id),
+        title: readRequiredText(row.title),
+        status: readRequiredText(row.status),
+        updated_at: readRequiredText(row.updated_at),
+        metadata:
+          typeof row.metadata === 'object' && row.metadata !== null
+            ? (row.metadata as Record<string, unknown>)
+            : {},
+      }));
     },
   };
 }
