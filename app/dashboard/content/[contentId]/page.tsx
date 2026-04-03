@@ -4,10 +4,14 @@ import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { parseArticleMetadata } from '@/lib/server/content-article-metadata';
+import { readContentPublishCheckHistory } from '@/lib/server/content-publish-check-history';
 import { evaluateEditorialReadiness } from '@/lib/server/content-editorial-readiness';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
-import { buildCanonicalContentUrl, getContentPublishIssues } from '@/lib/server/content-publishing';
+import {
+  buildCanonicalContentUrl,
+  evaluateContentPublishChecks,
+} from '@/lib/server/content-publishing';
 import { publishContentItem, pushContentItemToDestination, updateContentItem } from '../actions';
 
 export const dynamic = 'force-dynamic';
@@ -42,6 +46,25 @@ function readTopicPageField(metadata: Record<string, unknown>, key: string): str
   return typeof value === 'string' ? value : '';
 }
 
+function formatPublishCheckCategory(value: string): string {
+  if (value === 'publish_contract') return 'Publish contract';
+  if (value === 'llm_readiness') return 'LLM readiness';
+  if (value === 'claim_discipline') return 'Claim discipline';
+  if (value === 'semantic_quality') return 'Semantic quality';
+  return value;
+}
+
+function formatPublishCheckTimestamp(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default async function ContentItemDetailPage({ params }: Props) {
   const { contentId } = await params;
   const adminContext = await loadAdminPageContext(`/dashboard/content/${contentId}`);
@@ -72,8 +95,10 @@ export default async function ContentItemDetailPage({ params }: Props) {
         destination.destination_type === 'newsletter' && destination.supports_api_publish
     );
   const blogPath = buildCanonicalContentUrl(item.content_type, item.slug);
-  const publishIssues = getContentPublishIssues(item);
-  const canPublish = publishIssues.length === 0;
+  const publishChecks = evaluateContentPublishChecks(item);
+  const publishCheckHistory = readContentPublishCheckHistory(item.metadata);
+  const failedPublishChecks = publishChecks.filter((check) => !check.passed);
+  const canPublish = failedPublishChecks.length === 0;
   const articleMetadata = parseArticleMetadata(item.metadata);
   const isTopicPage = item.content_type === 'research_note' && item.slug?.startsWith('topic-');
   const editorialChecks =
@@ -390,12 +415,38 @@ export default async function ContentItemDetailPage({ params }: Props) {
                   Topic page route: {item.topic_cluster ? `/blog/topic/${item.topic_cluster}` : '-'}
                 </p>
               ) : null}
-              {publishIssues.length > 0 ? (
-                <ul className="mt-3 space-y-2 text-xs text-on-surface-variant">
-                  {publishIssues.map((issue) => (
-                    <li key={issue}>{issue}</li>
-                  ))}
-                </ul>
+              {failedPublishChecks.length > 0 ? (
+                <div className="mt-3 space-y-3">
+                  {(
+                    [
+                      'publish_contract',
+                      'llm_readiness',
+                      'claim_discipline',
+                      'semantic_quality',
+                    ] as const
+                  ).map((category) => {
+                    const categoryChecks = publishChecks.filter((check) => check.category === category);
+                    if (categoryChecks.length === 0) return null;
+
+                    return (
+                      <div key={category} className="rounded-xl border border-outline-variant/20 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                          {formatPublishCheckCategory(category)}
+                        </p>
+                        <div className="mt-2 space-y-2">
+                          {categoryChecks.map((check) => (
+                            <div key={check.key} className="rounded-lg bg-surface-container-low p-2">
+                              <p className="text-xs font-medium text-on-background">{check.label}</p>
+                              <p className="mt-1 text-[11px] text-on-surface-variant">
+                                {check.passed ? 'Pass' : check.hint ?? 'Needs work'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : null}
               <div className="mt-4 flex flex-wrap gap-3">
                 <form action={publishContentItem}>
@@ -417,6 +468,26 @@ export default async function ContentItemDetailPage({ params }: Props) {
                   </Link>
                 ) : null}
               </div>
+
+              {publishCheckHistory.length > 0 ? (
+                <div className="mt-4 rounded-xl border border-outline-variant/20 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Recent check snapshots
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {publishCheckHistory.slice(0, 5).map((snapshot) => (
+                      <div key={snapshot.checked_at} className="rounded-lg bg-surface-container-low p-2">
+                        <p className="text-xs font-medium text-on-background">
+                          {snapshot.passed ? 'Pass' : 'Failed'} - {formatPublishCheckTimestamp(snapshot.checked_at)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-on-surface-variant">
+                          {snapshot.failed_count} failed out of {snapshot.total_checks} checks
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </section>
 

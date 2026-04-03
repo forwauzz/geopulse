@@ -6,7 +6,7 @@ export type TopicGroup = {
   readonly articles: PublicContentListRow[];
 };
 
-function formatLabel(value: string | null): string {
+export function formatTopicLabel(value: string | null): string {
   if (!value) return 'General';
   return value
     .split('_')
@@ -24,7 +24,7 @@ function slugify(value: string): string {
 }
 
 export function buildTopicAnchor(topic: string | null): string {
-  return topic ? `topic-${slugify(formatLabel(topic))}` : 'topic-general';
+  return topic ? `topic-${slugify(formatTopicLabel(topic))}` : 'topic-general';
 }
 
 export function buildTopicHref(topic: string | null): string {
@@ -44,7 +44,7 @@ export function groupArticlesByTopic(articles: PublicContentListRow[]): TopicGro
   return Array.from(groups.entries())
     .map(([topicKey, groupedArticles]) => ({
       topicKey,
-      topicLabel: formatLabel(topicKey === 'general' ? null : topicKey),
+      topicLabel: formatTopicLabel(topicKey === 'general' ? null : topicKey),
       articles: groupedArticles,
     }))
     .sort((a, b) => a.topicLabel.localeCompare(b.topicLabel));

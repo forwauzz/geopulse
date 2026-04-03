@@ -36,6 +36,63 @@ export type PublicContentDetailRow = {
   readonly updated_at: string;
 };
 
+function isE2eBlogFixtureEnabled(): boolean {
+  return process.env['E2E_BLOG_FIXTURE'] === '1';
+}
+
+const E2E_BLOG_FIXTURE_DETAIL_ROWS: readonly PublicContentDetailRow[] = [
+  {
+    id: 'e2e-blog-item-1',
+    content_id: 'e2e-blog-item-1',
+    slug: 'e2e-blog-dark-theme',
+    title: 'E2E Blog Dark Theme Fixture',
+    target_persona: 'operators',
+    primary_problem: 'Teams need deterministic visual QA checks for blog theming.',
+    topic_cluster: 'ai_search_readiness',
+    keyword_cluster: 'theme_qa',
+    cta_goal: 'free_scan',
+    source_links: ['https://example.com/e2e-fixture-source'],
+    draft_markdown: [
+      '## Why this fixture exists',
+      '',
+      'This fixture gives Playwright a stable public blog artifact for style checks.',
+      '',
+      '## What to verify',
+      '',
+      '- Dark background surfaces',
+      '- Readable light text',
+      '- High-contrast link/focus behavior',
+    ].join('\n'),
+    canonical_url: '/blog/e2e-blog-dark-theme',
+    metadata: {
+      author_name: 'GEO-Pulse QA',
+      author_role: 'Automation',
+      hero_image_url: 'https://images.unsplash.com/photo-1518770660439-4636190af475',
+      hero_image_alt: 'Abstract dark gradient lines',
+    },
+    published_at: '2026-04-03T12:00:00.000Z',
+    updated_at: '2026-04-03T12:00:00.000Z',
+  },
+];
+
+const E2E_BLOG_FIXTURE_LIST_ROWS: readonly PublicContentListRow[] = E2E_BLOG_FIXTURE_DETAIL_ROWS.map(
+  (row) => ({
+    id: row.id,
+    content_id: row.content_id,
+    slug: row.slug,
+    title: row.title,
+    target_persona: row.target_persona,
+    primary_problem: row.primary_problem,
+    topic_cluster: row.topic_cluster,
+    cta_goal: row.cta_goal,
+    canonical_url: row.canonical_url,
+    published_at: row.published_at,
+    updated_at: row.updated_at,
+    excerpt: buildExcerpt(row.draft_markdown),
+    metadata: row.metadata,
+  })
+);
+
 function stripMarkdown(markdown: string): string {
   return markdown
     .replace(/^#{1,6}\s+/gm, '')
@@ -56,6 +113,10 @@ function buildExcerpt(markdown: string | null): string | null {
 export function createPublicContentData(supabase: SupabaseLike) {
   return {
     async getPublishedArticles(): Promise<PublicContentListRow[]> {
+      if (isE2eBlogFixtureEnabled()) {
+        return [...E2E_BLOG_FIXTURE_LIST_ROWS];
+      }
+
       const { data, error } = await supabase
         .from('content_items')
         .select(
@@ -87,6 +148,11 @@ export function createPublicContentData(supabase: SupabaseLike) {
     },
 
     async getPublishedArticleBySlug(slug: string): Promise<PublicContentDetailRow | null> {
+      if (isE2eBlogFixtureEnabled()) {
+        const fixture = E2E_BLOG_FIXTURE_DETAIL_ROWS.find((row) => row.slug === slug) ?? null;
+        return fixture ? { ...fixture } : null;
+      }
+
       const { data, error } = await supabase
         .from('content_items')
         .select(

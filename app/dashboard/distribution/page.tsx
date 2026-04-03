@@ -67,7 +67,64 @@ function tokenHealthLabel(account: {
   return 'Healthy';
 }
 
-export default async function DistributionAdminPage() {
+function formatBackoffPolicy(account: {
+  retry_backoff_profile: string;
+  retry_backoff_multiplier: number | null;
+}): string {
+  const profile = formatLabel(account.retry_backoff_profile);
+  if (!account.retry_backoff_multiplier) return profile;
+  return `${profile} x${account.retry_backoff_multiplier.toFixed(2)}`;
+}
+
+function formatRetryDelayMs(value: number | null): string {
+  if (!value || value <= 0) return '-';
+  if (value < 60_000) return `${Math.round(value / 1000)}s`;
+  const mins = Math.round(value / 60_000);
+  return `${mins}m`;
+}
+
+function accountNextAction(account: {
+  provider_name: string;
+  status: string;
+  token_count: number;
+}): string {
+  if (account.token_count === 0) return 'Save a token for this account.';
+  if (account.provider_name === 'linkedin' && account.status === 'token_expired') {
+    return 'Reconnect LinkedIn OAuth from the connect form above.';
+  }
+  if (account.status === 'token_expired' || account.status === 'revoked') {
+    return 'Reconnect account OAuth from the connect form above.';
+  }
+  return '-';
+}
+
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (!error || typeof error !== 'object') return 'Unknown error';
+
+  const message =
+    typeof (error as { message?: unknown }).message === 'string'
+      ? (error as { message: string }).message
+      : null;
+  const details =
+    typeof (error as { details?: unknown }).details === 'string'
+      ? (error as { details: string }).details
+      : null;
+  const hint =
+    typeof (error as { hint?: unknown }).hint === 'string'
+      ? (error as { hint: string }).hint
+      : null;
+
+  const parts = [message, details, hint].filter(
+    (part): part is string => typeof part === 'string' && part.trim().length > 0
+  );
+  if (parts.length === 0) return 'Unknown error';
+  return parts.join(' | ');
+}
+
+export default async function DistributionAdminPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const adminContext = await loadAdminPageContext('/dashboard/distribution');
   if (!adminContext.ok) {
     return (
@@ -78,6 +135,13 @@ export default async function DistributionAdminPage() {
   }
 
   const flags = resolveDistributionEngineFlags(adminContext.env);
+  const resolvedSearchParams = (await props.searchParams) ?? {};
+  const oauthOutcome = Array.isArray(resolvedSearchParams['oauth'])
+    ? resolvedSearchParams['oauth'][0] ?? null
+    : resolvedSearchParams['oauth'] ?? null;
+  const oauthProvider = Array.isArray(resolvedSearchParams['provider'])
+    ? resolvedSearchParams['provider'][0] ?? null
+    : resolvedSearchParams['provider'] ?? null;
   if (!flags.uiEnabled) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-16">
@@ -185,9 +249,19 @@ export default async function DistributionAdminPage() {
         <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
           <strong className="text-on-background">Current scope:</strong> this page is intentionally
           gated. The read model is behind <code>DISTRIBUTION_ENGINE_UI_ENABLED</code>, and writable
-          controls are separately behind <code>DISTRIBUTION_ENGINE_WRITE_ENABLED</code>. Background
-          cron dispatch is separately controlled by <code>DISTRIBUTION_ENGINE_BACKGROUND_ENABLED</code>.
+          controls are separately behind <code>DISTRIBUTION_ENGINE_WRITE_ENABLED</code>. Social OAuth
+          connect controls are behind <code>DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED</code>.
+          Background cron dispatch is separately controlled by{' '}
+          <code>DISTRIBUTION_ENGINE_BACKGROUND_ENABLED</code>.
         </div>
+
+        {oauthOutcome ? (
+          <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
+            <strong className="text-on-background">OAuth result:</strong>{' '}
+            {oauthProvider ? `${oauthProvider} - ` : ''}
+            {oauthOutcome.replaceAll('_', ' ')}
+          </div>
+        ) : null}
 
         {flags.writeEnabled ? (
           <DistributionEngineAdminControls
@@ -200,12 +274,14 @@ export default async function DistributionAdminPage() {
               id: account.id,
               accountId: account.account_id,
               label: account.account_label,
+              providerName: account.provider_name,
             }))}
             assetOptions={overview.assets.map((asset) => ({
               id: asset.id,
               assetId: asset.asset_id,
               label: asset.title?.trim() ? `${asset.title} (${asset.asset_id})` : asset.asset_id,
             }))}
+            socialOauthEnabled={flags.socialOauthEnabled}
           />
         ) : (
           <div className="mt-6 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
@@ -228,14 +304,16 @@ export default async function DistributionAdminPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
-            <table className="min-w-[980px] w-full border-collapse text-left font-body text-sm">
+            <table className="min-w-[1240px] w-full border-collapse text-left font-body text-sm">
               <thead className="bg-surface-container-low">
                 <tr className="text-on-surface-variant">
                   <th className="px-4 py-3">Account</th>
                   <th className="px-4 py-3">Provider</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Backoff policy</th>
                   <th className="px-4 py-3 text-right">Tokens</th>
                   <th className="px-4 py-3">Token health</th>
+                  <th className="px-4 py-3">Next action</th>
                   <th className="px-4 py-3">Latest expiry</th>
                   <th className="px-4 py-3">Verified</th>
                   <th className="px-4 py-3">Updated</th>
@@ -244,7 +322,7 @@ export default async function DistributionAdminPage() {
               <tbody>
                 {overview.accounts.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-on-surface-variant" colSpan={8}>
+                    <td className="px-4 py-8 text-on-surface-variant" colSpan={10}>
                       No distribution accounts stored yet. The schema and repository are present,
                       but no account-connection flow has been built on top of them yet.
                     </td>
@@ -269,6 +347,7 @@ export default async function DistributionAdminPage() {
                           {formatLabel(account.status)}
                         </span>
                       </td>
+                      <td className="px-4 py-3">{formatBackoffPolicy(account)}</td>
                       <td className="px-4 py-3 text-right">{account.token_count}</td>
                       <td className="px-4 py-3">
                         <span
@@ -284,6 +363,9 @@ export default async function DistributionAdminPage() {
                         >
                           {tokenHealthLabel(account)}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-on-surface-variant">
+                        {accountNextAction(account)}
                       </td>
                       <td className="px-4 py-3">{formatDateTime(account.latest_token_expiry)}</td>
                       <td className="px-4 py-3">{formatDateTime(account.last_verified_at)}</td>
@@ -307,7 +389,7 @@ export default async function DistributionAdminPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
-            <table className="min-w-[1080px] w-full border-collapse text-left font-body text-sm">
+            <table className="min-w-[1280px] w-full border-collapse text-left font-body text-sm">
               <thead className="bg-surface-container-low">
                 <tr className="text-on-surface-variant">
                   <th className="px-4 py-3">Asset</th>
@@ -315,6 +397,8 @@ export default async function DistributionAdminPage() {
                   <th className="px-4 py-3">Family</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3 text-right">Media</th>
+                  <th className="px-4 py-3 text-right">Ready media</th>
+                  <th className="px-4 py-3">Latest media URL</th>
                   <th className="px-4 py-3">Source</th>
                   <th className="px-4 py-3">Updated</th>
                 </tr>
@@ -322,7 +406,7 @@ export default async function DistributionAdminPage() {
               <tbody>
                 {overview.assets.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-on-surface-variant" colSpan={7}>
+                    <td className="px-4 py-8 text-on-surface-variant" colSpan={9}>
                       No generalized distribution assets exist yet.
                     </td>
                   </tr>
@@ -343,6 +427,21 @@ export default async function DistributionAdminPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">{asset.media_count}</td>
+                      <td className="px-4 py-3 text-right">{asset.ready_media_count}</td>
+                      <td className="px-4 py-3 text-on-surface-variant">
+                        {asset.latest_media_storage_url ? (
+                          <a
+                            href={asset.latest_media_storage_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline decoration-dotted underline-offset-2"
+                          >
+                            preview
+                          </a>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div>{formatLabel(asset.source_type)}</div>
                         <div className="mt-1 text-xs text-on-surface-variant">
@@ -369,13 +468,15 @@ export default async function DistributionAdminPage() {
           </div>
 
           <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
-            <table className="min-w-[1160px] w-full border-collapse text-left font-body text-sm">
+            <table className="min-w-[1280px] w-full border-collapse text-left font-body text-sm">
               <thead className="bg-surface-container-low">
                 <tr className="text-on-surface-variant">
                   <th className="px-4 py-3">Job</th>
                   <th className="px-4 py-3">Mode</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Scheduled</th>
+                  <th className="px-4 py-3">Next retry</th>
+                  <th className="px-4 py-3">Retry delay</th>
                   <th className="px-4 py-3 text-right">Attempts</th>
                   <th className="px-4 py-3">Latest error</th>
                   <th className="px-4 py-3">Updated</th>
@@ -384,7 +485,7 @@ export default async function DistributionAdminPage() {
               <tbody>
                 {overview.jobs.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-8 text-on-surface-variant" colSpan={7}>
+                    <td className="px-4 py-8 text-on-surface-variant" colSpan={9}>
                       No generalized distribution jobs exist yet.
                     </td>
                   </tr>
@@ -409,6 +510,8 @@ export default async function DistributionAdminPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">{formatDateTime(job.scheduled_for)}</td>
+                      <td className="px-4 py-3">{formatDateTime(job.latest_retry_scheduled_for)}</td>
+                      <td className="px-4 py-3">{formatRetryDelayMs(job.latest_retry_after_ms)}</td>
                       <td className="px-4 py-3 text-right">{job.attempt_count}</td>
                       <td className="px-4 py-3 text-on-surface-variant">
                         {job.latest_attempt_error ?? job.last_error ?? '-'}
@@ -424,9 +527,9 @@ export default async function DistributionAdminPage() {
       </main>
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = readErrorMessage(error);
     const missingTable =
-      /distribution_accounts|distribution_account_tokens|distribution_assets|distribution_asset_media|distribution_jobs|distribution_job_attempts|relation .* does not exist/i.test(
+      /distribution_accounts|distribution_account_tokens|distribution_assets|distribution_asset_media|distribution_jobs|distribution_job_attempts|relation .* does not exist|column .* does not exist|schema cache/i.test(
         message
       );
 

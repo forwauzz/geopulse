@@ -84,7 +84,7 @@ describe('dispatchDistributionQueueBatch', () => {
     expect(retry).not.toHaveBeenCalled();
   });
 
-  it('retries retryable provider failures and acks permanent failures', async () => {
+  it('acks retryable provider failures (deferred by scheduler) and acks permanent failures', async () => {
     const retryableAck = vi.fn();
     const retryableRetry = vi.fn();
     const permanentAck = vi.fn();
@@ -131,8 +131,8 @@ describe('dispatchDistributionQueueBatch', () => {
       } as any
     );
 
-    expect(retryableRetry).toHaveBeenCalledOnce();
-    expect(retryableAck).not.toHaveBeenCalled();
+    expect(retryableAck).toHaveBeenCalledOnce();
+    expect(retryableRetry).not.toHaveBeenCalled();
     expect(permanentAck).toHaveBeenCalledOnce();
     expect(permanentRetry).not.toHaveBeenCalled();
   });

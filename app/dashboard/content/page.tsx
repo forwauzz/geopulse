@@ -11,6 +11,7 @@ import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
 import { buildContentLaunchReadiness } from '@/lib/server/content-launch-readiness';
+import { buildContentPublishQualityTrendSummary } from '@/lib/server/content-publish-check-history';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
 
 export const dynamic = 'force-dynamic';
@@ -79,12 +80,14 @@ export default async function ContentAdminPage() {
   const distributionFlags = resolveDistributionEngineFlags(adminContext.env);
 
   try {
-    const [env, items, destinations] = await Promise.all([
+    const [env, items, destinations, publishTrendRows] = await Promise.all([
       getPaymentApiEnv(),
       contentAdminData.getRecentContentItems(),
       destinationAdminData.getDestinations(),
+      contentAdminData.getRecentPublishCheckTrendRows(),
     ]);
     const launchReadiness = await buildContentLaunchReadiness(contentAdminData);
+    const publishQualityTrend = buildContentPublishQualityTrendSummary(publishTrendRows);
     const resolvedDestinations = destinations.map((destination) => ({
       ...destination,
       health: evaluateContentDestinationHealth(destination, env),
@@ -368,6 +371,122 @@ export default async function ContentAdminPage() {
                       </p>
                       <p className="mt-1 font-body text-sm text-on-surface-variant">
                         {article.failedChecks.join(', ')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-headline text-xl font-bold text-on-background">
+                Publish quality trend
+              </h2>
+              <p className="mt-1 max-w-3xl font-body text-sm text-on-surface-variant">
+                Compact cross-article quality view from persisted publish-check snapshots.
+              </p>
+            </div>
+            <p className="font-body text-xs text-on-surface-variant">
+              Last check snapshot: {formatDateTime(publishQualityTrend.latest_checked_at)}
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-4">
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Articles with snapshots
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {publishQualityTrend.articles_with_history}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Currently failing
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {publishQualityTrend.failing_articles}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Regressions
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {publishQualityTrend.regressions}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Improvements
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {publishQualityTrend.improvements}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr,1fr]">
+            <div className="rounded-xl bg-surface-container-lowest px-5 py-5 shadow-float">
+              <h3 className="font-headline text-lg font-semibold text-on-background">
+                Top failure patterns
+              </h3>
+              {publishQualityTrend.top_failed_keys.length === 0 ? (
+                <p className="mt-4 font-body text-sm text-on-surface-variant">
+                  No failing check patterns in recent snapshots.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  {publishQualityTrend.top_failed_keys.map((pattern) => (
+                    <div
+                      key={pattern.key}
+                      className="flex items-center justify-between rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2"
+                    >
+                      <span className="font-body text-sm text-on-background">
+                        {formatLabel(pattern.key)}
+                      </span>
+                      <span className="font-body text-xs text-on-surface-variant">
+                        {pattern.count} article{pattern.count === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-surface-container-lowest px-5 py-5 shadow-float">
+              <h3 className="font-headline text-lg font-semibold text-on-background">
+                Regression flags
+              </h3>
+              {publishQualityTrend.regression_flags.length === 0 ? (
+                <p className="mt-4 font-body text-sm text-on-surface-variant">
+                  No regression flags in recent snapshots.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  {publishQualityTrend.regression_flags.map((flag) => (
+                    <div
+                      key={`${flag.content_id}:${flag.checked_at}`}
+                      className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-3"
+                    >
+                      <Link
+                        href={`/dashboard/content/${flag.content_id}`}
+                        className="font-body text-sm font-semibold text-on-background hover:text-primary"
+                      >
+                        {flag.title}
+                      </Link>
+                      <p className="mt-1 font-body text-xs text-on-surface-variant">
+                        Failed checks {flag.previous_failed_count} → {flag.failed_count}
+                      </p>
+                      <p className="mt-1 font-body text-xs text-on-surface-variant">
+                        New failures:{' '}
+                        {flag.newly_failed_keys.length > 0
+                          ? flag.newly_failed_keys.map((key) => formatLabel(key)).join(', ')
+                          : 'None'}
                       </p>
                     </div>
                   ))}

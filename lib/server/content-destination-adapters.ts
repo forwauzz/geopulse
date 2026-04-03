@@ -43,7 +43,23 @@ function isRetryableHttpStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
 }
 
-const ADAPTER_PROVIDERS = new Set(['buttondown', 'ghost', 'kit']);
+function isRetryableXStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+function isRetryableLinkedInFailure(status: number, errorText: string): boolean {
+  if (status === 429 || status >= 500) return true;
+  if (status !== 403) return false;
+
+  const normalized = errorText.trim().toLowerCase();
+  return (
+    normalized.includes('rate limit') ||
+    normalized.includes('throttle') ||
+    normalized.includes('too many requests')
+  );
+}
+
+const ADAPTER_PROVIDERS = new Set(['buttondown', 'ghost', 'kit', 'x', 'linkedin']);
 
 function escapeHtml(value: string): string {
   return value
@@ -127,6 +143,42 @@ function stripMarkdown(markdown: string): string {
 function buildPreviewText(markdown: string): string {
   const text = stripMarkdown(markdown);
   return text.length <= 180 ? text : `${text.slice(0, 177).trimEnd()}...`;
+}
+
+function buildSocialPostText(args: {
+  readonly item: ContentAdminDetailRow;
+  readonly markdown: string;
+  readonly maxChars: number;
+}): string {
+  const trimmedTitle = args.item.title.trim();
+  const preview = buildPreviewText(args.markdown);
+  const canonicalUrl = args.item.canonical_url?.trim() ?? '';
+
+  const baseParts = [trimmedTitle, preview].filter((value) => value.length > 0);
+  let composed = baseParts.join('\n\n').trim();
+
+  if (canonicalUrl.length > 0) {
+    composed = composed.length > 0 ? `${composed}\n\n${canonicalUrl}` : canonicalUrl;
+  }
+
+  if (composed.length <= args.maxChars) {
+    return composed;
+  }
+
+  if (canonicalUrl.length > 0) {
+    const reserved = canonicalUrl.length + 2;
+    const available = Math.max(args.maxChars - reserved, 0);
+    if (available === 0) {
+      return canonicalUrl.slice(0, args.maxChars);
+    }
+    const trimmedBase =
+      available > 1 ? `${composed.slice(0, available - 1).trimEnd()}…` : composed.slice(0, available);
+    return `${trimmedBase}\n\n${canonicalUrl}`.slice(0, args.maxChars);
+  }
+
+  return args.maxChars > 1
+    ? `${composed.slice(0, args.maxChars - 1).trimEnd()}…`
+    : composed.slice(0, args.maxChars);
 }
 
 function getDraftBody(item: ContentAdminDetailRow): string {
@@ -429,6 +481,186 @@ class GhostContentDestinationAdapter implements ContentDestinationAdapter {
   }
 }
 
+class XContentDestinationAdapter implements ContentDestinationAdapter {
+  async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
+    const accessToken = request.env.X_ACCESS_TOKEN?.trim() ?? '';
+    if (!accessToken) {
+      throw new ContentDestinationPublishError({
+        message: 'X_ACCESS_TOKEN is missing.',
+        providerName: 'x',
+        retryable: false,
+      });
+    }
+
+    const markdown = getDraftBody(request.item);
+    const text = buildSocialPostText({
+      item: request.item,
+      markdown,
+      maxChars: 280,
+    });
+
+    const apiBase = (request.env.X_API_BASE_URL?.trim() || 'https://api.x.com').replace(/\/+$/, '');
+    const response = await fetch(`${apiBase}/2/tweets`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        text,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new ContentDestinationPublishError({
+        message: `X publish failed (${response.status}): ${errorText}`,
+        providerName: 'x',
+        statusCode: response.status,
+        retryable: isRetryableXStatus(response.status),
+      });
+    }
+
+    const json = (await response.json()) as {
+      data?: {
+        id?: string;
+      };
+    };
+
+    const providerPublicationId = json.data?.id?.trim() ?? '';
+    if (!providerPublicationId) {
+      throw new ContentDestinationPublishError({
+        message: 'X publish succeeded but no tweet id was returned.',
+        providerName: 'x',
+        retryable: false,
+      });
+    }
+
+    return {
+      providerPublicationId,
+      destinationUrl: `https://x.com/i/web/status/${providerPublicationId}`,
+      status: 'published',
+      metadata: {
+        provider: 'x',
+      },
+    };
+  }
+}
+
+class LinkedInContentDestinationAdapter implements ContentDestinationAdapter {
+  async publishDraft(request: ContentPublishRequest): Promise<ContentPublishResult> {
+    const accessToken = request.env.LINKEDIN_ACCESS_TOKEN?.trim() ?? '';
+    if (!accessToken) {
+      throw new ContentDestinationPublishError({
+        message: 'LINKEDIN_ACCESS_TOKEN is missing.',
+        providerName: 'linkedin',
+        retryable: false,
+      });
+    }
+
+    const authorUrn = request.env.LINKEDIN_AUTHOR_URN?.trim() ?? '';
+    if (!authorUrn) {
+      throw new ContentDestinationPublishError({
+        message: 'LINKEDIN_AUTHOR_URN is missing.',
+        providerName: 'linkedin',
+        retryable: false,
+      });
+    }
+
+    const markdown = getDraftBody(request.item);
+    const text = buildSocialPostText({
+      item: request.item,
+      markdown,
+      maxChars: 3000,
+    });
+
+    const canonicalUrl = request.item.canonical_url?.trim() ?? null;
+    const apiBase = (request.env.LINKEDIN_API_BASE_URL?.trim() || 'https://api.linkedin.com').replace(
+      /\/+$/,
+      ''
+    );
+
+    const shareContent: {
+      shareCommentary: { text: string };
+      shareMediaCategory: 'NONE' | 'ARTICLE';
+      media?: Array<{
+        status: 'READY';
+        originalUrl: string;
+      }>;
+    } = canonicalUrl
+      ? {
+          shareCommentary: { text },
+          shareMediaCategory: 'ARTICLE',
+          media: [
+            {
+              status: 'READY',
+              originalUrl: canonicalUrl,
+            },
+          ],
+        }
+      : {
+          shareCommentary: { text },
+          shareMediaCategory: 'NONE',
+        };
+
+    const response = await fetch(`${apiBase}/v2/ugcPosts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-Restli-Protocol-Version': '2.0.0',
+      },
+      body: JSON.stringify({
+        author: authorUrn,
+        lifecycleState: 'PUBLISHED',
+        specificContent: {
+          'com.linkedin.ugc.ShareContent': shareContent,
+        },
+        visibility: {
+          'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new ContentDestinationPublishError({
+        message: `LinkedIn publish failed (${response.status}): ${errorText}`,
+        providerName: 'linkedin',
+        statusCode: response.status,
+        retryable: isRetryableLinkedInFailure(response.status, errorText),
+      });
+    }
+
+    const responseHeaderId = response.headers.get('x-restli-id')?.trim() ?? '';
+    let responseBodyId = '';
+    try {
+      const json = (await response.json()) as { id?: string };
+      responseBodyId = json.id?.trim() ?? '';
+    } catch {
+      responseBodyId = '';
+    }
+
+    const providerPublicationId = responseHeaderId || responseBodyId;
+    if (!providerPublicationId) {
+      throw new ContentDestinationPublishError({
+        message: 'LinkedIn publish succeeded but no post id was returned.',
+        providerName: 'linkedin',
+        retryable: false,
+      });
+    }
+
+    return {
+      providerPublicationId,
+      destinationUrl: null,
+      status: 'published',
+      metadata: {
+        provider: 'linkedin',
+      },
+    };
+  }
+}
+
 export function resolveContentDestinationAdapter(
   destination: ContentDestinationRow
 ): ContentDestinationAdapter {
@@ -439,6 +671,10 @@ export function resolveContentDestinationAdapter(
       return new GhostContentDestinationAdapter();
     case 'kit':
       return new KitContentDestinationAdapter();
+    case 'x':
+      return new XContentDestinationAdapter();
+    case 'linkedin':
+      return new LinkedInContentDestinationAdapter();
     default:
       throw new ContentDestinationPublishError({
         message: `No content destination adapter exists for ${destination.provider_name}.`,

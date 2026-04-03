@@ -51,6 +51,25 @@ Current truth:
 - the blog renderer now supports captioned images and standalone-link video embeds without changing the text-first canonical article model
 - authenticated dashboard routes now use a dedicated left-side navigation shell rather than relying on top-nav duplication
 - the repo now has a first-pass product marketing context, founder voice draft, social-research synthesis, blog LLM-readiness spec, content-machine blueprint, and content-writing skill spec
+- the repo now has a frozen docs-style 100-topic planning taxonomy for content scale (`docs/11-topic-taxonomy-v1.md`) using a bounded `20 pillars x 5 intents` model
+- the repo now has a frozen markdown frontmatter + media/channel mapping contract for canonical content and downstream newsletter/social distribution (`docs/12-content-frontmatter-media-contract-v1.md`)
+- the repo now has a machine-readable topic registry for editorial/generation tracking (`docs/13-topic-registry-v1.json`) derived from the frozen taxonomy and split with bounded batch planning fields
+- the repo now has a frozen docs-style blog IA/navigation contract (`docs/14-docs-style-blog-ia-contract-v1.md`) that defines route ownership, left-nav/breadcrumb behavior, topic-hub/article navigation rules, and crawler-friendly hierarchy constraints
+- the first docs-style blog navigation shell is now in repo too (`B2`): `/blog`, `/blog/topic/[topic]`, and `/blog/[slug]` now use explicit breadcrumb navigation with bounded topic-aware docs-style side navigation for topic/article browsing
+- the next IA/SEO hardening slice is now in repo too (`C1`): blog index/topic/article pages now emit breadcrumb JSON-LD aligned to visible breadcrumbs, blog index now emits collection structured data, and route metadata now includes a canonical URL for `/blog` in addition to existing topic/article canonicals
+- the next IA/SEO hardening slice is now in repo too (`C2`): sitemap coverage is now split by surface (`/sitemap.xml`, `/blog/sitemap.xml`, `/blog/topic/sitemap.xml`), robots now advertises all sitemap endpoints, and article metadata now supports `noindex` with route-level robots/canonical behavior aligned to indexability expectations
+- the next quality-gate slice is now in repo too (`D1`): pre-publish validation now enforces frontmatter/media/indexability requirements in publish workflows (publish button, bulk ready-publish, and direct `status=published` transitions), including topic-cluster presence, author fields, hero media fields, and `noindex` publish blocking
+- the next quality-gate slice is now in repo too (`D2`): publish validation now also enforces explicit LLM-readiness + claim-discipline checks (concrete extractable heading patterns, answer-block density, in-body internal blog link presence, and blocking of absolute overclaim language)
+- the next quality-gate slice is now in repo too (`D3`): `/dashboard/content/[contentId]` now surfaces the same shared publish-gate checks as structured operator-facing pass/fail cards grouped by publish contract, LLM readiness, and claim discipline
+- the next quality-gate slice is now in repo too (`D4`): publish validation now also enforces richer semantic checks for claim-to-source alignment, freshness drift on time-sensitive phrasing, and terminology consistency/clarification
+- the next quality-gate slice is now in repo too (`D5`): publish-check snapshots are now persisted in article metadata and visible as recent pass/fail history in `/dashboard/content/[contentId]` for operator trend review
+- the next quality-gate slice is now in repo too (`D6`): `/dashboard/content` now includes a compact publish-quality trend summary (cross-article failure patterns + regression flags) computed from persisted publish-check snapshots
+- the next planned public blog UI slice is now in repo too (`E1`): `/blog`, `/blog/topic/[topic]`, and `/blog/[slug]` now run with a black-first visual theme and white-primary text while preserving docs-style IA behavior and contrast accessibility
+- the next planned public blog UI slice is now in repo too (`E2`): header/footer now apply blog-route dark-theme treatment with first contrast edge-case cleanup, while non-blog routes keep existing theme behavior
+- the next planned public blog UI slice is now in repo too (`E3`): final dark-theme polish now aligns link/hover/active parity and low-contrast copy cleanup across blog routes and markdown rendering
+- the next planned public blog UI slice is now in repo too (`E4`): route-scoped visual QA polish now adds blog-route focus-visible treatment, selection contrast, and readability smoothing
+- the next planned public blog UI slice is now in repo too (`E5`): screenshot-based cross-device visual QA now runs in Playwright via `tests/e2e/blog-visual.spec.ts` with deterministic blog fixture data for stable checks
+- the next planned public blog UI slice is now frozen too (`E6`): optional tiny spacing/typography/perf micro-polish only if real-usage feedback surfaces concrete issues
 - the repo now also has a dedicated distribution-engine planning document that froze the implementation order as schema-first, repository/admin second, orchestration third, adapter expansion later
 - the first generalized distribution-engine schema slice is now in repo too: `supabase/migrations/020_distribution_engine_foundation.sql` adds accounts, tokens, assets, media, jobs, and attempts beside the existing content-machine delivery tables
 - the second generalized distribution-engine slice is now in repo too: `lib/server/distribution-engine-repository.ts` and `lib/server/distribution-engine-admin-data.ts` provide typed repository and admin-summary helpers over the new schema
@@ -59,9 +78,28 @@ Current truth:
 - the fifth generalized distribution-engine slice is now in repo too: a bounded dispatcher can process due distribution jobs, persist attempts, and reuse the current content-destination adapter seam for supported newsletter/content providers
 - the sixth generalized distribution-engine slice is now in repo too: the existing Worker cron can now enqueue due distribution jobs into a dedicated queue-backed runtime when the dedicated distribution runtime flag is enabled
 - the seventh generalized distribution-engine slice is now in repo too: `/dashboard/distribution` can now store account-token rows, update connection status, and show first-pass token health directly in the account table
+- distribution adapter expansion now follows a lean slice sequence (`1A` through `1F`) to keep maintenance low and rollout bounded; `1A` (adapter scaffolds + contract tests for `x` and `linkedin`) is now in repo
 - the distribution-engine UI is feature-flagged with `DISTRIBUTION_ENGINE_UI_ENABLED` and `DISTRIBUTION_ENGINE_WRITE_ENABLED`, so unfinished admin capability is not exposed accidentally
 - the background dispatch lane is separately gated with `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED` plus a bounded per-sweep limit, so queue rollout can stay dark until intentionally enabled
-- what remains for the generalized distribution engine is deeper provider-aware retry/backoff hardening, broader provider/runtime support, account-connection/token lifecycle management, richer media handling, and generalized social/video adapters
+- `1B` is now in repo too: text-first runtime wiring for `x` and `linkedin` is active through the existing adapter/dispatch seam using env-based provider credentials
+- `1C` is now in repo too: dispatch runtime can read provider credentials from `distribution_account_tokens` for `x` and `linkedin`, with bounded non-retryable auth/config failures when required token rows are missing
+- `1D` is now in repo too: `x` and `linkedin` publish failures now use provider-aware retry classification (rate-limit/transient failures retryable, auth/permission failures terminal)
+- `1E` is now in repo too: `/dashboard/distribution` includes a quick social seeding path that creates an approved `x`/`linkedin` asset plus linked job from one canonical content item for operator runtime testing
+- `1F` is now in repo too: hardening guardrails are added across the first social runtime path (dispatchable job-status defaults, stricter social seed validation, and clearer operator guidance/errors)
+- `2A` is now in repo too: provider-native OAuth connect foundation for `x` and `linkedin` is available behind `DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED`, including signed state, provider callback handling, and token persistence into `distribution_account_tokens`
+- `2B` is now in repo too: first token lifecycle runtime handling is active in dispatch (expiry preflight, bounded X refresh-token rotation, and account status transitions to `token_expired` on non-recoverable auth lifecycle failures)
+- `2C` is now in repo too: provider-specific retry backoff windows are now enforced in-runtime (retryable failures are deferred via `scheduled_for` windows instead of immediate queue retries, with first provider-specific windows for `x` and `linkedin`)
+- `2D` is now in repo too: operators can now control backoff policy (`profile` + `multiplier`) per account from `/dashboard/distribution`, and job rows now expose next-retry observability from attempt metadata
+- `2E` is now in repo too: refresh lifecycle handling now also supports LinkedIn refresh-token exchange when available, and `/dashboard/distribution` now shows explicit reconnect guidance for token-expired LinkedIn accounts
+- `3A` is now in repo too: first media foundation controls are live in admin (asset media replace/seed form, media preview/readiness visibility) and dispatch now blocks media-required asset types when no provider-ready media rows exist
+- `3B` is now in repo too: first provider media publish path is wired for LinkedIn `single_image_post` assets (media upload + post publish), while unsupported media/provider combinations are now explicitly blocked with bounded errors
+- `3C` is now in repo too: LinkedIn `carousel_post` assets now have a provider-native media publish path (multi-image upload + post publish), with bounded validation for provider-ready carousel/image media rows
+- `3D` is now in repo too: LinkedIn `short_video_post` assets now have a provider-native media publish path (video upload + post publish), with bounded validation for provider-ready video rows
+- `3E` is now in repo too: LinkedIn `long_video_post` assets now have a provider-native media publish path (reusing the bounded video upload + post publish runtime), with bounded validation for provider-ready video rows
+- `3F` is now in repo too: first non-LinkedIn media path is wired for X `single_image_post` assets (media upload + tweet publish), with bounded validation for provider-ready image rows
+- `3G` is now in repo too: X `short_video_post` assets now have a provider-native media publish path (video upload + tweet publish), with bounded validation for provider-ready video rows
+- `3H` is now in repo too: X `long_video_post` assets now have a provider-native media publish path (reusing the bounded X video upload + tweet publish runtime), with bounded validation for provider-ready video rows
+- what remains for the generalized distribution engine is broader media publishing coverage (additional providers and richer provider-specific media behavior where needed) and broader social/video adapter expansion beyond the first text-first pair
 - the implementation direction remains site-first and LLM-searchability-aware so GEO-Pulse does not create a visibility product while publishing weakly extractable content on its own domain
 - a new planning-only agency pilot stream is now documented in `docs/09-agency-pilot-lifter-plan.md`
 - that plan freezes the first target as one internal pilot agency (`lifter.ca`) with:
@@ -402,6 +440,10 @@ Current truth:
   - `DISTRIBUTION_ENGINE_WRITE_ENABLED`
   - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
   - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
+- first social adapter scaffolds:
+  - `x`
+  - `linkedin`
+  - both now have first text-first publish runtime wiring via env credentials
 - first background cron dispatch:
   - the Worker scheduled runtime can enqueue due jobs into `DISTRIBUTION_QUEUE`
   - one sweep is capped by `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
@@ -410,8 +452,8 @@ Current truth:
 - current limitation:
   - only `content_item` sourced assets flow through the current runtime
   - retry policy is now provider-aware at the permanent-vs-retryable level, but not yet tuned with provider-specific backoff windows
-  - token storage/admin connection state now exists, but the runtime still uses provider env secrets for the currently shipped newsletter adapters
-  - broader account OAuth/token refresh, media pipelines, and generalized social/video adapters are still unshipped
+  - token storage/admin connection state now also powers first runtime token use for `x` and `linkedin`, while newsletter adapters remain env-credential based
+  - OAuth/connect is now shipped for first social providers with first X token refresh handling, but broader multi-provider refresh coverage, media pipelines, and broader social/video adapters are still unshipped
 
 ## Current Blockers
 

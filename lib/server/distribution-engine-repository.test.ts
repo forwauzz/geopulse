@@ -431,4 +431,116 @@ describe('createDistributionEngineRepository', () => {
     expect(row.request_summary).toEqual({});
     expect(row.response_summary).toEqual({ accepted: false });
   });
+
+  it('defaults new jobs to queued unless publish mode is scheduled', async () => {
+    const insertedStatuses: string[] = [];
+
+    const supabase = {
+      from(table: string) {
+        expect(table).toBe('distribution_jobs');
+        return {
+          insert(payload: Record<string, unknown>) {
+            insertedStatuses.push(String(payload['status']));
+            return createSingleSelectBuilder({
+              data: {
+                id: 'job-row-1',
+                job_id: String(payload['job_id']),
+                distribution_asset_id: String(payload['distribution_asset_id']),
+                distribution_account_id: String(payload['distribution_account_id']),
+                publish_mode: payload['publish_mode'],
+                scheduled_for: payload['scheduled_for'],
+                status: payload['status'],
+                destination_url: null,
+                provider_post_id: null,
+                last_error: null,
+                created_by_user_id: null,
+                completed_at: null,
+                created_at: '2026-04-02T00:00:00.000Z',
+                updated_at: '2026-04-02T00:00:00.000Z',
+              },
+              error: null,
+            });
+          },
+        };
+      },
+    } as any;
+
+    const repo = createDistributionEngineRepository(supabase);
+
+    await repo.createJob({
+      jobId: 'job_draft_1',
+      distributionAssetId: 'asset-row-1',
+      distributionAccountId: 'acct-row-1',
+      publishMode: 'draft',
+    });
+    await repo.createJob({
+      jobId: 'job_publish_now_1',
+      distributionAssetId: 'asset-row-1',
+      distributionAccountId: 'acct-row-1',
+      publishMode: 'publish_now',
+    });
+    await repo.createJob({
+      jobId: 'job_scheduled_1',
+      distributionAssetId: 'asset-row-1',
+      distributionAccountId: 'acct-row-1',
+      publishMode: 'scheduled',
+      scheduledFor: '2026-04-03T00:00:00.000Z',
+    });
+
+    expect(insertedStatuses).toEqual(['queued', 'queued', 'scheduled']);
+  });
+
+  it('lists account tokens for one account ordered by newest update first', async () => {
+    let accountFilterValue: string | null = null;
+    let orderCalls = 0;
+
+    const supabase = {
+      from(table: string) {
+        expect(table).toBe('distribution_account_tokens');
+        return {
+          select() {
+            return this;
+          },
+          eq(column: string, value: string) {
+            expect(column).toBe('distribution_account_id');
+            accountFilterValue = value;
+            return this;
+          },
+          order() {
+            orderCalls += 1;
+            if (orderCalls === 1) return this;
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'token-row-1',
+                  distribution_account_id: 'acct-row-1',
+                  token_type: 'oauth',
+                  access_token_encrypted: 'token-one',
+                  refresh_token_encrypted: 'refresh-one',
+                  expires_at: '2026-04-10T00:00:00.000Z',
+                  scopes: ['tweet.write'],
+                  metadata: { author_urn: 'urn:li:person:abc123' },
+                  created_at: '2026-04-02T00:00:00.000Z',
+                  updated_at: '2026-04-02T01:00:00.000Z',
+                },
+              ],
+              error: null,
+            });
+          },
+        };
+      },
+    } as any;
+
+    const repo = createDistributionEngineRepository(supabase);
+    const rows = await repo.listAccountTokensForAccount('acct-row-1');
+
+    expect(accountFilterValue).toBe('acct-row-1');
+    expect(orderCalls).toBe(2);
+    expect(rows[0]).toMatchObject({
+      distribution_account_id: 'acct-row-1',
+      token_type: 'oauth',
+      access_token_encrypted: 'token-one',
+      metadata: { author_urn: 'urn:li:person:abc123' },
+    });
+  });
 });

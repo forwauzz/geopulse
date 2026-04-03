@@ -425,6 +425,20 @@ export function createDistributionEngineRepository(supabase: SupabaseLike) {
       return normalizeAccountToken(data);
     },
 
+    async listAccountTokensForAccount(
+      distributionAccountId: string
+    ): Promise<DistributionAccountTokenRow[]> {
+      const { data, error } = await supabase
+        .from('distribution_account_tokens')
+        .select(ACCOUNT_TOKEN_SELECT)
+        .eq('distribution_account_id', distributionAccountId)
+        .order('updated_at', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return ((data ?? []) as DistributionAccountTokenRow[]).map(normalizeAccountToken);
+    },
+
     async listAssets(filters?: {
       readonly sourceType?: DistributionAssetSourceType | null;
       readonly providerFamily?: DistributionProviderFamily | null;
@@ -553,8 +567,7 @@ export function createDistributionEngineRepository(supabase: SupabaseLike) {
     },
 
     async createJob(input: DistributionJobCreateInput): Promise<DistributionJobRow> {
-      const initialStatus =
-        input.status ?? (input.publishMode === 'scheduled' ? 'scheduled' : 'draft');
+      const initialStatus = input.status ?? (input.publishMode === 'scheduled' ? 'scheduled' : 'queued');
 
       const { data, error } = await supabase
         .from('distribution_jobs')

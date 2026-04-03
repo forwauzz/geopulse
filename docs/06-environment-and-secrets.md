@@ -45,6 +45,7 @@ Required:
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 - `DISTRIBUTION_ENGINE_UI_ENABLED`
 - `DISTRIBUTION_ENGINE_WRITE_ENABLED`
+- `DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED`
 - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
 - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
 - `STRIPE_PRICE_ID_DEEP_AUDIT`
@@ -75,6 +76,14 @@ Required:
 - optional: `DEEP_AUDIT_INTERNAL_REWRITE_MODEL`
 - optional: `MARKETING_REPORT_TO`
 - optional: `GHOST_ADMIN_API_VERSION`
+- optional: `X_API_BASE_URL`
+- optional: `LINKEDIN_API_BASE_URL`
+- optional: `X_OAUTH_SCOPE`
+- optional: `X_OAUTH_AUTH_URL`
+- optional: `X_OAUTH_TOKEN_URL`
+- optional: `LINKEDIN_OAUTH_SCOPE`
+- optional: `LINKEDIN_OAUTH_AUTH_URL`
+- optional: `LINKEDIN_OAUTH_TOKEN_URL`
 
 Source of truth:
 - `wrangler.jsonc`
@@ -99,6 +108,13 @@ Conditional secrets:
 - `BUTTONDOWN_API_KEY`
 - `GHOST_ADMIN_API_URL`
 - `GHOST_ADMIN_API_KEY`
+- `X_ACCESS_TOKEN`
+- `LINKEDIN_ACCESS_TOKEN`
+- `LINKEDIN_AUTHOR_URN`
+- `X_OAUTH_CLIENT_ID`
+- `X_OAUTH_CLIENT_SECRET`
+- `LINKEDIN_OAUTH_CLIENT_ID`
+- `LINKEDIN_OAUTH_CLIENT_SECRET`
 - `RECONCILE_SECRET`
 - `BROWSER_RENDERING_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
@@ -179,26 +195,34 @@ If a page says `Could not load analytics`, first verify the active DB has the at
 - content admin/editor pages still use the shared server-side env loader in `lib/server/cf-env.ts`
 - the first real destination adapter is Kit, so draft pushes from `/dashboard/content/[contentId]` require:
   - `KIT_API_KEY`
-- the second adapter is Ghost, so Ghost draft pushes require:
+- the Ghost adapter requires:
   - `GHOST_ADMIN_API_URL`
   - `GHOST_ADMIN_API_KEY`
   - optional: `GHOST_ADMIN_API_VERSION`
+- the first text-first social adapters are X and LinkedIn, so social draft/publish pushes require:
+  - `X_ACCESS_TOKEN`
+  - optional: `X_API_BASE_URL`
+  - `LINKEDIN_ACCESS_TOKEN`
+  - `LINKEDIN_AUTHOR_URN`
+  - optional: `LINKEDIN_API_BASE_URL`
 - current behavior:
   - GEO-Pulse converts the stored markdown into simple HTML
   - pushes a draft broadcast to Kit via API
   - pushes a draft post to Ghost via the Ghost Admin API
+  - pushes text-first posts to X and LinkedIn when the social env credentials are configured
   - stores the downstream delivery record in `content_distribution_deliveries`
   - resolves destination readiness in admin from both feature flags and provider env such as `KIT_API_KEY` and Ghost Admin credentials
   - writes push lifecycle events into `app_logs`, visible at `/dashboard/logs`
 - current non-goals:
   - no auto-send to subscribers
   - no provider-side connectivity or send-permission probe yet
-  - no provider adapter beyond Kit and Ghost yet
+  - no broad multi-provider OAuth refresh lifecycle yet (first X refresh handling is shipped)
 
 ### Distribution engine admin shell
 - the generalized distribution-engine admin page at `/dashboard/distribution` is gated by:
   - `DISTRIBUTION_ENGINE_UI_ENABLED=true` for the read-only shell
   - `DISTRIBUTION_ENGINE_WRITE_ENABLED=true` for writable account / asset / job controls
+  - `DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED=true` for provider OAuth connect controls
 - the first background dispatch lane is separately gated by:
   - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED=true` to let the Worker cron process due jobs
   - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT` to cap one cron sweep
@@ -318,6 +342,7 @@ To match the current repo/runtime features in Cloudflare production, make sure t
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 - `DISTRIBUTION_ENGINE_UI_ENABLED`
 - `DISTRIBUTION_ENGINE_WRITE_ENABLED`
+- `DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED`
 - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
 - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
 - `ADMIN_EMAIL`
@@ -348,6 +373,14 @@ To match the current repo/runtime features in Cloudflare production, make sure t
 - `BENCHMARK_SCHEDULE_VERSION`
 - optional: `MARKETING_REPORT_TO`
 - optional: `GHOST_ADMIN_API_VERSION`
+- optional: `X_API_BASE_URL`
+- optional: `LINKEDIN_API_BASE_URL`
+- optional: `X_OAUTH_SCOPE`
+- optional: `X_OAUTH_AUTH_URL`
+- optional: `X_OAUTH_TOKEN_URL`
+- optional: `LINKEDIN_OAUTH_SCOPE`
+- optional: `LINKEDIN_OAUTH_AUTH_URL`
+- optional: `LINKEDIN_OAUTH_TOKEN_URL`
 
 ### Secrets stored in Cloudflare
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -361,6 +394,13 @@ To match the current repo/runtime features in Cloudflare production, make sure t
 - optional: `BUTTONDOWN_API_KEY`
 - optional: `GHOST_ADMIN_API_URL`
 - optional: `GHOST_ADMIN_API_KEY`
+- optional: `X_ACCESS_TOKEN`
+- optional: `LINKEDIN_ACCESS_TOKEN`
+- optional: `LINKEDIN_AUTHOR_URN`
+- optional: `X_OAUTH_CLIENT_ID`
+- optional: `X_OAUTH_CLIENT_SECRET`
+- optional: `LINKEDIN_OAUTH_CLIENT_ID`
+- optional: `LINKEDIN_OAUTH_CLIENT_SECRET`
 - optional: `RECONCILE_SECRET`
 - optional: `BROWSER_RENDERING_API_TOKEN`
 - optional: `CLOUDFLARE_ACCOUNT_ID`

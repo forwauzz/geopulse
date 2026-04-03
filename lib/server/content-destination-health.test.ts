@@ -182,4 +182,98 @@ describe('evaluateContentDestinationHealth', () => {
       readyToPush: true,
     });
   });
+
+  it('marks X unavailable when access token is missing', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'x',
+          destination_type: 'social',
+          destination_key: 'x_social',
+          display_name: 'X',
+          requires_paid_plan: false,
+          plan_tier: null,
+        },
+        baseEnv
+      )
+    ).toEqual({
+      availabilityStatus: 'not_configured',
+      availabilityReason: 'X_ACCESS_TOKEN is missing, so pushes cannot be sent to X.',
+      readyToPush: false,
+    });
+  });
+
+  it('marks X available when access token exists', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'x',
+          destination_type: 'social',
+          destination_key: 'x_social',
+          display_name: 'X',
+          requires_paid_plan: false,
+          plan_tier: null,
+        },
+        {
+          ...baseEnv,
+          X_ACCESS_TOKEN: 'x_token',
+        }
+      )
+    ).toEqual({
+      availabilityStatus: 'available',
+      availabilityReason: 'X adapter is configured and ready for text-first posts.',
+      readyToPush: true,
+    });
+  });
+
+  it('marks LinkedIn unavailable when required auth fields are missing', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'linkedin',
+          destination_type: 'social',
+          destination_key: 'linkedin_social',
+          display_name: 'LinkedIn',
+          requires_paid_plan: false,
+          plan_tier: null,
+        },
+        {
+          ...baseEnv,
+          LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
+        }
+      )
+    ).toEqual({
+      availabilityStatus: 'not_configured',
+      availabilityReason: 'LINKEDIN_AUTHOR_URN is missing, so pushes cannot be sent to LinkedIn.',
+      readyToPush: false,
+    });
+  });
+
+  it('marks LinkedIn available when required auth fields exist', () => {
+    expect(
+      evaluateContentDestinationHealth(
+        {
+          ...baseDestination,
+          provider_name: 'linkedin',
+          destination_type: 'social',
+          destination_key: 'linkedin_social',
+          display_name: 'LinkedIn',
+          requires_paid_plan: false,
+          plan_tier: null,
+        },
+        {
+          ...baseEnv,
+          LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
+          LINKEDIN_AUTHOR_URN: 'urn:li:person:abc123',
+        }
+      )
+    ).toEqual({
+      availabilityStatus: 'available',
+      availabilityReason: 'LinkedIn adapter is configured and ready for text-first posts.',
+      readyToPush: true,
+    });
+  });
 });

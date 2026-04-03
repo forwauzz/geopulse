@@ -132,4 +132,32 @@ describe('createPublicContentData', () => {
       updated_at: '2026-03-31T12:30:00.000Z',
     });
   });
+
+  it('returns deterministic fixture rows when E2E_BLOG_FIXTURE is enabled', async () => {
+    const previous = process.env['E2E_BLOG_FIXTURE'];
+    process.env['E2E_BLOG_FIXTURE'] = '1';
+
+    try {
+      const supabase = {
+        from() {
+          throw new Error('fixture mode should not query supabase');
+        },
+      } as any;
+
+      const data = createPublicContentData(supabase);
+      const rows = await data.getPublishedArticles();
+      const detail = await data.getPublishedArticleBySlug('e2e-blog-dark-theme');
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.slug).toBe('e2e-blog-dark-theme');
+      expect(detail?.title).toBe('E2E Blog Dark Theme Fixture');
+      expect(detail?.topic_cluster).toBe('ai_search_readiness');
+    } finally {
+      if (typeof previous === 'string') {
+        process.env['E2E_BLOG_FIXTURE'] = previous;
+      } else {
+        delete process.env['E2E_BLOG_FIXTURE'];
+      }
+    }
+  });
 });

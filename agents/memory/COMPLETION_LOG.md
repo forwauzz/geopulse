@@ -5,6 +5,804 @@
 
 ---
 
+### 2026-04-03 - Content quality-gate slice D5
+
+Completed publish-check snapshot persistence and operator history visibility.
+
+Files updated:
+- `lib/server/content-publish-check-history.ts`
+- `lib/server/content-publish-check-history.test.ts`
+- `lib/server/content-publishing.ts`
+- `lib/server/content-publishing.test.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added shared publish-check snapshot helper to persist bounded check history in content metadata (`publish_check_history`, latest 20)
+- wired snapshot persistence into admin article flows:
+  - content save flow for articles
+  - manual publish flow
+  - bulk publish-ready flow
+- added recent check snapshot visibility in `/dashboard/content/[contentId]` publish panel (latest pass/fail trend items)
+- kept publish enforcement unchanged and centralized in existing shared publish checks
+
+What was not implemented:
+- no dedicated DB table for publish-check events
+- no cross-article trend aggregation on `/dashboard/content` yet
+- no alerting/notifications on regressions in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-publishing.test.ts lib/server/content-publish-check-history.test.ts`
+
+---
+
+### 2026-04-03 - Content quality-gate slice D4
+
+Completed richer semantic publish checks on top of the existing shared publish gate.
+
+Files updated:
+- `lib/server/content-publishing.ts`
+- `lib/server/content-publishing.test.ts`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added semantic quality checks in shared publish validation:
+  - claim-to-source alignment:
+    - blocks quantified/date-specific claims when no external citation link appears in-body
+  - freshness drift:
+    - blocks stale pages that use time-sensitive phrasing (`latest`, `today`, `currently`, etc.) beyond bounded freshness window
+  - terminology consistency:
+    - blocks mixed GEO/AEO/AI SEO/LLM-optimization terminology when aliases are not explicitly clarified
+- surfaced semantic checks in the existing structured publish-check UI category (`semantic_quality`) on `/dashboard/content/[contentId]`
+- kept enforcement centralized in the same publish helper, so all publish paths inherit these checks
+
+What was not implemented:
+- no persisted claim-to-source mapping records in DB
+- no topic-type-specific freshness windows yet
+- no advanced semantic NER/claim extraction model in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-publishing.test.ts`
+
+---
+
+### 2026-04-03 - Content quality-gate slice D3
+
+Completed the first structured operator-facing publish-check UI on the content detail route.
+
+Files updated:
+- `lib/server/content-publishing.ts`
+- `lib/server/content-publishing.test.ts`
+- `app/dashboard/content/[contentId]/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added shared structured publish-check evaluation (`evaluateContentPublishChecks`) with:
+  - stable check keys
+  - categories (`publish_contract`, `llm_readiness`, `claim_discipline`)
+  - pass/fail status
+  - operator-actionable hints for failed checks
+- kept existing publish enforcement centralized:
+  - `getContentPublishIssues` now derives from structured checks
+  - `prepareContentForPublish` still blocks on failed checks
+- updated `/dashboard/content/[contentId]` publish panel to render grouped pass/fail cards from shared checks so operators can see exactly what is blocking publish and why
+
+What was not implemented:
+- no persisted history/snapshots of publish-check outcomes in DB
+- no semantic claim-to-source matching in this slice
+- no freshness/terminology drift checker in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-publishing.test.ts`
+
+---
+
+### 2026-04-03 - Content quality-gate slice D2
+
+Completed the next pre-publish gate layer for explicit LLM-readiness and claim-discipline checks.
+
+Files updated:
+- `lib/server/content-publishing.ts`
+- `lib/server/content-publishing.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- extended shared publish validation with bounded LLM-readiness checks:
+  - requires concrete extractable heading structure
+  - requires at least one question/decision-oriented H2 heading
+  - blocks known vague editorial heading patterns
+  - requires answer-block density from H2/H3/list/callout structure
+  - requires at least one in-body internal `/blog` link
+- added bounded claim-discipline check:
+  - blocks absolute overclaim language patterns (for example guaranteed rankings/citations claims)
+- kept enforcement centralized in the same publish helper used by all admin publish workflows
+
+What was not implemented:
+- no semantic claim-to-source matching in this slice
+- no freshness/terminology drift checker in this slice
+- no new DB schema for persisted quality-check results in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-publishing.test.ts`
+
+---
+
+### 2026-04-03 - Content quality-gate slice D1
+
+Completed the first bounded pre-publish frontmatter/media/indexability gate for canonical blog publish workflows.
+
+Files updated:
+- `lib/server/content-publishing.ts`
+- `lib/server/content-publishing.test.ts`
+- `app/dashboard/content/actions.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- extended publish-blocker validation so article publish now requires:
+  - topic cluster
+  - author name and author role metadata
+  - hero image URL and hero image alt metadata
+  - hero image URL as absolute `http(s)` URL
+- added indexability guardrail:
+  - publish is blocked when article metadata has `noindex = true`
+- enforced these checks through all publish paths that call the shared publish helper:
+  - manual publish button
+  - bulk `publishReadyArticles`
+  - direct `status = published` transitions via content-item save flow
+- kept enforcement centralized in shared publish helper so UI blockers and server publish logic stay consistent
+
+What was not implemented:
+- no new dedicated frontmatter storage model in this slice
+- no explicit LLM-readiness claim-discipline validator yet (`D2`)
+- no topic-page publish gate expansion in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-publishing.test.ts lib/server/content-article-metadata.test.ts`
+
+---
+
+### 2026-04-03 - Blog IA/SEO hardening slice C1
+
+Completed navigation-related structured-data and canonical-metadata hardening on top of the B2 docs-style shell.
+
+Files updated:
+- `lib/server/content-structured-data.ts`
+- `lib/server/content-structured-data.test.ts`
+- `app/blog/page.tsx`
+- `app/blog/topic/[topic]/page.tsx`
+- `app/blog/[slug]/page.tsx`
+- `lib/server/content-navigation.ts`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added reusable breadcrumb structured-data builder (`BreadcrumbList`)
+- added blog index structured-data builder (`CollectionPage`)
+- `/blog` now emits:
+  - canonical metadata via `generateMetadata`
+  - collection structured data
+  - breadcrumb structured data
+- `/blog/topic/[topic]` now emits breadcrumb structured data aligned to visible breadcrumb path
+- `/blog/[slug]` now emits breadcrumb structured data aligned to visible breadcrumb path
+- exported shared topic-label helper for consistent topic naming in nav + metadata contexts
+
+What was not implemented:
+- no sitemap/index split implementation yet (`C2`)
+- no indexability/noindex policy automation in this slice
+- no new content-model schema fields in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-structured-data.test.ts lib/server/content-navigation.test.ts lib/server/public-content-data.test.ts`
+
+---
+
+### 2026-04-03 - Docs-style blog navigation shell slice B2
+
+Implemented the first bounded docs-style navigation shell across public blog routes.
+
+Files updated:
+- `app/blog/page.tsx`
+- `app/blog/topic/[topic]/page.tsx`
+- `app/blog/[slug]/page.tsx`
+- `lib/server/content-navigation.ts`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added explicit breadcrumb navigation on:
+  - `/blog`
+  - `/blog/topic/[topic]`
+  - `/blog/[slug]`
+- added topic-aware docs-style sidebar browsing on article pages:
+  - full topic list with active topic highlighting
+  - in-topic sibling article menu
+- kept current canonical route model and existing content rendering flow intact
+- normalized topic label usage by exporting `formatTopicLabel` from navigation helpers
+
+What was not implemented:
+- no new DB schema or content-model changes in this slice
+- no search service or dynamic filter indexing in this slice
+- no new structured-data payload changes in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-navigation.test.ts lib/server/public-content-data.test.ts`
+
+---
+
+### 2026-04-03 - Docs-style blog IA contract slice B1
+
+Completed the route/navigation information-architecture contract for docs-style blog scaling.
+
+Files updated:
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a frozen IA contract for `/blog`, `/blog/topic/[topic]`, and `/blog/[slug]` route ownership
+- defined docs-style navigation behavior:
+  - left nav by topic + intent
+  - breadcrumb path contract
+  - article/topic contextual navigation expectations
+- defined topic-hub and article link-graph rules for crawlability/extractability
+- defined maintainability guardrails so nav logic stays centralized as topic count scales
+
+What was not implemented:
+- no UI implementation changes yet (handled in `B2`)
+- no dynamic search/index service integration in this slice
+- no schema code changes in this slice
+
+Verification:
+- docs/state consistency pass across current-state, open-risks, and project-state docs
+
+---
+
+### 2026-04-03 - Content topic registry slice A3
+
+Completed the machine-readable topic registry layer on top of the A1/A2 planning contracts.
+
+Files updated:
+- `docs/13-topic-registry-v1.json`
+- `docs/12-content-frontmatter-media-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a structured JSON registry for all 100 planned topics from A1
+- normalized the registry by pillar + intent with explicit per-topic status and planned batch fields
+- validated registry JSON parseability for downstream tooling use
+- advanced planning sequence so the next slice is docs-style IA contracts (`B1`)
+
+What was not implemented:
+- no runtime ingestion of the registry into app/admin tables yet
+- no content generation pipeline changes yet
+- no publish scheduler integration in this slice
+
+Verification:
+- `node -e \"JSON.parse(require('fs').readFileSync('docs/13-topic-registry-v1.json','utf8')); console.log('ok')\"`
+- docs/state consistency pass across current-state, open-risks, and project-state docs
+
+---
+
+### 2026-04-03 - Content frontmatter/media contract slice A2
+
+Completed the markdown frontmatter and media/channel mapping contract for canonical and downstream content assets.
+
+Files updated:
+- `docs/12-content-frontmatter-media-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a frozen v1 frontmatter schema with required/recommended fields for canonical article assets
+- added a frozen media contract (`cover`, `thumbnail`, `video`, `social`, `newsletter`) with deterministic fallback order
+- added v1 channel mapping rules for blog renderer, newsletter adapters, and social adapters
+- added hard publish blockers and soft warnings to support a lean validation gate
+
+What was not implemented:
+- no runtime/frontmatter parser changes in code yet
+- no admin UI validation wiring yet
+- no destination-specific media transformation layer in this slice
+
+Verification:
+- docs/state consistency pass across current-state, open-risks, and project-state docs
+
+---
+
+### 2026-04-03 - Content topic taxonomy slice A1
+
+Completed the first frozen topic-map planning slice for docs-style content scale.
+
+Files updated:
+- `docs/11-topic-taxonomy-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a frozen `20 pillars x 5 intents` taxonomy contract (`100` planned topics total)
+- fixed intent classes for each topic (`definition`, `implementation`, `comparison`, `checklist`, `case_pattern`)
+- froze canonical topic/article route assumptions and claim-discipline constraints
+- grounded the map in existing internal benchmark/content findings (crawlable-vs-extractable, schema-not-sufficient, trust/linking/provenance themes)
+
+What was not implemented:
+- no frontmatter/media contract changes yet (`A2`)
+- no app/admin topic registry persistence yet (`A3+`)
+- no automated generation or publish workflow in this slice
+
+Verification:
+- docs/state consistency pass across current-state, open-risks, and project-state docs
+
+---
+
+### 2026-04-03 - Distribution engine media publish slice 3H
+
+Completed the X `long_video_post` runtime path on top of the existing X media publish lane.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added explicit dispatcher support for X `long_video_post` assets
+- added a dedicated runtime hook (`publishXLongVideoPost`) and dependency-injection seam for tests
+- reused the bounded X video upload + tweet publish behavior already used for X short-video runtime
+- kept bounded provider-ready media validation expectations for X video asset types
+
+What was not implemented:
+- no X carousel media runtime in this slice
+- no new providers in this slice
+- no scheduler/queue policy changes in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-03 - Content machine publish-quality trend slice D6
+
+Added a compact cross-article publish-quality trend summary on `/dashboard/content` using persisted publish-check snapshots.
+
+Files updated:
+- `app/dashboard/content/page.tsx`
+- `lib/server/content-admin-data.ts`
+- `lib/server/content-publish-check-history.ts`
+- `lib/server/content-publish-check-history.test.ts`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added a trend-summary aggregator over persisted `publish_check_history` snapshots:
+  - article coverage and failing-article counts
+  - top cross-article failed check patterns
+  - regression and improvement counters
+  - bounded regression flag list with newly failed keys
+- added a content-admin data helper for recent publish-check trend rows
+- added a new `/dashboard/content` section showing:
+  - compact trend KPI cards
+  - top failure patterns
+  - regression flags linking to affected content detail pages
+- updated planning/state docs to mark `D6` as shipped and `E1` as next
+
+What was not implemented:
+- no new publish gate rules were added
+- no schema changes or new snapshot persistence model changes
+- no public blog visual theming work yet (`E1` remains next)
+
+Verification:
+- `npx vitest run lib/server/content-publish-check-history.test.ts lib/server/content-admin-data.test.ts`
+
+---
+
+### 2026-04-03 - Public blog black-theme slice E1
+
+Applied a first public blog visual theming pass so blog pages are black-themed with white primary text.
+
+Files updated:
+- `app/blog/layout.tsx`
+- `app/blog/page.tsx`
+- `app/blog/topic/[topic]/page.tsx`
+- `app/blog/[slug]/page.tsx`
+- `components/blog-article-body.tsx`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added a route-scoped blog layout wrapper with black background
+- updated blog index/topic/article route surfaces to black-first cards/backgrounds with white primary text
+- updated markdown article rendering (`BlogArticleBody`) for dark readability (`prose-invert` and dark code/media chrome)
+- updated planning/state docs to mark `E1` shipped and set `E2` as next theming polish slice
+
+What was not implemented:
+- no header/footer route-aware theming yet (`E2` remains next)
+- no changes to dashboard or non-blog public routes
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-publish-check-history.test.ts`
+
+---
+
+### 2026-04-03 - Public blog dark-chrome polish slice E2
+
+Extended blog dark theming into shared site chrome for route-level consistency.
+
+Files updated:
+- `components/site-header-shell.tsx`
+- `components/site-footer.tsx`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- made shared header blog-route aware (`/blog*`) with dark background/border and blog-safe text/link contrast
+- made shared footer blog-route aware (`/blog*`) with dark background/border and blog-safe text/link contrast
+- preserved existing header/footer behavior for non-blog routes
+- advanced theming queue state to `E3` for final parity polish
+
+What was not implemented:
+- no redesign of non-blog pages
+- no typography/layout structural changes in this slice
+
+Verification:
+- `npm run type-check`
+
+---
+
+### 2026-04-03 - Public blog dark-theme parity polish slice E3
+
+Completed final dark-theme parity cleanup for blog route interactions and low-contrast text.
+
+Files updated:
+- `app/blog/page.tsx`
+- `app/blog/topic/[topic]/page.tsx`
+- `app/blog/[slug]/page.tsx`
+- `components/blog-article-body.tsx`
+- `components/site-header-shell.tsx`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- aligned blog-route accent/link states to higher-contrast sky tones on dark surfaces
+- normalized hover/active parity for article/topic/breadcrumb links on dark blog pages
+- improved markdown link contrast in `BlogArticleBody` on dark article surfaces
+- polished blog-route header icon/dashboard-link contrast for dark chrome parity
+- advanced theming queue to optional `E4` visual QA only
+
+What was not implemented:
+- no non-blog route visual redesign
+- no structural layout or content-model changes
+
+Verification:
+- `npm run type-check`
+
+---
+
+### 2026-04-03 - Public blog visual QA polish slice E4
+
+Added route-scoped visual QA refinements for blog accessibility and readability consistency.
+
+Files updated:
+- `app/blog/layout.tsx`
+- `app/blog/theme.css`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added route-scoped blog theme stylesheet import from `app/blog/layout.tsx`
+- added blog-only focus-visible treatment for links/buttons
+- added blog-only text-selection contrast styling
+- added minor readability smoothing for blog-route rendering
+- kept all changes scoped to blog routes only
+- advanced queue to optional `E5` screenshot-based visual QA
+
+What was not implemented:
+- no global app theme changes
+- no spacing/typography structural redesign
+- no dashboard/non-blog style updates
+
+Verification:
+- `npm run type-check`
+
+---
+
+### 2026-04-03 - Public blog screenshot QA slice E5
+
+Implemented and validated a deterministic screenshot-oriented visual QA lane for blog routes.
+
+Files updated:
+- `lib/server/public-content-data.ts`
+- `lib/server/public-content-data.test.ts`
+- `playwright.config.ts`
+- `tests/e2e/blog-visual.spec.ts`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added `E2E_BLOG_FIXTURE=1` deterministic fixture mode in public blog data loader
+- added stable fixture article/content for `/blog`, topic page, and article page route QA
+- wired Playwright webServer env to enable blog fixture mode during e2e runs
+- added `tests/e2e/blog-visual.spec.ts` for route-level visual checks:
+  - dark header/footer shell treatment
+  - topic/article route dark readability markers
+- kept runtime behavior unchanged when fixture mode is not enabled
+
+What was not implemented:
+- no production user-facing content model changes
+- no new non-blog e2e coverage in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/public-content-data.test.ts`
+- `npx playwright test tests/e2e/blog-visual.spec.ts`
+
+---
+
+### 2026-04-02 - Distribution engine social adapter slice 1F
+
+Completed hardening on top of the first social runtime lane.
+
+Files updated:
+- `lib/server/distribution-engine-repository.ts`
+- `lib/server/distribution-engine-repository.test.ts`
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- fixed dispatchability default for new jobs in repository:
+  - `scheduled` mode defaults to `scheduled`
+  - non-scheduled modes now default to `queued` (instead of `draft`) so they are actually dispatchable
+- tightened quick social seed guardrails:
+  - account must be social (`x` / `linkedin`) and `connected`
+  - account must have at least one stored token row
+  - selected content must include draft/brief markdown body
+  - scheduled jobs require a valid future timestamp
+- improved admin quick-seed UX guidance with explicit prerequisites
+
+What was not implemented:
+- no OAuth lifecycle flow yet
+- no provider-specific backoff-window policy yet
+- no media/image/video workflow in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-repository.test.ts lib/server/content-destination-adapters.test.ts lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-02 - Distribution engine social adapter slice 1E
+
+Added a minimal operator seed path for social runtime testing in `/dashboard/distribution`.
+
+Files updated:
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `app/dashboard/distribution/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added a quick social seeding server action:
+  - validates social account + canonical content item + asset type + publish mode
+  - supports `x` and `linkedin` accounts only for this shortcut path
+  - creates one approved social `distribution_asset` prefilled from canonical content title/body/url
+  - creates one linked `distribution_job` in the selected publish mode
+- added a dedicated "Seed social asset + job" form to distribution admin controls
+- kept the flow bounded and low-maintenance:
+  - no new orchestration surface
+  - reuses existing repository and dispatcher/runtime seams
+
+What was not implemented:
+- no new media handling path in this slice
+- no OAuth flow or token refresh lifecycle in this slice
+- no broad social planner/editor UI in this slice
+
+Verification:
+- `npm run type-check`
+
+---
+
+### 2026-04-02 - Distribution engine social adapter slice 1D
+
+Added provider-aware retry classification for the first text-first social adapters.
+
+Files updated:
+- `lib/server/content-destination-adapters.ts`
+- `lib/server/content-destination-adapters.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added provider-aware retry mapping for X:
+  - retryable: `429`, `5xx`
+  - terminal: auth/permission/client errors such as `401` / `403`
+- added provider-aware retry mapping for LinkedIn:
+  - retryable: `429`, `5xx`
+  - retryable `403` only when response text indicates throttle/rate-limit behavior
+  - terminal `403` for permission/authorization style failures
+- kept `ContentDestinationPublishError` as the dispatch contract, so queue retry behavior continues to flow through the same dispatcher/consumer seams
+
+What was not implemented:
+- no per-provider backoff timing windows yet
+- no OAuth refresh flow yet
+- no newsletter adapter retry-policy rewrite yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-destination-adapters.test.ts lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-02 - Distribution engine social adapter slice 1C
+
+Implemented the first runtime token-table consumption path for text-first social providers.
+
+Files updated:
+- `lib/server/distribution-engine-repository.ts`
+- `lib/server/distribution-engine-repository.test.ts`
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added repository token read helper:
+  - `listAccountTokensForAccount(distributionAccountId)`
+- updated dispatcher runtime so `x` and `linkedin` jobs now read provider credentials from `distribution_account_tokens`
+- added preferred-token selection (`oauth` -> `bearer_token` -> `api_key` -> `session_token`)
+- added bounded auth/config failure handling in dispatcher:
+  - if `x` or `linkedin` dispatch is attempted without a token row, dispatch fails as non-retryable with an explicit error
+- kept backward compatibility:
+  - non-social providers continue through existing behavior
+  - social token runtime still allows fallback to existing env values for optional fields like author URN/base URLs
+
+What was not implemented:
+- no OAuth handshake flow yet
+- no token refresh/revocation automation yet
+- no newsletter adapter migration to token-table runtime yet
+- no media/image/video runtime work in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-repository.test.ts lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-02 - Distribution engine social adapter slice 1B
+
+Implemented the first text-first social runtime wiring through the existing distribution adapter/dispatch seam.
+
+Files updated:
+- `lib/server/content-destination-adapters.ts`
+- `lib/server/content-destination-adapters.test.ts`
+- `lib/server/content-destination-health.ts`
+- `lib/server/content-destination-health.test.ts`
+- `lib/server/cf-env.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `.env.local.example`
+- `.dev.vars.example`
+- `wrangler.jsonc`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- replaced the `x` and `linkedin` scaffold-only adapter behavior with first text-first runtime calls:
+  - X posts via `/2/tweets`
+  - LinkedIn posts via `/v2/ugcPosts`
+- added bounded text composition for social destinations using canonical title/body/link
+- kept this slice intentionally env-auth based (no token-table runtime use yet):
+  - `X_ACCESS_TOKEN`
+  - optional `X_API_BASE_URL`
+  - `LINKEDIN_ACCESS_TOKEN`
+  - `LINKEDIN_AUTHOR_URN`
+  - optional `LINKEDIN_API_BASE_URL`
+- extended destination health evaluation for `x` and `linkedin` configuration readiness
+- added/updated contract tests for success + bounded missing-config failures
+
+What was not implemented:
+- no runtime read path from `distribution_account_tokens` yet
+- no OAuth connect flow yet
+- no provider-specific backoff windows beyond existing retryable/permanent classification
+- no media/image/video adapter path in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-destination-adapters.test.ts lib/server/content-destination-health.test.ts lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-02 - Distribution engine social adapter slice 1A
+
+Started the lean adapter-expansion sequence with bounded scaffolds and contract tests only.
+
+Files updated:
+- `lib/server/content-destination-adapters.ts`
+- `lib/server/content-destination-adapters.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added adapter-provider registration for:
+  - `x`
+  - `linkedin`
+- added bounded adapter scaffolds for `x` and `linkedin` that:
+  - resolve through the existing adapter contract seam
+  - fail with explicit non-retryable "scaffold only" errors until runtime wiring is added in follow-up slices
+- added contract tests proving both providers resolve and return the expected bounded error shape
+- recorded the agreed low-maintenance slice plan (`1A` through `1F`) in state docs
+
+What was not implemented:
+- no token-runtime usage for social providers yet
+- no provider endpoint wiring yet
+- no OAuth flow yet
+- no media pipeline changes
+- no queue behavior changes in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-destination-adapters.test.ts lib/server/content-destination-health.test.ts`
+
+---
+
 ### 2026-04-02 - Distribution engine token admin slice
 
 Added the first writable token/account-connection admin surface on top of the generalized distribution schema.
@@ -8020,3 +8818,385 @@ Test Files  2 passed (2)
 **Notes:** BM-038 is accepted as the first exact-page citation-quality metric slice. The benchmark now has a narrow internal quality metric that is clearly separated from citation presence and share-of-voice.
 
 ---
+
+---
+
+### 2026-04-02 - Distribution engine social OAuth slices 2A + 2B
+
+Completed first provider OAuth connect foundation plus first token lifecycle runtime handling for social dispatch.
+
+Files updated:
+- `app/api/admin/distribution/oauth/[provider]/callback/route.ts`
+- `app/dashboard/distribution/actions.ts`
+- `app/dashboard/distribution/page.tsx`
+- `components/distribution-engine-admin-controls.tsx`
+- `lib/server/distribution-social-oauth.ts`
+- `lib/server/distribution-social-oauth.test.ts`
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `lib/server/cf-env.ts`
+- `lib/server/distribution-engine-flags.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/06-environment-and-secrets.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- `2A` OAuth connect foundation:
+  - feature-flagged social OAuth controls in `/dashboard/distribution` (`DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED`)
+  - signed OAuth state + provider authorize URL builders for `x` and `linkedin`
+  - provider callback route validates admin session + signed state, exchanges code for tokens, stores token rows, and updates account connection state
+- `2B` first token lifecycle handling in dispatch:
+  - pre-dispatch token expiry checks for social account tokens
+  - bounded X refresh-token exchange + token row rotation when token is expired/near-expiry
+  - account status transition to `token_expired` when token lifecycle failures are non-recoverable
+  - bounded status transition on non-retryable 401/403 dispatch failures
+
+What was not implemented:
+- no broad multi-provider refresh lifecycle (only first X refresh path)
+- no provider-specific retry backoff windows beyond existing retryable classification
+- no media/image/video lifecycle in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-social-oauth.test.ts lib/server/distribution-job-dispatcher.test.ts lib/server/distribution-engine-repository.test.ts`
+
+---
+
+### 2026-04-02 - Distribution engine social slice 2C
+
+Completed provider-specific retry backoff windows for queue-driven social distribution dispatch.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `workers/queue/distribution-job-queue-consumer.ts`
+- `workers/queue/distribution-job-queue-consumer.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- retryable provider failures now schedule the next attempt window using `distribution_jobs.scheduled_for` (app-managed backoff), instead of immediate queue retries
+- first provider-specific backoff profiles are now active:
+  - `x`: longer delays for `429` than generic transients
+  - `linkedin`: dedicated windows for rate/throttle style failures
+  - fallback default windows for other providers
+- retryable failures now persist `retry_after_ms` and `retry_scheduled_for` into attempt response summary for operator traceability
+- queue consumer behavior changed for retryable dispatch errors:
+  - now `ack()` retryable messages (deferred by scheduled job window)
+  - no longer calls queue `retry()` for normal retryable provider failures
+
+What was not implemented:
+- no provider-specific backoff policy surfaced in admin UI yet
+- no dynamic per-account/per-provider policy config table yet
+- no broader multi-provider token refresh expansion in this slice
+
+Verification:
+- `npm run build:worker`
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-dispatcher.test.ts workers/queue/distribution-job-queue-consumer.test.ts lib/server/distribution-social-oauth.test.ts`
+
+---
+
+### 2026-04-02 - Distribution engine social slice 2D
+
+Completed operator-visible backoff policy controls and retry-window observability in `/dashboard/distribution`.
+
+Files updated:
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `app/dashboard/distribution/page.tsx`
+- `lib/server/distribution-engine-admin-data.ts`
+- `lib/server/distribution-engine-admin-data.test.ts`
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `workers/queue/distribution-job-queue-consumer.ts`
+- `workers/queue/distribution-job-queue-consumer.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- account-level retry policy controls now exist in the admin account form:
+  - `retry_backoff_profile` (`default` / `aggressive` / `conservative`)
+  - `retry_backoff_multiplier` (bounded numeric factor)
+- dispatcher now applies account policy over provider windows when computing retry schedule
+- retry attempt records now include policy + retry schedule metadata
+- distribution admin read model now surfaces:
+  - account backoff policy in the accounts table
+  - next retry time and retry delay in the jobs table
+- queue consumer keeps the app-managed defer model for retryable failures (`ack`, no immediate queue retry)
+
+What was not implemented:
+- no dedicated policy-management subpage; controls are integrated in the existing account form
+- no per-error-code custom table-driven policy editor yet
+- no new feature flag added; this remains under existing distribution UI/write flags
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-admin-data.test.ts lib/server/distribution-job-dispatcher.test.ts workers/queue/distribution-job-queue-consumer.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine social slice 2E
+
+Completed broader token-refresh lifecycle support and LinkedIn reconnect UX guidance.
+
+Files updated:
+- `lib/server/distribution-social-oauth.ts`
+- `lib/server/distribution-social-oauth.test.ts`
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `app/dashboard/distribution/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- token refresh exchange now supports LinkedIn when a refresh token is available (in addition to the existing X path)
+- dispatch token-lifecycle preflight now attempts provider refresh for both `x` and `linkedin` where supported and configured
+- explicit LinkedIn reconnect guidance is now visible in the distribution account table for token-expired states
+
+What was not implemented:
+- no new provider adapters in this slice
+- no media pipeline additions in this slice
+- no table-driven provider OAuth policy editor yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-social-oauth.test.ts lib/server/distribution-job-dispatcher.test.ts lib/server/distribution-engine-admin-data.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine media foundation slice 3A
+
+Completed first media foundation controls and runtime guardrails for generalized distribution assets.
+
+Files updated:
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `app/dashboard/distribution/page.tsx`
+- `lib/server/distribution-engine-admin-data.ts`
+- `lib/server/distribution-engine-admin-data.test.ts`
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added first operator media seed/replace control in `/dashboard/distribution`:
+  - choose asset
+  - choose media kind + readiness status
+  - submit one or more storage URLs
+  - writes canonical `distribution_asset_media` rows through repository
+- expanded asset-table observability:
+  - media count
+  - ready media count
+  - latest media preview URL
+- added dispatch-time media guardrails for media-required asset types (`single_image_post`, `carousel_post`, `short_video_post`, `long_video_post`):
+  - dispatch now fails with a bounded permanent error when no media rows are provider-ready
+
+What was not implemented:
+- no provider-specific media upload APIs yet
+- no rendering/transcoding workflow yet
+- no per-platform media validation matrix beyond ready/uploaded gate
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-admin-data.test.ts lib/server/distribution-job-dispatcher.test.ts lib/server/distribution-engine-repository.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine media publish slice 3B
+
+Completed first provider-native media publish runtime path.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `lib/server/distribution-engine-admin-data.ts`
+- `lib/server/distribution-engine-admin-data.test.ts`
+- `app/dashboard/distribution/actions.ts`
+- `components/distribution-engine-admin-controls.tsx`
+- `app/dashboard/distribution/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added first provider-native media publish flow for LinkedIn `single_image_post` assets:
+  - fetch provider-ready media URL
+  - register LinkedIn asset upload
+  - upload media bytes
+  - publish UGC image post
+- media-required dispatch behavior is now explicitly split:
+  - LinkedIn `single_image_post` goes through the new media publish flow
+  - non-wired media provider/type combinations fail with bounded non-retryable errors
+- retained and validated media readiness guardrails from 3A
+
+What was not implemented:
+- no LinkedIn carousel media publish flow yet
+- no video publish flow yet
+- no media publish flow yet for other social providers
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-engine-admin-data.test.ts lib/server/distribution-job-dispatcher.test.ts lib/server/distribution-engine-repository.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine media publish slice 3C
+
+Extended provider-native LinkedIn media runtime coverage from single-image to carousel assets.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added LinkedIn `carousel_post` runtime path in dispatch:
+  - validates provider auth env (`LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_AUTHOR_URN`)
+  - requires at least two provider-ready image/carousel-slide rows
+  - registers and uploads each slide to LinkedIn media assets
+  - publishes one UGC post referencing all uploaded media assets
+- extended dispatcher dependency injection seam with `publishLinkedInCarouselPost` for bounded testability
+- retained explicit bounded failures for non-wired media provider/type combinations
+
+What was not implemented:
+- no LinkedIn native video publish path yet
+- no media publish path yet for X/Threads/Meta/TikTok/YouTube
+- no media rendering/transcoding lifecycle yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine media publish slice 3D
+
+Extended provider-native LinkedIn media runtime coverage from image/carousel to short-video assets.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added LinkedIn `short_video_post` runtime path in dispatch:
+  - validates provider auth env (`LINKEDIN_ACCESS_TOKEN`, `LINKEDIN_AUTHOR_URN`)
+  - requires at least one provider-ready `video` media row
+  - registers and uploads video media to LinkedIn asset API
+  - publishes one UGC post with `shareMediaCategory: VIDEO`
+- extended dispatcher dependency injection seam with `publishLinkedInShortVideoPost` for bounded testability
+- retained explicit bounded failures for non-wired media provider/type combinations
+
+What was not implemented:
+- no LinkedIn long-video specialized workflow yet
+- no media publish path yet for X/Threads/Meta/TikTok/YouTube
+- no media rendering/transcoding lifecycle yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine media publish slice 3E
+
+Extended provider-native LinkedIn media runtime coverage from short-video to long-video assets.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added LinkedIn `long_video_post` runtime path in dispatch
+- reused the existing bounded LinkedIn video upload + publish flow for `short_video_post`
+- extended dispatcher dependency injection seam with `publishLinkedInLongVideoPost` for bounded testability
+- retained explicit bounded failures for non-wired media provider/type combinations
+
+What was not implemented:
+- no provider-specific long-video transcoding/processing state management yet
+- no media publish path yet for X/Threads/Meta/TikTok/YouTube
+- no media rendering/transcoding lifecycle yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine media publish slice 3F
+
+Added the first non-LinkedIn media publish runtime path.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added X `single_image_post` runtime path in dispatch:
+  - validates `X_ACCESS_TOKEN`
+  - requires at least one provider-ready `image` row
+  - uploads media to X media endpoint
+  - publishes tweet with attached media id
+- extended dispatcher dependency injection seam with `publishXSingleImagePost`
+- retained explicit bounded failures for non-wired media provider/type combinations
+
+What was not implemented:
+- no X carousel/video media path yet
+- no media publish path yet for Threads/Meta/TikTok/YouTube
+- no media rendering/transcoding lifecycle yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-03 - Distribution engine media publish slice 3G
+
+Extended X media runtime coverage from single-image to short-video assets.
+
+Files updated:
+- `lib/server/distribution-job-dispatcher.ts`
+- `lib/server/distribution-job-dispatcher.test.ts`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added X `short_video_post` runtime path in dispatch:
+  - validates `X_ACCESS_TOKEN`
+  - requires at least one provider-ready `video` media row
+  - uploads media and publishes tweet with attached media id
+- extended dispatcher dependency injection seam with `publishXShortVideoPost`
+- retained explicit bounded failures for non-wired media provider/type combinations
+
+What was not implemented:
+- no X long-video specialized behavior yet
+- no media publish path yet for Threads/Meta/TikTok/YouTube
+- no media rendering/transcoding lifecycle yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/distribution-job-dispatcher.test.ts`

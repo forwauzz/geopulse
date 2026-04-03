@@ -9,7 +9,10 @@ import {
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { parseArticleMetadata } from '@/lib/server/content-article-metadata';
 import { createPublicContentClient } from '@/lib/server/public-content-client';
-import { buildTopicPageStructuredData } from '@/lib/server/content-structured-data';
+import {
+  buildBreadcrumbStructuredData,
+  buildTopicPageStructuredData,
+} from '@/lib/server/content-structured-data';
 import { getTopicPageContent } from '@/lib/server/content-topic-pages';
 import { createPublicContentData } from '@/lib/server/public-content-data';
 
@@ -83,6 +86,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     alternates: {
       canonical: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, buildTopicHref(group.topicKey)),
     },
+    robots: {
+      index: true,
+      follow: true,
+    },
   };
 }
 
@@ -126,6 +133,10 @@ export default async function BlogTopicPage({ params }: Props) {
       toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, `/blog/${article.slug}`)
     ),
   });
+  const breadcrumbStructuredData = buildBreadcrumbStructuredData([
+    { name: 'Blog', item: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/blog') },
+    { name: group.topicLabel, item: topicUrl },
+  ]);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-16 md:px-10">
@@ -133,52 +144,61 @@ export default async function BlogTopicPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbStructuredData) }}
+      />
       <div className="max-w-3xl">
-        <Link
-          href="/blog"
-          className="font-label text-xs font-semibold uppercase tracking-widest text-primary"
-        >
-          Back to blog
-        </Link>
-        <p className="mt-6 font-label text-sm font-semibold uppercase tracking-widest text-primary">
+        <nav aria-label="Breadcrumb" className="font-label text-xs uppercase tracking-widest">
+          <ol className="flex flex-wrap items-center gap-2 text-zinc-300">
+            <li>
+              <Link href="/blog" className="text-sky-300 hover:text-sky-200 hover:underline">
+                Blog
+              </Link>
+            </li>
+            <li aria-hidden="true">/</li>
+            <li className="text-white">{group.topicLabel}</li>
+          </ol>
+        </nav>
+        <p className="mt-6 font-label text-sm font-semibold uppercase tracking-widest text-sky-300">
           Topic cluster
         </p>
-        <h1 className="mt-3 font-headline text-4xl font-bold text-on-background md:text-5xl">
+        <h1 className="mt-3 font-headline text-4xl font-bold text-white md:text-5xl">
           {group.topicLabel}
         </h1>
-        <p className="mt-4 font-body text-lg leading-relaxed text-on-surface-variant">
+        <p className="mt-4 font-body text-lg leading-relaxed text-zinc-300">
           {topicContent.definition}
         </p>
       </div>
 
       <section className="mt-8 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
-          <p className="font-label text-xs uppercase tracking-widest text-primary">Definition</p>
-          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+        <div className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+          <p className="font-label text-xs uppercase tracking-widest text-sky-300">Definition</p>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-300">
             {topicContent.definition}
           </p>
         </div>
-        <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
-          <p className="font-label text-xs uppercase tracking-widest text-primary">Why It Matters</p>
-          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+        <div className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+          <p className="font-label text-xs uppercase tracking-widest text-sky-300">Why It Matters</p>
+          <p className="mt-3 text-sm leading-relaxed text-zinc-300">
             {topicContent.whyItMatters}
           </p>
         </div>
-        <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
-          <p className="font-label text-xs uppercase tracking-widest text-primary">
+        <div className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+          <p className="font-label text-xs uppercase tracking-widest text-sky-300">
             Practical takeaway
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+          <p className="mt-3 text-sm leading-relaxed text-zinc-300">
             {topicContent.practicalTakeaway}
           </p>
         </div>
       </section>
 
-      <div className="mt-4 rounded-2xl bg-surface-container-low p-6 shadow-float">
-        <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+      <div className="mt-4 rounded-2xl bg-zinc-900 p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
           Cluster summary
         </p>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-300">
           This topic page exists so the GEO-Pulse blog has a stable cluster URL with a clear
           definition, a bounded explanation of why the topic matters, and direct paths into the
           supporting canonical articles.
@@ -187,8 +207,8 @@ export default async function BlogTopicPage({ params }: Props) {
 
       <div className="mt-12 grid gap-10 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
-          <section className="rounded-2xl bg-surface-container-low p-6 shadow-float">
-            <p className="font-label text-xs uppercase tracking-widest text-primary">Browse topics</p>
+          <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+            <p className="font-label text-xs uppercase tracking-widest text-sky-300">Browse topics</p>
             <ul className="mt-4 space-y-3 text-sm">
               {topicGroups.map((topicGroup) => (
                 <li key={topicGroup.topicKey}>
@@ -196,13 +216,13 @@ export default async function BlogTopicPage({ params }: Props) {
                     href={buildTopicHref(topicGroup.topicKey)}
                     className={
                       topicGroup.topicKey === group.topicKey
-                        ? 'text-primary'
-                        : 'text-on-background hover:text-primary'
+                        ? 'text-sky-300'
+                        : 'text-white hover:text-sky-300'
                     }
                   >
                     {topicGroup.topicLabel}
                   </Link>
-                  <p className="mt-1 text-xs text-on-surface-variant">
+                  <p className="mt-1 text-xs text-zinc-300">
                     {topicGroup.articles.length} article{topicGroup.articles.length === 1 ? '' : 's'}
                   </p>
                 </li>
@@ -215,12 +235,12 @@ export default async function BlogTopicPage({ params }: Props) {
           {topicArticles.map((article) => (
             <article
               key={article.content_id}
-              className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-float"
+              className="overflow-hidden rounded-2xl bg-zinc-950 shadow-float"
             >
               {(() => {
                 const articleMetadata = parseArticleMetadata(article.metadata);
                 return articleMetadata.heroImageUrl ? (
-                  <div className="aspect-[16/8] w-full overflow-hidden bg-surface-container-low">
+                  <div className="aspect-[16/8] w-full overflow-hidden bg-zinc-900">
                     <img
                       src={articleMetadata.heroImageUrl}
                       alt={articleMetadata.heroImageAlt ?? article.title}
@@ -230,23 +250,23 @@ export default async function BlogTopicPage({ params }: Props) {
                 ) : null;
               })()}
               <div className="p-8">
-              <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-on-surface-variant">
+              <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-zinc-300">
                 <span>{formatDate(article.published_at)}</span>
                 <span>&bull;</span>
                 <span>{article.target_persona ?? '-'}</span>
               </div>
-              <h2 className="mt-4 font-headline text-3xl font-bold text-on-background">
-                <Link href={`/blog/${article.slug}`} className="hover:text-primary">
+              <h2 className="mt-4 font-headline text-3xl font-bold text-white">
+                <Link href={`/blog/${article.slug}`} className="hover:text-sky-300">
                   {article.title}
                 </Link>
               </h2>
               {article.primary_problem ? (
-                <p className="mt-3 font-body text-sm font-medium text-on-background">
+                <p className="mt-3 font-body text-sm font-medium text-white">
                   Problem: {article.primary_problem}
                 </p>
               ) : null}
               {article.excerpt ? (
-                <p className="mt-4 max-w-3xl font-body leading-relaxed text-on-surface-variant">
+                <p className="mt-4 max-w-3xl font-body leading-relaxed text-zinc-300">
                   {article.excerpt}
                 </p>
               ) : null}
@@ -266,3 +286,5 @@ export default async function BlogTopicPage({ params }: Props) {
     </main>
   );
 }
+
+

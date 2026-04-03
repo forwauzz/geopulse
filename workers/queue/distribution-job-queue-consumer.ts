@@ -124,14 +124,14 @@ export async function dispatchDistributionQueueBatch(
     } catch (error) {
       structuredLog(
         isRetryableDistributionDispatchError(error)
-          ? 'distribution_queue_job_retrying'
+          ? 'distribution_queue_job_deferred'
           : 'distribution_queue_job_failed_permanently',
         {
           message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
         }
       );
       if (isRetryableDistributionDispatchError(error)) {
-        message.retry();
+        message.ack();
       } else {
         message.ack();
       }

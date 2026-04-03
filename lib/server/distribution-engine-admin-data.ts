@@ -17,6 +17,8 @@ export type DistributionEngineAccountAdminRow = {
   readonly updated_at: string;
   readonly token_count: number;
   readonly latest_token_expiry: string | null;
+  readonly retry_backoff_profile: string;
+  readonly retry_backoff_multiplier: number | null;
 };
 
 export type DistributionEngineAssetAdminRow = {
@@ -37,6 +39,8 @@ export type DistributionEngineAssetAdminRow = {
   readonly created_at: string;
   readonly updated_at: string;
   readonly media_count: number;
+  readonly ready_media_count: number;
+  readonly latest_media_storage_url: string | null;
 };
 
 export type DistributionEngineJobAdminRow = {
@@ -56,6 +60,8 @@ export type DistributionEngineJobAdminRow = {
   readonly updated_at: string;
   readonly attempt_count: number;
   readonly latest_attempt_error: string | null;
+  readonly latest_retry_scheduled_for: string | null;
+  readonly latest_retry_after_ms: number | null;
 };
 
 export type DistributionEngineOverview = {
@@ -71,12 +77,16 @@ type DistributionAccountTokenRow = {
 
 type DistributionAssetMediaRow = {
   readonly distribution_asset_id: string;
+  readonly storage_url: string;
+  readonly provider_ready_status: string;
+  readonly created_at: string;
 };
 
 type DistributionJobAttemptRow = {
   readonly distribution_job_id: string;
   readonly error_message: string | null;
   readonly created_at: string;
+  readonly response_summary: Record<string, unknown> | null;
 };
 
 function readMetadata(value: unknown): Record<string, unknown> {
@@ -89,6 +99,31 @@ function maxIsoDate(values: Array<string | null>): string | null {
   const filtered = values.filter((value): value is string => typeof value === 'string' && value.length > 0);
   if (filtered.length === 0) return null;
   return filtered.sort((a, b) => b.localeCompare(a))[0] ?? null;
+}
+
+function readRetryBackoffProfile(metadata: Record<string, unknown>): string {
+  const value = metadata['retry_backoff_profile'];
+  if (value === 'aggressive' || value === 'default' || value === 'conservative') {
+    return value;
+  }
+  return 'default';
+}
+
+function readRetryBackoffMultiplier(metadata: Record<string, unknown>): number | null {
+  const value = metadata['retry_backoff_multiplier'];
+  if (typeof value !== 'number') return null;
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function readRetryScheduledFor(responseSummary: Record<string, unknown>): string | null {
+  const value = responseSummary['retry_scheduled_for'];
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function readRetryAfterMs(responseSummary: Record<string, unknown>): number | null {
+  const value = responseSummary['retry_after_ms'];
+  if (typeof value !== 'number') return null;
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 export function createDistributionEngineAdminData(supabase: SupabaseLike) {
@@ -116,7 +151,7 @@ export function createDistributionEngineAdminData(supabase: SupabaseLike) {
             .limit(50),
           supabase
             .from('distribution_asset_media')
-            .select('distribution_asset_id')
+            .select('distribution_asset_id,storage_url,provider_ready_status,created_at')
             .order('created_at', { ascending: false }),
           supabase
             .from('distribution_jobs')
@@ -127,7 +162,7 @@ export function createDistributionEngineAdminData(supabase: SupabaseLike) {
             .limit(50),
           supabase
             .from('distribution_job_attempts')
-            .select('distribution_job_id,error_message,created_at')
+            .select('distribution_job_id,error_message,created_at,response_summary')
             .order('created_at', { ascending: false }),
         ]);
 
@@ -150,11 +185,29 @@ export function createDistributionEngineAdminData(supabase: SupabaseLike) {
       }
 
       const mediaCountByAsset = new Map<string, number>();
+      const readyMediaCountByAsset = new Map<string, number>();
+      const latestMediaByAsset = new Map<
+        string,
+        { readonly created_at: string; readonly storage_url: string }
+      >();
       for (const media of mediaRows) {
         mediaCountByAsset.set(
           media.distribution_asset_id,
           (mediaCountByAsset.get(media.distribution_asset_id) ?? 0) + 1
         );
+        if (media.provider_ready_status === 'ready' || media.provider_ready_status === 'uploaded') {
+          readyMediaCountByAsset.set(
+            media.distribution_asset_id,
+            (readyMediaCountByAsset.get(media.distribution_asset_id) ?? 0) + 1
+          );
+        }
+        const existingLatest = latestMediaByAsset.get(media.distribution_asset_id);
+        if (!existingLatest || media.created_at > existingLatest.created_at) {
+          latestMediaByAsset.set(media.distribution_asset_id, {
+            created_at: media.created_at,
+            storage_url: media.storage_url,
+          });
+        }
       }
 
       const attemptsByJob = new Map<string, DistributionJobAttemptRow[]>();
@@ -164,34 +217,59 @@ export function createDistributionEngineAdminData(supabase: SupabaseLike) {
         attemptsByJob.set(attempt.distribution_job_id, existing);
       }
 
-      const accounts = ((accountsResult.data ?? []) as Array<Omit<DistributionEngineAccountAdminRow, 'token_count' | 'latest_token_expiry'>>).map(
+      const accounts = ((accountsResult.data ?? []) as Array<
+        Omit<
+          DistributionEngineAccountAdminRow,
+          'token_count' | 'latest_token_expiry' | 'retry_backoff_profile' | 'retry_backoff_multiplier'
+        >
+      >).map(
         (row) => {
           const tokens = tokenRowsByAccount.get(row.id) ?? [];
+          const metadata = readMetadata(row.metadata);
           return {
             ...row,
-            metadata: readMetadata(row.metadata),
+            metadata,
             token_count: tokens.length,
             latest_token_expiry: maxIsoDate(tokens.map((token) => token.expires_at)),
+            retry_backoff_profile: readRetryBackoffProfile(metadata),
+            retry_backoff_multiplier: readRetryBackoffMultiplier(metadata),
           };
         }
       );
 
-      const assets = ((assetsResult.data ?? []) as Array<Omit<DistributionEngineAssetAdminRow, 'media_count'>>).map(
-        (row) => ({
-          ...row,
-          metadata: readMetadata(row.metadata),
-          media_count: mediaCountByAsset.get(row.id) ?? 0,
-        })
-      );
+      const assets = ((assetsResult.data ?? []) as Array<
+        Omit<
+          DistributionEngineAssetAdminRow,
+          'media_count' | 'ready_media_count' | 'latest_media_storage_url'
+        >
+      >).map((row) => ({
+        ...row,
+        metadata: readMetadata(row.metadata),
+        media_count: mediaCountByAsset.get(row.id) ?? 0,
+        ready_media_count: readyMediaCountByAsset.get(row.id) ?? 0,
+        latest_media_storage_url: latestMediaByAsset.get(row.id)?.storage_url ?? null,
+      }));
 
       const jobs = ((jobsResult.data ?? []) as Array<
-        Omit<DistributionEngineJobAdminRow, 'attempt_count' | 'latest_attempt_error'>
+        Omit<
+          DistributionEngineJobAdminRow,
+          'attempt_count' | 'latest_attempt_error' | 'latest_retry_scheduled_for' | 'latest_retry_after_ms'
+        >
       >).map((row) => {
         const attempts = attemptsByJob.get(row.id) ?? [];
+        const latestRetryAttempt = attempts.find((attempt) => {
+          const responseSummary = readMetadata(attempt.response_summary);
+          return (
+            readRetryScheduledFor(responseSummary) !== null || readRetryAfterMs(responseSummary) !== null
+          );
+        });
+        const latestRetrySummary = readMetadata(latestRetryAttempt?.response_summary);
         return {
           ...row,
           attempt_count: attempts.length,
           latest_attempt_error: attempts.find((attempt) => attempt.error_message)?.error_message ?? null,
+          latest_retry_scheduled_for: readRetryScheduledFor(latestRetrySummary),
+          latest_retry_after_ms: readRetryAfterMs(latestRetrySummary),
         };
       });
 

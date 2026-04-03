@@ -49,10 +49,10 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
             alt={alt ?? ''}
             title={title ?? undefined}
             loading="lazy"
-            className="w-full rounded-2xl border border-outline-variant/15"
+            className="w-full rounded-2xl border border-white/15"
           />
           {title ? (
-            <figcaption className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+            <figcaption className="mt-3 text-sm leading-relaxed text-zinc-300">
               {title}
             </figcaption>
           ) : null}
@@ -75,11 +75,11 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
             <video
               controls
               preload="metadata"
-              className="w-full rounded-2xl border border-outline-variant/15 bg-black"
+              className="w-full rounded-2xl border border-white/15 bg-black"
             >
               <source src={embeddedVideo.embedUrl} />
             </video>
-            <figcaption className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+            <figcaption className="mt-3 text-sm leading-relaxed text-zinc-300">
               {label}
             </figcaption>
           </figure>
@@ -88,7 +88,7 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
 
       return (
         <figure className="my-8">
-          <div className="relative overflow-hidden rounded-2xl border border-outline-variant/15 bg-black pb-[56.25%]">
+          <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black pb-[56.25%]">
             <iframe
               src={embeddedVideo.embedUrl}
               title={label}
@@ -98,7 +98,7 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
               className="absolute inset-0 h-full w-full"
             />
           </div>
-          <figcaption className="mt-3 text-sm leading-relaxed text-on-surface-variant">
+          <figcaption className="mt-3 text-sm leading-relaxed text-zinc-300">
             {label}
           </figcaption>
         </figure>
@@ -107,10 +107,12 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
   };
 
   return (
-    <div className="prose prose-slate max-w-none prose-headings:font-headline prose-headings:text-on-background prose-p:text-on-surface-variant prose-li:text-on-surface-variant prose-strong:text-on-background prose-a:text-primary prose-code:text-on-background prose-pre:bg-surface-container-low prose-pre:text-on-background prose-figcaption:text-on-surface-variant">
+    <div className="prose prose-invert max-w-none prose-headings:font-headline prose-headings:text-white prose-p:text-zinc-200 prose-li:text-zinc-200 prose-strong:text-white prose-a:text-sky-300 prose-code:text-white prose-pre:bg-zinc-900 prose-pre:text-white prose-figcaption:text-zinc-300">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {markdown}
       </ReactMarkdown>
     </div>
   );
 }
+
+
