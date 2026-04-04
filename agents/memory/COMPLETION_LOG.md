@@ -5,6 +5,647 @@
 
 ---
 
+### 2026-04-04 - Startup beta rollout guardrails SD-015
+
+Completed startup beta rollout guardrails with centralized flags and suggest-only safe default behavior.
+
+Files updated:
+- `lib/server/startup-rollout-flags.ts`
+- `lib/server/startup-rollout-flags.test.ts`
+- `lib/server/cf-env.ts`
+- `app/dashboard/startups/actions.ts`
+- `components/startup-admin-control-view.tsx`
+- `lib/server/startup-admin-data.ts`
+- `lib/server/startup-admin-data.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added centralized rollout-flag resolver for startup workspaces:
+  - `startup_dashboard`
+  - `github_agent`
+  - `auto_pr`
+  - defaults: startup dashboard on, github agent on, auto-pr off (suggest-only safe mode)
+- added optional env-level rollout overrides in server env contract:
+  - `STARTUP_DASHBOARD_ENABLED`
+  - `STARTUP_GITHUB_AGENT_ENABLED`
+  - `STARTUP_AUTO_PR_ENABLED`
+- added admin controls per startup workspace to update rollout flags in workspace metadata
+- startup dashboard/actions now enforce rollout flags consistently:
+  - startup dashboard can be disabled per workspace
+  - github integration can be rollout-disabled per workspace
+  - PR queue action now blocks in suggest-only mode when `auto_pr` is off
+  - startup status messaging now reflects rollout-disabled / suggest-only outcomes
+- startup admin timeline now summarizes rollout-flag update events
+
+What was not implemented:
+- no automated pilot rollout orchestrator job; rollout execution remains operator-driven via admin controls
+- no new post-rollout analytics route; rollout outcomes are visible via existing startup timeline/events
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-rollout-flags.test.ts lib/server/startup-admin-data.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-github-integration.test.ts lib/server/startup-agent-pr-workflow.test.ts lib/server/startup-model-policy.test.ts`
+
+---
+
+### 2026-04-04 - Startup observability + admin timeline SD-014
+
+Completed centralized startup structured-event instrumentation and workspace-level admin timeline visibility.
+
+Files updated:
+- `lib/server/startup-model-policy.ts`
+- `lib/server/startup-recommendation-lifecycle.ts`
+- `lib/server/startup-agent-pr-workflow.ts`
+- `lib/server/startup-github-integration.ts`
+- `lib/server/startup-implementation-plan.ts`
+- `app/dashboard/startup/actions.ts`
+- `lib/server/startup-admin-data.ts`
+- `lib/server/startup-admin-data.test.ts`
+- `components/startup-admin-control-view.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added centralized startup structured events for:
+  - model policy resolution (`startup_model_policy_resolved`)
+  - recommendation status transitions (`startup_recommendation_status_transitioned`)
+  - PR workflow queue/status transitions (`startup_pr_run_queued`, `startup_pr_run_status_updated`)
+  - GitHub integration lifecycle (session create/consume, installation connect/disconnect, allowlist updates)
+  - implementation plan generation (`startup_implementation_plan_created`)
+  - startup service-gate blocked outcomes (`startup_service_gate_blocked`)
+- added startup admin timeline read model:
+  - aggregates recent `startup_*` structured logs by `startup_workspace_id`
+  - includes actor extraction and deterministic summary shaping for audit readability
+- surfaced timeline panel per workspace in `/dashboard/startups`
+
+What was not implemented:
+- no new rollout-flag/suggest-only safety controls yet (`SD-015` remains next)
+- no dedicated standalone timeline route; timeline currently lives in startup admin control surface
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-admin-data.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-model-policy.test.ts lib/server/startup-agent-pr-workflow.test.ts lib/server/startup-recommendation-lifecycle.test.ts lib/server/startup-github-integration.test.ts lib/server/startup-implementation-plan.test.ts`
+
+---
+
+### 2026-04-04 - Startup/agency UI gating centralization SD-013
+
+Completed centralized dashboard UI gating adapters so startup and agency routes consume shared gate contracts instead of route-local entitlement branching.
+
+Files updated:
+- `lib/server/startup-service-gates.ts`
+- `lib/server/startup-service-gates.test.ts`
+- `lib/server/startup-github-integration.ts`
+- `lib/server/agency-access.ts`
+- `lib/server/agency-access.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `app/dashboard/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added centralized startup service-gate resolver:
+  - resolves startup bundle key once
+  - evaluates service entitlement + billing guard together
+  - exposes deterministic `enabled` + `blockedReason` for dashboard and action usage
+- switched startup GitHub connect and PR queue actions to shared service-gate checks instead of duplicated route-local entitlement/billing logic
+- switched startup dashboard modules to shared service-gate checks so PR controls and GitHub module reflect the same runtime gate contract as actions
+- added centralized agency dashboard UI-gate mapper and switched agency dashboard route gating checks to that contract
+
+What was not implemented:
+- no new observability timeline/event schema yet (`SD-014` remains next)
+- no expansion of service keys beyond existing startup/agency dashboard scope in this slice
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-service-gates.test.ts lib/server/agency-access.test.ts lib/server/service-billing-guard.test.ts lib/server/startup-github-integration.test.ts`
+
+---
+
+### 2026-04-04 - Startup Stripe billing mapping SD-012
+
+Completed centralized Stripe billing mapping + runtime billing-guard enforcement for startup GitHub/PR service paths.
+
+Files updated:
+- `supabase/migrations/028_service_billing_mappings.sql`
+- `lib/server/service-billing-guard.ts`
+- `lib/server/service-billing-guard.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added centralized billing mapping table:
+  - `service_billing_mappings` with Stripe provider/product/price linkage
+  - active/inactive state and billing mode metadata
+  - indexes, uniqueness constraints, trigger-managed timestamps, and RLS enabled
+- added runtime billing guard helper:
+  - free/trial entitlement modes bypass Stripe mapping requirements
+  - paid entitlement mode requires non-free workspace billing mode and active Stripe mapping
+  - deterministic blocked reasons for action-level routing
+- wired startup action guards:
+  - GitHub connect flow now applies billing guard for `github_integration`
+  - PR queue flow now applies billing guard for `agent_pr_execution`
+- surfaced startup UI status messages for billing-blocked redirects
+
+What was not implemented:
+- no `/dashboard/services` admin write-path yet for managing `service_billing_mappings` rows directly
+- no broader startup/agency UI gating cleanup yet (`SD-013` remains next)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/service-billing-guard.test.ts lib/server/startup-github-integration.test.ts lib/server/startup-agent-pr-workflow.test.ts lib/server/startup-implementation-plan.test.ts lib/server/startup-model-policy.test.ts`
+
+---
+
+### 2026-04-04 - Startup model policy routing SD-011
+
+Completed startup model-policy precedence and budget-guardrail wiring using centralized service model policies.
+
+Files updated:
+- `supabase/migrations/027_startup_model_policy_scope.sql`
+- `lib/server/startup-model-policy.ts`
+- `lib/server/startup-model-policy.test.ts`
+- `lib/server/startup-implementation-plan.ts`
+- `app/dashboard/startup/actions.ts`
+- `lib/server/startup-agent-pr-workflow.ts`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- extended centralized `service_model_policies` with startup workspace scope
+- added startup model resolver:
+  - precedence: `service_default` -> `bundle` -> `startup_workspace`
+  - budget guardrail evaluation against `max_cost_usd`
+  - fallback model/provider behavior for unsupported providers or budget exceedance
+- wired resolved model-policy metadata into:
+  - markdown implementation-plan generation metadata
+  - queued PR run metadata for agent execution traceability
+
+What was not implemented:
+- no Stripe mapping/billing guardrail linkage yet (`SD-012`)
+- no startup model policy admin UI editing surface yet (resolver/runtime only in this slice)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-model-policy.test.ts lib/server/startup-agent-pr-workflow.test.ts lib/server/startup-github-integration.test.ts lib/server/startup-implementation-plan.test.ts lib/server/startup-recommendation-lifecycle.test.ts lib/server/startup-dashboard-data.test.ts lib/server/startup-tracking-metrics.test.ts lib/server/startup-dashboard-shell.test.ts`
+
+---
+
+### 2026-04-04 - Startup agent PR workflow SD-010
+
+Completed recommendation-linked PR workflow records and status-sync transitions in startup dashboard execution flow.
+
+Files updated:
+- `supabase/migrations/026_startup_agent_pr_workflow.sql`
+- `lib/server/startup-agent-pr-workflow.ts`
+- `lib/server/startup-agent-pr-workflow.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added PR workflow schema:
+  - `startup_agent_pr_runs`
+  - `startup_agent_pr_run_events`
+  - startup-member RLS and status constraints
+- added server workflow helpers:
+  - queue run from approved recommendation + allowlisted repo
+  - run status transitions (`queued/running/pr_opened/merged/failed/...`)
+  - recommendation lifecycle sync:
+    - `approved -> in_progress` when queued
+    - `in_progress -> shipped` when PR opened
+    - `shipped -> validated` when PR merged
+    - `* -> failed` on run failure
+- wired startup dashboard PR module:
+  - queue PR run controls
+  - manual run status controls (`opened`, `merged`, `failed`)
+  - recent run status list
+
+What was not implemented:
+- no automatic branch/commit/PR creation worker yet (still operator/manual status-driving in this slice)
+- no external GitHub webhook ingestion yet for automatic status sync
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-agent-pr-workflow.test.ts lib/server/startup-github-integration.test.ts lib/server/startup-implementation-plan.test.ts lib/server/startup-recommendation-lifecycle.test.ts lib/server/startup-dashboard-data.test.ts lib/server/startup-tracking-metrics.test.ts lib/server/startup-dashboard-shell.test.ts`
+
+---
+
+### 2026-04-04 - Startup GitHub integration foundation SD-009
+
+Completed startup GitHub App integration foundation with install/session persistence, repo allowlist controls, callback handling, and centralized entitlement gating.
+
+Files updated:
+- `supabase/migrations/025_startup_github_integration_foundation.sql`
+- `lib/server/startup-github-integration.ts`
+- `lib/server/startup-github-integration.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/api/startup/github/callback/route.ts`
+- `app/dashboard/startup/page.tsx`
+- `lib/server/cf-env.ts`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added startup GitHub integration schema:
+  - installation linkage table
+  - callback session/state table
+  - repository allowlist table
+  - startup-member RLS policies and indexes
+- added server helpers for:
+  - state-token callback session creation/consumption
+  - installation upsert and disconnect flow
+  - repository allowlist normalization + persistence
+  - startup workspace `github_integration` entitlement resolution via centralized resolver
+- added startup dashboard controls:
+  - connect/reconnect action
+  - disconnect action
+  - repo allowlist save action
+  - callback route for GitHub install redirect completion
+
+What was not implemented:
+- no recommendation-to-PR execution pipeline yet (`SD-010`)
+- no PR lifecycle status sync back into recommendation states yet (`SD-010`)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-github-integration.test.ts lib/server/startup-implementation-plan.test.ts lib/server/startup-recommendation-lifecycle.test.ts lib/server/startup-dashboard-data.test.ts lib/server/startup-tracking-metrics.test.ts lib/server/startup-dashboard-shell.test.ts`
+
+---
+
+### 2026-04-04 - Startup markdown-to-plan slice SD-008
+
+Completed markdown-audit implementation-plan generation with team-lane task persistence and startup dashboard implementation-lane rendering.
+
+Files updated:
+- `supabase/migrations/024_startup_implementation_plan.sql`
+- `lib/server/startup-implementation-plan.ts`
+- `lib/server/startup-implementation-plan.test.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added implementation-plan schema:
+  - `startup_implementation_plans`
+  - `startup_implementation_plan_tasks`
+  - founder/dev/content/ops/cross-functional team-lane model
+  - confidence/evidence fields on tasks
+- added markdown-audit conversion helper:
+  - parses lane/priority/confidence markers from markdown bullets
+  - persists generated plan rows and tasks linked to startup workspace
+- added latest-plan query + lane-card aggregation helper for dashboard runtime
+- wired startup implementation module to show generated lane cards and latest task rows, while keeping burn-down context visible
+
+What was not implemented:
+- no GitHub App connect/install lifecycle yet (`SD-009`)
+- no agent PR execution pipeline yet (`SD-010`)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-implementation-plan.test.ts lib/server/startup-recommendation-lifecycle.test.ts lib/server/startup-dashboard-data.test.ts lib/server/startup-tracking-metrics.test.ts lib/server/startup-dashboard-shell.test.ts`
+
+---
+
+### 2026-04-04 - Startup recommendation lifecycle slice SD-007
+
+Completed normalized recommendation lifecycle modeling and wired startup dashboard funnel counts to persisted recommendation statuses.
+
+Files updated:
+- `supabase/migrations/023_startup_recommendation_lifecycle.sql`
+- `lib/server/startup-recommendation-lifecycle.ts`
+- `lib/server/startup-recommendation-lifecycle.test.ts`
+- `lib/server/startup-dashboard-data.ts`
+- `lib/server/startup-dashboard-data.test.ts`
+- `lib/server/startup-tracking-metrics.ts`
+- `lib/server/startup-tracking-metrics.test.ts`
+- `lib/server/startup-dashboard-shell.test.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added normalized recommendation lifecycle schema:
+  - `startup_recommendations`
+  - `startup_recommendation_status_events`
+  - status enum: `suggested`, `approved`, `in_progress`, `shipped`, `validated`, `failed`
+  - startup-member RLS for read/write paths
+- added lifecycle server helpers:
+  - transition validation + update + event write
+  - workspace status summary aggregation
+  - markdown-audit recommendation ingest mapping
+- extended startup dashboard data model to load recommendation rows
+- switched funnel metrics to recommendation-status counts when recommendations exist (with stable fallback for legacy workspaces)
+- updated startup dashboard PR-activity module to render full lifecycle funnel statuses
+
+What was not implemented:
+- no markdown-audit implementation-plan generation yet (`SD-008`)
+- no GitHub PR execution/status-sync pipeline yet (`SD-009`/`SD-010`)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-recommendation-lifecycle.test.ts lib/server/startup-dashboard-data.test.ts lib/server/startup-tracking-metrics.test.ts lib/server/startup-dashboard-shell.test.ts`
+
+---
+
+### 2026-04-04 - Startup tracking metrics slice SD-006
+
+Completed actionable startup tracking metrics and graph modules in the startup dashboard route.
+
+Files updated:
+- `lib/server/startup-tracking-metrics.ts`
+- `lib/server/startup-tracking-metrics.test.ts`
+- `lib/server/startup-dashboard-data.ts`
+- `lib/server/startup-dashboard-data.test.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added startup metric aggregation helper:
+  - implementation burn-down event series
+  - status funnel (`suggested`, `approved`, `in_progress`, `validated`)
+  - 7/14/30-day impact windows (average score snapshots)
+- extended startup report data model to include report creation timestamps used for burn-down calculations
+- wired `/dashboard/startup` to render real metric modules instead of placeholders for:
+  - implementation lane
+  - PR activity tracking panel
+
+What was not implemented:
+- no normalized recommendation table/status model yet (`SD-007`)
+- no GitHub PR ingestion/execution lifecycle yet (`SD-009`/`SD-010`)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-dashboard-shell.test.ts lib/server/startup-tracking-metrics.test.ts lib/server/startup-dashboard-data.test.ts`
+
+---
+
+### 2026-04-04 - Startup dashboard shell slice SD-005
+
+Completed a dedicated startup-specific dark dashboard shell with actionable module slots and helper-backed trend/backlog derivations.
+
+Files updated:
+- `app/dashboard/startup/page.tsx`
+- `lib/server/startup-dashboard-shell.ts`
+- `lib/server/startup-dashboard-shell.test.ts`
+- `components/dashboard-sidebar.tsx`
+- `app/dashboard/page.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added dedicated startup route `/dashboard/startup` with dark-first shell styling
+- added startup module slots:
+  - score trend
+  - action backlog
+  - implementation lane (placeholder for SD-008)
+  - PR activity (placeholder for SD-009/SD-010)
+- added server helpers for route data shaping:
+  - bounded trend series derivation from startup scans
+  - actionable backlog derivation from score/report coverage gaps
+- added startup nav entry in account sidebar and startup-dashboard deep link from `/dashboard` startup context panel
+
+What was not implemented:
+- no persistent recommendation lifecycle metrics yet (`SD-006`/`SD-007`)
+- implementation lane and PR activity remain placeholders in this slice
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-dashboard-shell.test.ts lib/server/startup-dashboard-data.test.ts lib/server/agency-dashboard-data.test.ts`
+
+---
+
+### 2026-04-04 - Startup workspace model slice SD-004
+
+Completed startup workspace tenancy + membership foundation and wired startup context selection into dashboard runtime.
+
+Files updated:
+- `supabase/migrations/022_startup_workspace_foundation.sql`
+- `app/dashboard/startups/page.tsx`
+- `app/dashboard/startups/actions.ts`
+- `components/startup-admin-control-view.tsx`
+- `lib/server/startup-admin-data.ts`
+- `lib/server/startup-dashboard-data.ts`
+- `lib/server/startup-dashboard-data.test.ts`
+- `app/dashboard/page.tsx`
+- `app/dashboard/new-scan/page.tsx`
+- `components/dashboard-sidebar.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added startup tenancy schema:
+  - `startup_workspaces`
+  - `startup_workspace_users` (roles: `founder`, `admin`, `member`, `viewer`)
+  - `startup_workspace_domains`
+- added startup linkage on runtime records:
+  - `scans.startup_workspace_id`
+  - `reports.startup_workspace_id`
+  - expanded `scans.run_source` check to include `startup_dashboard`
+- added member-read RLS helpers/policies for startup workspace tables and startup-linked scans/reports
+- added admin bootstrap surface at `/dashboard/startups`:
+  - create startup workspace
+  - create/attach startup member (creates auth user when needed)
+- added startup dashboard data helper and tests for:
+  - membership-driven workspace visibility
+  - selected-workspace fallback behavior
+- wired startup workspace selector/context into `/dashboard` and preserved context in `/dashboard/new-scan` back-navigation
+
+What was not implemented:
+- no standalone dark startup dashboard shell yet (`SD-005`)
+- no startup-specific actionable graph modules yet (`SD-006`)
+- scan API does not yet persist startup context on new runs in this slice
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/startup-dashboard-data.test.ts lib/server/agency-dashboard-data.test.ts lib/server/service-entitlements.test.ts`
+
+---
+
+### 2026-04-04 - Startup service control center slice SD-003
+
+Completed the centralized admin control center for service defaults, bundle toggles, scoped overrides, and audit-log change tracking.
+
+Files updated:
+- `app/dashboard/services/page.tsx`
+- `app/dashboard/services/actions.ts`
+- `components/service-control-admin-view.tsx`
+- `lib/server/service-control-admin-data.ts`
+- `components/dashboard-sidebar.tsx`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added new admin route `/dashboard/services` behind existing admin auth controls
+- added centralized service control actions:
+  - update per-service default mode (`free` / `paid` / `trial` / `off`) and active state
+  - update per-bundle service mapping (enabled + access mode + usage limit)
+  - update scoped entitlement overrides (`global`, `bundle_default`, `agency_account`, `agency_client`, `user`)
+- added Stripe placeholder mapping fields on bundle-service controls via metadata (`stripe.product_id`, `stripe.price_id`)
+- added structured audit logging for control-plane mutations with before/after payloads:
+  - `service_control_service_updated`
+  - `service_control_bundle_service_upserted`
+  - `service_control_override_upserted`
+- added admin sidebar navigation entry to access the service control center
+
+What was not implemented:
+- no startup workspace tenancy model changes yet (`SD-004`)
+- no startup dashboard route/UI yet (`SD-005`)
+- no billing runtime guardrail linkage to Stripe placeholders yet (`SD-012`)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/service-entitlements-contract.test.ts lib/server/service-entitlements.test.ts lib/server/agency-access.test.ts`
+
+---
+
+### 2026-04-04 - Startup entitlement resolver slice SD-002
+
+Completed centralized entitlement resolution logic with deterministic precedence and integrated it into agency entitlement reads with a rollout-safe fallback.
+
+Files updated:
+- `lib/server/service-entitlements.ts`
+- `lib/server/service-entitlements.test.ts`
+- `lib/server/agency-access.ts`
+- `lib/server/agency-access.test.ts`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added unified resolver functions:
+  - `resolveServiceEntitlement(...)`
+  - `resolveServiceEntitlements(...)`
+- enforced deterministic precedence:
+  - `service_default`
+  - `bundle_service`
+  - `global_override`
+  - `bundle_override`
+  - `agency_account_override`
+  - `agency_client_override`
+  - `user_override`
+- integrated agency entitlement path (`resolveAgencyFeatureEntitlements`) with centralized service resolution for:
+  - `agency_dashboard`
+  - `free_scan`
+  - `deep_audit`
+  - `geo_tracker`
+- kept `report_history_enabled` on legacy flag path for compatibility until mapped into service catalog
+- added fallback behavior to legacy agency flags when centralized tables are unavailable (`undefined_table` rollout safety)
+
+What was not implemented:
+- no startup dashboard/runtime UI gating refactor yet (`SD-013`)
+- no admin service-control UI yet (`SD-003`)
+- no billing runtime linkage yet (`SD-012`)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/service-entitlements-contract.test.ts lib/server/service-entitlements.test.ts lib/server/agency-access.test.ts`
+
+---
+
+### 2026-04-04 - Startup entitlement foundation slice SD-001
+
+Completed the centralized service/bundle schema foundation and typed contract layer.
+
+Files updated:
+- `supabase/migrations/021_service_entitlements_foundation.sql`
+- `lib/server/service-entitlements-contract.ts`
+- `lib/server/service-entitlements-contract.test.ts`
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `PLAYBOOK/startup-dashboard-entitlements-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+
+What was implemented:
+- added centralized entitlement schema migration:
+  - service catalog (`service_catalog`)
+  - bundle definitions (`service_bundles`)
+  - per-bundle service defaults (`service_bundle_services`)
+  - scope overrides (`service_entitlement_overrides`)
+  - scope-aware model policy table (`service_model_policies`)
+  - legacy agency-flag compatibility map (`service_legacy_flag_map`)
+- seeded initial service catalog and startup/agency bundles from the SD plan
+- seeded bundle-service defaults with explicit enabled/access-mode states
+- seeded legacy agency-flag mapping for `agency_dashboard_enabled`, `scan_launch_enabled`, `deep_audit_enabled`, and `geo_tracker_enabled`
+- added typed service and bundle key contract plus flag mapping in server code
+- added contract test coverage for key uniqueness and mapping validity
+
+What was not implemented:
+- no runtime entitlement resolver integration yet (`SD-002`)
+- no UI gating migration yet (`SD-013`)
+- no billing runtime mapping logic yet (`SD-012`)
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/service-entitlements-contract.test.ts`
+
+---
+
+### 2026-04-04 - Startup dashboard + entitlement planning sync
+
+Completed cross-doc state synchronization for the startup founder dashboard and centralized service-entitlement stream before implementation start.
+
+Files updated:
+- `docs/15-startup-dashboard-entitlements-plan.md`
+- `PLAYBOOK/startup-dashboard-entitlements-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/ORCHESTRATOR.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/README.md`
+
+What was implemented:
+- added the canonical bite-sized execution plan (`SD-001` ... `SD-015`) with dependencies, acceptance criteria, and immediate `SD-001` start steps
+- added startup-entitlements strategy playbook with non-negotiable centralization and rollout principles
+- registered `SD-001` ... `SD-015` in task registry and state history
+- updated orchestrator guidance to explicitly allow this stream in parallel only when launch is externally blocked and to keep it centrally gated/feature-flagged
+- updated current-state/open-work/docs index references to include the new stream and plan source
+
+What was not implemented:
+- no runtime code, schema migration, or UI changes from the `SD-*` stream yet
+- no entitlement resolver implementation yet (`SD-002` remains pending)
+- no GitHub integration implementation yet (`SD-009` remains pending)
+
+Verification:
+- planning/doc consistency pass across updated orchestrator/state/docs/playbook files
+
+---
+
 ### 2026-04-03 - Content quality-gate slice D5
 
 Completed publish-check snapshot persistence and operator history visibility.

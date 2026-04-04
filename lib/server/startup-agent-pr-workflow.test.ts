@@ -1,0 +1,250 @@
+import { describe, expect, it } from 'vitest';
+import {
+  queueStartupRecommendationPrRun,
+  updateStartupAgentPrRunStatus,
+} from './startup-agent-pr-workflow';
+
+function createWorkflowMock(options?: {
+  recommendationStatus?: 'approved' | 'in_progress' | 'shipped';
+  runStatus?: 'queued' | 'running' | 'pr_opened';
+}) {
+  const state = {
+    recommendationStatus: options?.recommendationStatus ?? ('approved' as 'approved' | 'in_progress' | 'shipped'),
+    runStatus: options?.runStatus ?? ('running' as 'queued' | 'running' | 'pr_opened'),
+    recommendationUpdates: [] as Array<Record<string, unknown>>,
+    runUpdates: [] as Array<Record<string, unknown>>,
+    runEvents: [] as Array<Record<string, unknown>>,
+    recommendationEvents: [] as Array<Record<string, unknown>>,
+    insertedRun: null as Record<string, unknown> | null,
+  };
+
+  const supabase = {
+    from(table: string) {
+      const filters: Record<string, unknown> = {};
+      let updatePayload: Record<string, unknown> | null = null;
+      let insertPayload: unknown = null;
+
+      const api = {
+        select() {
+          return this;
+        },
+        eq(field: string, value: unknown) {
+          filters[field] = value;
+          return this;
+        },
+        order() {
+          return this;
+        },
+        maybeSingle() {
+          if (table === 'startup_github_installations') {
+            return Promise.resolve({
+              data: { id: 'install-1', status: 'connected' },
+              error: null,
+            });
+          }
+          if (table === 'startup_github_installation_repositories') {
+            return Promise.resolve({
+              data: { id: 'repo-1', is_enabled: true },
+              error: null,
+            });
+          }
+          if (table === 'startup_recommendations') {
+            return Promise.resolve({
+              data: {
+                id: 'rec-1',
+                startup_workspace_id: 'ws-1',
+                scan_id: null,
+                report_id: null,
+                source_kind: 'markdown_audit',
+                source_ref: null,
+                title: 'Fix schema',
+                summary: null,
+                team_lane: 'dev',
+                priority: 'high',
+                status: state.recommendationStatus,
+                status_changed_at: '2026-04-04T00:00:00.000Z',
+                status_reason: null,
+                status_updated_by_user_id: null,
+                confidence: null,
+                evidence: {},
+                metadata: {},
+                created_by_user_id: 'user-1',
+                created_at: '2026-04-04T00:00:00.000Z',
+                updated_at: '2026-04-04T00:00:00.000Z',
+              },
+              error: null,
+            });
+          }
+          if (table === 'startup_agent_pr_runs') {
+            return Promise.resolve({
+              data: {
+                id: 'run-1',
+                startup_workspace_id: 'ws-1',
+                recommendation_id: 'rec-1',
+                repository_owner: 'acme',
+                repository_name: 'geo-pulse',
+                branch_name: 'agent/fix-schema',
+                pull_request_number: null,
+                pull_request_url: null,
+                status: state.runStatus,
+                error_message: null,
+                created_at: '2026-04-04T00:00:00.000Z',
+                completed_at: null,
+              },
+              error: null,
+            });
+          }
+          throw new Error(`Unexpected maybeSingle on ${table}`);
+        },
+        update(payload: Record<string, unknown>) {
+          updatePayload = payload;
+          if (table === 'startup_recommendations') {
+            state.recommendationUpdates.push(payload);
+            if (typeof payload.status === 'string') {
+              state.recommendationStatus = payload.status as typeof state.recommendationStatus;
+            }
+          }
+          if (table === 'startup_agent_pr_runs') {
+            state.runUpdates.push(payload);
+            if (typeof payload.status === 'string') {
+              state.runStatus = payload.status as typeof state.runStatus;
+            }
+          }
+          return this;
+        },
+        insert(payload: unknown) {
+          insertPayload = payload;
+          if (table === 'startup_agent_pr_run_events') {
+            state.runEvents.push(payload as Record<string, unknown>);
+            return Promise.resolve({ error: null });
+          }
+          if (table === 'startup_recommendation_status_events') {
+            state.recommendationEvents.push(payload as Record<string, unknown>);
+            return Promise.resolve({ error: null });
+          }
+          if (table === 'startup_agent_pr_runs') {
+            state.insertedRun = payload as Record<string, unknown>;
+            return this;
+          }
+          return Promise.resolve({ error: null });
+        },
+        limit() {
+          if (table === 'startup_agent_pr_runs') {
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'run-1',
+                  startup_workspace_id: 'ws-1',
+                  recommendation_id: 'rec-1',
+                  repository_owner: 'acme',
+                  repository_name: 'geo-pulse',
+                  branch_name:
+                    (updatePayload?.branch_name as string | null | undefined) ??
+                    ((state.insertedRun?.branch_name as string | undefined) ?? null),
+                  pull_request_number:
+                    (updatePayload?.pull_request_number as number | null | undefined) ?? null,
+                  pull_request_url: (updatePayload?.pull_request_url as string | null | undefined) ?? null,
+                  status:
+                    (updatePayload?.status as string | undefined) ??
+                    ((state.insertedRun?.status as string | undefined) ?? 'queued'),
+                  error_message: (updatePayload?.error_message as string | null | undefined) ?? null,
+                  created_at: '2026-04-04T00:00:00.000Z',
+                  completed_at: (updatePayload?.completed_at as string | null | undefined) ?? null,
+                },
+              ],
+              error: null,
+            });
+          }
+          if (table === 'startup_recommendations') {
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'rec-1',
+                  startup_workspace_id: 'ws-1',
+                  scan_id: null,
+                  report_id: null,
+                  source_kind: 'markdown_audit',
+                  source_ref: null,
+                  title: 'Fix schema',
+                  summary: null,
+                  team_lane: 'dev',
+                  priority: 'high',
+                  status: updatePayload?.status ?? state.recommendationStatus,
+                  status_changed_at: '2026-04-04T00:00:00.000Z',
+                  status_reason: updatePayload?.status_reason ?? null,
+                  status_updated_by_user_id: updatePayload?.status_updated_by_user_id ?? null,
+                  confidence: null,
+                  evidence: {},
+                  metadata: updatePayload?.metadata ?? {},
+                  created_by_user_id: 'user-1',
+                  created_at: '2026-04-04T00:00:00.000Z',
+                  updated_at: '2026-04-04T00:00:00.000Z',
+                },
+              ],
+              error: null,
+            });
+          }
+          throw new Error(`Unexpected limit on ${table}`);
+        },
+      };
+
+      return api;
+    },
+  } as any;
+
+  return { supabase, state };
+}
+
+describe('startup agent pr workflow', () => {
+  it('queues a PR run from approved recommendation and moves recommendation to in_progress', async () => {
+    const { supabase, state } = createWorkflowMock({ recommendationStatus: 'approved', runStatus: 'queued' });
+
+    const run = await queueStartupRecommendationPrRun({
+      supabase,
+      startupWorkspaceId: 'ws-1',
+      recommendationId: 'rec-1',
+      repoFullName: 'acme/geo-pulse',
+      queuedByUserId: 'user-1',
+    });
+
+    expect(run.status).toBe('queued');
+    expect(state.recommendationUpdates.some((payload) => payload.status === 'in_progress')).toBe(true);
+    expect(state.runEvents.some((event) => event.to_status === 'queued')).toBe(true);
+  });
+
+  it('syncs recommendation to shipped when PR is opened', async () => {
+    const { supabase, state } = createWorkflowMock({ recommendationStatus: 'in_progress', runStatus: 'running' });
+
+    const run = await updateStartupAgentPrRunStatus({
+      supabase,
+      startupWorkspaceId: 'ws-1',
+      runId: 'run-1',
+      toStatus: 'pr_opened',
+      changedByUserId: 'user-1',
+      pullRequestNumber: 42,
+      pullRequestUrl: 'https://github.com/acme/geo-pulse/pull/42',
+      branchName: 'agent/fix-schema',
+    });
+
+    expect(run.status).toBe('pr_opened');
+    expect(state.recommendationUpdates.some((payload) => payload.status === 'shipped')).toBe(true);
+    expect(state.runEvents.some((event) => event.to_status === 'pr_opened')).toBe(true);
+  });
+
+  it('syncs recommendation to validated when PR is merged', async () => {
+    const { supabase, state } = createWorkflowMock({ recommendationStatus: 'shipped', runStatus: 'pr_opened' });
+
+    const run = await updateStartupAgentPrRunStatus({
+      supabase,
+      startupWorkspaceId: 'ws-1',
+      runId: 'run-1',
+      toStatus: 'merged',
+      changedByUserId: 'user-1',
+      pullRequestNumber: 42,
+      pullRequestUrl: 'https://github.com/acme/geo-pulse/pull/42',
+    });
+
+    expect(run.status).toBe('merged');
+    expect(state.recommendationUpdates.some((payload) => payload.status === 'validated')).toBe(true);
+  });
+});

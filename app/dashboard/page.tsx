@@ -4,6 +4,8 @@ import { AgencyClientManagementView } from '@/components/agency-client-managemen
 import { signOut } from './actions';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getAgencyDashboardData } from '@/lib/server/agency-dashboard-data';
+import { buildAgencyDashboardUiGates } from '@/lib/server/agency-access';
+import { getStartupDashboardData } from '@/lib/server/startup-dashboard-data';
 import { isAdminEmail } from '@/lib/server/require-admin';
 
 export const dynamic = 'force-dynamic';
@@ -12,6 +14,7 @@ type Props = {
   searchParams?: Promise<{
     agencyAccount?: string;
     agencyClient?: string;
+    startupWorkspace?: string;
   }>;
 };
 
@@ -28,18 +31,28 @@ function gradeColor(grade: string | null): string {
   return 'bg-error/15 text-error';
 }
 
-function buildDashboardHref(accountId: string | null, clientId: string | null): string {
+function buildDashboardHref(args: {
+  agencyAccountId?: string | null;
+  agencyClientId?: string | null;
+  startupWorkspaceId?: string | null;
+}): string {
   const params = new URLSearchParams();
-  if (accountId) params.set('agencyAccount', accountId);
-  if (clientId) params.set('agencyClient', clientId);
+  if (args.agencyAccountId) params.set('agencyAccount', args.agencyAccountId);
+  if (args.agencyClientId) params.set('agencyClient', args.agencyClientId);
+  if (args.startupWorkspaceId) params.set('startupWorkspace', args.startupWorkspaceId);
   const query = params.toString();
   return query.length > 0 ? `/dashboard?${query}` : '/dashboard';
 }
 
-function buildNewScanHref(accountId: string | null, clientId: string | null): string {
+function buildNewScanHref(args: {
+  agencyAccountId?: string | null;
+  agencyClientId?: string | null;
+  startupWorkspaceId?: string | null;
+}): string {
   const params = new URLSearchParams();
-  if (accountId) params.set('agencyAccount', accountId);
-  if (clientId) params.set('agencyClient', clientId);
+  if (args.agencyAccountId) params.set('agencyAccount', args.agencyAccountId);
+  if (args.agencyClientId) params.set('agencyClient', args.agencyClientId);
+  if (args.startupWorkspaceId) params.set('startupWorkspace', args.startupWorkspaceId);
   const query = params.toString();
   return query.length > 0 ? `/dashboard/new-scan?${query}` : '/dashboard/new-scan';
 }
@@ -55,22 +68,30 @@ export default async function DashboardPage({ searchParams }: Props) {
     redirect('/login?next=/dashboard');
   }
 
-  const [{ data: scans, error: scansErr }, { data: reports }, agencyDashboard] = await Promise.all([
+  const [{ data: scans, error: scansErr }, { data: reports }, agencyDashboard, startupDashboard] = await Promise.all([
     supabase
       .from('scans')
       .select('id, url, domain, score, letter_grade, created_at')
       .eq('user_id', user.id)
       .is('agency_account_id', null)
+      .is('startup_workspace_id', null)
       .order('created_at', { ascending: false }),
     supabase
       .from('reports')
       .select('id, scan_id, type, email_delivered_at, pdf_generated_at, pdf_url')
-      .eq('user_id', user.id),
+      .eq('user_id', user.id)
+      .is('agency_account_id', null)
+      .is('startup_workspace_id', null),
     getAgencyDashboardData({
       supabase,
       userId: user.id,
       selectedAccountId: sp.agencyAccount ?? null,
       selectedClientId: sp.agencyClient ?? null,
+    }),
+    getStartupDashboardData({
+      supabase,
+      userId: user.id,
+      selectedWorkspaceId: sp.startupWorkspace ?? null,
     }),
   ]);
 
@@ -98,6 +119,13 @@ export default async function DashboardPage({ searchParams }: Props) {
     }
   }
 
+  const startupReportByScan = new Map<string, (typeof startupDashboard.reports)[number]>();
+  for (const report of startupDashboard.reports) {
+    if (report.scanId) {
+      startupReportByScan.set(report.scanId, report);
+    }
+  }
+
   const scanList = scans ?? [];
   const totalScans = scanList.length;
   const scores = scanList.map((s) => s.score).filter((s): s is number => s != null);
@@ -109,7 +137,9 @@ export default async function DashboardPage({ searchParams }: Props) {
     agencyDashboard.accounts.find((account) => account.id === agencyDashboard.selectedAccountId) ?? null;
   const selectedAgencyClient =
     selectedAgencyAccount?.clients.find((client) => client.id === agencyDashboard.selectedClientId) ?? null;
-  const agencyEntitlements = agencyDashboard.entitlements;
+  const agencyUiGates = buildAgencyDashboardUiGates(agencyDashboard.entitlements);
+  const selectedStartupWorkspace =
+    startupDashboard.workspaces.find((workspace) => workspace.id === startupDashboard.selectedWorkspaceId) ?? null;
 
   return (
     <section className="min-h-[60vh]">
@@ -117,13 +147,19 @@ export default async function DashboardPage({ searchParams }: Props) {
         <div>
           <p className="font-label text-sm font-semibold uppercase tracking-widest text-primary">Account</p>
           <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">
-            {agencyDashboard.accounts.length > 0 ? 'Dashboard' : 'Your scans'}
+            {agencyDashboard.accounts.length > 0 || startupDashboard.workspaces.length > 0
+              ? 'Dashboard'
+              : 'Your scans'}
           </h1>
           <p className="mt-1 font-body text-on-surface-variant">{user.email}</p>
         </div>
         <div className="flex items-center gap-3">
           <Link
-            href="/dashboard/new-scan"
+            href={buildNewScanHref({
+              agencyAccountId: agencyDashboard.selectedAccountId,
+              agencyClientId: agencyDashboard.selectedClientId,
+              startupWorkspaceId: startupDashboard.selectedWorkspaceId,
+            })}
             className="rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
           >
             New scan
@@ -144,6 +180,155 @@ export default async function DashboardPage({ searchParams }: Props) {
         </div>
       </div>
 
+      {startupDashboard.workspaces.length > 0 ? (
+        <section className="mt-8 rounded-2xl bg-surface-container-low p-6 shadow-float">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Startup</p>
+              <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
+                {selectedStartupWorkspace?.name ??
+                  startupDashboard.workspaces[0]?.name ??
+                  'Startup workspace'}
+              </h2>
+              <p className="mt-1 max-w-2xl font-body text-sm text-on-surface-variant">
+                Founder/team workspace context for startup-specific dashboard tracking and rollout.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {startupDashboard.workspaces.map((workspace) => (
+                <Link
+                  key={workspace.id}
+                  href={buildDashboardHref({ startupWorkspaceId: workspace.id })}
+                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
+                    workspace.id === startupDashboard.selectedWorkspaceId
+                      ? 'bg-primary text-on-primary'
+                      : 'bg-surface-container-high text-on-background hover:bg-surface'
+                  }`}
+                >
+                  {workspace.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Link
+              href={buildNewScanHref({
+                startupWorkspaceId: startupDashboard.selectedWorkspaceId,
+                agencyAccountId: agencyDashboard.selectedAccountId,
+                agencyClientId: agencyDashboard.selectedClientId,
+              })}
+              className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition hover:opacity-90"
+            >
+              New startup scan
+            </Link>
+            <Link
+              href={
+                startupDashboard.selectedWorkspaceId
+                  ? `/dashboard/startup?startupWorkspace=${startupDashboard.selectedWorkspaceId}`
+                  : '/dashboard/startup'
+              }
+              className="rounded-xl bg-surface-container-high px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface"
+            >
+              Open startup dashboard
+            </Link>
+            <span className="rounded-xl bg-surface-container-high px-4 py-2 text-sm font-medium text-on-surface-variant">
+              Role: {selectedStartupWorkspace?.role ?? 'member'}
+            </span>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Startup scans</p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {startupDashboard.scans.length}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Deep audits</p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {startupDashboard.reports.filter((report) => report.type === 'deep_audit').length}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Workspace</p>
+              <p className="mt-1 font-body text-sm text-on-background">
+                {selectedStartupWorkspace?.workspaceKey ?? '-'}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Domain</p>
+              <p className="mt-1 font-body text-sm text-on-background">
+                {selectedStartupWorkspace?.canonicalDomain ?? '-'}
+              </p>
+            </div>
+          </div>
+
+          <ul className="mt-8 space-y-4">
+            {startupDashboard.scans.length === 0 ? (
+              <li className="rounded-xl bg-surface-container-lowest p-6 text-center font-body text-on-surface-variant">
+                No startup scans are linked to this workspace yet.
+              </li>
+            ) : (
+              startupDashboard.scans.map((scan) => {
+                const report = startupReportByScan.get(scan.id);
+                const hasPdf = report?.type === 'deep_audit' && !!report.pdfUrl;
+                return (
+                  <li key={scan.id} className="rounded-xl bg-surface-container-lowest px-5 py-5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="font-headline text-lg font-semibold text-on-background">
+                          {scan.domain}
+                        </span>
+                        {scan.letterGrade ? (
+                          <span
+                            className={`inline-flex items-center rounded-lg px-2.5 py-0.5 text-xs font-bold ${gradeColor(
+                              scan.letterGrade
+                            )}`}
+                          >
+                            {scan.letterGrade}
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="text-right text-sm text-on-surface-variant">
+                        <div>{scan.score != null ? `${scan.score}/100` : '-'}</div>
+                        <div className="text-xs">{formatDate(scan.createdAt)}</div>
+                      </div>
+                    </div>
+                    <p className="mt-1 truncate font-body text-sm text-on-surface-variant">{scan.url}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded-lg bg-surface-container-high px-2.5 py-1 text-on-surface-variant">
+                        {scan.runSource}
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-3 border-t border-outline-variant/10 pt-3 font-body text-sm">
+                      <Link
+                        href={`/results/${scan.id}`}
+                        className="inline-flex items-center gap-1 font-medium text-tertiary hover:underline"
+                      >
+                        <span className="material-symbols-outlined text-sm">visibility</span>
+                        View results
+                      </Link>
+                      {hasPdf ? (
+                        <a
+                          href={report?.pdfUrl ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 font-medium text-tertiary hover:underline"
+                        >
+                          <span className="material-symbols-outlined text-sm">download</span>
+                          Download PDF
+                        </a>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </section>
+      ) : null}
+
       {agencyDashboard.accounts.length > 0 ? (
         <section className="mt-8 rounded-2xl bg-surface-container-low p-6 shadow-float">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -161,7 +346,7 @@ export default async function DashboardPage({ searchParams }: Props) {
               {agencyDashboard.accounts.map((account) => (
                 <Link
                   key={account.id}
-                  href={buildDashboardHref(account.id, null)}
+                  href={buildDashboardHref({ agencyAccountId: account.id })}
                   className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
                     account.id === agencyDashboard.selectedAccountId
                       ? 'bg-primary text-on-primary'
@@ -175,9 +360,13 @@ export default async function DashboardPage({ searchParams }: Props) {
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2">
-            {agencyEntitlements.scanLaunchEnabled ? (
+            {agencyUiGates.scanLaunch ? (
               <Link
-                href={buildNewScanHref(agencyDashboard.selectedAccountId, agencyDashboard.selectedClientId)}
+                href={buildNewScanHref({
+                  agencyAccountId: agencyDashboard.selectedAccountId,
+                  agencyClientId: agencyDashboard.selectedClientId,
+                  startupWorkspaceId: startupDashboard.selectedWorkspaceId,
+                })}
                 className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition hover:opacity-90"
               >
                 New client scan
@@ -188,7 +377,7 @@ export default async function DashboardPage({ searchParams }: Props) {
               </span>
             )}
             <Link
-              href={buildDashboardHref(agencyDashboard.selectedAccountId, null)}
+              href={buildDashboardHref({ agencyAccountId: agencyDashboard.selectedAccountId })}
               className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
                 agencyDashboard.selectedClientId === null
                   ? 'bg-primary text-on-primary'
@@ -200,7 +389,10 @@ export default async function DashboardPage({ searchParams }: Props) {
             {selectedAgencyAccount?.clients.map((client) => (
               <Link
                 key={client.id}
-                href={buildDashboardHref(selectedAgencyAccount.id, client.id)}
+                href={buildDashboardHref({
+                  agencyAccountId: selectedAgencyAccount.id,
+                  agencyClientId: client.id,
+                })}
                 className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
                   client.id === agencyDashboard.selectedClientId
                     ? 'bg-primary text-on-primary'
@@ -212,7 +404,7 @@ export default async function DashboardPage({ searchParams }: Props) {
             ))}
           </div>
 
-          {!agencyEntitlements.agencyDashboardEnabled ? (
+          {!agencyUiGates.agencyDashboard ? (
             <div className="mt-6 rounded-xl bg-surface-container-lowest px-5 py-5 text-sm text-on-surface-variant">
               The agency dashboard module is disabled for this account. GEO-Pulse admin can re-enable it from
               the agency control plane.
@@ -249,7 +441,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                 </div>
               </div>
 
-              {agencyEntitlements.geoTrackerEnabled ? (
+              {agencyUiGates.geoTracker ? (
                 <div className="mt-4 rounded-xl bg-tertiary/10 px-4 py-4 text-sm text-on-background">
                   GEO tracker module is enabled for this agency account. The dedicated agency tracker surface is still
                   pending, but the entitlement is now live and preserved in control state.
@@ -267,7 +459,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                 selectedClientDomains={agencyDashboard.selectedClientDomains}
               />
 
-              {agencyEntitlements.reportHistoryEnabled ? (
+              {agencyUiGates.reportHistory ? (
                 <ul className="mt-8 space-y-4">
                   {agencyDashboard.scans.length === 0 ? (
                     <li className="rounded-xl bg-surface-container-lowest p-6 text-center font-body text-on-surface-variant">

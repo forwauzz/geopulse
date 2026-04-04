@@ -1,6 +1,6 @@
 # Current State
 
-Last consolidated: 2026-04-02
+Last consolidated: 2026-04-04
 
 ## Product Status
 
@@ -125,6 +125,80 @@ Current truth:
 - the sixth implementation slice is now in repo too: agency/client model policy now affects runtime for Gemini-backed `free_scan` and `deep_audit` paths, with requested/effective model lineage stamped onto scan metadata and deep-audit run config
 - the seventh implementation slice is now in repo too: agency feature entitlements now gate live product behavior for dashboard visibility, scan launch, report history, deep-audit CTA/access, and the first GEO-tracker entitlement state
 - what remains is deeper polish around agency-triggered audit UX, richer client-domain control, broader agency self-service controls, and live non-Gemini provider execution
+- a new startup-founder planning stream is now frozen in `docs/15-startup-dashboard-entitlements-plan.md` with bite-sized tasks (`SD-001` ... `SD-015`) for:
+  - centralized service catalog + bundles + entitlement overrides
+  - dark startup dashboard with actionable trend tracking and graphs
+  - markdown-audit-to-implementation planning workflow
+  - GitHub App integration and agent PR lifecycle
+  - multi-model policy routing by service/bundle/workspace
+- a companion strategy note now exists at `PLAYBOOK/startup-dashboard-entitlements-v1.md`
+- `SD-001` is now in repo:
+  - migration `supabase/migrations/021_service_entitlements_foundation.sql`
+  - typed keys/contracts in `lib/server/service-entitlements-contract.ts`
+  - contract tests in `lib/server/service-entitlements-contract.test.ts`
+- `SD-002` is now in repo:
+  - unified entitlement resolver `lib/server/service-entitlements.ts`
+  - resolver tests `lib/server/service-entitlements.test.ts`
+  - agency entitlement integration + rollout-safe legacy fallback in `lib/server/agency-access.ts`
+  - updated tests in `lib/server/agency-access.test.ts`
+- `SD-003` is now in repo:
+  - admin control page `/dashboard/services`
+  - server actions for service defaults, bundle mappings, and scoped overrides
+  - structured audit-log events for before/after entitlement changes
+  - admin sidebar navigation link for service controls
+- `SD-004` is now in repo:
+  - startup workspace tenancy schema (`startup_workspaces`, `startup_workspace_users`, `startup_workspace_domains`)
+  - startup admin bootstrap surface at `/dashboard/startups`
+  - startup membership/context resolver on `/dashboard` (workspace selector + workspace-linked scan/report history)
+  - startup dashboard data helper tests for membership/context selection behavior
+- `SD-005` is now in repo:
+  - dedicated startup route `/dashboard/startup`
+  - dark-first startup shell with module slots (`score trend`, `action backlog`, `implementation lane`, `PR activity`)
+  - trend/backlog helper derivations + tests in `lib/server/startup-dashboard-shell.ts`
+- `SD-006` is now in repo:
+  - startup tracking metric helper in `lib/server/startup-tracking-metrics.ts`
+  - startup dashboard modules now render real burn-down, funnel, and 7/14/30-day impact windows from workspace scan/report data
+  - metric aggregation tests in `lib/server/startup-tracking-metrics.test.ts`
+- `SD-007` is now in repo:
+  - normalized recommendation lifecycle schema via `supabase/migrations/023_startup_recommendation_lifecycle.sql`
+  - transition + summary server helpers in `lib/server/startup-recommendation-lifecycle.ts`
+  - startup dashboard funnel now sourced from recommendation statuses (`suggested`, `approved`, `in_progress`, `shipped`, `validated`, `failed`)
+- `SD-008` is now in repo:
+  - implementation-plan schema via `supabase/migrations/024_startup_implementation_plan.sql`
+  - markdown-audit parser + plan generation/query helpers in `lib/server/startup-implementation-plan.ts`
+  - startup implementation module now renders team-lane cards from the latest generated plan
+- `SD-009` is now in repo:
+  - GitHub integration schema via `supabase/migrations/025_startup_github_integration_foundation.sql`
+  - startup GitHub install/session/allowlist helpers in `lib/server/startup-github-integration.ts`
+  - startup connect/disconnect + repo-allowlist controls on `/dashboard/startup` with callback handling route
+  - startup GitHub controls are now entitlement-gated through centralized `github_integration` resolver flow
+- `SD-010` is now in repo:
+  - PR execution schema via `supabase/migrations/026_startup_agent_pr_workflow.sql`
+  - recommendation-linked PR run helpers and status-sync logic in `lib/server/startup-agent-pr-workflow.ts`
+  - startup dashboard PR module now supports queue/open/merge/fail control flow with recommendation lifecycle sync
+- `SD-011` is now in repo:
+  - centralized startup model-policy workspace scope extension via `supabase/migrations/027_startup_model_policy_scope.sql`
+  - deterministic startup model resolver (`service_default` -> `bundle` -> `startup_workspace`) in `lib/server/startup-model-policy.ts`
+  - budget guardrail + fallback model handling now covered by startup model-policy tests
+  - model-policy metadata now stamped into startup planning and PR workflow runtime metadata
+- `SD-012` is now in repo:
+  - Stripe billing mapping schema via `supabase/migrations/028_service_billing_mappings.sql`
+  - centralized runtime billing guard in `lib/server/service-billing-guard.ts`
+  - startup GitHub connect and PR queue actions now enforce billing guard checks before execution
+  - startup dashboard now surfaces explicit billing-blocked status messaging for GitHub/PR flows
+- `SD-013` is now in repo:
+  - centralized startup UI/action service gates in `lib/server/startup-service-gates.ts`
+  - startup page and actions now consume shared gate outputs (no route-local entitlement/billing branching)
+  - agency dashboard rendering now consumes centralized UI-gate mapping from `lib/server/agency-access.ts`
+- `SD-014` is now in repo:
+  - startup service/model/recommendation/GitHub/PR workflows now emit structured startup events with workspace + actor metadata
+  - startup admin control page now includes per-workspace startup timeline cards sourced from structured logs
+  - startup timeline read model is centralized in `lib/server/startup-admin-data.ts` with focused tests
+- `SD-015` is now in repo:
+  - startup rollout flags are centralized (`startup_dashboard`, `github_agent`, `auto_pr`) with suggest-only (`auto_pr=false`) safe default
+  - startup admin control now supports per-workspace rollout toggle controls
+  - startup dashboard/actions now enforce rollout flags consistently, including rollout-disabled and suggest-only outcomes
+- next startup stream step is pilot rollout execution using SD-015 controls
 
 ## What Is Implemented
 

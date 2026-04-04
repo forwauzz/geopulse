@@ -66,12 +66,15 @@ export function DashboardSidebar({ userEmail, isAdmin }: DashboardSidebarProps) 
 
   const accountItems: NavItem[] = [
     { href: '/dashboard', label: 'Scans', icon: 'space_dashboard' },
+    { href: '/dashboard/startup', label: 'Startup', icon: 'rocket' },
     { href: '/', label: 'New scan', icon: 'add_circle' },
     { href: '/blog', label: 'Blog', icon: 'article' },
   ];
 
   const adminItems: NavItem[] = [
     { href: '/dashboard/agencies', label: 'Agencies', icon: 'groups' },
+    { href: '/dashboard/startups', label: 'Startups', icon: 'rocket_launch' },
+    { href: '/dashboard/services', label: 'Services', icon: 'tune' },
     { href: '/dashboard/attribution', label: 'Attribution', icon: 'ads_click' },
     { href: '/dashboard/content', label: 'Content', icon: 'edit_square' },
     { href: '/dashboard/content/launch', label: 'Launch readiness', icon: 'rocket_launch' },

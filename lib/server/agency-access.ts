@@ -1,3 +1,5 @@
+import { resolveServiceEntitlements } from './service-entitlements';
+
 type SupabaseLike = {
   from(table: string): any;
 };
@@ -20,6 +22,14 @@ export type AgencyFeatureEntitlements = {
   readonly geoTrackerEnabled: boolean;
 };
 
+export type AgencyDashboardUiGates = {
+  readonly agencyDashboard: boolean;
+  readonly scanLaunch: boolean;
+  readonly reportHistory: boolean;
+  readonly deepAudit: boolean;
+  readonly geoTracker: boolean;
+};
+
 const DEFAULT_ENTITLEMENTS: AgencyFeatureEntitlements = {
   agencyDashboardEnabled: true,
   scanLaunchEnabled: true,
@@ -27,6 +37,27 @@ const DEFAULT_ENTITLEMENTS: AgencyFeatureEntitlements = {
   deepAuditEnabled: true,
   geoTrackerEnabled: false,
 };
+
+export function buildAgencyDashboardUiGates(
+  entitlements: AgencyFeatureEntitlements
+): AgencyDashboardUiGates {
+  return {
+    agencyDashboard: entitlements.agencyDashboardEnabled,
+    scanLaunch: entitlements.scanLaunchEnabled,
+    reportHistory: entitlements.reportHistoryEnabled,
+    deepAudit: entitlements.deepAuditEnabled,
+    geoTracker: entitlements.geoTrackerEnabled,
+  };
+}
+
+function shouldFallbackToLegacyEntitlements(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = (error as { code?: string }).code ?? '';
+  const message = String((error as { message?: unknown }).message ?? '');
+  if (code === '42P01') return true; // undefined_table
+  if (message.includes('Unexpected table')) return true; // test-mock compatibility
+  return false;
+}
 
 async function loadFeatureFlag(args: {
   readonly supabase: SupabaseLike;
@@ -114,44 +145,69 @@ export async function resolveAgencyFeatureEntitlements(args: {
     return DEFAULT_ENTITLEMENTS;
   }
 
-  const [
-    agencyDashboardEnabled,
-    scanLaunchEnabled,
-    reportHistoryEnabled,
-    deepAuditEnabled,
-    geoTrackerEnabled,
-  ] = await Promise.all([
-    loadFeatureFlag({
+  try {
+    const resolved = await resolveServiceEntitlements({
       supabase,
+      serviceKeys: ['agency_dashboard', 'free_scan', 'deep_audit', 'geo_tracker'],
       agencyAccountId,
       agencyClientId,
-      flagKey: 'agency_dashboard_enabled',
-    }),
-    loadFeatureFlag({
-      supabase,
-      agencyAccountId,
-      agencyClientId,
-      flagKey: 'scan_launch_enabled',
-    }),
-    loadFeatureFlag({
+    });
+
+    // `report_history_enabled` is still legacy-flag-backed until it is mapped as a service key.
+    const reportHistoryEnabled = await loadFeatureFlag({
       supabase,
       agencyAccountId,
       agencyClientId,
       flagKey: 'report_history_enabled',
-    }),
-    loadFeatureFlag({
-      supabase,
-      agencyAccountId,
-      agencyClientId,
-      flagKey: 'deep_audit_enabled',
-    }),
-    loadFeatureFlag({
-      supabase,
-      agencyAccountId,
-      agencyClientId,
-      flagKey: 'geo_tracker_enabled',
-    }),
-  ]);
+    });
+
+    return {
+      agencyDashboardEnabled:
+        resolved['agency_dashboard']?.enabled ?? DEFAULT_ENTITLEMENTS.agencyDashboardEnabled,
+      scanLaunchEnabled: resolved['free_scan']?.enabled ?? DEFAULT_ENTITLEMENTS.scanLaunchEnabled,
+      reportHistoryEnabled: reportHistoryEnabled ?? DEFAULT_ENTITLEMENTS.reportHistoryEnabled,
+      deepAuditEnabled: resolved['deep_audit']?.enabled ?? DEFAULT_ENTITLEMENTS.deepAuditEnabled,
+      geoTrackerEnabled: resolved['geo_tracker']?.enabled ?? DEFAULT_ENTITLEMENTS.geoTrackerEnabled,
+    };
+  } catch (error) {
+    if (!shouldFallbackToLegacyEntitlements(error)) {
+      throw error;
+    }
+  }
+
+  const [agencyDashboardEnabled, scanLaunchEnabled, reportHistoryEnabled, deepAuditEnabled, geoTrackerEnabled] =
+    await Promise.all([
+      loadFeatureFlag({
+        supabase,
+        agencyAccountId,
+        agencyClientId,
+        flagKey: 'agency_dashboard_enabled',
+      }),
+      loadFeatureFlag({
+        supabase,
+        agencyAccountId,
+        agencyClientId,
+        flagKey: 'scan_launch_enabled',
+      }),
+      loadFeatureFlag({
+        supabase,
+        agencyAccountId,
+        agencyClientId,
+        flagKey: 'report_history_enabled',
+      }),
+      loadFeatureFlag({
+        supabase,
+        agencyAccountId,
+        agencyClientId,
+        flagKey: 'deep_audit_enabled',
+      }),
+      loadFeatureFlag({
+        supabase,
+        agencyAccountId,
+        agencyClientId,
+        flagKey: 'geo_tracker_enabled',
+      }),
+    ]);
 
   return {
     agencyDashboardEnabled: agencyDashboardEnabled ?? DEFAULT_ENTITLEMENTS.agencyDashboardEnabled,
