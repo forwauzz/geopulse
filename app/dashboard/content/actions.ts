@@ -12,6 +12,7 @@ import { evaluateContentDestinationHealth } from '@/lib/server/content-destinati
 import { mergeArticleMetadata } from '@/lib/server/content-article-metadata';
 import { appendContentPublishCheckSnapshot } from '@/lib/server/content-publish-check-history';
 import { seedTopicPageItems } from '@/lib/server/content-topic-page-admin';
+import { seedTopicRegistryBatch } from '@/lib/server/content-topic-registry-seed';
 import { evaluateContentPublishChecks, prepareContentForPublish } from '@/lib/server/content-publishing';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
 
@@ -106,6 +107,295 @@ export async function seedTopicPagesFromClusters() {
   for (const topicKey of result.topicKeys) {
     revalidatePath(`/blog/topic/${topicKey}`);
   }
+}
+
+export async function seedTopicRegistryBatchOne() {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  await seedTopicRegistryBatch(actionContext.adminDb, 'batch_1', actionContext.user.id);
+  revalidatePath('/dashboard/content');
+}
+
+export async function seedTopicRegistryBatchTwo() {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  await seedTopicRegistryBatch(actionContext.adminDb, 'batch_2', actionContext.user.id);
+  revalidatePath('/dashboard/content');
+}
+
+export async function seedTopicRegistryBatchThree() {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  await seedTopicRegistryBatch(actionContext.adminDb, 'batch_3', actionContext.user.id);
+  revalidatePath('/dashboard/content');
+}
+
+export async function updateContentQueueAssignment(formData: FormData) {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  const contentId = String(formData.get('contentId') ?? '').trim();
+  const queueOwner = String(formData.get('queueOwner') ?? '').trim();
+  const queueTargetWeek = String(formData.get('queueTargetWeek') ?? '').trim();
+
+  if (!contentId) {
+    throw new Error('Missing content id.');
+  }
+
+  const existingItem = await createContentAdminData(actionContext.adminDb).getContentItemDetail(contentId);
+  if (!existingItem) {
+    throw new Error('Content item not found.');
+  }
+
+  const metadata = { ...(existingItem.metadata ?? {}) };
+  if (queueOwner) metadata['queue_owner'] = queueOwner;
+  else delete metadata['queue_owner'];
+
+  if (queueTargetWeek) metadata['queue_target_week'] = queueTargetWeek;
+  else delete metadata['queue_target_week'];
+
+  const { error } = await actionContext.adminDb
+    .from('content_items')
+    .update({ metadata })
+    .eq('content_id', contentId);
+
+  if (error) throw error;
+
+  revalidatePath('/dashboard/content');
+  revalidatePath(`/dashboard/content/${contentId}`);
+}
+
+type QueueStatus = 'brief' | 'draft' | 'review' | 'approved';
+
+function readQueueStatus(value: FormDataEntryValue | null): QueueStatus | null {
+  const text = String(value ?? '').trim();
+  if (text === 'brief' || text === 'draft' || text === 'review' || text === 'approved') {
+    return text;
+  }
+  return null;
+}
+
+function readMetadataString(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === 'string' ? value : null;
+}
+
+export async function bulkAdvanceContentQueueStatus(formData: FormData) {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  const fromStatus = readQueueStatus(formData.get('fromStatus'));
+  const toStatus = readQueueStatus(formData.get('toStatus'));
+  const queueOwner = String(formData.get('queueOwner') ?? '').trim().toLowerCase();
+  const queueWeek = String(formData.get('queueWeek') ?? '').trim();
+  const maxItemsRaw = Number.parseInt(String(formData.get('maxItems') ?? '25'), 10);
+  const maxItems = Number.isFinite(maxItemsRaw)
+    ? Math.max(1, Math.min(maxItemsRaw, 100))
+    : 25;
+
+  const allowedTransitions = new Set(['brief:draft', 'draft:review', 'review:approved']);
+  const transitionKey = `${fromStatus ?? ''}:${toStatus ?? ''}`;
+  if (!allowedTransitions.has(transitionKey)) {
+    throw new Error('Invalid queue transition.');
+  }
+
+  const { data, error } = await actionContext.adminDb
+    .from('content_items')
+    .select('content_id,status,metadata')
+    .eq('content_type', 'article')
+    .eq('status', fromStatus)
+    .order('updated_at', { ascending: false })
+    .limit(250);
+
+  if (error) throw error;
+
+  const rows = ((data ?? []) as Array<{
+    content_id?: unknown;
+    status?: unknown;
+    metadata?: unknown;
+  }>)
+    .map((row) => ({
+      content_id: typeof row.content_id === 'string' ? row.content_id : '',
+      status: typeof row.status === 'string' ? row.status : '',
+      metadata:
+        typeof row.metadata === 'object' && row.metadata !== null
+          ? (row.metadata as Record<string, unknown>)
+          : {},
+    }))
+    .filter((row) => row.content_id);
+
+  const filteredRows = rows.filter((row) => {
+    if (queueOwner) {
+      const owner = readMetadataString(row.metadata, 'queue_owner')?.toLowerCase() ?? '';
+      if (!owner.includes(queueOwner)) return false;
+    }
+    if (queueWeek) {
+      const week = readMetadataString(row.metadata, 'queue_target_week') ?? '';
+      if (week !== queueWeek) return false;
+    }
+    return true;
+  });
+
+  const targets = filteredRows.slice(0, maxItems);
+  for (const row of targets) {
+    const { error: updateError } = await actionContext.adminDb
+      .from('content_items')
+      .update({ status: toStatus })
+      .eq('content_id', row.content_id);
+    if (updateError) throw updateError;
+  }
+
+  revalidatePath('/dashboard/content');
+}
+
+export async function publishApprovedBlogWave(formData: FormData) {
+  const actionContext = await loadAdminActionContext();
+  if (!actionContext.ok) {
+    throw new Error(actionContext.message);
+  }
+
+  const queueOwner = String(formData.get('queueOwner') ?? '').trim().toLowerCase();
+  const queueWeek = String(formData.get('queueWeek') ?? '').trim();
+  const maxItemsRaw = Number.parseInt(String(formData.get('maxItems') ?? '25'), 10);
+  const maxItems = Number.isFinite(maxItemsRaw)
+    ? Math.max(1, Math.min(maxItemsRaw, 100))
+    : 25;
+
+  const { data, error } = await actionContext.adminDb
+    .from('content_items')
+    .select(
+      'content_id,slug,title,status,content_type,topic_cluster,cta_goal,source_type,source_links,draft_markdown,canonical_url,metadata,published_at,updated_at'
+    )
+    .eq('content_type', 'article')
+    .eq('status', 'approved')
+    .order('updated_at', { ascending: false })
+    .limit(500);
+
+  if (error) throw error;
+
+  const candidates = ((data ?? []) as Array<{
+    content_id: string;
+    slug: string | null;
+    title: string | null;
+    status: string | null;
+    content_type: string;
+    cta_goal: string | null;
+    source_type: string | null;
+    source_links: string[] | null;
+    draft_markdown: string | null;
+    canonical_url: string | null;
+    metadata: Record<string, unknown> | null;
+    published_at: string | null;
+    updated_at: string | null;
+    topic_cluster: string | null;
+  }>).filter((row) => {
+    if (queueOwner) {
+      const owner =
+        typeof row.metadata?.['queue_owner'] === 'string'
+          ? String(row.metadata?.['queue_owner']).toLowerCase()
+          : '';
+      if (!owner.includes(queueOwner)) return false;
+    }
+    if (queueWeek) {
+      const week =
+        typeof row.metadata?.['queue_target_week'] === 'string'
+          ? String(row.metadata?.['queue_target_week'])
+          : '';
+      if (week !== queueWeek) return false;
+    }
+    return true;
+  });
+
+  const selected = candidates.slice(0, maxItems);
+  for (const row of selected) {
+    try {
+      const publishChecks = evaluateContentPublishChecks({
+        content_type: row.content_type,
+        slug: row.slug,
+        title: row.title,
+        status: row.status,
+        topic_cluster: row.topic_cluster,
+        cta_goal: row.cta_goal,
+        source_type: row.source_type,
+        source_links: Array.isArray(row.source_links) ? row.source_links : [],
+        draft_markdown: row.draft_markdown,
+        canonical_url: row.canonical_url,
+        metadata: row.metadata,
+        published_at: row.published_at,
+        updated_at: row.updated_at,
+      });
+      const metadataWithSnapshot = appendContentPublishCheckSnapshot(row.metadata, publishChecks);
+
+      assertEditorialReadyForLaunch({
+        title: row.title ?? '',
+        draftMarkdown: row.draft_markdown,
+        sourceLinks: Array.isArray(row.source_links) ? row.source_links : [],
+        ctaGoal: row.cta_goal,
+      });
+
+      const publishFields = prepareContentForPublish({
+        content_type: row.content_type,
+        slug: row.slug,
+        title: row.title,
+        status: row.status,
+        topic_cluster: row.topic_cluster,
+        cta_goal: row.cta_goal,
+        source_type: row.source_type,
+        source_links: Array.isArray(row.source_links) ? row.source_links : [],
+        draft_markdown: row.draft_markdown,
+        canonical_url: row.canonical_url,
+        metadata: row.metadata,
+        published_at: row.published_at,
+      });
+
+      const { error: updateError } = await actionContext.adminDb
+        .from('content_items')
+        .update({
+          status: 'published',
+          canonical_url: publishFields.canonicalUrl,
+          published_at: publishFields.publishedAt,
+          metadata: metadataWithSnapshot,
+        })
+        .eq('content_id', row.content_id);
+      if (updateError) throw updateError;
+    } catch (publishError) {
+      structuredLog(
+        'content_publish_wave_item_blocked',
+        {
+          actor_user_id: actionContext.user.id,
+          content_id: row.content_id,
+          slug: row.slug,
+          queue_owner:
+            typeof row.metadata?.['queue_owner'] === 'string'
+              ? String(row.metadata?.['queue_owner'])
+              : null,
+          queue_target_week:
+            typeof row.metadata?.['queue_target_week'] === 'string'
+              ? String(row.metadata?.['queue_target_week'])
+              : null,
+          reason: publishError instanceof Error ? publishError.message : String(publishError),
+        },
+        'warning'
+      );
+    }
+  }
+
+  revalidatePath('/dashboard/content');
+  revalidatePath('/dashboard/content/launch');
+  revalidatePath('/blog');
 }
 
 export async function updateContentItem(formData: FormData) {

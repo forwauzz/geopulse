@@ -9200,3 +9200,252 @@ What was not implemented:
 Verification:
 - `npm run type-check`
 - `npx vitest run lib/server/distribution-job-dispatcher.test.ts`
+
+---
+
+### 2026-04-03 - Content 100-topic execution slice F1
+
+Added the first executable batch-seeding path from the frozen 100-topic registry into canonical content inventory.
+
+Files updated:
+- `lib/server/content-topic-registry-seed.ts`
+- `lib/server/content-topic-registry-seed.test.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added a dedicated topic-registry seeding helper:
+  - parses and validates `docs/13-topic-registry-v1.json`
+  - builds canonical `content_items` seed rows for one planned batch at a time
+  - generates stable `content_id`, seeded brief markdown, and starter draft markdown
+- added idempotent batch insertion behavior:
+  - skips rows when slug or content-id already exists
+  - inserts only missing rows (non-destructive reruns)
+- added admin trigger for `batch_1` seeding:
+  - new `/dashboard/content` action button: `Seed topic batch 1`
+  - updates on-page operator guidance for first-batch execution
+
+What was not implemented:
+- no `batch_2`/`batch_3` button wiring yet
+- no in-app batch progress dashboard yet (`F2`)
+- no automatic article generation/publish scheduling in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-topic-registry-seed.test.ts lib/server/content-draft-import.test.ts`
+
+---
+
+### 2026-04-03 - Content 100-topic execution slice F2
+
+Added in-app progress tracking for the planned 100-topic rollout.
+
+Files updated:
+- `lib/server/content-topic-registry-progress.ts`
+- `lib/server/content-topic-registry-progress.test.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added registry-aware progress helper:
+  - loads `docs/13-topic-registry-v1.json`
+  - compares planned topic slugs against canonical `content_items` (`article` rows)
+  - computes per-batch and total metrics: planned, seeded, ready, published, remaining, and seed/publish percentages
+- added `/dashboard/content` batch-progress UI section:
+  - summary cards for total planned/seeded/ready/remaining
+  - per-batch table for `batch_1`, `batch_2`, and `batch_3`
+  - explicit in-app visibility for weekly operator review without doc/CLI cross-checking
+
+What was not implemented:
+- no `batch_2`/`batch_3` seed action buttons yet
+- no automatic publish scheduling from batch progress state
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`
+
+---
+
+### 2026-04-03 - Content 100-topic execution slice F3
+
+Extended admin seeding controls so all planned topic batches can be seeded from the app.
+
+Files updated:
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added admin server actions:
+  - `seedTopicRegistryBatchTwo`
+  - `seedTopicRegistryBatchThree`
+- wired `/dashboard/content` controls:
+  - `Seed topic batch 2`
+  - `Seed topic batch 3`
+- retained the same idempotent behavior as `batch_1` seeding:
+  - existing slugs/content IDs are skipped
+  - reruns remain non-destructive
+
+What was not implemented:
+- no drafting queue prioritization view yet (`F4`)
+- no auto-generation/publish scheduling in this slice
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`
+
+---
+
+### 2026-04-03 - Content 100-topic execution slice F4
+
+Added a bounded in-app drafting queue so blog-article execution can run directly from admin.
+
+Files updated:
+- `lib/server/content-admin-data.ts`
+- `lib/server/content-admin-data.test.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added `getArticleDraftQueue(limitPerStatus)` in content admin data helper:
+  - fetches article rows in `brief` / `draft` / `review`
+  - returns bounded next items per bucket (default 10 each)
+- added `/dashboard/content` drafting queue section:
+  - bucketed views: `Brief to draft`, `Draft to review`, `Review to publish`
+  - direct links to content detail pages for immediate workflow
+  - explicit blog-first copy indicating newsletter pushes can remain paused
+
+What was not implemented:
+- no queue assignment metadata (`owner`, `target_week`) yet
+- no queue-level bulk transition actions yet
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-admin-data.test.ts lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`
+
+---
+
+### 2026-04-03 - Content 100-topic execution slice F5
+
+Added lightweight queue assignment + filtering controls for blog-first article execution.
+
+Files updated:
+- `lib/server/content-admin-data.ts`
+- `lib/server/content-admin-data.test.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- extended drafting queue rows with assignment metadata:
+  - `queue_owner`
+  - `queue_target_week`
+- added queue filtering on `/dashboard/content`:
+  - owner filter (`queueOwner`)
+  - target week filter (`queueWeek`)
+- added per-row assignment save action:
+  - persists assignment metadata onto `content_items.metadata`
+  - revalidates queue + content detail views
+- kept flow blog-first:
+  - queue copy explicitly states newsletter pushes can remain paused
+
+What was not implemented:
+- no queue bulk-transition actions yet (`F6`)
+- no hard workflow lock/enforcement by owner/week
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-admin-data.test.ts lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`
+
+---
+
+### 2026-04-03 - Content 100-topic execution slice F6
+
+Added bounded queue bulk-transition actions for faster blog-first publishing throughput.
+
+Files updated:
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added `bulkAdvanceContentQueueStatus` action with bounded allowed transitions:
+  - `brief -> draft`
+  - `draft -> review`
+  - `review -> approved`
+- transition execution is bounded and filter-aware:
+  - honors current queue owner/week filters from the page
+  - capped to max items per run (default 25, hard cap 100)
+- added queue-level buttons on `/dashboard/content` for each transition
+
+What was not implemented:
+- no direct approved->published bulk action yet (`F7`)
+- no newsletter-distribution automation changes
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-admin-data.test.ts lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`
+
+---
+
+### 2026-04-03 - Content 100-topic execution slice F7
+
+Added bounded approved-blog publish-wave controls for full-rollout execution while keeping newsletters paused.
+
+Files updated:
+- `lib/server/content-admin-data.ts`
+- `lib/server/content-admin-data.test.ts`
+- `app/dashboard/content/actions.ts`
+- `app/dashboard/content/page.tsx`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `docs/14-docs-style-blog-ia-contract-v1.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added approved queue preview helper:
+  - filter-aware (`queue_owner`, `queue_target_week`)
+  - bounded preview rows + total filtered count
+- added publish-wave execute action:
+  - publishes only `approved` article rows
+  - applies current owner/week filters
+  - bounded max item count per run
+  - still enforces existing publish checks + editorial readiness before publishing each row
+  - logs blocked rows without forcing newsletter distribution changes
+- added `/dashboard/content` UI panel:
+  - dry-run preview list for approved rows under current filters
+  - bounded execute form (`maxItems`) for blog wave publish
+
+What was not implemented:
+- no post-wave aggregated outcome panel yet (`F8`)
+- no newsletter push behavior change
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/content-admin-data.test.ts lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`

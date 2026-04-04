@@ -148,4 +148,20 @@ Exact schema field implementation is handled in implementation slices, not this 
 
 `E5` is now in repo: screenshot-based cross-device visual QA lane is implemented and passing (`tests/e2e/blog-visual.spec.ts`) using deterministic blog fixture content for stable route-level checks.
 
-`E6` is next (optional): only if needed after real-usage feedback, apply tiny spacing/typography/perf micro-polish on blog routes without changing IA contracts.
+`E6` remains optional: only if needed after real-usage feedback, apply tiny spacing/typography/perf micro-polish on blog routes without changing IA contracts.
+
+`F1` is now in repo: `/dashboard/content` can seed `batch_1` topic inventory from `docs/13-topic-registry-v1.json` into canonical `content_items` as article briefs, with idempotent skip behavior for existing slugs/content IDs.
+
+`F2` is now in repo: `/dashboard/content` now shows bounded `batch_1`/`batch_2`/`batch_3` progress (planned, seeded, ready, published, remaining + progress percentages) by comparing the topic registry plan with canonical article rows.
+
+`F3` is now in repo: `/dashboard/content` now includes admin seed controls for `batch_2` and `batch_3` (same idempotent behavior as `batch_1`) so operators can execute the full 100-topic rollout from the app without CLI-only steps.
+
+`F4` is now in repo: `/dashboard/content` now includes a bounded in-app drafting queue for article rows (`brief` / `draft` / `review`) showing the next 10 per bucket, so operators can run a blog-first weekly execution loop without manual filtering.
+
+`F5` is now in repo: queue rows now support lightweight owner/week assignment metadata (`queue_owner`, `queue_target_week`) with in-app filters and per-row save controls, so blog execution can be split across sessions while newsletter pushes remain optional.
+
+`F6` is now in repo: queue-level bulk actions are now available for blog-first flow (`brief -> draft`, `draft -> review`, `review -> approved`) and respect current owner/week filters, so today’s article push can move faster with fewer per-item edits.
+
+`F7` is now in repo: bounded approved-blog publish-wave controls are now available with filter-aware dry-run preview and execute action (owner/week scoped), while newsletter distribution remains explicitly paused.
+
+`F8` is next: add a post-wave outcome panel (published count, blocked count, top block reasons) so operators can immediately see what prevented full blog rollout in each run.

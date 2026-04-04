@@ -48,6 +48,14 @@ Still open:
 - decide later whether the editorial-readiness gate should cover topic pages too, or stay article-only
 - extend structured data beyond the current first article/topic-page coverage
 - run optional public-blog micro-polish slice (`E6`) only if real-usage feedback shows concrete spacing/typography/perf issues after the current passing visual QA lane
+- `F1` is now complete: `/dashboard/content` can seed `batch_1` planned topics from `docs/13-topic-registry-v1.json` into canonical article-brief inventory with idempotent skip behavior
+- `F2` is now complete: `/dashboard/content` now exposes in-app batch progress coverage (`batch_1` / `batch_2` / `batch_3`) for planned vs seeded vs ready vs published inventory
+- `F3` is now complete: `/dashboard/content` now exposes admin seed controls for `batch_2` and `batch_3` with the same idempotent skip behavior as `batch_1`
+- `F4` is now complete: `/dashboard/content` now exposes a bounded in-app drafting queue (`brief` / `draft` / `review` buckets, next 10 rows each) for blog-first weekly execution
+- `F5` is now complete: drafting queue rows now support lightweight owner/week assignment metadata + filters so blog execution can be split cleanly while newsletter pushes remain optional
+- `F6` is now complete: drafting queue now supports bounded bulk-transition actions (`brief`->`draft`, `draft`->`review`, `review`->`approved`) scoped by current owner/week filters
+- `F7` is now complete: bounded approved-blog publish-wave controls now exist (filter-aware dry-run preview + execute), while newsletter distribution remains paused
+- next content-scale execution slice is `F8`: add post-wave outcome panel (published/blocked counts + top block reasons) so operators can iterate faster during full rollout
 - adjust the first-launch threshold later if real publication cadence shows the current 3-article / 1-topic-hub rule is too weak or too strict
 - expand beyond Kit and Ghost into a broader adapter set without breaking the contract boundary
 - extend provider health past local env/config checks into provider-side connectivity validation when worth the complexity
