@@ -1,6 +1,6 @@
 # GEO-Pulse Docs
 
-This folder is the implementation handoff set for GEO-Pulse as of 2026-03-26.
+This folder is the implementation handoff set for GEO-Pulse as of 2026-04-04.
 
 Read these in order:
 1. `docs/01-current-state.md`
@@ -13,6 +13,8 @@ Read these in order:
 8. `docs/08-architecture-flows.md`
 9. `docs/09-agency-pilot-lifter-plan.md`
 10. `docs/10-cloudflare-workflows-deploy-guard-plan.md`
+11. `docs/15-startup-dashboard-entitlements-plan.md`
+12. `docs/16-startup-pilot-rollout-runbook.md`
 
 Supporting source files used to build this set:
 - `agents/ORCHESTRATOR.md`

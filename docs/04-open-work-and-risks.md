@@ -140,6 +140,81 @@ Current repo state:
 - unsupported stored providers currently fall back to Gemini rather than silently changing execution shape
 - what remains is the fuller pilot control surface and broader entitlement enforcement on top of that runtime
 
+### Startup dashboard + centralized entitlements
+New implementation stream (planning frozen, staged implementation active). See `docs/15-startup-dashboard-entitlements-plan.md` and `PLAYBOOK/startup-dashboard-entitlements-v1.md`.
+
+Still open:
+- pilot startup rollout execution and operator evidence capture using shipped rollout flags (`startup_dashboard`, `github_agent`, `auto_pr`)
+
+Current repo state:
+- `SD-001` is complete in repo:
+  - `supabase/migrations/021_service_entitlements_foundation.sql`
+  - `lib/server/service-entitlements-contract.ts`
+  - `lib/server/service-entitlements-contract.test.ts`
+- `SD-002` is complete in repo:
+  - `lib/server/service-entitlements.ts`
+  - `lib/server/service-entitlements.test.ts`
+  - `lib/server/agency-access.ts` (centralized path + legacy fallback)
+  - `lib/server/agency-access.test.ts`
+- `SD-003` is complete in repo:
+  - `/dashboard/services` admin page + server actions
+  - centralized bundle/service toggles and scoped override controls
+  - structured audit logs for before/after changes
+- `SD-004` is complete in repo:
+  - startup workspace tenancy schema + startup workspace/user/domain records
+  - admin bootstrap controls at `/dashboard/startups`
+  - startup workspace selector/context wired into `/dashboard`
+- `SD-005` is complete in repo:
+  - dark startup route shell at `/dashboard/startup`
+  - module slots for trend, backlog, implementation lane, and PR activity
+  - helper-based startup trend/backlog derivation with tests
+- `SD-006` is complete in repo:
+  - startup tracking metrics helper (burn-down, funnel, 7/14/30 windows)
+  - startup dashboard now renders these metrics in actionable tracking modules
+- `SD-007` is complete in repo:
+  - recommendation lifecycle schema + event history tables
+  - lifecycle transition and status-summary server helpers
+  - startup dashboard funnel now reads recommendation statuses directly
+- `SD-008` is complete in repo:
+  - implementation-plan schema + task-lane tables
+  - markdown-audit parsing and plan-generation persistence helpers
+  - startup implementation module now shows lane cards and generated task rows from latest plan
+- `SD-009` is complete in repo:
+  - startup GitHub installation/session/repo-allowlist schema and RLS policies
+  - callback-safe connect flow with state-token session consumption
+  - startup dashboard GitHub controls now gated by centralized `github_integration` entitlement
+- `SD-010` is complete in repo:
+  - recommendation-linked PR run and run-event schema with startup-member RLS
+  - queue/open/merge/fail run transitions with recommendation lifecycle synchronization
+  - startup dashboard now surfaces PR run controls and status history in PR activity module
+- `SD-011` is complete in repo:
+  - service model-policy scope now supports startup workspace overrides
+  - startup model resolver precedence and budget/fallback guardrails are implemented + tested
+  - startup planning + PR workflows now persist effective model-policy metadata
+- `SD-012` is complete in repo:
+  - Stripe billing mapping schema now exists in `supabase/migrations/028_service_billing_mappings.sql`
+  - runtime billing guard checks now exist in `lib/server/service-billing-guard.ts`
+  - startup GitHub connect and PR queue actions now enforce billing guard checks before execution
+  - startup dashboard now surfaces explicit billing-blocked status messaging for GitHub/PR workflows
+- `SD-013` is complete in repo:
+  - startup dashboard/actions now consume centralized startup service-gate resolver outputs
+  - startup entitlement + billing gate decisions no longer drift between UI and action handlers
+  - agency dashboard route now consumes centralized UI-gate mapping instead of direct boolean field checks
+- `SD-014` is complete in repo:
+  - startup workflow surfaces now emit structured startup timeline events with workspace + actor metadata
+  - startup admin control page now includes per-workspace timeline visibility over those structured events
+  - startup timeline shaping/mapping is centralized in startup admin data helper with focused tests
+- `SD-015` is complete in repo:
+  - centralized startup rollout-flag resolver now enforces `startup_dashboard`, `github_agent`, and `auto_pr` behavior
+  - startup admin control page now includes per-workspace rollout toggle controls
+  - startup dashboard/actions now enforce rollout-disabled and suggest-only outcomes consistently
+
+Current guidance:
+- do not fork agency/startup backends
+- do not hardcode plan/bundle logic in route/components
+- keep all runtime gating centralized and feature-flagged
+- keep Phase 4 launch closure tracking separate from this stream
+
 ### Retrieval eval detail UX
 Still open:
 - latest-vs-previous comparison at the prompt level

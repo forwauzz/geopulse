@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ScanForm } from '@/components/scan-form';
 import { getAgencyDashboardData } from '@/lib/server/agency-dashboard-data';
+import { getStartupDashboardData } from '@/lib/server/startup-dashboard-data';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
@@ -12,13 +13,19 @@ type Props = {
     url?: string;
     agencyAccount?: string;
     agencyClient?: string;
+    startupWorkspace?: string;
   }>;
 };
 
-function buildDashboardHref(accountId: string | null, clientId: string | null): string {
+function buildDashboardHref(args: {
+  agencyAccountId?: string | null;
+  agencyClientId?: string | null;
+  startupWorkspaceId?: string | null;
+}): string {
   const params = new URLSearchParams();
-  if (accountId) params.set('agencyAccount', accountId);
-  if (clientId) params.set('agencyClient', clientId);
+  if (args.agencyAccountId) params.set('agencyAccount', args.agencyAccountId);
+  if (args.agencyClientId) params.set('agencyClient', args.agencyClientId);
+  if (args.startupWorkspaceId) params.set('startupWorkspace', args.startupWorkspaceId);
   const query = params.toString();
   return query.length > 0 ? `/dashboard?${query}` : '/dashboard';
 }
@@ -35,22 +42,32 @@ export default async function DashboardNewScanPage({ searchParams }: Props) {
   }
 
   const siteKey = getTurnstileSiteKey();
-  const agencyDashboard = await getAgencyDashboardData({
-    supabase,
-    userId: user.id,
-    selectedAccountId: sp.agencyAccount ?? null,
-    selectedClientId: sp.agencyClient ?? null,
-  });
+  const [agencyDashboard, startupDashboard] = await Promise.all([
+    getAgencyDashboardData({
+      supabase,
+      userId: user.id,
+      selectedAccountId: sp.agencyAccount ?? null,
+      selectedClientId: sp.agencyClient ?? null,
+    }),
+    getStartupDashboardData({
+      supabase,
+      userId: user.id,
+      selectedWorkspaceId: sp.startupWorkspace ?? null,
+    }),
+  ]);
 
-  const backHref = buildDashboardHref(
-    agencyDashboard.selectedAccountId,
-    agencyDashboard.selectedClientId
-  );
+  const backHref = buildDashboardHref({
+    agencyAccountId: agencyDashboard.selectedAccountId,
+    agencyClientId: agencyDashboard.selectedClientId,
+    startupWorkspaceId: startupDashboard.selectedWorkspaceId,
+  });
 
   const selectedAgencyAccount =
     agencyDashboard.accounts.find((account) => account.id === agencyDashboard.selectedAccountId) ?? null;
   const selectedAgencyClient =
     selectedAgencyAccount?.clients.find((client) => client.id === agencyDashboard.selectedClientId) ?? null;
+  const selectedStartupWorkspace =
+    startupDashboard.workspaces.find((workspace) => workspace.id === startupDashboard.selectedWorkspaceId) ?? null;
 
   return (
     <main className="mx-auto max-w-screen-xl px-6 py-16 md:px-10">
@@ -91,6 +108,26 @@ export default async function DashboardNewScanPage({ searchParams }: Props) {
               Scan launch is disabled for this agency context by GEO-Pulse admin.
             </p>
           ) : null}
+        </div>
+      ) : null}
+
+      {!selectedAgencyAccount && selectedStartupWorkspace ? (
+        <div className="mt-8 rounded-2xl bg-surface-container-low p-6 shadow-float">
+          <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Startup context</p>
+          <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="font-body text-sm text-on-surface-variant">Workspace</p>
+              <p className="mt-1 font-headline text-xl font-bold text-on-background">
+                {selectedStartupWorkspace.name}
+              </p>
+            </div>
+            <div>
+              <p className="font-body text-sm text-on-surface-variant">Role</p>
+              <p className="mt-1 font-headline text-xl font-bold text-on-background">
+                {selectedStartupWorkspace.role}
+              </p>
+            </div>
+          </div>
         </div>
       ) : null}
 

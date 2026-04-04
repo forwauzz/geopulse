@@ -117,6 +117,12 @@ If Phase 4 is blocked by an **external operator dependency**, the team may also 
 
 If Phase 4 is blocked by an **external operator dependency**, the team may also continue **architecture hardening and internal observability work** that keeps the codebase lean, debuggable, secure, and easier to test. This work must be explicitly tracked in `PROJECT_STATE.md`, documented in `PLAYBOOK/`, and must not be presented as launch closure. Prefer narrow improvements such as log visibility, simpler route boundaries, and test-readiness over broad framework churn.
 
+If Phase 4 is blocked by an **external operator dependency**, the team may also continue the **startup dashboard + centralized entitlements stream** (`SD-001` ... in `PROJECT_STATE.md`) so long as it remains:
+- centrally gated by one entitlement resolver path
+- feature-flagged for rollout safety
+- documented in `docs/15-startup-dashboard-entitlements-plan.md`
+- explicitly separated from launch-closure claims
+
 ### Phase 4 first — defer remaining Deep Audit until Launch gate (Orchestrator)
 
 **Effective:** 2026-03-25  
