@@ -281,6 +281,7 @@ export async function beginStartupSlackInstall(formData: FormData): Promise<void
 
   const installUrl = new URL(env.STARTUP_SLACK_APP_INSTALL_URL);
   installUrl.searchParams.set('client_id', env.STARTUP_SLACK_CLIENT_ID);
+  installUrl.searchParams.set('scope', 'chat:write');
   installUrl.searchParams.set('state', stateToken);
   installUrl.searchParams.set('redirect_uri', callbackUrl);
   redirect(installUrl.toString());
