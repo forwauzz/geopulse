@@ -18,6 +18,7 @@ describe('service-entitlements-contract', () => {
 
   it('recognizes service keys and bundle keys', () => {
     expect(isServiceKey('free_scan')).toBe(true);
+    expect(isServiceKey('slack_integration')).toBe(true);
     expect(isServiceKey('unknown')).toBe(false);
     expect(isBundleKey('startup_dev')).toBe(true);
     expect(isBundleKey('enterprise_max')).toBe(false);

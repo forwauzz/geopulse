@@ -51,6 +51,16 @@
     "BENCHMARK_EXECUTION_ENABLED_MODELS": "gemini-2.5-flash-lite",
     "BENCHMARK_EXECUTION_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
 
+    // Startup rollout defaults (can be overridden per workspace in metadata rollout_flags).
+    "STARTUP_DASHBOARD_ENABLED": "true",
+    "STARTUP_GITHUB_AGENT_ENABLED": "true",
+    "STARTUP_AUTO_PR_ENABLED": "false",
+    "STARTUP_SLACK_AGENT_ENABLED": "true",
+    "STARTUP_SLACK_AUTO_POST_ENABLED": "false",
+
+    // Slack OAuth install entrypoint (non-secret).
+    "STARTUP_SLACK_APP_INSTALL_URL": "https://slack.com/oauth/v2/authorize",
+
     // Recurring benchmark lane config.
     // Keep disabled here until production values are finalized.
     "BENCHMARK_SCHEDULE_ENABLED": "false",
@@ -94,6 +104,8 @@
   //   GEMINI_API_KEY
   //   RESEND_API_KEY
   //   TURNSTILE_SECRET_KEY
+  //   STARTUP_SLACK_CLIENT_ID
+  //   STARTUP_SLACK_CLIENT_SECRET
   //
   // Benchmark secret:
   //   BENCHMARK_EXECUTION_API_KEY

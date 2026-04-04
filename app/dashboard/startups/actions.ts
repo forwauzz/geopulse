@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
+import { applyStartupRolloutFlagPatch } from '@/lib/server/startup-rollout-flags';
 import { structuredLog } from '@/lib/server/structured-log';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
@@ -31,6 +32,8 @@ const rolloutFlagsSchema = z.object({
   startupDashboard: z.boolean(),
   githubAgent: z.boolean(),
   autoPr: z.boolean(),
+  slackAgent: z.boolean(),
+  slackAutoPost: z.boolean(),
 });
 
 export type StartupAdminActionState =
@@ -202,6 +205,8 @@ export async function updateStartupWorkspaceRolloutFlags(
     startupDashboard: formData.get('startupDashboard') === 'on',
     githubAgent: formData.get('githubAgent') === 'on',
     autoPr: formData.get('autoPr') === 'on',
+    slackAgent: formData.get('slackAgent') === 'on',
+    slackAutoPost: formData.get('slackAutoPost') === 'on',
   });
 
   if (!parsed.success) {
@@ -220,14 +225,16 @@ export async function updateStartupWorkspaceRolloutFlags(
   if (existingError) return { ok: false, message: existingError.message };
 
   const currentMetadata = (existing?.metadata as Record<string, unknown> | null | undefined) ?? {};
-  const nextMetadata = {
-    ...currentMetadata,
-    rollout_flags: {
-      startup_dashboard: parsed.data.startupDashboard,
-      github_agent: parsed.data.githubAgent,
-      auto_pr: parsed.data.autoPr,
+  const nextMetadata = applyStartupRolloutFlagPatch({
+    metadata: currentMetadata,
+    patch: {
+      startupDashboard: parsed.data.startupDashboard,
+      githubAgent: parsed.data.githubAgent,
+      autoPr: parsed.data.autoPr,
+      slackAgent: parsed.data.slackAgent,
+      slackAutoPost: parsed.data.slackAutoPost,
     },
-  };
+  });
 
   const { error } = await context.adminDb
     .from('startup_workspaces')
@@ -242,6 +249,8 @@ export async function updateStartupWorkspaceRolloutFlags(
       startup_dashboard: parsed.data.startupDashboard,
       github_agent: parsed.data.githubAgent,
       auto_pr: parsed.data.autoPr,
+      slack_agent: parsed.data.slackAgent,
+      slack_auto_post: parsed.data.slackAutoPost,
     },
     'info'
   );

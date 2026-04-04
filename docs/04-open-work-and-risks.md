@@ -145,6 +145,7 @@ New implementation stream (planning frozen, staged implementation active). See `
 
 Still open:
 - pilot startup rollout execution and operator evidence capture using shipped rollout flags (`startup_dashboard`, `github_agent`, `auto_pr`)
+- startup Slack pilot execution for `Alie` using the new rollout runbook and evidence checklist
 
 Current repo state:
 - `SD-001` is complete in repo:
@@ -208,6 +209,22 @@ Current repo state:
   - centralized startup rollout-flag resolver now enforces `startup_dashboard`, `github_agent`, and `auto_pr` behavior
   - startup admin control page now includes per-workspace rollout toggle controls
   - startup dashboard/actions now enforce rollout-disabled and suggest-only outcomes consistently
+- startup Slack MVP planning is now frozen:
+  - contract + execution plan in `docs/17-startup-slack-integration-mvp-plan.md`
+  - strategy companion in `PLAYBOOK/startup-slack-integration-mvp-v1.md`
+  - rollout/evidence runbook in `docs/18-startup-slack-pilot-rollout-runbook.md`
+  - `SL-001` complete (payload, message shape, gating defaults)
+  - `SL-002` complete (central Slack service keys + startup Slack rollout flags)
+  - `SL-003` complete (minimal Slack schema: installations, destinations, delivery events + RLS)
+  - `SL-004` complete (Slack OAuth connect/disconnect foundation + dashboard connection UI card)
+  - `SL-005` complete (startup Slack destination list + add UI/action flow)
+  - `SL-006` complete (manual send-to-Slack action from report/audit context)
+  - `SL-007` complete (normalized Slack formatter contract + manual send wiring)
+  - `SL-008` complete (delivery attempt persistence and failure reasons)
+  - `SL-009` complete (owner/admin workspace `slack_auto_post` toggle)
+  - `SL-010` complete (centralized Slack service controls in `/dashboard/services`)
+  - `SL-011` complete (focused Slack test + hardening pass)
+  - `SL-012` complete (Alie pilot rollout/evidence runbook shipped for operator execution)
 
 Current guidance:
 - do not fork agency/startup backends

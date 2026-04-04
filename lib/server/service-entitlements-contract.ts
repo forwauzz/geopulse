@@ -9,6 +9,8 @@ export const SERVICE_KEYS = [
   'skills_library',
   'github_integration',
   'agent_pr_execution',
+  'slack_integration',
+  'slack_notifications',
   'api_access',
 ] as const;
 

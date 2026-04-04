@@ -262,7 +262,7 @@ export function StartupAdminControlView({ workspaces }: Props) {
                     {rolloutPending ? 'Saving...' : 'Save rollout flags'}
                   </button>
                 </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-3 text-sm text-on-background">
+                <div className="mt-3 grid gap-3 sm:grid-cols-5 text-sm text-on-background">
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -282,6 +282,22 @@ export function StartupAdminControlView({ workspaces }: Props) {
                   <label className="flex items-center gap-2">
                     <input type="checkbox" name="autoPr" defaultChecked={workspace.rolloutFlags.autoPr} />
                     Auto PR
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="slackAgent"
+                      defaultChecked={workspace.rolloutFlags.slackAgent}
+                    />
+                    Slack agent
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="slackAutoPost"
+                      defaultChecked={workspace.rolloutFlags.slackAutoPost}
+                    />
+                    Slack auto-post
                   </label>
                 </div>
                 {rolloutState ? (

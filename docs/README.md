@@ -15,6 +15,8 @@ Read these in order:
 10. `docs/10-cloudflare-workflows-deploy-guard-plan.md`
 11. `docs/15-startup-dashboard-entitlements-plan.md`
 12. `docs/16-startup-pilot-rollout-runbook.md`
+13. `docs/17-startup-slack-integration-mvp-plan.md`
+14. `docs/18-startup-slack-pilot-rollout-runbook.md`
 
 Supporting source files used to build this set:
 - `agents/ORCHESTRATOR.md`

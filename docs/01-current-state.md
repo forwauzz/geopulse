@@ -199,6 +199,22 @@ Current truth:
   - startup admin control now supports per-workspace rollout toggle controls
   - startup dashboard/actions now enforce rollout flags consistently, including rollout-disabled and suggest-only outcomes
 - next startup stream step is pilot rollout execution using SD-015 controls
+- startup Slack MVP planning stream is now opened:
+  - contract and byte-sized execution plan in `docs/17-startup-slack-integration-mvp-plan.md`
+  - strategy companion in `PLAYBOOK/startup-slack-integration-mvp-v1.md`
+  - pilot rollout runbook in `docs/18-startup-slack-pilot-rollout-runbook.md`
+  - `SL-001` is complete (message contract + rollout posture)
+  - `SL-002` is complete (central Slack service keys + startup Slack rollout flags)
+  - `SL-003` is complete (minimal Slack schema: installations, destinations, delivery events)
+  - `SL-004` is complete (Slack OAuth connect/disconnect foundation, startup dashboard connection card)
+  - `SL-005` is complete (destination list + add flow in startup dashboard)
+  - `SL-006` is complete (manual send-to-Slack action from report/audit context)
+  - `SL-007` is complete (normalized Slack message formatter contract wired to manual send)
+  - `SL-008` is complete (delivery event persistence for success/failure + failure reasons)
+  - `SL-009` is complete (workspace `slack_auto_post` toggle, owner/admin controlled)
+  - `SL-010` is complete (centralized Slack service controls wired in `/dashboard/services`)
+  - `SL-011` is complete (focused Slack integration test pass and hardening)
+  - `SL-012` is complete (Alie pilot rollout/evidence runbook for operator execution)
 
 ## What Is Implemented
 

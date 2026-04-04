@@ -2,6 +2,11 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
   beginStartupGithubInstall,
+  beginStartupSlackInstall,
+  disconnectStartupSlack,
+  sendStartupReportToSlack,
+  saveStartupSlackDestination,
+  updateStartupSlackAutoPostSetting,
   disconnectStartupGithub,
   markStartupPrRunFailedAction,
   markStartupPrRunMergedAction,
@@ -16,6 +21,11 @@ import { getStartupDashboardData } from '@/lib/server/startup-dashboard-data';
 import {
   getStartupGithubIntegrationState,
 } from '@/lib/server/startup-github-integration';
+import {
+  getStartupSlackIntegrationState,
+  listStartupSlackDeliveryEvents,
+  listStartupSlackDestinations,
+} from '@/lib/server/startup-slack-integration';
 import {
   buildStartupImplementationLaneCards,
   getLatestStartupImplementationPlan,
@@ -33,6 +43,7 @@ type Props = {
     startupWorkspace?: string;
     github?: string;
     pr?: string;
+    slack?: string;
   }>;
 };
 
@@ -120,6 +131,50 @@ function readPrStatusMessage(code: string | undefined): string | null {
   }
 }
 
+function readSlackStatusMessage(code: string | undefined): string | null {
+  if (!code) return null;
+  switch (code) {
+    case 'slack_connected':
+      return 'Slack workspace connected.';
+    case 'slack_disconnected':
+      return 'Slack workspace disconnected.';
+    case 'slack_not_entitled':
+      return 'Slack integration is disabled for this workspace bundle.';
+    case 'slack_rollout_disabled':
+      return 'Slack integration is disabled by startup rollout flags for this workspace.';
+    case 'slack_billing_blocked':
+      return 'Slack integration is currently paid-only for this workspace. Ask an admin to enable billing or switch service mode.';
+    case 'slack_install_url_missing':
+      return 'Slack install URL is not configured yet.';
+    case 'slack_callback_invalid':
+      return 'Slack callback could not be validated. Retry connect.';
+    case 'slack_state_invalid':
+      return 'Slack callback state is invalid or expired. Retry connect.';
+    case 'slack_env_missing':
+      return 'Server env is missing Slack integration credentials.';
+    case 'slack_oauth_denied':
+      return 'Slack authorization was cancelled.';
+    case 'slack_destination_saved':
+      return 'Slack destination saved.';
+    case 'slack_destination_invalid':
+      return 'Slack destination requires workspace, install, and channel values.';
+    case 'slack_send_ok':
+      return 'Report sent to Slack.';
+    case 'slack_send_failed':
+      return 'Slack send failed. Reconnect Slack or verify destination channel access.';
+    case 'slack_send_invalid':
+      return 'Slack send requires workspace, report, and destination.';
+    case 'slack_destination_missing':
+      return 'Selected Slack destination was not found.';
+    case 'slack_report_missing':
+      return 'Selected report was not found for this workspace.';
+    case 'slack_auto_post_updated':
+      return 'Slack auto-post setting updated.';
+    default:
+      return null;
+  }
+}
+
 export default async function StartupDashboardPage({ searchParams }: Props) {
   const sp = (await searchParams) ?? {};
   const supabase = await createSupabaseServerClient();
@@ -139,6 +194,8 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
 
   const selectedWorkspace =
     dashboard.workspaces.find((workspace) => workspace.id === dashboard.selectedWorkspaceId) ?? null;
+  const canManageSlackAutoPost =
+    selectedWorkspace?.role === 'founder' || selectedWorkspace?.role === 'admin';
   const trend = buildStartupTrendSeries(dashboard.scans);
   const backlog = buildStartupActionBacklog(dashboard);
   const metrics = buildStartupTrackingMetrics(dashboard);
@@ -179,6 +236,30 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
   const githubAllowlistValue = githubState.repositories.map((repo) => repo.fullName).join('\n');
   const githubStatusMessage = readGithubStatusMessage(sp.github);
   const prStatusMessage = readPrStatusMessage(sp.pr);
+  const slackStatusMessage = readSlackStatusMessage(sp.slack);
+  const slackState = dashboard.selectedWorkspaceId
+    ? await getStartupSlackIntegrationState({
+        supabase,
+        startupWorkspaceId: dashboard.selectedWorkspaceId,
+      })
+    : { installations: [] };
+  const slackDestinations = dashboard.selectedWorkspaceId
+    ? await listStartupSlackDestinations({
+        supabase,
+        startupWorkspaceId: dashboard.selectedWorkspaceId,
+      })
+    : [];
+  const slackDeliveryEvents = dashboard.selectedWorkspaceId
+    ? await listStartupSlackDeliveryEvents({
+        supabase,
+        startupWorkspaceId: dashboard.selectedWorkspaceId,
+        limit: 6,
+      })
+    : [];
+  const slackActiveDestinations = slackDestinations.filter((destination) => destination.status === 'active');
+  const slackActiveInstallations = slackState.installations.filter(
+    (installation) => installation.status === 'active'
+  );
   const prRuns = dashboard.selectedWorkspaceId
     ? await listStartupAgentPrRuns({
         supabase,
@@ -418,6 +499,63 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
                 <div className="rounded-md bg-zinc-900 px-3 py-2">Deep audits: {dashboard.reports.length}</div>
                 <div className="rounded-md bg-zinc-900 px-3 py-2">Delivered: {deliveredReports}</div>
               </div>
+              {dashboard.selectedWorkspaceId &&
+              startupRolloutFlags?.slackAgent &&
+              startupServiceGates?.slackIntegration.enabled &&
+              startupServiceGates?.slackNotifications.enabled ? (
+                <form action={sendStartupReportToSlack} className="mt-3 grid gap-2">
+                  <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId} />
+                  <select
+                    name="reportId"
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100"
+                    defaultValue={dashboard.reports[0]?.id ?? ''}
+                  >
+                    {dashboard.reports.length === 0 ? (
+                      <option value="">No reports available</option>
+                    ) : (
+                      dashboard.reports.map((report) => (
+                        <option key={report.id} value={report.id}>
+                          {report.type} · {new Date(report.createdAt).toLocaleDateString()}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <select
+                    name="destinationId"
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100"
+                    defaultValue={slackActiveDestinations[0]?.id ?? ''}
+                  >
+                    {slackActiveDestinations.length === 0 ? (
+                      <option value="">No active Slack destinations</option>
+                    ) : (
+                      slackActiveDestinations.map((destination) => (
+                        <option key={destination.id} value={destination.id}>
+                          {destination.channelName ?? destination.channelId}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <select
+                    name="eventType"
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100"
+                    defaultValue="new_audit_ready"
+                  >
+                    <option value="new_audit_ready">new_audit_ready</option>
+                    <option value="plan_ready">plan_ready</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={dashboard.reports.length === 0 || slackActiveDestinations.length === 0}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Send report to Slack
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-2 text-xs text-zinc-500">
+                  Slack manual send requires rollout + entitlement gates and at least one active destination.
+                </p>
+              )}
             </div>
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
               <p className="text-xs uppercase tracking-widest text-zinc-500">Agent PR workflow</p>
@@ -647,6 +785,223 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
                     Save allowlist
                   </button>
                 </form>
+              </div>
+            </div>
+          )}
+        </article>
+
+        <article className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 lg:col-span-2">
+          <h2 className="text-lg font-semibold">Slack integration</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Connect Slack workspaces and map delivery channels for startup reports.
+          </p>
+          {slackStatusMessage ? (
+            <p className="mt-3 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+              {slackStatusMessage}
+            </p>
+          ) : null}
+          {!dashboard.selectedWorkspaceId ? null : !startupRolloutFlags?.slackAgent ? (
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+              Slack integration is currently disabled by rollout flags for this workspace.
+            </div>
+          ) : !startupServiceGates?.slackIntegration.enabled ? (
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-400">
+              {startupServiceGates?.slackIntegration.blockedReason === 'workspace_requires_paid_mode' ||
+              startupServiceGates?.slackIntegration.blockedReason === 'stripe_mapping_missing' ||
+              startupServiceGates?.slackIntegration.blockedReason === 'stripe_mapping_inactive'
+                ? 'Slack integration is currently blocked by billing configuration for this workspace.'
+                : 'Slack integration is disabled for this workspace bundle.'}
+              <br />
+              Bundle:{' '}
+              <span className="font-medium text-zinc-200">
+                {startupServiceGates?.slackIntegration.bundleKey ?? 'unknown'}
+              </span>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-500">Connection</p>
+                <p className="mt-2 text-xs text-zinc-400">
+                  Connect one or more Slack workspaces. Channel destination setup comes next.
+                </p>
+                <form action={beginStartupSlackInstall} className="mt-3">
+                  <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId} />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-emerald-300"
+                  >
+                    Connect Slack
+                  </button>
+                </form>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-500">Auto-post mode</p>
+                <p className="mt-2 text-xs text-zinc-400">
+                  Keep this off by default. Enable only when your team wants automatic Slack posting in later slices.
+                </p>
+                {canManageSlackAutoPost ? (
+                  <form action={updateStartupSlackAutoPostSetting} className="mt-3 space-y-2">
+                    <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId ?? ''} />
+                    <label className="flex items-center gap-2 text-xs text-zinc-300">
+                      <input
+                        type="checkbox"
+                        name="slackAutoPostEnabled"
+                        defaultChecked={startupRolloutFlags?.slackAutoPost ?? false}
+                        className="h-4 w-4 rounded border-zinc-700"
+                      />
+                      Enable workspace Slack auto-post
+                    </label>
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 transition hover:bg-zinc-800"
+                    >
+                      Save auto-post setting
+                    </button>
+                  </form>
+                ) : (
+                  <p className="mt-3 text-xs text-zinc-500">
+                    Founder or admin role required to change auto-post mode.
+                  </p>
+                )}
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-500">Connected workspaces</p>
+                {slackState.installations.length === 0 ? (
+                  <p className="mt-2 text-sm text-zinc-400">No Slack workspaces connected yet.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2 text-sm text-zinc-300">
+                    {slackState.installations.map((installation) => (
+                      <li
+                        key={installation.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2"
+                      >
+                        <div>
+                          <p className="font-medium text-zinc-100">
+                            {installation.slackTeamName ?? installation.slackTeamId}
+                          </p>
+                          <p className="text-xs text-zinc-400">
+                            Team ID: {installation.slackTeamId}
+                            {installation.slackTeamDomain ? ` · ${installation.slackTeamDomain}.slack.com` : ''}
+                            {` · ${installation.status}`}
+                          </p>
+                        </div>
+                        {installation.status === 'active' ? (
+                          <form action={disconnectStartupSlack}>
+                            <input
+                              type="hidden"
+                              name="startupWorkspaceId"
+                              value={dashboard.selectedWorkspaceId ?? ''}
+                            />
+                            <input type="hidden" name="installationId" value={installation.id} />
+                            <button
+                              type="submit"
+                              className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 transition hover:bg-zinc-800"
+                            >
+                              Disconnect
+                            </button>
+                          </form>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-500">Destination channels</p>
+                {slackDestinations.length === 0 ? (
+                  <p className="mt-2 text-sm text-zinc-400">No destination channels configured yet.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2 text-sm text-zinc-300">
+                    {slackDestinations.map((destination) => (
+                      <li
+                        key={destination.id}
+                        className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2"
+                      >
+                        <p className="font-medium text-zinc-100">
+                          {destination.channelName ?? destination.channelId}
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                          Channel ID: {destination.channelId}
+                          {destination.isDefaultDestination ? ' · default' : ''}
+                          {` · ${destination.status}`}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {slackActiveInstallations.length > 0 ? (
+                  <form action={saveStartupSlackDestination} className="mt-4 grid gap-2 md:grid-cols-2">
+                    <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId ?? ''} />
+                    <label className="text-xs text-zinc-400">
+                      Workspace
+                      <select
+                        name="installationId"
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100"
+                        defaultValue={slackActiveInstallations[0]?.id ?? ''}
+                      >
+                        {slackActiveInstallations.map((installation) => (
+                          <option key={installation.id} value={installation.id}>
+                            {installation.slackTeamName ?? installation.slackTeamId}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs text-zinc-400">
+                      Channel ID
+                      <input
+                        name="channelId"
+                        placeholder="C0123456789"
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100"
+                      />
+                    </label>
+                    <label className="text-xs text-zinc-400 md:col-span-2">
+                      Channel name (optional)
+                      <input
+                        name="channelName"
+                        placeholder="#geo-audits"
+                        className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs text-zinc-100"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-zinc-300 md:col-span-2">
+                      <input type="checkbox" name="isDefaultDestination" className="h-4 w-4 rounded border-zinc-700" />
+                      Set as default Slack destination
+                    </label>
+                    <div className="md:col-span-2">
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-100 transition hover:bg-zinc-800"
+                      >
+                        Save destination
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <p className="mt-3 text-xs text-zinc-500">
+                    Connect at least one active Slack workspace before adding destination channels.
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <p className="text-xs uppercase tracking-widest text-zinc-500">Recent delivery attempts</p>
+                {slackDeliveryEvents.length === 0 ? (
+                  <p className="mt-2 text-sm text-zinc-400">No Slack delivery attempts yet.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2 text-sm text-zinc-300">
+                    {slackDeliveryEvents.map((event) => (
+                      <li key={event.id} className="rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2">
+                        <p className="font-medium text-zinc-100">
+                          {event.eventType} · {event.status}
+                        </p>
+                        <p className="text-xs text-zinc-400">
+                          {new Date(event.createdAt).toLocaleString()}
+                          {event.errorMessage ? ` · ${event.errorMessage}` : ''}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           )}

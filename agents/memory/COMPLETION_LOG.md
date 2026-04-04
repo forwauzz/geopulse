@@ -5,6 +5,113 @@
 
 ---
 
+### 2026-04-04 - Startup Slack schema foundation SL-003
+
+Completed SL-003 implementation with minimal startup Slack schema and RLS policies.
+
+Files updated:
+- `supabase/migrations/030_startup_slack_integration_foundation.sql`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added startup Slack installations table:
+  - connected Slack workspace records per startup workspace
+  - bounded provider/status constraints
+- added startup Slack destinations table:
+  - channel presets per startup workspace/install
+  - single active default-channel constraint per workspace
+- added startup Slack delivery-events table:
+  - event-level send log (`queued`/`sent`/`failed`/`skipped`)
+  - bounded event types (`new_audit_ready`, `plan_ready`)
+- added indexes, updated-at triggers, and startup-member RLS policies for read/write paths
+
+What was not implemented:
+- no OAuth connect flow yet (`SL-004`)
+- no Slack UI destinations page yet (`SL-005`)
+- no send-to-Slack runtime action yet (`SL-006`)
+
+Verification:
+- schema-only migration slice (no runtime TypeScript path changed in this step)
+
+---
+
+### 2026-04-04 - Startup Slack keys + rollout flags SL-002
+
+Completed SL-002 implementation for centralized Slack service keys and startup rollout flags.
+
+Files updated:
+- `lib/server/service-entitlements-contract.ts`
+- `lib/server/service-entitlements-contract.test.ts`
+- `supabase/migrations/029_startup_slack_service_keys.sql`
+- `lib/server/startup-rollout-flags.ts`
+- `lib/server/startup-rollout-flags.test.ts`
+- `lib/server/cf-env.ts`
+- `app/dashboard/startups/actions.ts`
+- `components/startup-admin-control-view.tsx`
+- `lib/server/startup-admin-data.ts`
+- `lib/server/startup-admin-data.test.ts`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- added centralized service contract keys:
+  - `slack_integration`
+  - `slack_notifications`
+- added DB seed migration for those keys in `service_catalog`
+- added startup rollout flags to resolver + metadata/env overrides:
+  - `slack_agent` (manual-send exposure)
+  - `slack_auto_post` (automation toggle, default off)
+- wired new flags into startup admin rollout controls and rollout update action payload/logging
+- included Slack rollout fields in startup admin timeline summary extraction
+
+What was not implemented:
+- no Slack OAuth or Slack API runtime yet
+- no Slack destination schema yet
+- no send-to-Slack action yet
+
+Verification:
+- `npm.cmd run type-check`
+- `npx.cmd vitest run lib/server/service-entitlements-contract.test.ts lib/server/startup-rollout-flags.test.ts lib/server/startup-admin-data.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP contract freeze SL-001
+
+Completed the first Slack slice by freezing scope and implementation contract before coding runtime/OAuth/database integration.
+
+Files updated:
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `PLAYBOOK/startup-slack-integration-mvp-v1.md`
+- `docs/README.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+
+What was implemented:
+- defined Slack MVP scope with strict simplicity guardrails:
+  - connect workspace(s)
+  - save channel destination(s)
+  - manual send first
+  - delivery status visibility
+- froze event contract for first implementation:
+  - `new_audit_ready`
+  - `plan_ready`
+- froze normalized Slack payload and message-shape requirements
+- froze gating defaults:
+  - centralized service gating
+  - rollout-flag-controlled exposure
+  - markdown link only when markdown entitlement is enabled
+- registered byte-sized implementation tasks `SL-002` ... `SL-012` in project state
+
+What was not implemented:
+- no Slack database migration yet
+- no Slack OAuth/runtime/API route yet
+- no Slack UI components yet
+
+Verification:
+- documentation + task-ledger update slice only (no runtime code path changed)
+
+---
+
 ### 2026-04-04 - Startup beta rollout guardrails SD-015
 
 Completed startup beta rollout guardrails with centralized flags and suggest-only safe default behavior.
@@ -9980,6 +10087,339 @@ What was not implemented:
 Verification:
 - `npm run type-check`
 - `npx vitest run lib/server/content-admin-data.test.ts lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-004
+
+Added Slack OAuth connect/disconnect foundation with centralized rollout + entitlement gating.
+
+Files updated:
+- `supabase/migrations/031_startup_slack_install_sessions.sql`
+- `lib/server/startup-slack-integration.ts`
+- `lib/server/startup-slack-integration.test.ts`
+- `app/api/startup/slack/callback/route.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `lib/server/startup-service-gates.ts`
+- `lib/server/startup-service-gates.test.ts`
+- `lib/server/cf-env.ts`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added Slack OAuth session table with RLS + TTL state support (`startup_slack_install_sessions`)
+- added startup Slack integration helpers:
+  - create/consume install session
+  - list workspace Slack installations
+  - upsert callback installation as active
+  - disconnect installation by workspace + row id
+- added startup Slack callback route at `/api/startup/slack/callback`
+  - validates/consumes state
+  - supports team resolution from callback params or Slack `oauth.v2.access` exchange when credentials are configured
+  - redirects back to startup dashboard with status code
+- added startup dashboard Slack actions:
+  - begin Slack install (`beginStartupSlackInstall`)
+  - disconnect Slack installation (`disconnectStartupSlack`)
+  - both enforce startup membership, rollout flags, and centralized service gates
+- added startup dashboard Slack card:
+  - connect button
+  - connected workspace list
+  - per-install disconnect
+  - clear status/billing/rollout messages
+- expanded startup UI gate resolver coverage to include `slack_integration` and `slack_notifications`
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/startup-slack-integration.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-rollout-flags.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-005
+
+Added startup Slack destination setup (list + add) in the startup dashboard.
+
+Files updated:
+- `lib/server/startup-slack-integration.ts`
+- `lib/server/startup-slack-integration.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added destination read/write helpers:
+  - `listStartupSlackDestinations`
+  - `upsertStartupSlackDestination`
+- destination save enforces:
+  - connected active Slack installation in the same startup workspace
+  - single default destination behavior (unset previous default when a new default is chosen)
+- added startup action `saveStartupSlackDestination` with:
+  - startup membership check
+  - startup rollout checks
+  - centralized Slack entitlement gating
+  - dashboard revalidation + status redirect
+- expanded Slack dashboard card with:
+  - destination list
+  - add destination form (`installation`, `channelId`, optional `channelName`, `isDefaultDestination`)
+  - status messages for destination save/validation outcomes
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/startup-slack-integration.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-rollout-flags.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-006
+
+Added manual send-to-Slack action from startup report/audit context.
+
+Files updated:
+- `lib/server/startup-slack-integration.ts`
+- `lib/server/startup-slack-integration.test.ts`
+- `app/api/startup/slack/callback/route.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added destination resolution + manual Slack send helper:
+  - `getStartupSlackDestination`
+  - `sendStartupSlackMessage` (`chat.postMessage`)
+- callback now persists exchanged Slack bot token metadata when OAuth exchange succeeds
+- added startup server action `sendStartupReportToSlack`:
+  - enforces startup membership + rollout flags
+  - enforces centralized entitlement gates (`slack_integration`, `slack_notifications`)
+  - validates selected report + destination in workspace
+  - sends minimal report-context message to Slack destination
+  - emits structured success/failure logs + status redirects
+- added manual send UI to startup report/audit context card:
+  - report selector
+  - destination selector
+  - event type selector (`new_audit_ready`, `plan_ready`)
+  - send button with disabled states
+- added focused send helper coverage to startup Slack integration tests
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/startup-slack-integration.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-rollout-flags.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-007
+
+Added normalized Slack message formatter from the frozen payload contract and wired it into manual send.
+
+Files updated:
+- `lib/server/startup-slack-message.ts`
+- `lib/server/startup-slack-message.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/api/startup/slack/callback/route.ts`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added canonical formatter module for Slack payload contract:
+  - strict payload shape (`startup_workspace_id`, `destination_id`, `event_type`, `site_domain`, `score`, `score_delta`, `summary_bullets`, `report_url`, `markdown_url`, `sent_by_user_id`)
+  - deterministic text format:
+    - header (event + site)
+    - score + delta line
+    - up to 3 bullets
+    - links (GEO-Pulse + optional markdown)
+- manual send action now:
+  - resolves recommendations to build top summary bullets
+  - computes score delta against previous scan
+  - applies markdown link inclusion only when `markdown_audit_export` gate is enabled
+  - uses formatter output as Slack message body
+- callback OAuth token persistence was tightened so formatter-driven/manual sends have token metadata available when exchange succeeds
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/startup-slack-message.test.ts lib/server/startup-slack-integration.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-rollout-flags.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-008
+
+Added delivery-attempt persistence and failure-reason tracking for Slack sends.
+
+Files updated:
+- `lib/server/startup-slack-integration.ts`
+- `lib/server/startup-slack-integration.test.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added delivery event helpers:
+  - `createStartupSlackDeliveryEvent`
+  - `updateStartupSlackDeliveryEventStatus`
+  - `listStartupSlackDeliveryEvents`
+- manual send action now:
+  - inserts `queued` delivery event before send
+  - updates to `sent` with response metadata on success
+  - updates to `failed` with explicit `error_message` on failure
+  - includes `delivery_event_id` in structured success/failure logs
+- startup Slack UI now shows recent delivery attempts with status + timestamp + failure reason
+- corrected Slack destination default flag persistence to match DB schema:
+  - switched to `is_default` column usage (previous code used `is_default_destination`)
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/startup-slack-integration.test.ts lib/server/startup-slack-message.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-rollout-flags.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-009
+
+Added optional workspace-level `slack_auto_post` toggle with maintainable rollout metadata handling.
+
+Files updated:
+- `lib/server/startup-rollout-flags.ts`
+- `lib/server/startup-rollout-flags.test.ts`
+- `app/dashboard/startups/actions.ts`
+- `app/dashboard/startup/actions.ts`
+- `app/dashboard/startup/page.tsx`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added centralized rollout metadata patch helper:
+  - `applyStartupRolloutFlagPatch` in `startup-rollout-flags.ts`
+  - prevents admin/startup rollout metadata write drift
+- updated admin rollout action to use shared patch helper
+- added startup workspace action `updateStartupSlackAutoPostSetting`:
+  - founder/admin role enforcement
+  - service-role metadata update
+  - structured log event for rollout update
+- added startup dashboard Slack UI control:
+  - owner/admin-only checkbox + save button
+  - default-off posture maintained
+  - status feedback on update
+- added focused test coverage for metadata patch helper
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/startup-rollout-flags.test.ts lib/server/startup-slack-integration.test.ts lib/server/startup-slack-message.test.ts lib/server/startup-service-gates.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-010
+
+Wired Slack service keys into centralized `/dashboard/services` controls with maintainable propagation behavior.
+
+Files updated:
+- `supabase/migrations/032_slack_service_bundle_mappings.sql`
+- `app/dashboard/services/actions.ts`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added migration to seed Slack bundle mappings centrally:
+  - seeds `service_bundle_services` rows for
+    - `slack_integration`
+    - `slack_notifications`
+  - across existing bundles:
+    - `startup_lite`
+    - `startup_dev`
+    - `agency_core`
+    - `agency_pro`
+  - default posture seeded as `enabled=false`, `access_mode='off'`
+- updated service-control center actions to revalidate startup surfaces after changes:
+  - `/dashboard/startup`
+  - `/dashboard/startups`
+  - in addition to existing services/agencies revalidation
+
+Verification:
+- `npm run type-check`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-011
+
+Added focused Slack tests and edge-case hardening coverage.
+
+Files updated:
+- `lib/server/startup-slack-integration.test.ts`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- expanded Slack integration test coverage for high-risk edge paths:
+  - missing Slack token in installation metadata
+  - inactive/paused destination send rejection
+  - delivery-event list normalization
+  - destination lookup null path when installation linkage is missing
+- retained focused coverage for:
+  - Slack gates (`startup-service-gates.test.ts`)
+  - formatter contract (`startup-slack-message.test.ts`)
+  - rollout handling (`startup-rollout-flags.test.ts`)
+- kept runtime behavior unchanged (test/hardening-only slice)
+
+Verification:
+- `npm run type-check`
+- `npx vitest run lib/server/startup-slack-integration.test.ts lib/server/startup-slack-message.test.ts lib/server/startup-service-gates.test.ts lib/server/startup-rollout-flags.test.ts`
+
+---
+
+### 2026-04-04 - Startup Slack MVP slice SL-012
+
+Completed Alie pilot rollout evidence packaging so Slack MVP execution is standardized and auditable.
+
+Files updated:
+- `docs/18-startup-slack-pilot-rollout-runbook.md`
+- `docs/17-startup-slack-integration-mvp-plan.md`
+- `docs/README.md`
+- `docs/01-current-state.md`
+- `docs/04-open-work-and-risks.md`
+- `agents/memory/PROJECT_STATE.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+What was implemented:
+- added dedicated rollout/evidence runbook for startup Slack pilot:
+  - preconditions (services, flags, env)
+  - step-by-step connect -> destination -> send -> verify flow
+  - explicit rollback order and exit criteria
+- added operator evidence checklist:
+  - installation proof
+  - destination proof
+  - two manual send proofs (`new_audit_ready`, `plan_ready`)
+  - delivery-event proof
+- added optional SQL verification snippets for delivery and structured logs
+- updated docs/index/state references so Slack stream status and next actions are consistent
+
+What was not implemented:
+- no runtime code-path changes for Slack send/connect behavior
+- no synthetic/fabricated pilot evidence added; live pilot evidence must be captured during operator execution
+
+Verification:
+- documentation/state synchronization slice only (no runtime test delta required)
 
 ---
 

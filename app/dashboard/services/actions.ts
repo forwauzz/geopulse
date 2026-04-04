@@ -235,6 +235,8 @@ export async function upsertServiceCatalogControl(
 
     revalidatePath('/dashboard/services');
     revalidatePath('/dashboard/agencies');
+    revalidatePath('/dashboard/startups');
+    revalidatePath('/dashboard/startup');
     return { ok: true, message: 'Service defaults updated.' };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'Could not update service defaults.' };
@@ -328,6 +330,8 @@ export async function upsertBundleServiceControl(
 
     revalidatePath('/dashboard/services');
     revalidatePath('/dashboard/agencies');
+    revalidatePath('/dashboard/startups');
+    revalidatePath('/dashboard/startup');
     return { ok: true, message: 'Bundle service mapping updated.' };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'Could not update bundle service mapping.' };
@@ -472,6 +476,8 @@ export async function upsertServiceEntitlementOverride(
 
     revalidatePath('/dashboard/services');
     revalidatePath('/dashboard/agencies');
+    revalidatePath('/dashboard/startups');
+    revalidatePath('/dashboard/startup');
     return { ok: true, message: 'Entitlement override saved.' };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'Could not save entitlement override.' };
