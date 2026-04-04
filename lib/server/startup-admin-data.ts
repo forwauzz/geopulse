@@ -74,7 +74,13 @@ function summarizeTimelineEvent(event: string, data: Record<string, unknown>): s
     startup_model_policy_resolved: ['service_key', 'effective_provider', 'effective_model', 'fallback_reason'],
     startup_implementation_plan_created: ['task_count', 'model_policy_effective_provider', 'model_policy_effective_model'],
     startup_service_gate_blocked: ['service_key', 'blocked_reason'],
-    startup_rollout_flags_updated: ['startup_dashboard', 'github_agent', 'auto_pr'],
+    startup_rollout_flags_updated: [
+      'startup_dashboard',
+      'github_agent',
+      'auto_pr',
+      'slack_agent',
+      'slack_auto_post',
+    ],
   };
 
   const keys = keysByEvent[event] ?? ['message', 'reason', 'status'];

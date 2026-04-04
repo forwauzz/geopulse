@@ -85,7 +85,7 @@ describe('startup service gates', () => {
     expect(gate.blockedReason).toBe('workspace_requires_paid_mode');
   });
 
-  it('resolves startup dashboard gates for github and agent pr services', async () => {
+  it('resolves startup dashboard gates for github, pr, and slack services', async () => {
     vi.mocked(resolveServiceEntitlement)
       .mockResolvedValueOnce({
         serviceKey: 'github_integration',
@@ -98,6 +98,20 @@ describe('startup service gates', () => {
         serviceKey: 'agent_pr_execution',
         enabled: false,
         accessMode: 'off',
+        usageLimit: null,
+        source: 'bundle_service',
+      })
+      .mockResolvedValueOnce({
+        serviceKey: 'slack_integration',
+        enabled: true,
+        accessMode: 'free',
+        usageLimit: null,
+        source: 'bundle_service',
+      })
+      .mockResolvedValueOnce({
+        serviceKey: 'slack_notifications',
+        enabled: true,
+        accessMode: 'free',
         usageLimit: null,
         source: 'bundle_service',
       });
@@ -115,6 +129,20 @@ describe('startup service gates', () => {
         requiresStripePayment: false,
         workspaceBillingMode: 'free',
         mapping: null,
+      })
+      .mockResolvedValueOnce({
+        allowed: false,
+        reason: 'workspace_requires_paid_mode',
+        requiresStripePayment: false,
+        workspaceBillingMode: 'free',
+        mapping: null,
+      })
+      .mockResolvedValueOnce({
+        allowed: true,
+        reason: 'ok',
+        requiresStripePayment: false,
+        workspaceBillingMode: 'free',
+        mapping: null,
       });
 
     const gates = await resolveStartupDashboardUiGates({
@@ -127,5 +155,8 @@ describe('startup service gates', () => {
     expect(gates.githubIntegration.enabled).toBe(true);
     expect(gates.agentPrExecution.enabled).toBe(false);
     expect(gates.agentPrExecution.blockedReason).toBe('service_disabled');
+    expect(gates.slackIntegration.enabled).toBe(false);
+    expect(gates.slackIntegration.blockedReason).toBe('workspace_requires_paid_mode');
+    expect(gates.slackNotifications.enabled).toBe(true);
   });
 });

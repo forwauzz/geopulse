@@ -62,26 +62,45 @@ export async function resolveStartupDashboardUiGates(args: {
 }): Promise<{
   readonly githubIntegration: StartupServiceGate;
   readonly agentPrExecution: StartupServiceGate;
+  readonly slackIntegration: StartupServiceGate;
+  readonly slackNotifications: StartupServiceGate;
 }> {
-  const [githubIntegration, agentPrExecution] = await Promise.all([
-    resolveStartupServiceGate({
-      memberSupabase: args.memberSupabase,
-      serviceSupabase: args.serviceSupabase,
-      startupWorkspaceId: args.startupWorkspaceId,
-      userId: args.userId,
-      serviceKey: 'github_integration',
-    }),
-    resolveStartupServiceGate({
-      memberSupabase: args.memberSupabase,
-      serviceSupabase: args.serviceSupabase,
-      startupWorkspaceId: args.startupWorkspaceId,
-      userId: args.userId,
-      serviceKey: 'agent_pr_execution',
-    }),
-  ]);
+  const [githubIntegration, agentPrExecution, slackIntegration, slackNotifications] =
+    await Promise.all([
+      resolveStartupServiceGate({
+        memberSupabase: args.memberSupabase,
+        serviceSupabase: args.serviceSupabase,
+        startupWorkspaceId: args.startupWorkspaceId,
+        userId: args.userId,
+        serviceKey: 'github_integration',
+      }),
+      resolveStartupServiceGate({
+        memberSupabase: args.memberSupabase,
+        serviceSupabase: args.serviceSupabase,
+        startupWorkspaceId: args.startupWorkspaceId,
+        userId: args.userId,
+        serviceKey: 'agent_pr_execution',
+      }),
+      resolveStartupServiceGate({
+        memberSupabase: args.memberSupabase,
+        serviceSupabase: args.serviceSupabase,
+        startupWorkspaceId: args.startupWorkspaceId,
+        userId: args.userId,
+        serviceKey: 'slack_integration',
+      }),
+      resolveStartupServiceGate({
+        memberSupabase: args.memberSupabase,
+        serviceSupabase: args.serviceSupabase,
+        startupWorkspaceId: args.startupWorkspaceId,
+        userId: args.userId,
+        serviceKey: 'slack_notifications',
+      }),
+    ]);
 
   return {
     githubIntegration,
     agentPrExecution,
+    slackIntegration,
+    slackNotifications,
   };
 }
