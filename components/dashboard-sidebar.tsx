@@ -84,12 +84,12 @@ export function DashboardSidebar({ userEmail, isAdmin }: DashboardSidebarProps) 
   ];
 
   return (
-    <aside className="w-full rounded-2xl bg-surface-container-low p-5 shadow-float lg:sticky lg:top-24 lg:w-72 lg:self-start">
-      <Link href="/" className="flex items-center gap-2 px-3 text-on-background">
+    <aside className="w-full rounded-2xl bg-surface-container-low p-4 shadow-float sm:p-5 lg:sticky lg:top-24 lg:w-72 lg:self-start">
+      <Link href="/" className="flex items-center gap-2 px-2 text-on-background sm:px-3">
         <span className="material-symbols-outlined text-primary" aria-hidden>
           explore
         </span>
-        <span className="font-headline text-2xl font-bold">GEO-Pulse</span>
+        <span className="font-headline text-xl font-bold sm:text-2xl">GEO-Pulse</span>
       </Link>
 
       <div className="mt-5 rounded-xl bg-surface-container-high px-3 py-3">

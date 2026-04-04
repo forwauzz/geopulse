@@ -546,7 +546,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
       <section className="mt-8">
         {totalScans > 0 && (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
               <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Scans</p>
               <p className="mt-1 font-headline text-2xl font-bold text-on-background">{totalScans}</p>
@@ -564,7 +564,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           </div>
         )}
 
-        <div className="mt-8 flex items-end justify-between gap-4">
+        <div className="mt-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="font-headline text-2xl font-bold text-on-background">Personal scans</h2>
             <p className="mt-1 font-body text-sm text-on-surface-variant">

@@ -478,7 +478,7 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
           <div className="mt-4 grid gap-3">
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
               <p className="text-xs uppercase tracking-widest text-zinc-500">Funnel</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                 <div className="rounded-md bg-zinc-900 px-3 py-2">Suggested: {metrics.funnel.suggested}</div>
                 <div className="rounded-md bg-zinc-900 px-3 py-2">Approved: {metrics.funnel.approved}</div>
                 <div className="rounded-md bg-zinc-900 px-3 py-2">In progress: {metrics.funnel.inProgress}</div>
@@ -489,7 +489,7 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
             </div>
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
               <p className="text-xs uppercase tracking-widest text-zinc-500">Impact windows (avg score)</p>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
                 <div className="rounded-md bg-zinc-900 px-3 py-2">7d: {metrics.impactWindows.d7 ?? '-'}</div>
                 <div className="rounded-md bg-zinc-900 px-3 py-2">14d: {metrics.impactWindows.d14 ?? '-'}</div>
                 <div className="rounded-md bg-zinc-900 px-3 py-2">30d: {metrics.impactWindows.d30 ?? '-'}</div>
@@ -497,7 +497,7 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
             </div>
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
               <p className="text-xs uppercase tracking-widest text-zinc-500">Audit delivery context</p>
-              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div className="mt-2 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                 <div className="rounded-md bg-zinc-900 px-3 py-2">Deep audits: {dashboard.reports.length}</div>
                 <div className="rounded-md bg-zinc-900 px-3 py-2">Delivered: {deliveredReports}</div>
               </div>

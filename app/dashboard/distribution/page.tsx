@@ -128,7 +128,7 @@ export default async function DistributionAdminPage(props: {
   const adminContext = await loadAdminPageContext('/dashboard/distribution');
   if (!adminContext.ok) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-16">
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
         <p className="text-error">{adminContext.message}</p>
       </main>
     );
@@ -144,7 +144,7 @@ export default async function DistributionAdminPage(props: {
     : resolvedSearchParams['provider'] ?? null;
   if (!flags.uiEnabled) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-16">
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
         <h1 className="font-headline text-3xl font-bold text-on-background">Distribution engine</h1>
         <p className="mt-4 font-body text-on-surface-variant">
           The distribution-engine admin surface is feature-flagged off for this environment.
@@ -172,7 +172,7 @@ export default async function DistributionAdminPage(props: {
     const assetsWithMedia = overview.assets.filter((asset) => asset.media_count > 0).length;
 
     return (
-      <main className="mx-auto max-w-6xl px-6 py-16">
+      <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="font-label text-sm font-semibold uppercase tracking-widest text-primary">
@@ -208,7 +208,7 @@ export default async function DistributionAdminPage(props: {
           </div>
         </div>
 
-        <section className="mt-10 grid gap-4 md:grid-cols-4">
+        <section className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
             <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
               Accounts
@@ -534,7 +534,7 @@ export default async function DistributionAdminPage(props: {
       );
 
     return (
-      <main className="mx-auto max-w-5xl px-6 py-16">
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
         <h1 className="font-headline text-3xl font-bold text-on-background">Distribution engine</h1>
         <p className="mt-4 text-error">
           Could not load the distribution-engine admin shell.
@@ -552,3 +552,4 @@ export default async function DistributionAdminPage(props: {
     );
   }
 }
+

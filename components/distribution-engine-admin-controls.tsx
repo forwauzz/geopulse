@@ -101,7 +101,7 @@ export function DistributionEngineAdminControls({
         </div>
       </form>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <form action={socialSeedAction} className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
         <h2 className="font-headline text-lg font-semibold text-on-background">
           Seed social asset + job
@@ -623,7 +623,7 @@ export function DistributionEngineAdminControls({
       </form>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
       <form action={jobAction} className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
         <h2 className="font-headline text-lg font-semibold text-on-background">Create job</h2>
         <p className="mt-1 text-sm text-on-surface-variant">
@@ -814,3 +814,4 @@ export function DistributionEngineAdminControls({
     </section>
   );
 }
+

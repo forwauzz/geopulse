@@ -21,9 +21,11 @@ export function SiteHeaderShell({
     ? 'sticky top-0 z-50 border-b border-white/10 bg-black/95 backdrop-blur'
     : 'sticky top-0 z-50 bg-surface';
   const brandTextClassName = isBlogRoute
-    ? 'font-headline text-2xl font-bold text-white'
-    : 'font-headline text-2xl font-bold text-[#0f172a]';
-  const brandIconClassName = isBlogRoute ? 'material-symbols-outlined text-sky-300' : 'material-symbols-outlined text-primary';
+    ? 'font-headline text-xl font-bold text-blue-300 sm:text-2xl'
+    : 'font-headline text-xl font-bold text-blue-600 sm:text-2xl';
+  const brandIconClassName = isBlogRoute
+    ? 'material-symbols-outlined text-blue-300'
+    : 'material-symbols-outlined text-blue-600';
   const primaryNavLinkClassName = isBlogRoute
     ? 'hidden font-headline text-lg font-semibold text-white md:inline'
     : 'hidden font-headline text-lg font-semibold text-on-background md:inline';
@@ -37,7 +39,7 @@ export function SiteHeaderShell({
   return (
     <header className={headerClassName}>
       <nav
-        className={`mx-auto flex max-w-screen-2xl items-center justify-between px-6 md:px-10 ${
+        className={`mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6 md:px-10 ${
           isDashboardRoute ? 'py-4' : 'py-6'
         }`}
       >
@@ -48,7 +50,7 @@ export function SiteHeaderShell({
           <span className={brandTextClassName}>GEO-Pulse</span>
         </Link>
 
-        <div className="flex items-center gap-4 sm:gap-8 md:gap-10">
+        <div className="flex items-center gap-3 sm:gap-6 md:gap-10">
           {isDashboardRoute ? (
             <>
               <Link

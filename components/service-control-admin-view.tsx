@@ -42,7 +42,7 @@ export function ServiceControlAdminView({ overview }: Props) {
   );
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-16">
+    <main className="mx-auto max-w-7xl px-4 py-12 sm:px-6 md:py-16">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="font-label text-sm font-semibold uppercase tracking-widest text-primary">
@@ -58,7 +58,7 @@ export function ServiceControlAdminView({ overview }: Props) {
         </div>
       </div>
 
-      <section className="mt-10 grid gap-4 md:grid-cols-4">
+      <section className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
           <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
             Services
@@ -520,3 +520,4 @@ export function ServiceControlAdminView({ overview }: Props) {
     </main>
   );
 }
+

@@ -36,7 +36,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${newsreader.variable} flex min-h-screen flex-col bg-surface font-body text-on-surface antialiased`}
+        className={`${inter.variable} ${newsreader.variable} flex min-h-screen flex-col overflow-x-hidden bg-surface font-body text-on-surface antialiased`}
       >
         <LongWaitProvider>
           <AttributionInit />

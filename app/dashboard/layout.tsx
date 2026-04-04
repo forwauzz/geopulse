@@ -22,8 +22,8 @@ export default async function DashboardLayout({
   const isAdmin = isAdminEmail(user.email);
 
   return (
-    <main className="mx-auto w-full max-w-screen-2xl px-6 py-10 md:px-10">
-      <div className="grid gap-8 lg:grid-cols-[288px_minmax(0,1fr)]">
+    <main className="mx-auto w-full max-w-screen-2xl px-4 py-8 sm:px-6 md:px-10">
+      <div className="grid gap-6 lg:grid-cols-[288px_minmax(0,1fr)] lg:gap-8">
         <DashboardSidebar userEmail={user.email ?? null} isAdmin={isAdmin} />
         <div className="min-w-0">{children}</div>
       </div>
