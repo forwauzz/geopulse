@@ -199,7 +199,7 @@ export async function upsertStartupSlackInstallationFromCallback(args: {
       slack_team_name: args.slackTeamName ?? null,
       slack_team_domain: args.slackTeamDomain ?? null,
       status: 'active',
-      connected_by_user_id: args.connectedByUserId ?? null,
+      installed_by_user_id: args.connectedByUserId ?? null,
       connected_at: new Date().toISOString(),
       disconnected_at: null,
       metadata: args.metadata ?? {},
