@@ -61,6 +61,33 @@ export type ContentPublishCheckTrendRow = {
   readonly metadata: Record<string, unknown>;
 };
 
+export type ContentDraftQueueRow = {
+  readonly content_id: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly status: 'brief' | 'draft' | 'review';
+  readonly topic_cluster: string | null;
+  readonly queue_owner: string | null;
+  readonly queue_target_week: string | null;
+  readonly updated_at: string;
+};
+
+export type ContentDraftQueueFilters = {
+  readonly owner?: string | null;
+  readonly targetWeek?: string | null;
+};
+
+export type ContentApprovedQueueRow = {
+  readonly content_id: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly status: 'approved';
+  readonly topic_cluster: string | null;
+  readonly queue_owner: string | null;
+  readonly queue_target_week: string | null;
+  readonly updated_at: string;
+};
+
 type ContentItemRow = Omit<
   ContentAdminListRow,
   'delivery_count' | 'published_delivery_count' | 'latest_delivery_destination' | 'latest_delivery_status'
@@ -89,6 +116,12 @@ function readRequiredText(value: unknown): string {
 }
 
 function readOptionalText(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function readMetadataText(metadata: unknown, key: string): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const value = (metadata as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : null;
 }
 
@@ -216,6 +249,130 @@ export function createContentAdminData(supabase: SupabaseLike) {
             ? (row.metadata as Record<string, unknown>)
             : {},
       }));
+    },
+
+    async getArticleDraftQueue(
+      limitPerStatus = 10,
+      filters: ContentDraftQueueFilters = {}
+    ): Promise<{
+      readonly brief: ContentDraftQueueRow[];
+      readonly draft: ContentDraftQueueRow[];
+      readonly review: ContentDraftQueueRow[];
+    }> {
+      const queueStatuses = ['brief', 'draft', 'review'] as const;
+
+      const { data, error } = await supabase
+        .from('content_items')
+        .select('content_id,slug,title,status,topic_cluster,metadata,updated_at')
+        .eq('content_type', 'article')
+        .in('status', [...queueStatuses])
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      const rows = ((data ?? []) as Array<{
+        content_id?: unknown;
+        slug?: unknown;
+        title?: unknown;
+        status?: unknown;
+        topic_cluster?: unknown;
+        metadata?: unknown;
+        updated_at?: unknown;
+      }>).map((row) => ({
+        content_id: readRequiredText(row.content_id),
+        slug: readRequiredText(row.slug),
+        title: readRequiredText(row.title),
+        status: readRequiredText(row.status) as ContentDraftQueueRow['status'],
+        topic_cluster: readOptionalText(row.topic_cluster),
+        queue_owner: readMetadataText(row.metadata, 'queue_owner'),
+        queue_target_week: readMetadataText(row.metadata, 'queue_target_week'),
+        updated_at: readRequiredText(row.updated_at),
+      }));
+
+      const ownerFilter = filters.owner?.trim().toLowerCase() ?? '';
+      const targetWeekFilter = filters.targetWeek?.trim() ?? '';
+      const filteredRows = rows.filter((row) => {
+        if (ownerFilter) {
+          const owner = row.queue_owner?.toLowerCase() ?? '';
+          if (!owner.includes(ownerFilter)) return false;
+        }
+        if (targetWeekFilter) {
+          const targetWeek = row.queue_target_week ?? '';
+          if (targetWeek !== targetWeekFilter) return false;
+        }
+        return true;
+      });
+
+      const byStatus = {
+        brief: [] as ContentDraftQueueRow[],
+        draft: [] as ContentDraftQueueRow[],
+        review: [] as ContentDraftQueueRow[],
+      };
+
+      for (const status of queueStatuses) {
+        byStatus[status] = filteredRows
+          .filter((row) => row.status === status)
+          .slice(0, limitPerStatus);
+      }
+
+      return byStatus;
+    },
+
+    async getApprovedArticleQueue(
+      limit = 25,
+      filters: ContentDraftQueueFilters = {}
+    ): Promise<{
+      readonly totalFilteredCount: number;
+      readonly rows: ContentApprovedQueueRow[];
+    }> {
+      const { data, error } = await supabase
+        .from('content_items')
+        .select('content_id,slug,title,status,topic_cluster,metadata,updated_at')
+        .eq('content_type', 'article')
+        .eq('status', 'approved')
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      const rows = ((data ?? []) as Array<{
+        content_id?: unknown;
+        slug?: unknown;
+        title?: unknown;
+        status?: unknown;
+        topic_cluster?: unknown;
+        metadata?: unknown;
+        updated_at?: unknown;
+      }>)
+        .map((row) => ({
+          content_id: readRequiredText(row.content_id),
+          slug: readRequiredText(row.slug),
+          title: readRequiredText(row.title),
+          status: readRequiredText(row.status) as 'approved',
+          topic_cluster: readOptionalText(row.topic_cluster),
+          queue_owner: readMetadataText(row.metadata, 'queue_owner'),
+          queue_target_week: readMetadataText(row.metadata, 'queue_target_week'),
+          updated_at: readRequiredText(row.updated_at),
+        }))
+        .filter((row) => row.content_id);
+
+      const ownerFilter = filters.owner?.trim().toLowerCase() ?? '';
+      const targetWeekFilter = filters.targetWeek?.trim() ?? '';
+      const filteredRows = rows.filter((row) => {
+        if (ownerFilter) {
+          const owner = row.queue_owner?.toLowerCase() ?? '';
+          if (!owner.includes(ownerFilter)) return false;
+        }
+        if (targetWeekFilter) {
+          const targetWeek = row.queue_target_week ?? '';
+          if (targetWeek !== targetWeekFilter) return false;
+        }
+        return true;
+      });
+
+      return {
+        totalFilteredCount: filteredRows.length,
+        rows: filteredRows.slice(0, Math.max(1, Math.min(limit, 100))),
+      };
     },
   };
 }

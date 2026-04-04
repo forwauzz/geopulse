@@ -1,8 +1,14 @@
 import Link from 'next/link';
 import {
+  bulkAdvanceContentQueueStatus,
   importContentMachineDrafts,
+  publishApprovedBlogWave,
   publishReadyArticles,
+  seedTopicRegistryBatchOne,
+  seedTopicRegistryBatchThree,
+  seedTopicRegistryBatchTwo,
   seedTopicPagesFromClusters,
+  updateContentQueueAssignment,
   updateContentDestinationConfig,
 } from './actions';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
@@ -12,9 +18,17 @@ import { createContentDestinationAdminData } from '@/lib/server/content-destinat
 import { evaluateContentDestinationHealth } from '@/lib/server/content-destination-health';
 import { buildContentLaunchReadiness } from '@/lib/server/content-launch-readiness';
 import { buildContentPublishQualityTrendSummary } from '@/lib/server/content-publish-check-history';
+import { getTopicRegistryProgressSummary } from '@/lib/server/content-topic-registry-progress';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
 
 export const dynamic = 'force-dynamic';
+
+type PageProps = {
+  readonly searchParams?: Promise<{
+    readonly queueOwner?: string;
+    readonly queueWeek?: string;
+  }>;
+};
 
 function formatDateTime(value: string | null): string {
   if (!value) return '-';
@@ -65,7 +79,7 @@ function availabilityTone(status: string): string {
   }
 }
 
-export default async function ContentAdminPage() {
+export default async function ContentAdminPage({ searchParams }: PageProps) {
   const adminContext = await loadAdminPageContext('/dashboard/content');
   if (!adminContext.ok) {
     return (
@@ -80,12 +94,26 @@ export default async function ContentAdminPage() {
   const distributionFlags = resolveDistributionEngineFlags(adminContext.env);
 
   try {
-    const [env, items, destinations, publishTrendRows] = await Promise.all([
+    const params = (await searchParams) ?? {};
+    const queueOwnerFilter = (params.queueOwner ?? '').trim();
+    const queueWeekFilter = (params.queueWeek ?? '').trim();
+
+    const [env, items, destinations, publishTrendRows, topicRegistryProgress, draftQueue] =
+      await Promise.all([
       getPaymentApiEnv(),
       contentAdminData.getRecentContentItems(),
       destinationAdminData.getDestinations(),
       contentAdminData.getRecentPublishCheckTrendRows(),
+      getTopicRegistryProgressSummary(adminContext.adminDb),
+      contentAdminData.getArticleDraftQueue(10, {
+        owner: queueOwnerFilter || null,
+        targetWeek: queueWeekFilter || null,
+      }),
     ]);
+    const approvedPublishWavePreview = await contentAdminData.getApprovedArticleQueue(25, {
+      owner: queueOwnerFilter || null,
+      targetWeek: queueWeekFilter || null,
+    });
     const launchReadiness = await buildContentLaunchReadiness(contentAdminData);
     const publishQualityTrend = buildContentPublishQualityTrendSummary(publishTrendRows);
     const resolvedDestinations = destinations.map((destination) => ({
@@ -140,6 +168,30 @@ export default async function ContentAdminPage() {
                 className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
               >
                 Seed topic pages
+              </button>
+            </form>
+            <form action={seedTopicRegistryBatchOne}>
+              <button
+                type="submit"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Seed topic batch 1
+              </button>
+            </form>
+            <form action={seedTopicRegistryBatchTwo}>
+              <button
+                type="submit"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Seed topic batch 2
+              </button>
+            </form>
+            <form action={seedTopicRegistryBatchThree}>
+              <button
+                type="submit"
+                className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Seed topic batch 3
               </button>
             </form>
             <form action={publishReadyArticles}>
@@ -230,10 +282,331 @@ export default async function ContentAdminPage() {
           topic-page intro copy can be edited from the existing content admin flow.
         </div>
         <div className="mt-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
+          <strong className="text-on-background">Topic registry seeding:</strong> the batch seed
+          buttons insert planned topics from{' '}
+          <code>docs/13-topic-registry-v1.json</code> into canonical{' '}
+          <code>content_items</code> as article briefs for `batch_1`, `batch_2`, and `batch_3`.
+          Each action is idempotent and skips existing slugs/content IDs.
+        </div>
+        <div className="mt-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
           <strong className="text-on-background">Publish-ready batch action:</strong> the publish
           button promotes all non-published article rows that already satisfy the existing publish
           checks. Current eligible inventory: <code>{readyToPublishCount}</code>.
         </div>
+
+        <section className="mt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-headline text-xl font-bold text-on-background">
+                Drafting queue (blog-first)
+              </h2>
+              <p className="mt-1 max-w-3xl font-body text-sm text-on-surface-variant">
+                Next topic rows to move today for canonical blog publishing. Newsletter pushes can
+                stay paused until after on-site publication.
+              </p>
+            </div>
+            <p className="font-body text-xs text-on-surface-variant">
+              Queue sizes / brief: <code>{draftQueue.brief.length}</code> / draft:{' '}
+              <code>{draftQueue.draft.length}</code> / review: <code>{draftQueue.review.length}</code>
+            </p>
+          </div>
+
+          <form action="/dashboard/content" method="get" className="mt-4 grid gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4 md:grid-cols-[1fr_220px_auto]">
+            <label className="text-xs uppercase tracking-widest text-on-surface-variant">
+              Queue owner
+              <input
+                type="text"
+                name="queueOwner"
+                defaultValue={queueOwnerFilter}
+                placeholder="e.g. carine"
+                className="mt-2 w-full rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-background"
+              />
+            </label>
+            <label className="text-xs uppercase tracking-widest text-on-surface-variant">
+              Target week (YYYY-Www)
+              <input
+                type="text"
+                name="queueWeek"
+                defaultValue={queueWeekFilter}
+                placeholder="2026-W14"
+                className="mt-2 w-full rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-background"
+              />
+            </label>
+            <div className="flex items-end gap-2">
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
+              >
+                Apply filters
+              </button>
+              <Link
+                href="/dashboard/content"
+                className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Clear
+              </Link>
+            </div>
+          </form>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <form action={bulkAdvanceContentQueueStatus}>
+              <input type="hidden" name="fromStatus" value="brief" />
+              <input type="hidden" name="toStatus" value="draft" />
+              <input type="hidden" name="queueOwner" value={queueOwnerFilter} />
+              <input type="hidden" name="queueWeek" value={queueWeekFilter} />
+              <input type="hidden" name="maxItems" value="25" />
+              <button
+                type="submit"
+                className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Move brief {'->'} draft
+              </button>
+            </form>
+            <form action={bulkAdvanceContentQueueStatus}>
+              <input type="hidden" name="fromStatus" value="draft" />
+              <input type="hidden" name="toStatus" value="review" />
+              <input type="hidden" name="queueOwner" value={queueOwnerFilter} />
+              <input type="hidden" name="queueWeek" value={queueWeekFilter} />
+              <input type="hidden" name="maxItems" value="25" />
+              <button
+                type="submit"
+                className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Move draft {'->'} review
+              </button>
+            </form>
+            <form action={bulkAdvanceContentQueueStatus}>
+              <input type="hidden" name="fromStatus" value="review" />
+              <input type="hidden" name="toStatus" value="approved" />
+              <input type="hidden" name="queueOwner" value={queueOwnerFilter} />
+              <input type="hidden" name="queueWeek" value={queueWeekFilter} />
+              <input type="hidden" name="maxItems" value="25" />
+              <button
+                type="submit"
+                className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs font-medium text-on-background transition hover:bg-surface-container-high"
+              >
+                Move review {'->'} approved
+              </button>
+            </form>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            {[
+              { key: 'brief', label: 'Brief to draft', rows: draftQueue.brief },
+              { key: 'draft', label: 'Draft to review', rows: draftQueue.draft },
+              { key: 'review', label: 'Review to publish', rows: draftQueue.review },
+            ].map((group) => (
+              <div key={group.key} className="rounded-xl bg-surface-container-lowest px-5 py-5 shadow-float">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-headline text-lg font-semibold text-on-background">{group.label}</h3>
+                  <span className="rounded-lg bg-surface-container-low px-2 py-1 font-body text-xs text-on-surface-variant">
+                    {group.rows.length}
+                  </span>
+                </div>
+                {group.rows.length === 0 ? (
+                  <p className="mt-4 font-body text-sm text-on-surface-variant">
+                    No rows currently in this queue bucket.
+                  </p>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    {group.rows.map((row) => (
+                      <div
+                        key={row.content_id}
+                        className="rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-3"
+                      >
+                        <Link
+                          href={`/dashboard/content/${row.content_id}`}
+                          className="font-body text-sm font-semibold text-on-background hover:text-primary"
+                        >
+                          {row.title}
+                        </Link>
+                        <p className="mt-1 font-body text-xs text-on-surface-variant">
+                          Topic: {formatLabel(row.topic_cluster)} / Updated {formatDateTime(row.updated_at)}
+                        </p>
+                        <p className="mt-1 font-body text-xs text-on-surface-variant">
+                          Owner: {row.queue_owner ?? '-'} / Week: {row.queue_target_week ?? '-'}
+                        </p>
+                        <form action={updateContentQueueAssignment} className="mt-3 grid gap-2 sm:grid-cols-[1fr_140px_auto]">
+                          <input type="hidden" name="contentId" value={row.content_id} />
+                          <input
+                            type="text"
+                            name="queueOwner"
+                            defaultValue={row.queue_owner ?? queueOwnerFilter}
+                            placeholder="owner"
+                            className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-2 py-1.5 text-xs text-on-background"
+                          />
+                          <input
+                            type="text"
+                            name="queueTargetWeek"
+                            defaultValue={row.queue_target_week ?? queueWeekFilter}
+                            placeholder="2026-W14"
+                            className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-2 py-1.5 text-xs text-on-background"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-lg bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-background transition hover:bg-surface-container"
+                          >
+                            Save
+                          </button>
+                        </form>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="font-headline text-base font-semibold text-on-background">
+                  Approved publish wave (dry-run preview)
+                </p>
+                <p className="mt-1 font-body text-xs text-on-surface-variant">
+                  Filter-scoped approved blog rows ready for bounded publish execution. This action
+                  does not push newsletters.
+                </p>
+              </div>
+              <form action={publishApprovedBlogWave} className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="queueOwner" value={queueOwnerFilter} />
+                <input type="hidden" name="queueWeek" value={queueWeekFilter} />
+                <label className="text-xs uppercase tracking-widest text-on-surface-variant">
+                  Max
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    name="maxItems"
+                    defaultValue={25}
+                    className="ml-2 w-20 rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-2 py-1 text-xs text-on-background"
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-on-primary transition hover:opacity-90"
+                >
+                  Publish approved blog wave
+                </button>
+              </form>
+            </div>
+            <p className="mt-3 font-body text-xs text-on-surface-variant">
+              Preview count: <code>{approvedPublishWavePreview.totalFilteredCount}</code>
+            </p>
+            {approvedPublishWavePreview.rows.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {approvedPublishWavePreview.rows.map((row) => (
+                  <div
+                    key={row.content_id}
+                    className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2"
+                  >
+                    <Link
+                      href={`/dashboard/content/${row.content_id}`}
+                      className="font-body text-sm font-medium text-on-background hover:text-primary"
+                    >
+                      {row.title}
+                    </Link>
+                    <p className="mt-1 font-body text-xs text-on-surface-variant">
+                      Owner: {row.queue_owner ?? '-'} / Week: {row.queue_target_week ?? '-'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 font-body text-sm text-on-surface-variant">
+                No approved rows match the current queue filters.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="font-headline text-xl font-bold text-on-background">
+                100-topic batch progress
+              </h2>
+              <p className="mt-1 max-w-3xl font-body text-sm text-on-surface-variant">
+                Planned topics from the registry versus seeded and published canonical article rows.
+              </p>
+            </div>
+            <p className="font-body text-xs text-on-surface-variant">
+              Planned: <code>{topicRegistryProgress.total_planned}</code> / Seeded:{' '}
+              <code>{topicRegistryProgress.total_seeded}</code> / Published:{' '}
+              <code>{topicRegistryProgress.total_published}</code>
+            </p>
+          </div>
+
+          <div className="mt-4 grid gap-4 md:grid-cols-4">
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Total planned
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {topicRegistryProgress.total_planned}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Total seeded
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {topicRegistryProgress.total_seeded}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Total ready
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {topicRegistryProgress.total_ready}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                Remaining to seed
+              </p>
+              <p className="mt-1 font-headline text-2xl font-bold text-on-background">
+                {topicRegistryProgress.total_remaining}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 overflow-x-auto rounded-xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
+            <table className="min-w-full divide-y divide-outline-variant/20">
+              <thead>
+                <tr className="text-left font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                  <th className="px-4 py-3">Batch</th>
+                  <th className="px-4 py-3">Planned</th>
+                  <th className="px-4 py-3">Seeded</th>
+                  <th className="px-4 py-3">Published</th>
+                  <th className="px-4 py-3">Ready</th>
+                  <th className="px-4 py-3">Remaining</th>
+                  <th className="px-4 py-3">Seed progress</th>
+                  <th className="px-4 py-3">Publish progress</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/10 font-body text-sm">
+                {topicRegistryProgress.batches.map((batch) => (
+                  <tr key={batch.batch}>
+                    <td className="px-4 py-3 text-on-background">{formatLabel(batch.batch)}</td>
+                    <td className="px-4 py-3 text-on-background">{batch.planned_count}</td>
+                    <td className="px-4 py-3 text-on-background">{batch.seeded_count}</td>
+                    <td className="px-4 py-3 text-on-background">{batch.published_count}</td>
+                    <td className="px-4 py-3 text-on-background">{batch.ready_count}</td>
+                    <td className="px-4 py-3 text-on-surface-variant">{batch.remaining_count}</td>
+                    <td className="px-4 py-3 text-on-surface-variant">
+                      {batch.seed_progress_percent}%
+                    </td>
+                    <td className="px-4 py-3 text-on-surface-variant">
+                      {batch.publish_progress_percent}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
 
         <section className="mt-12">
           <div className="flex flex-wrap items-end justify-between gap-4">

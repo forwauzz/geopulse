@@ -303,4 +303,205 @@ describe('createContentAdminData', () => {
       metadata: {},
     });
   });
+
+  it('builds bounded blog drafting queue buckets', async () => {
+    const supabase = {
+      from(table: string) {
+        if (table !== 'content_items') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+
+        return {
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          in() {
+            return this;
+          },
+          order() {
+            return Promise.resolve({
+              data: [
+                {
+                  content_id: 'a1',
+                  slug: 'topic-a-1',
+                  title: 'Topic A 1',
+                  status: 'brief',
+                  topic_cluster: 'topic_a',
+                  updated_at: '2026-04-03T10:00:00.000Z',
+                },
+                {
+                  content_id: 'a2',
+                  slug: 'topic-a-2',
+                  title: 'Topic A 2',
+                  status: 'brief',
+                  topic_cluster: 'topic_a',
+                  updated_at: '2026-04-03T09:00:00.000Z',
+                },
+                {
+                  content_id: 'd1',
+                  slug: 'topic-d-1',
+                  title: 'Topic D 1',
+                  status: 'draft',
+                  topic_cluster: 'topic_d',
+                  updated_at: '2026-04-03T08:00:00.000Z',
+                },
+                {
+                  content_id: 'r1',
+                  slug: 'topic-r-1',
+                  title: 'Topic R 1',
+                  status: 'review',
+                  topic_cluster: 'topic_r',
+                  updated_at: '2026-04-03T07:00:00.000Z',
+                },
+              ],
+              error: null,
+            });
+          },
+        };
+      },
+    } as any;
+
+    const queue = await createContentAdminData(supabase).getArticleDraftQueue(1);
+
+    expect(queue).toEqual({
+      brief: [
+        expect.objectContaining({
+          content_id: 'a1',
+          status: 'brief',
+        }),
+      ],
+      draft: [
+        expect.objectContaining({
+          content_id: 'd1',
+          status: 'draft',
+        }),
+      ],
+      review: [
+        expect.objectContaining({
+          content_id: 'r1',
+          status: 'review',
+        }),
+      ],
+    });
+  });
+
+  it('filters drafting queue by owner and target week', async () => {
+    const supabase = {
+      from(table: string) {
+        if (table !== 'content_items') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+
+        return {
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          in() {
+            return this;
+          },
+          order() {
+            return Promise.resolve({
+              data: [
+                {
+                  content_id: 'a1',
+                  slug: 'topic-a-1',
+                  title: 'Topic A 1',
+                  status: 'brief',
+                  topic_cluster: 'topic_a',
+                  metadata: { queue_owner: 'carine', queue_target_week: '2026-W14' },
+                  updated_at: '2026-04-03T10:00:00.000Z',
+                },
+                {
+                  content_id: 'a2',
+                  slug: 'topic-a-2',
+                  title: 'Topic A 2',
+                  status: 'brief',
+                  topic_cluster: 'topic_a',
+                  metadata: { queue_owner: 'other', queue_target_week: '2026-W14' },
+                  updated_at: '2026-04-03T09:00:00.000Z',
+                },
+              ],
+              error: null,
+            });
+          },
+        };
+      },
+    } as any;
+
+    const queue = await createContentAdminData(supabase).getArticleDraftQueue(10, {
+      owner: 'carine',
+      targetWeek: '2026-W14',
+    });
+
+    expect(queue.brief).toHaveLength(1);
+    expect(queue.brief[0]).toMatchObject({
+      content_id: 'a1',
+      queue_owner: 'carine',
+      queue_target_week: '2026-W14',
+    });
+  });
+
+  it('builds approved queue preview with owner/week filters', async () => {
+    const supabase = {
+      from(table: string) {
+        if (table !== 'content_items') {
+          throw new Error(`Unexpected table: ${table}`);
+        }
+
+        return {
+          select() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          order() {
+            return Promise.resolve({
+              data: [
+                {
+                  content_id: 'p1',
+                  slug: 'post-1',
+                  title: 'Post 1',
+                  status: 'approved',
+                  topic_cluster: 'topic_a',
+                  metadata: { queue_owner: 'carine', queue_target_week: '2026-W14' },
+                  updated_at: '2026-04-03T10:00:00.000Z',
+                },
+                {
+                  content_id: 'p2',
+                  slug: 'post-2',
+                  title: 'Post 2',
+                  status: 'approved',
+                  topic_cluster: 'topic_b',
+                  metadata: { queue_owner: 'other', queue_target_week: '2026-W14' },
+                  updated_at: '2026-04-03T09:00:00.000Z',
+                },
+              ],
+              error: null,
+            });
+          },
+        };
+      },
+    } as any;
+
+    const preview = await createContentAdminData(supabase).getApprovedArticleQueue(25, {
+      owner: 'carine',
+      targetWeek: '2026-W14',
+    });
+
+    expect(preview.totalFilteredCount).toBe(1);
+    expect(preview.rows).toHaveLength(1);
+    expect(preview.rows[0]).toMatchObject({
+      content_id: 'p1',
+      status: 'approved',
+      queue_owner: 'carine',
+      queue_target_week: '2026-W14',
+    });
+  });
 });
