@@ -265,6 +265,9 @@ export async function beginStartupSlackInstall(formData: FormData): Promise<void
   if (!env.STARTUP_SLACK_APP_INSTALL_URL) {
     redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_install_url_missing'));
   }
+  if (!env.STARTUP_SLACK_CLIENT_ID) {
+    redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_client_id_missing'));
+  }
 
   const callbackBase = env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '') ?? 'http://localhost:3000';
   const callbackUrl = `${callbackBase}/api/startup/slack/callback`;
@@ -277,6 +280,7 @@ export async function beginStartupSlackInstall(formData: FormData): Promise<void
   });
 
   const installUrl = new URL(env.STARTUP_SLACK_APP_INSTALL_URL);
+  installUrl.searchParams.set('client_id', env.STARTUP_SLACK_CLIENT_ID);
   installUrl.searchParams.set('state', stateToken);
   installUrl.searchParams.set('redirect_uri', callbackUrl);
   redirect(installUrl.toString());

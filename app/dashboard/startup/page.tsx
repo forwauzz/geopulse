@@ -146,6 +146,8 @@ function readSlackStatusMessage(code: string | undefined): string | null {
       return 'Slack integration is currently paid-only for this workspace. Ask an admin to enable billing or switch service mode.';
     case 'slack_install_url_missing':
       return 'Slack install URL is not configured yet.';
+    case 'slack_client_id_missing':
+      return 'Slack client ID is not configured in runtime secrets.';
     case 'slack_callback_invalid':
       return 'Slack callback could not be validated. Retry connect.';
     case 'slack_state_invalid':

@@ -36,10 +36,10 @@
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
     "NEXT_PUBLIC_APP_URL": "https://getgeopulse.com/",
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACySl18X8egdbFEN",
-    "DISTRIBUTION_ENGINE_UI_ENABLED": "false",
-    "DISTRIBUTION_ENGINE_WRITE_ENABLED": "false",
-    "DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED": "false",
-    "DISTRIBUTION_ENGINE_BACKGROUND_ENABLED": "false",
+    "DISTRIBUTION_ENGINE_UI_ENABLED": "true",
+    "DISTRIBUTION_ENGINE_WRITE_ENABLED": "true",
+    "DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED": "true",
+    "DISTRIBUTION_ENGINE_BACKGROUND_ENABLED": "true",
     "DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT": "20",
     "ADMIN_EMAIL": "uzziel@getgeopulse.com",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
@@ -54,16 +54,16 @@
     // Startup rollout defaults (can be overridden per workspace in metadata rollout_flags).
     "STARTUP_DASHBOARD_ENABLED": "true",
     "STARTUP_GITHUB_AGENT_ENABLED": "true",
-    "STARTUP_AUTO_PR_ENABLED": "false",
+    "STARTUP_AUTO_PR_ENABLED": "true",
     "STARTUP_SLACK_AGENT_ENABLED": "true",
-    "STARTUP_SLACK_AUTO_POST_ENABLED": "false",
+    "STARTUP_SLACK_AUTO_POST_ENABLED": "true",
 
     // Slack OAuth install entrypoint (non-secret).
     "STARTUP_SLACK_APP_INSTALL_URL": "https://slack.com/oauth/v2/authorize",
 
     // Recurring benchmark lane config.
     // Keep disabled here until production values are finalized.
-    "BENCHMARK_SCHEDULE_ENABLED": "false",
+    "BENCHMARK_SCHEDULE_ENABLED": "true",
     "BENCHMARK_SCHEDULE_QUERY_SET_ID": "9910b5ac-ade6-42be-9dca-9b85c04e4469",
     "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite",
     "BENCHMARK_SCHEDULE_RUN_MODES": "ungrounded_inference,grounded_site",
@@ -79,7 +79,7 @@
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
     "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
     "DEEP_AUDIT_BROWSER_RENDER_MODE": "auto",
-    "DEEP_AUDIT_INTERNAL_REWRITE_ENABLED": "false",
+    "DEEP_AUDIT_INTERNAL_REWRITE_ENABLED": "true",
     "DEEP_AUDIT_INTERNAL_REWRITE_MODEL": "gemini-2.5-flash-lite-preview-06-17",
 
     "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
