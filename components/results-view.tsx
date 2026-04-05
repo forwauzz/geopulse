@@ -90,14 +90,17 @@ function buildActionCard(input: {
   }
 
   return {
-    eyebrow: input.hasPaidReport ? 'Step 2' : 'Step 2',
-    title: 'Choose what to do next',
-    body: `Start with the preview for ${input.host}, then either continue to the full audit or save this preview for later. The paid path is the main next step.`,
-    primaryLabel: 'Continue to full audit',
-    primaryTargetId: 'full-audit-checkout',
-    secondaryLabel: 'Save preview instead',
-    secondaryTargetId: 'preview-save',
-    note: 'Use the full audit if you want the complete report and action plan. Use save preview only if you are not ready to buy yet.',
+    eyebrow: 'Step 2',
+    title: input.hasPaidReport ? 'Report queued — check back soon' : 'Choose what to do next',
+    body: input.hasPaidReport
+      ? `Your payment was received for ${input.host}. The full audit will begin shortly — you'll get an email when it's ready.`
+      : `You've seen your score for ${input.host}. Upgrade to a full audit to get prioritized recommendations, technical fixes, and a downloadable PDF report.`,
+    primaryLabel: input.hasPaidReport ? 'Check dashboard' : 'Start full audit',
+    primaryHref: input.hasPaidReport ? '/dashboard' : undefined,
+    primaryTargetId: input.hasPaidReport ? undefined : 'full-audit-checkout',
+    secondaryLabel: input.hasPaidReport ? undefined : 'Save preview',
+    secondaryHref: undefined,
+    secondaryTargetId: input.hasPaidReport ? undefined : 'preview-save',
   };
 }
 

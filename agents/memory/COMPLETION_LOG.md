@@ -5,6 +5,524 @@
 
 ---
 
+### 2026-04-05 — UXIA-MOB — Full Mobile Responsiveness Pass
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Complete mobile responsiveness pass across all app screens. Users can now navigate and use GEO-Pulse on any phone (375–430px viewport).
+
+**Changes:**
+
+1. **`components/dashboard-sidebar.tsx`** — Replaced full-width stacked sidebar with a collapsible mobile pattern:
+   - Added `useState(mobileOpen)` to toggle nav on mobile
+   - Logo row always visible; hamburger button (`menu` / `close` icon) appears only below `lg` breakpoint
+   - Nav body: hidden by default on mobile, shown when `mobileOpen=true`; always rendered at `lg+` (hidden via `lg:flex` on dedicated desktop div)
+   - `onNavigate` callback passed to all `<Link>` items and sign-out form to auto-close mobile menu on navigation
+   - Desktop behavior (sticky sidebar at `lg:top-24 lg:w-72`) is unchanged
+
+2. **`components/admin-sidebar.tsx`** (NEW file) — Extracted admin sidebar from the Server Component layout into a dedicated `'use client'` component with identical mobile hamburger pattern:
+   - Amber-tinted `border-amber-500/20 bg-amber-950/5` styling preserved
+   - All 4 nav sections (Platform / Content / Analytics / System) + Back to Dashboard link
+   - Same `mobileOpen` toggle pattern with `closeMenu` passed to every link
+
+3. **`app/admin/layout.tsx`** — Removed 80+ lines of inline sidebar nav (static Server Component); now imports and renders `<AdminSidebar />` client component. Auth gate unchanged.
+
+4. **`app/dashboard/connectors/page.tsx`** — Fixed Slack "Add channel" form inputs:
+   - `grid grid-cols-2 gap-2` → `grid grid-cols-1 gap-2 sm:grid-cols-2`
+   - Channel ID and Channel Name fields now stack vertically on mobile; side-by-side at `sm+`
+
+5. **`app/dashboard/new-scan/page.tsx`** — Fixed context card field gaps:
+   - `gap-x-8` → `gap-x-4 sm:gap-x-8` on both agency context and startup context field rows
+   - Prevents fields overflowing the card on narrow screens
+
+**Coverage verified:**
+- Dashboard home stats grids: `grid-cols-2` on mobile → ✅ already correct
+- Startup score trend / backlog: `lg:grid-cols-2` → stacks to 1 col on mobile → ✅ already correct
+- WhatNextBanner: `flex-col sm:flex-row` → ✅ already correct
+- Results view: `md:grid-cols-2` default single col → ✅ already correct
+- Workspace settings: `sm:grid-cols-2` collapses to 1 → ✅ already correct
+- Admin console quick-links: `sm:grid-cols-2` collapses to 1 → ✅ already correct
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-012 — Scan Results page (action card + step framing)
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Fixed the `buildActionCard` function in the results view and improved action card copy for the `hasPaidReport` / default states.
+
+**Changes:**
+- `components/results-view.tsx` — `buildActionCard`:
+  - Fixed duplicate `hasPaidReport ? 'Step 2' : 'Step 2'` — both branches were identical; now the condition actually does different things:
+    - `hasPaidReport = true`: title "Report queued — check back soon", body explains payment received and email delivery, primaryHref → `/dashboard`
+    - `hasPaidReport = false`: title "Choose what to do next", body clearly frames the upgrade value proposition, scrolls to `#full-audit-checkout`
+  - Removed the generic `note` field (was noise; information now in the body)
+  - Step framing: 4 states (Step 2 choose path → Step 3 generating → Step 4 delivered) remain intact
+  - Journey model (4-step progress indicator) untouched — already correct from prior UX work
+
+**Note:** The results view journey model and step progress indicator were already correctly implemented from prior UX loading-state tasks (UX-001–UX-008). UXIA-012 closed the remaining action card logic gap.
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-009 / UXIA-010 / UXIA-011 — Admin Workspace Management, Service Control, Logs
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Created `/admin/agencies`, `/admin/startups`, `/admin/services`, `/admin/logs` pages under the amber admin shell. Updated admin layout nav + console home quick-links to use the new `/admin/*` routes.
+
+**Changes:**
+- `app/admin/agencies/page.tsx` — thin wrapper using `AgencyAdminControlView` + `loadAdminPageContext('/admin')`
+- `app/admin/startups/page.tsx` — thin wrapper using `StartupAdminControlView` + `loadAdminPageContext('/admin')`
+- `app/admin/services/page.tsx` — thin wrapper using `ServiceControlAdminView` + `loadAdminPageContext('/admin')`
+- `app/admin/logs/page.tsx` — full logs page (filter bar, level/event chips, table) repointed to `/admin/logs` hrefs
+- `app/admin/layout.tsx` — Platform section now links to `/admin/agencies`, `/admin/startups`, `/admin/services`; System section links to `/admin/logs`
+- `app/admin/page.tsx` — quick-links updated to `/admin/agencies`, `/admin/startups`, `/admin/services`, `/admin/logs`
+- Existing `/dashboard/agencies`, `/dashboard/startups`, `/dashboard/services`, `/dashboard/logs` — unchanged (still accessible, still gated by `requireAdminOrRedirect`)
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-008 — Admin Console Shell + Home
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Created the standalone admin console shell with amber-tinted sidebar and console home page.
+
+**Changes:**
+- `app/admin/layout.tsx` — new admin shell layout:
+  - Auth gate: `isAdminEmail()` — non-admins redirect to `/dashboard`
+  - Amber-tinted sidebar: `border-amber-500/20 bg-amber-950/5`
+  - Logo + amber "Admin" badge (`bg-amber-500/20 text-amber-600`)
+  - 4 nav sections: Platform (Home, Agencies, Startups, Services), Content, Analytics, System
+  - All links point to existing `/dashboard/*` admin routes (will migrate to `/admin/*` in UXIA-009–011)
+  - "← Back to Dashboard" link at sidebar bottom
+- `app/admin/page.tsx` — console home:
+  - Amber eyebrow: "Admin Console"
+  - Operator warning notice (amber border, warning icon)
+  - Quick-access grid (8 cards): Agencies, Startups, Services, Content, Benchmarks, Logs, Distribution, Evals
+  - Migration notes section: explains current `/dashboard/*` routing + `ADMIN_EMAIL` env gate
+- `components/dashboard-sidebar.tsx`: existing "Admin Console →" amber link already points to `/admin` ✅
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-007 — Workspace Settings page
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Created the new `/dashboard/workspace` settings page and added it to the sidebar.
+
+**Changes:**
+- `app/dashboard/workspace/page.tsx` — new page:
+  - Read-only metadata display for personal account + startup workspace + agency account
+  - `Field` component: label + value (optional mono styling)
+  - Personal account card: email, user ID, account type (derived from workspace memberships)
+  - Startup workspace card: name, workspaceKey, canonicalDomain, role, status + workspace switcher for multi-workspace users + "Manage integrations → Connectors" link
+  - Agency workspace card: name, accountKey, benchmarkVertical, benchmarkSubvertical + client chip list + account switcher for multi-account users
+  - Empty state for personal-only accounts
+  - Back → Dashboard button
+- `components/dashboard-sidebar.tsx` — added `Workspace` nav item (settings icon) after Connectors
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-006 — Connectors Page (GitHub + Slack + future placeholders)
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Created the new `/dashboard/connectors` page and added it to the sidebar nav.
+
+**Changes:**
+- `app/dashboard/connectors/page.tsx` — new page:
+  - Uses `loadStartupDashboardContext` to load workspace + GitHub + Slack + service gates
+  - 3 page states: `no-workspaces` (empty state), `rollout-blocked` (gate message), `ok` (full connector hub)
+  - OAuth return banners: reads `?github=` and `?slack=` params, shows success/error badge
+  - `StatusBadge` component: connected (primary color) vs disconnected (muted)
+  - GitHub card: connection sub-card (status, installationId, accountLogin, Connect/Reconnect/Disconnect buttons) + repo allowlist (textarea + save + connected repo chips)
+  - Slack card: connected workspaces list (slackTeamName + domain + disconnect button) + Connect Slack button + destination channels list + add channel form + auto-post toggle (canManageSlackAutoPost gate)
+  - Gate states: if service gate disabled, shows bundleKey + explanation + contact admin
+  - Future placeholders: LinkedIn + Twitter/X — muted opacity-50 "Coming soon" cards
+- `components/dashboard-sidebar.tsx` — added `Connectors` nav item (cable icon, exact match) between "Run a Scan" and "Blog"
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-005 — New Scan page (in-dashboard, context-aware)
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Rewrote the new scan page to be clean, context-aware, and guided.
+
+**Changes:**
+- `app/dashboard/new-scan/page.tsx` — full rewrite:
+  - Removed nested `<main>` (layout already provides `<main>`) → changed to `<section>`
+  - Constrained to `max-w-2xl` (plan: single-column centered card layout)
+  - Added `WhatNextBanner` as pre-scan guidance above the form:
+    - If context is active: "Scanning for [Context]" + scope explanation
+    - If personal: "Run an AI search readiness audit" + time/cost note
+  - Simplified header: eyebrow + H1 "Run a Scan" + back arrow link
+  - Context card for agency: Account + Client in row layout, scan-disabled warning inline
+  - Context card for startup: Workspace + canonical domain + role
+  - Scan form section: cleaner card container
+  - `scanDisabled` flag derived cleanly (agency account + entitlement check)
+  - Removed redundant grid layout in context cards (flat row with gap-x-8)
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-004 — Dashboard Home — Startup persona
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Redesigned the startup workspace section on the dashboard home with score trend, action backlog, step-based WhatNextBanner, and improved stats.
+
+**Changes:**
+- `app/dashboard/page.tsx` — startup section:
+  - Imports `buildStartupTrendSeries`, `buildStartupActionBacklog` from startup-dashboard-shell
+  - Computes: `startupTrend`, `startupBacklog`, `startupAvgScore`, `startupOpenRecs`
+  - Added `getStartupBanner()` — step-based 3-state guidance:
+    1. 0 scans → "Step 1 of 3: Run your first startup scan" → `/dashboard/new-scan`
+    2. Scans + no recommendations → "Step 2 of 3: Review your scan results" → results page
+    3. Has recommendations → "Step 3 of 3: Connect GitHub & Slack" → `/dashboard/connectors`
+  - Context bar: workspaceKey + canonicalDomain + role chips inline below name
+  - Workspace switcher: only shows when >1 workspace; softened chip style (primary/15 ring)
+  - WhatNextBanner rendered immediately below context bar
+  - Updated stats: Scans · Avg score · Recommendations · Open
+  - Score trend sparkline: inline SVG (240×64 viewBox), label chips below
+  - Action backlog: top 3 items with high/medium priority badges (error/warning tokens)
+  - Scan list: capped to last 3 scans with "View all" link to `/dashboard/startup?tab=audits`
+  - Removed standalone "Startup dashboard" button (scan list "View all" replaces it)
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-003 — Dashboard Home — Agency persona
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Added WhatNextBanner and collapsible client management to the agency section of the dashboard home.
+
+**Changes:**
+- `app/dashboard/page.tsx` — agency section:
+  - Added `getAgencyBanner()` function with 3 context-aware states:
+    1. No account selected → "Select an account to get started"
+    2. Account selected, no client → "Select a client to start scanning"
+    3. Client selected, no scans → "Run first scan for [Client]"
+    4. Client + scans exist → "[N] scans for [Client] — View Latest"
+  - Added `WhatNextBanner` rendered above stats row (always visible when agency section shows)
+  - Wrapped `AgencyClientManagementView` in native `<details>/<summary>` disclosure — collapsed by default, labelled "Manage clients" with group icon + expand chevron
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-002 — Dashboard Home — Individual persona
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Redesigned the unified dashboard home page for the Individual persona.
+
+**Changes:**
+- `components/what-next-banner.tsx` — new reusable component: eyebrow + title + body + CTA link. Used on every dashboard home persona section.
+- `app/dashboard/page.tsx` — full restructure of the Individual section:
+  - Removed sign-out form from page (moved to sidebar in UXIA-001)
+  - Removed "Admin tools" notice from page header
+  - Simplified page header: eyebrow label + H1 "Dashboard" + email
+  - Added `StatCard` inline component: Scans · Avg Score · Deep Audits
+  - Added `WhatNextBanner` above scan list with 4 context-aware states:
+    1. 0 scans → "Run your first audit" → `/dashboard/new-scan`
+    2. Report delivered → "Your report is ready" → download link
+    3. Report generating → "Deep Audit in progress" → no action
+    4. Scans exist, no report → "Upgrade to Deep Audit" → results page
+  - Added shared `ScanRow` component — replaces 3× duplicated scan item JSX
+  - Fixed empty state link: `/` → `/dashboard/new-scan`
+  - Softened active client chip: `bg-primary text-on-primary` → `bg-primary/15 text-primary ring-1 ring-primary/30`
+  - Agency and Startup sections preserved intact (full redesign deferred to UXIA-003/UXIA-004)
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-001 — Dashboard Shell implementation
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Implemented the dashboard shell redesign (no code changes to scan engine, API routes, or DB).
+
+**Changes:**
+- `components/dashboard-sidebar.tsx` — full restructure:
+  - Fixed "New scan" link: `/` → `/dashboard/new-scan`
+  - Removed confusing "Startup" standalone nav item
+  - "Run a Scan" now highlighted as primary CTA (`bg-primary/10 border-primary/20`)
+  - Active item: left border accent + surface container bg
+  - Admin tools removed from inline nav — replaced with single "Admin Console →" amber link at bottom (only visible to admins)
+  - User email + role badge moved to sidebar bottom
+  - Sign-out form moved into sidebar (was only on dashboard page)
+  - Theme toggle moved into sidebar bottom
+  - `exact: true` matching on Dashboard and Run a Scan (prevents incorrect active state on sub-pages)
+- `app/dashboard/layout.tsx` — imports `signOut` from `./actions`, passes as `signOutAction` prop to sidebar
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
+### 2026-04-05 — UXIA-001 through UXIA-012 — Stitch prompts complete
+
+**Agent:** Frontend
+**Claimed complete:** 2026-04-05
+**Evidence type:** 12 Stitch prompt files written, all screens specified
+
+All 12 Stitch prompts written and saved in `stitch-prompts/`:
+- `UXIA-001-dashboard-shell.md` — Sidebar + header + workspace switcher (3 states: personal/agency/startup + mobile)
+- `UXIA-002-dashboard-home-individual.md` — Stats + WhatNextBanner + ScanCards + empty state
+- `UXIA-003-dashboard-home-agency.md` — Context bar + client chips + scoped stats + scan list
+- `UXIA-004-dashboard-home-startup.md` — Score trend + backlog + lanes + PR funnel + empty state
+- `UXIA-005-new-scan-page.md` — Context card + scan form (3 states: personal/agency/startup)
+- `UXIA-006-connectors-page.md` — GitHub + Slack cards + future placeholders + gated state
+- `UXIA-007-workspace-settings.md` — Workspace info + services + feature flags + members
+- `UXIA-008-admin-console-shell-home.md` — Amber sidebar + stats + quick links + logs preview
+- `UXIA-009-admin-workspace-management.md` — Agency forms + expandable accounts + startups variant
+- `UXIA-010-admin-service-control.md` — Service catalog + bundles + entitlement overrides
+- `UXIA-011-admin-logs.md` — Filter bar + logs table + expand-row JSON + empty state
+- `UXIA-012-scan-results-page.md` — Score hero + categories + issues + 4-state action card
+
+Each prompt specifies: layout, components, data fields, interaction states, color tokens. Ready to paste into Stitch.
+
+**Orchestrator verification:** ✅ ACCEPTED — all prompts written, docs synced, task registry updated.
+
+---
+
+### 2026-04-05 — UX/IA Redesign stream opened
+
+**Agent:** Frontend (Orchestrator)
+**Claimed complete:** 2026-04-05
+**Evidence type:** Design audit + plan document
+
+Full UX/IA audit completed. Codebase explored across all routes, components, data models, and user flows. Core fragmentation identified: 3 disconnected dashboard surfaces, buried integrations, no guided "what's next", admin tools mixed into user nav.
+
+Plan frozen at `.claude/plans/snoopy-hatching-scroll.md`. Task registry UXIA-001...UXIA-012 added to PROJECT_STATE.md. Stream goal: write 12 Stitch prompts (one per screen), generate and approve UI, then implement. No code changes until Stitch screens are approved.
+
+**Orchestrator verification:** ✅ ACCEPTED — stream opened, docs synced.
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-009
+
+Completed TR-009: **Cross-tab empty states** — Overview shows a full-width callout when `dashboard.scans.length === 0` (links to Audits + new scan); backlog list shows a single empty-state row when `backlog.length === 0`; Delivery shows a dashed callout when there are no deep audit reports (links to Audits + new scan). **E2E hooks:** `data-testid` on tab bar, layout, per-tab panel (`startup-tab-panel-{tab}`), and primary tab surfaces (`startup-audits-tab`, `startup-delivery-tab`, `startup-settings-tab`, plus `startup-overview-empty-scans` / `startup-overview-backlog` / `startup-delivery-empty-reports`). **E2E proof:** `tests/e2e/startup-dashboard-tabs.spec.ts` — tab navigation + URL `tab=` param, GitHub status redirect to Settings, Slack send status redirect to Delivery (e2e auth cookie). **Line-count note:** all startup dashboard *tab/shell* TSX under ~400 LOC; `app/dashboard/startup/actions.ts` remains above the 700-line soft cap (pre-existing); split deferred to a dedicated refactor if desired.
+
+Files updated:
+- `app/dashboard/startup/components/startup-tab-bar.tsx`
+- `app/dashboard/startup/components/startup-dashboard-page-shell.tsx`
+- `app/dashboard/startup/components/startup-overview-tab.tsx`
+- `app/dashboard/startup/components/startup-delivery-tab.tsx`
+- `app/dashboard/startup/components/startup-audits-tab.tsx`
+- `app/dashboard/startup/components/startup-settings-tab.tsx`
+- `tests/e2e/startup-dashboard-tabs.spec.ts` (new)
+
+Verification:
+- `npx tsc --noEmit` passed
+- `npx playwright test tests/e2e/startup-dashboard-tabs.spec.ts` passed (3 tests)
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-008
+
+Completed TR-008: **thin** `app/dashboard/startup/page.tsx` (auth, status-inferred redirect, load, early exits, shell). **Status auto-routing:** `pr=*` → `tab=overview`; `github=*` → `tab=settings` (PR wins if both); Slack send/missing-report/destination codes → `tab=delivery`, other recognized Slack codes → `tab=settings`; preserves `startupWorkspace`, audit `range`/`from`/`to`, and status query keys. **Tab-scoped banners:** shell passes `prStatusMessage` only on Overview, splits Slack message between Delivery (send-related codes) vs Settings (connect/config), clears irrelevant status props on other tabs; Delivery tab shows a Slack status strip when applicable. **Extracted:** `lib/server/startup-dashboard-status-messages.ts`, `app/dashboard/startup/lib/load-startup-dashboard-context.ts`, `components/startup-dashboard-page-shell.tsx`. Tests: `lib/server/startup-dashboard-status-messages.test.ts`.
+
+Files updated:
+- `app/dashboard/startup/page.tsx`
+- `app/dashboard/startup/components/startup-dashboard-page-shell.tsx` (new)
+- `app/dashboard/startup/lib/load-startup-dashboard-context.ts` (new)
+- `lib/server/startup-dashboard-status-messages.ts` (new)
+- `lib/server/startup-dashboard-status-messages.test.ts` (new)
+- `app/dashboard/startup/components/startup-delivery-tab.tsx` (Slack status banner)
+- `app/dashboard/startup/components/startup-tab-types.ts` (search-params comment)
+
+Verification:
+- `npx tsc --noEmit` passed
+- `npx vitest run lib/server/startup-dashboard-status-messages.test.ts` passed
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-007
+
+Completed TR-007 compare-two audits on the Audits tab: client table with checkboxes (max two selected, selection order = Audit A / Audit B), **Compare selected** shows a delta card (scores B−A with green/red, grades, recommendation count B−A with inverted coloring so fewer open recs reads as improvement), sample title diffs (in B not in A / in A not in B), **Clear selection**; row models built server-side from filtered scans + reports + `dashboard.recommendations` (no extra fetch).
+
+Files updated:
+- `app/dashboard/startup/components/startup-audits-table-client.tsx` (new)
+- `app/dashboard/startup/components/startup-tab-types.ts` (`StartupAuditRowModel`)
+- `app/dashboard/startup/components/startup-audits-tab.tsx` (`buildAuditRows`, render client table)
+
+Verification:
+- `npx tsc --noEmit` passed
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-006
+
+Completed TR-006 Audits tab: URL-driven presets (`range=7d|30d|90d|all`), custom `from`/`to` (date inputs, GET form), client-side filter over loaded `dashboard.scans`, joined report artifact summary per scan, **Results** links to `/results/{scanId}` and **PDF** when `pdfUrl` exists; empty states for no scans vs no filter matches.
+
+Files updated:
+- `app/dashboard/startup/components/startup-audits-tab.tsx` (new, 181 lines)
+- `app/dashboard/startup/components/startup-tab-types.ts` (`parseStartupAuditFilterFromSearchParams`)
+- `app/dashboard/startup/page.tsx` (`range`/`from`/`to` search params, render audits tab)
+
+Verification:
+- `npx tsc --noEmit` passed
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-005
+
+Completed TR-005 Delivery tab: manual Slack send, audit delivery metrics, auto-post badge with Settings link, empty-destinations hint linking to Settings, recent delivery attempts list; gated copy when rollout/entitlements block send.
+
+Files updated:
+- `app/dashboard/startup/components/startup-delivery-tab.tsx` (new)
+- `app/dashboard/startup/components/startup-overview-tab.tsx` (removed audit-delivery slot from PR activity)
+- `app/dashboard/startup/components/startup-settings-tab.tsx` (removed Recent delivery attempts — now on Delivery)
+- `app/dashboard/startup/components/startup-tab-types.ts` (`StartupOverviewTabProps` no longer carries `auditDeliveryContext`)
+- `app/dashboard/startup/page.tsx` (render `StartupDeliveryTab` when `tab=delivery`; no `sendStartupReportToSlack` import on page)
+
+Verification:
+- `npx tsc --noEmit` passed
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-004
+
+Completed TR-004 Settings tab extraction: workspace read-only card, GitHub integration, and Slack integration render when `activeTab === 'settings'`.
+
+Files updated:
+- `app/dashboard/startup/components/startup-settings-tab.tsx` (new)
+- `app/dashboard/startup/page.tsx` (integration actions moved off page; only `sendStartupReportToSlack` remains for overview audit slot until TR-005)
+
+What was implemented:
+- **Workspace** card: name, workspace key, canonical domain, member role, bundle key, GitHub/Slack/Slack-notifications service availability summaries, rollout flag list
+- GitHub and Slack sections match prior markup and server actions (connect/disconnect, allowlist, Slack destinations, auto-post, delivery attempt list — TR-005 will relocate delivery-focused pieces)
+
+Verification:
+- `npx tsc --noEmit` passed
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-003
+
+Completed TR-003 by extracting the startup dashboard overview body into `StartupOverviewStatStrip` + `StartupOverviewTab`, gated by `activeTab === 'overview'`.
+
+Files updated:
+- `app/dashboard/startup/components/startup-overview-tab.tsx` (new)
+- `app/dashboard/startup/components/startup-tab-types.ts` (`StartupOverviewStatStripProps`, `auditDeliveryContext` on overview props)
+- `app/dashboard/startup/page.tsx` (thin wiring: `overviewTabBase`, `auditDeliveryContext` slot for Slack send until TR-005)
+
+What was implemented:
+- stat strip, score trend, action backlog, implementation lane + burn-down, PR funnel + impact windows, agent PR workflow + run list moved into overview components
+- audit delivery metrics + `sendStartupReportToSlack` form remain in `page.tsx` and are passed as `auditDeliveryContext` (TR-005 will move to Delivery tab)
+- non-overview tabs still show GitHub + Slack integration cards below the grid until TR-004/005
+
+Verification:
+- `npx tsc --noEmit` passed
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-002
+
+Completed TR-002 tab bar for `/dashboard/startup` using `?tab=overview|audits|delivery|settings` (default when omitted: overview).
+
+Files updated:
+- `app/dashboard/startup/components/startup-tab-bar.tsx` (new)
+- `app/dashboard/startup/components/startup-tab-types.ts` (`parseStartupDashboardTab`)
+- `app/dashboard/startup/page.tsx` (read `tab`, render tab bar, preserve tab on workspace switcher links)
+
+What was implemented:
+- server `StartupTabBar` with four semantic-token-styled links; active tab uses bottom border on `border-primary`
+- URLs omit `tab` when `overview`; non-overview tabs keep `startupWorkspace` when set
+- workspace pills use `buildStartupHref(id, activeTab)` so the selected tab survives workspace changes
+
+What was not implemented:
+- tab-specific section visibility (TR-003 onward); all tabs still show the same single-page body for now
+
+Verification:
+- `startup-tab-bar.tsx` line count 44 (under 60)
+- `npx tsc --noEmit` passed
+
+---
+
+### 2026-04-05 - Startup dashboard tab redesign TR-001
+
+Completed TR-001 contract freeze for the four-tab startup dashboard redesign (`?tab=overview|audits|delivery|settings`).
+
+Files updated:
+- `app/dashboard/startup/components/startup-tab-types.ts` (new)
+- `agents/memory/PROJECT_STATE.md` (Startup Dashboard Tab Redesign task table TR-001 through TR-009)
+
+What was implemented:
+- registered TR-001 through TR-009 in PROJECT_STATE with TR-001 marked done
+- exported shared types: tab id union, tab bar props, `StartupDashboardTabContext` (dashboard, workspace, gates, rollout flags, trend, backlog, metrics, implementation lane data, PR runs, Slack/GitHub integration payloads, status messages, derived counters)
+- exported `StartupAuditFilterState` / preset type and `StartupDashboardPageSearchParams` for upcoming URL-driven audits filtering
+- per-tab prop aliases (`StartupOverviewTabProps`, `StartupAuditsTabProps`, `StartupDeliveryTabProps`, `StartupSettingsTabProps`)
+
+What was not implemented:
+- no UI or `page.tsx` refactor yet (TR-002 onward)
+
+Verification:
+- `npx tsc --noEmit` passed
+
+---
+
 ### 2026-04-04 - Startup Slack schema foundation SL-003
 
 Completed SL-003 implementation with minimal startup Slack schema and RLS policies.

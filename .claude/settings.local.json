@@ -6,7 +6,8 @@
       "Bash(find '/c/Users/Carine Tamon/Desktop/CLAUDE WORKSPACE/projects/geopulse/geo-pulse' -type f -name *roadmap* -o -name *backlog* -o -name *report*rewrite* -o -name *layer-one*)",
       "Bash(dir \"C:\\\\Users\\\\Carine Tamon\\\\Desktop\\\\CLAUDE WORKSPACE\\\\projects\\\\geopulse\\\\geo-pulse\\\\workers\\\\report\")",
       "Bash(npm run:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

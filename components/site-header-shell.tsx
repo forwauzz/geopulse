@@ -52,7 +52,6 @@ export function SiteHeaderShell({
         </Link>
 
         <div className="flex items-center gap-3 sm:gap-6 md:gap-10">
-          {!isBlogRoute ? <ThemeToggle /> : null}
           {isDashboardRoute ? (
             <>
               <Link
@@ -129,6 +128,7 @@ export function SiteHeaderShell({
               </Link>
             </>
           )}
+          {!isBlogRoute ? <ThemeToggle /> : null}
         </div>
       </nav>
     </header>

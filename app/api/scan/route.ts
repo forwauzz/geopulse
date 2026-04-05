@@ -6,6 +6,7 @@ import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
 import { checkScanRateLimit } from '@/lib/server/rate-limit-kv';
 import { resolveAgencyFeatureEntitlements, validateAgencyContext } from '@/lib/server/agency-access';
 import { resolveAgencyModelPolicy } from '@/lib/server/agency-model-policy';
+import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
@@ -20,6 +21,7 @@ const bodySchema = z.object({
   turnstileToken: z.string().min(1),
   agencyAccountId: z.string().uuid().nullish(),
   agencyClientId: z.string().uuid().nullish(),
+  startupWorkspaceId: z.string().uuid().nullish(),
 }).extend(optionalAttributionFields.shape);
 
 class UnconfiguredLlm implements LLMProvider {
@@ -68,6 +70,7 @@ export async function POST(request: Request): Promise<Response> {
     landing_path,
     agencyAccountId,
     agencyClientId,
+    startupWorkspaceId,
   } = parsed.data;
   const attrCtx = { anonymous_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer_url, landing_path };
 
@@ -94,7 +97,9 @@ export async function POST(request: Request): Promise<Response> {
 
   let sessionUserId: string | null = null;
   let agencyContext: { agencyAccountId: string | null; agencyClientId: string | null } | null = null;
-  if (agencyAccountId) {
+  let startupContext: { startupWorkspaceId: string } | null = null;
+
+  if (agencyAccountId || startupWorkspaceId) {
     try {
       const sessionClient = await createSupabaseServerClient();
       const {
@@ -104,6 +109,7 @@ export async function POST(request: Request): Promise<Response> {
 
       if (
         user?.id &&
+        agencyAccountId &&
         (await validateAgencyContext({
           supabase,
           userId: user.id,
@@ -136,14 +142,37 @@ export async function POST(request: Request): Promise<Response> {
           agencyAccountId,
           agencyClientId: agencyClientId ?? null,
         };
-        structuredLog('agency_scan_context_resolved', {
+        structuredLog(
+          'agency_scan_context_resolved',
+          {
+            userId: user.id,
+            agencyAccountId,
+            agencyClientId: agencyClientId ?? null,
+          },
+          'info'
+        );
+      }
+
+      if (
+        !agencyContext &&
+        user?.id &&
+        startupWorkspaceId &&
+        (await validateStartupWorkspaceScanContext({
+          supabase,
           userId: user.id,
-          agencyAccountId,
-          agencyClientId: agencyClientId ?? null,
-        }, 'info');
+          startupWorkspaceId,
+        }))
+      ) {
+        startupContext = { startupWorkspaceId };
+        structuredLog(
+          'startup_scan_context_resolved',
+          { userId: user.id, startupWorkspaceId },
+          'info'
+        );
       }
     } catch {
       agencyContext = null;
+      startupContext = null;
     }
   }
 
@@ -171,6 +200,12 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: { code: 'scan_failed', message: scan.reason } }, { status: 400 });
   }
 
+  const runSource = agencyContext
+    ? 'agency_dashboard'
+    : startupContext
+      ? 'startup_dashboard'
+      : 'public_self_serve';
+
   const { data: row, error } = await supabase
     .from('scans')
     .insert({
@@ -181,10 +216,11 @@ export async function POST(request: Request): Promise<Response> {
       letter_grade: scan.output.letterGrade,
       issues_json: scan.output.issues,
       full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
-      user_id: agencyContext ? sessionUserId : null,
+      user_id: agencyContext || startupContext ? sessionUserId : null,
       agency_account_id: agencyContext?.agencyAccountId ?? null,
       agency_client_id: agencyContext?.agencyClientId ?? null,
-      run_source: agencyContext ? 'agency_dashboard' : 'public_self_serve',
+      startup_workspace_id: startupContext?.startupWorkspaceId ?? null,
+      run_source: runSource,
       requested_model_policy: scanModelPolicy.requestedModelPolicy,
       effective_model: scanModelPolicy.effectiveModel,
     })
@@ -198,14 +234,19 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  structuredLog('scan_completed_persisted', {
-    scanId: row.id,
-    userId: agencyContext ? sessionUserId : null,
-    agencyAccountId: agencyContext?.agencyAccountId ?? null,
-    agencyClientId: agencyContext?.agencyClientId ?? null,
-    runSource: agencyContext ? 'agency_dashboard' : 'public_self_serve',
-    effectiveModel: scanModelPolicy.effectiveModel,
-  }, 'info');
+  structuredLog(
+    'scan_completed_persisted',
+    {
+      scanId: row.id,
+      userId: agencyContext || startupContext ? sessionUserId : null,
+      agencyAccountId: agencyContext?.agencyAccountId ?? null,
+      agencyClientId: agencyContext?.agencyClientId ?? null,
+      startupWorkspaceId: startupContext?.startupWorkspaceId ?? null,
+      runSource,
+      effectiveModel: scanModelPolicy.effectiveModel,
+    },
+    'info'
+  );
 
   await emitMarketingEvent(supabaseForAttr, 'scan_completed', {
     ...attrCtx,

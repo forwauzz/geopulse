@@ -1,4 +1,4 @@
-﻿# GEO-Pulse Ã¢â‚¬â€ Project State
+# GEO-Pulse Ã¢â‚¬â€ Project State
 > Maintained by: Orchestrator only
 > Format: Update this file whenever a task changes state. Never delete history Ã¢â‚¬â€ add new entries.
 
@@ -341,6 +341,21 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | SL-013 | Add scheduled startup Slack autopost cadence trigger (find due workspaces, enqueue deep-audit queue jobs) | Backend | âœ… DONE | `lib/server/startup-slack-schedule.ts`, `workers/cloudflare-entry.ts`, `lib/server/startup-slack-schedule.test.ts`, COMPLETION_LOG 2026-04-04 |
 | SL-014 | Auto-post Slack `new_audit_ready` delivery from report completion path for eligible startup workspaces | Backend | âœ… DONE | `workers/queue/report-queue-consumer.ts`, `lib/server/startup-slack-integration.ts`, COMPLETION_LOG 2026-04-04 |
 
+### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)
+> Restructure the startup dashboard into Overview / Audits / Delivery / Settings via `?tab=` (default `overview`). Plan: `.cursor/plans/startup_dashboard_tab_redesign_997f45c9.plan.md`. Shared types: `app/dashboard/startup/components/startup-tab-types.ts`.
+
+| TASK ID | Description | Owner | Status | Evidence |
+|---|---|---|---|---|
+| TR-001 | Contract freeze: register TR tasks, shared tab prop types + audit filter types | Frontend | âœ… DONE | `startup-tab-types.ts`, PROJECT_STATE, COMPLETION_LOG TR-001 |
+| TR-002 | Tab bar: four links with `?tab=`, preserve `startupWorkspace`, active styling | Frontend | âœ… DONE | `startup-tab-bar.tsx`, `page.tsx`, `parseStartupDashboardTab`, COMPLETION_LOG TR-002 |
+| TR-003 | Extract Overview tab (stats, trend, backlog, implementation lane, PR activity) | Frontend | âœ… DONE | `startup-overview-tab.tsx`, `page.tsx`, COMPLETION_LOG TR-003 |
+| TR-004 | Extract Settings tab (Slack, GitHub, workspace info) | Frontend | âœ… DONE | `startup-settings-tab.tsx`, `page.tsx`, COMPLETION_LOG TR-004 |
+| TR-005 | Extract Delivery tab (send form, delivery metrics, auto-post badge, delivery history) | Frontend | âœ… DONE | `startup-delivery-tab.tsx`, `page.tsx`, COMPLETION_LOG TR-005 |
+| TR-006 | Audits tab: filterable history table (presets + custom range, URL params) | Frontend | âœ… DONE | `startup-audits-tab.tsx`, `parseStartupAuditFilterFromSearchParams`, `page.tsx`, COMPLETION_LOG TR-006 |
+| TR-007 | Audits tab: compare-two mode with side-by-side score/grade/recommendations delta | Frontend | âœ… DONE | `startup-audits-table-client.tsx`, `StartupAuditRowModel`, `startup-audits-tab.tsx`, COMPLETION_LOG TR-007 |
+| TR-008 | Thin `page.tsx`: `?tab=` routing + status-param auto-routing + tab-scoped banners | Frontend | âœ… DONE | `startup-dashboard-status-messages.ts`, `load-startup-dashboard-context.ts`, `startup-dashboard-page-shell.tsx`, `page.tsx`, COMPLETION_LOG TR-008 |
+| TR-009 | Cross-tab empty states, line-count guardrails, type-check + E2E proof | Frontend | âœ… DONE | empty CTAs + `data-testid` hooks, `tests/e2e/startup-dashboard-tabs.spec.ts`, COMPLETION_LOG TR-009 |
+
 ### Architecture Hardening + Ops Observability
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
@@ -352,7 +367,27 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | AH-006 | Add the first large-module decomposition slice by reducing the benchmark run-detail route to a thin shell and moving detail rendering/helpers into dedicated modules | Backend + Frontend | Ã¢Å“â€¦ DONE | `app/dashboard/benchmarks/[runGroupId]/page.tsx`, `components/benchmark-run-detail-view.tsx`, `lib/server/benchmark-run-detail.ts`; COMPLETION_LOG AH-006 |
 | AH-007 | Document the admin-auth maturity path from the current env-based founder-stage gate to a future table-driven admin allowlist / role model without changing runtime auth behavior yet | Architect + Security | Ã¢Å“â€¦ DONE | `PLAYBOOK/architecture-hardening-backlog.md`, `lib/server/require-admin.ts`, `app/admin/login/actions.ts`; COMPLETION_LOG AH-007 |
 | AH-008 | Add the first open-source Playwright browser smoke-test foundation and wire it into CI for narrow public-entry-flow coverage | QA + Frontend | Ã¢Å“â€¦ DONE | `playwright.config.ts`, `tests/e2e/smoke.spec.ts`, `.github/workflows/ci.yml`; COMPLETION_LOG AH-008 |
-| AH-009 | Add the second large-module decomposition slice by reducing `components/report-viewer.tsx` to a shell and moving helpers/sections into dedicated modules with browser proof | Backend + Frontend | Ã¢Å“â€¦ DONE | `components/report-viewer.tsx`, `components/report-viewer-sections.tsx`, `lib/client/report-viewer.ts`; COMPLETION_LOG AH-009 |
+| AH-009 | Add the second large-module decomposition slice by reducing `components/report-viewer.tsx` to a shell and moving helpers/sections into dedicated modules with browser proof | Backend + Frontend | Ã¢Å”â€¦ DONE | `components/report-viewer.tsx`, `components/report-viewer-sections.tsx`, `lib/client/report-viewer.ts`; COMPLETION_LOG AH-009 |
+
+### UX/IA Redesign Stream — Stitch prompt generation
+> **Goal:** Unified dashboard shell, one connectors page, separate admin console, WhatNextBanner on every home. Each task = one Stitch prompt + screen. No code changes until all Stitch screens are approved. Plan: `.claude/plans/snoopy-hatching-scroll.md`.
+> **Note:** Task IDs use UXIA prefix to avoid collision with prior UX loading-state tasks (UX-001...UX-008).
+
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| UXIA-001 | Dashboard Shell Stitch prompt (sidebar + header + workspace switcher) | Frontend | ✅ DONE | `components/dashboard-sidebar.tsx`, `app/dashboard/layout.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-002 | Dashboard Home — Individual persona | Frontend | ✅ DONE | `app/dashboard/page.tsx`, `components/what-next-banner.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-003 | Dashboard Home — Agency persona | Frontend | ✅ DONE | `app/dashboard/page.tsx` agency section; COMPLETION_LOG 2026-04-05 |
+| UXIA-004 | Dashboard Home — Startup persona | Frontend | ✅ DONE | `app/dashboard/page.tsx` startup section; COMPLETION_LOG 2026-04-05 |
+| UXIA-005 | New Scan page (in-dashboard, context-aware) | Frontend | ✅ DONE | `app/dashboard/new-scan/page.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-006 | Connectors Page (GitHub + Slack + future placeholders) | Frontend | ✅ DONE | `app/dashboard/connectors/page.tsx`, sidebar updated; COMPLETION_LOG 2026-04-05 |
+| UXIA-007 | Workspace Settings page (metadata, bundle, rollout flags) | Frontend | ✅ DONE | `app/dashboard/workspace/page.tsx`, sidebar updated; COMPLETION_LOG 2026-04-05 |
+| UXIA-008 | Admin Console Shell + Home (separate shell, amber tint) | Frontend | ✅ DONE | `app/admin/layout.tsx`, `app/admin/page.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-009 | Admin Workspace Management (agencies + startups) | Frontend | ✅ DONE | `app/admin/agencies/page.tsx`, `app/admin/startups/page.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-010 | Admin Service Control | Frontend | ✅ DONE | `app/admin/services/page.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-011 | Admin Logs | Frontend | ✅ DONE | `app/admin/logs/page.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-012 | Scan Results page (redesigned action card + step framing) | Frontend | ✅ DONE | `components/results-view.tsx`; COMPLETION_LOG 2026-04-05 |
+| UXIA-MOB | Full mobile responsiveness pass — sidebar hamburger, admin sidebar client extract, connectors grid fix, new-scan context gap fix | Frontend | ✅ DONE | `components/dashboard-sidebar.tsx`, `components/admin-sidebar.tsx`, `app/admin/layout.tsx`, `app/dashboard/connectors/page.tsx`, `app/dashboard/new-scan/page.tsx`; COMPLETION_LOG 2026-04-05 |
 
 ---
 
@@ -611,3 +646,4 @@ pm run benchmark:schedule:run-now so the recurring benchmark lane can be execute
 | 2026-04-04 | **Theme verification sweep byte - COMPLETE (verification).** Re-ran focused theme browser proof after duplication cleanup: `tests/e2e/startup-theme.spec.ts` and `tests/e2e/theme-parity.spec.ts` both pass in one run, and `npx.cmd tsc --noEmit` remains clean. Current truth: startup and cross-route light/dark toggle + persistence behavior are stable after the latest token cleanup pass. |
 | 2026-04-04 | **Startup surface token-level normalization byte - COMPLETE (implementation + verification).** Normalized mixed startup card/control surface classes by replacing `bg-surface-container-low dark:bg-surface-container` with one consistent semantic token (`bg-surface-container-low`) throughout `app/dashboard/startup/page.tsx`. Verification: `npx.cmd tsc --noEmit` passed; `npx.cmd playwright test tests/e2e/startup-theme.spec.ts tests/e2e/theme-parity.spec.ts` passed. |
 | 2026-04-04 | **Final non-blog theme sweep byte - COMPLETE (implementation + verification).** Ran a full non-blog class sweep for hardcoded grayscale/hex token drift, normalized the remaining startup trend chart stroke to semantic token usage (`text-primary` + `currentColor`) in `app/dashboard/startup/page.tsx`, and re-verified with `npx.cmd tsc --noEmit` plus both focused browser specs (`tests/e2e/startup-theme.spec.ts`, `tests/e2e/theme-parity.spec.ts`). Current residual hardcoded colors are intentional in blog-only dark-theme surfaces and OG image rendering constants. |
+| 2026-04-05 | **UX/IA redesign stream opened (UXIA-001...UXIA-012).** Full UX audit completed — technical implementation is solid but the UX is fragmented across 3 disconnected dashboard surfaces with no shared shell, buried integrations, and no guided "what's next" logic. Plan frozen at `agents/memory/plans/uxia-redesign.md`. Approach: write 12 Stitch prompts (one per key screen), generate and approve UI screens, then implement. No code changes until Stitch screens are approved. See UXIA task registry below. |
