@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 type SiteHeaderShellProps = {
   readonly isSignedIn: boolean;
@@ -51,6 +52,7 @@ export function SiteHeaderShell({
         </Link>
 
         <div className="flex items-center gap-3 sm:gap-6 md:gap-10">
+          {!isBlogRoute ? <ThemeToggle /> : null}
           {isDashboardRoute ? (
             <>
               <Link

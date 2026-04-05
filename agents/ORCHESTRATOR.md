@@ -165,4 +165,12 @@ After every blocker:
 
 The PROJECT_STATE.md is the single source of truth for where the build is. It is never ahead of reality.
 
+For each completed byte-sized slice, docs must be updated before acceptance:
+- Update the matching task row in `agents/memory/PROJECT_STATE.md`.
+- Add or update the state-history entry in `agents/memory/PROJECT_STATE.md`.
+- Update stream truth in `docs/01-current-state.md`.
+- Update stream contract/runbook/playbook docs tied to the slice (for example `docs/17*`, `docs/18*`, `PLAYBOOK/*`).
+- If the slice changes shared UI theme/tokens/mode behavior, add or update focused browser proof (for example Playwright) and record that coverage in docs.
+
 **Parallel product initiatives (e.g. Deep Audit Upgrade — `DA-001`… in `PROJECT_STATE.md`):** Use the same verification ritual and **COMPLETION_LOG** evidence as phase tasks. Any change to **outbound URL fetching / SSRF / crawl** requires **Security** review before marking done. Initiatives do **not** replace Phase 4 or API deferral sequencing unless the Orchestrator explicitly reprioritizes and documents that in **State history**.
+

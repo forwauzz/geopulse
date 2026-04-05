@@ -41,28 +41,28 @@ function LongWaitPanel({
   activeStep: number;
 }) {
   return (
-    <div className="pointer-events-auto w-full max-w-lg rounded-[28px] border border-white/55 bg-white/92 p-6 text-slate-900 shadow-[0_32px_80px_rgba(15,23,42,0.26)] backdrop-blur-xl md:p-7">
+    <div className="pointer-events-auto w-full max-w-lg rounded-[28px] border border-outline-variant/40 bg-surface-container-lowest/95 p-6 text-on-surface shadow-[0_32px_80px_rgba(15,23,42,0.26)] backdrop-blur-xl dark:border-outline-variant/60 dark:bg-surface-container-low/95 md:p-7">
       <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#103d38] text-white shadow-lg shadow-[#103d38]/25">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-on-primary shadow-lg">
           <div className="loading-orbit relative h-6 w-6">
-            <span className="absolute inset-0 rounded-full border border-white/25" />
-            <span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-[#f7c95f]" />
+            <span className="absolute inset-0 rounded-full border border-on-primary/25" />
+            <span className="absolute left-1/2 top-0 h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-secondary-container" />
           </div>
         </div>
         <div>
-          <p className="font-label text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+          <p className="font-label text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
             Longer Than Usual
           </p>
-          <h2 className="font-headline text-2xl font-bold text-slate-900">{config.title}</h2>
+          <h2 className="font-headline text-2xl font-bold text-on-surface">{config.title}</h2>
         </div>
       </div>
 
-      <p className="mt-4 font-body text-sm leading-6 text-slate-600">
+      <p className="mt-4 font-body text-sm leading-6 text-on-surface-variant">
         {config.description ?? 'Estimated processing steps are shown below while your request finishes.'}
       </p>
 
-      <div className="loading-stripe mt-5 h-1.5 overflow-hidden rounded-full bg-slate-200">
-        <div className="h-full w-2/5 rounded-full bg-[#103d38]" />
+      <div className="loading-stripe mt-5 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+        <div className="h-full w-2/5 rounded-full bg-primary" />
       </div>
 
       <ol className="mt-5 space-y-3">
@@ -73,16 +73,16 @@ function LongWaitPanel({
             <li
               key={`${config.title}-${step}`}
               className={`flex items-start gap-3 rounded-2xl px-3 py-2 transition ${
-                isCurrent ? 'bg-[#103d38]/8' : ''
+                isCurrent ? 'bg-primary/10' : ''
               }`}
             >
               <span
                 className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold ${
                   isComplete
-                    ? 'border-emerald-600 bg-emerald-600 text-white'
+                    ? 'border-primary bg-primary text-on-primary'
                     : isCurrent
-                      ? 'border-[#103d38] bg-[#103d38] text-white'
-                      : 'border-slate-300 bg-white text-slate-400'
+                      ? 'border-primary bg-primary/15 text-primary'
+                      : 'border-outline-variant bg-surface-container-lowest text-on-surface-variant dark:bg-surface-container-low'
                 }`}
               >
                 {isComplete ? '✓' : index + 1}
@@ -90,13 +90,13 @@ function LongWaitPanel({
               <div>
                 <p
                   className={`font-body text-sm ${
-                    isCurrent ? 'font-semibold text-slate-900' : isComplete ? 'text-slate-700' : 'text-slate-500'
+                    isCurrent ? 'font-semibold text-on-surface' : isComplete ? 'text-on-surface' : 'text-on-surface-variant'
                   }`}
                 >
                   {step}
                 </p>
                 {isCurrent ? (
-                  <p className="mt-1 font-body text-xs text-slate-500">Estimated current step</p>
+                  <p className="mt-1 font-body text-xs text-on-surface-variant">Estimated current step</p>
                 ) : null}
               </div>
             </li>
@@ -104,7 +104,7 @@ function LongWaitPanel({
         })}
       </ol>
 
-      <p className="mt-5 font-body text-xs tracking-[0.02em] text-slate-500">
+      <p className="mt-5 font-body text-xs tracking-[0.02em] text-on-surface-variant">
         {config.note ?? 'We only show this overlay when a request takes longer than the normal fast path.'}
       </p>
     </div>
@@ -198,7 +198,7 @@ export function LongWaitProvider({ children }: { children: ReactNode }) {
     <LongWaitContext.Provider value={value}>
       {children}
       {visibleSession ? (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/28 px-4 py-6 backdrop-blur-md">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-on-background/45 px-4 py-6 backdrop-blur-md">
           <LongWaitPanel config={visibleSession.config} activeStep={activeStep} />
         </div>
       ) : null}

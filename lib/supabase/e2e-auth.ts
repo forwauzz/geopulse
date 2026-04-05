@@ -1,4 +1,10 @@
 const E2E_AUTH_COOKIE = 'gp_e2e_auth';
+const E2E_ADMIN_USER_ID = '00000000-0000-4000-8000-000000000001';
+const E2E_STARTUP_WORKSPACE_ID = '00000000-0000-4000-8000-000000000101';
+const E2E_STARTUP_MEMBER_ID = '00000000-0000-4000-8000-000000000102';
+const E2E_STARTUP_SCAN_ID = '00000000-0000-4000-8000-000000000103';
+const E2E_STARTUP_REPORT_ID = '00000000-0000-4000-8000-000000000104';
+const E2E_STARTUP_RECOMMENDATION_ID = '00000000-0000-4000-8000-000000000105';
 
 type E2EAuthUser = {
   readonly id: string;
@@ -21,7 +27,7 @@ export function resolveE2EAuthUserFromCookieValue(
 
   if (cookieValue === 'admin') {
     return {
-      id: 'e2e-admin-user',
+      id: E2E_ADMIN_USER_ID,
       email: resolveAdminEmail(),
     };
   }
@@ -269,27 +275,161 @@ function createE2EAdminQueryBuilder(seedRows: unknown[]) {
 }
 
 function createE2EQueryBuilder(table: string) {
-  const rowsByTable: Record<string, unknown[]> = {
-    scans: [],
-    reports: [],
+  const now = '2026-04-05T10:00:00.000Z';
+  const rowsByTable: Record<string, Record<string, unknown>[]> = {
+    startup_workspace_users: [
+      {
+        id: E2E_STARTUP_MEMBER_ID,
+        startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
+        user_id: E2E_ADMIN_USER_ID,
+        role: 'founder',
+        status: 'active',
+        created_at: now,
+      },
+    ],
+    startup_workspaces: [
+      {
+        id: E2E_STARTUP_WORKSPACE_ID,
+        workspace_key: 'e2e-startup',
+        name: 'E2E Startup Workspace',
+        canonical_domain: 'example.com',
+        primary_domain: 'example.com',
+        billing_mode: 'free',
+        status: 'active',
+        metadata: {
+          rollout_flags: {
+            startup_dashboard: true,
+            github_agent: true,
+            auto_pr: false,
+            slack_agent: true,
+            slack_auto_post: false,
+          },
+        },
+        created_at: now,
+        updated_at: now,
+      },
+    ],
+    scans: [
+      {
+        id: E2E_STARTUP_SCAN_ID,
+        startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
+        url: 'https://example.com',
+        domain: 'example.com',
+        score: 74,
+        letter_grade: 'B',
+        run_source: 'startup_dashboard',
+        created_at: now,
+      },
+    ],
+    reports: [
+      {
+        id: E2E_STARTUP_REPORT_ID,
+        scan_id: E2E_STARTUP_SCAN_ID,
+        startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
+        type: 'deep_audit',
+        email_delivered_at: now,
+        pdf_generated_at: now,
+        pdf_url: 'https://example.com/report.pdf',
+        created_at: now,
+      },
+    ],
+    startup_recommendations: [
+      {
+        id: E2E_STARTUP_RECOMMENDATION_ID,
+        startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
+        scan_id: E2E_STARTUP_SCAN_ID,
+        report_id: E2E_STARTUP_REPORT_ID,
+        source_kind: 'manual',
+        source_ref: 'e2e',
+        title: 'Add missing schema blocks',
+        summary: 'Improve AI extractability',
+        team_lane: 'dev',
+        priority: 'high',
+        status: 'approved',
+        status_changed_at: now,
+        status_reason: null,
+        created_at: now,
+      },
+    ],
+    startup_github_installations: [],
+    startup_github_installation_repositories: [],
+    startup_slack_installations: [],
+    startup_slack_destinations: [],
+    startup_slack_delivery_events: [],
+    startup_agent_pr_runs: [],
+    startup_implementation_plans: [],
+    startup_implementation_plan_tasks: [],
   };
 
-  const finalize = () =>
-    Promise.resolve({
-      data: rowsByTable[table] ?? [],
-      error: null,
-    });
+  let rows = [...(rowsByTable[table] ?? [])];
 
-  return {
+  const builder: {
+    select: (columns?: string) => typeof builder;
+    eq: (column: string, value: unknown) => typeof builder;
+    neq: (column: string, value: unknown) => typeof builder;
+    in: (column: string, values: unknown[]) => typeof builder;
+    is: (column: string, value: unknown) => typeof builder;
+    contains: (column: string, value: unknown) => typeof builder;
+    order: (column: string, options?: { ascending?: boolean }) => typeof builder;
+    limit: (count: number) => typeof builder;
+    maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: null }>;
+    single: () => Promise<{ data: Record<string, unknown> | null; error: null }>;
+    then: <TResult1 = { data: Record<string, unknown>[]; error: null }, TResult2 = never>(
+      onfulfilled?:
+        | ((value: { data: Record<string, unknown>[]; error: null }) => TResult1 | PromiseLike<TResult1>)
+        | null,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+    ) => Promise<TResult1 | TResult2>;
+  } = {
     select() {
-      return this;
+      return builder;
     },
-    eq() {
-      return this;
+    eq(column: string, value: unknown) {
+      rows = rows.filter((row) => row[column] === value);
+      return builder;
     },
-    order() {
-      return finalize();
+    neq(column: string, value: unknown) {
+      rows = rows.filter((row) => row[column] !== value);
+      return builder;
     },
-    then: undefined,
+    in(column: string, values: unknown[]) {
+      const allowed = new Set(values);
+      rows = rows.filter((row) => allowed.has(row[column]));
+      return builder;
+    },
+    is(column: string, value: unknown) {
+      rows = rows.filter((row) => row[column] === value);
+      return builder;
+    },
+    contains() {
+      return builder;
+    },
+    order(column: string, options?: { ascending?: boolean }) {
+      rows.sort((left, right) => {
+        const a = left[column];
+        const b = right[column];
+        if (a === b) return 0;
+        if (a == null) return 1;
+        if (b == null) return -1;
+        return a < b ? -1 : 1;
+      });
+      if (options?.ascending === false) rows.reverse();
+      return builder;
+    },
+    limit(count: number) {
+      rows = rows.slice(0, count);
+      return builder;
+    },
+    async maybeSingle() {
+      return { data: rows[0] ?? null, error: null };
+    },
+    async single() {
+      return { data: rows[0] ?? null, error: null };
+    },
+    then(onfulfilled, onrejected) {
+      return Promise.resolve({ data: rows, error: null }).then(onfulfilled, onrejected);
+    },
   };
+
+  return builder;
 }

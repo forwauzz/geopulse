@@ -127,7 +127,7 @@ Current truth:
 - what remains is deeper polish around agency-triggered audit UX, richer client-domain control, broader agency self-service controls, and live non-Gemini provider execution
 - a new startup-founder planning stream is now frozen in `docs/15-startup-dashboard-entitlements-plan.md` with bite-sized tasks (`SD-001` ... `SD-015`) for:
   - centralized service catalog + bundles + entitlement overrides
-  - dark startup dashboard with actionable trend tracking and graphs
+  - startup dashboard with actionable trend tracking and graphs on shared semantic theme tokens
   - markdown-audit-to-implementation planning workflow
   - GitHub App integration and agent PR lifecycle
   - multi-model policy routing by service/bundle/workspace
@@ -153,7 +153,7 @@ Current truth:
   - startup dashboard data helper tests for membership/context selection behavior
 - `SD-005` is now in repo:
   - dedicated startup route `/dashboard/startup`
-  - dark-first startup shell with module slots (`score trend`, `action backlog`, `implementation lane`, `PR activity`)
+  - startup shell with module slots (`score trend`, `action backlog`, `implementation lane`, `PR activity`) now on shared light/dark token classes
   - trend/backlog helper derivations + tests in `lib/server/startup-dashboard-shell.ts`
 - `SD-006` is now in repo:
   - startup tracking metric helper in `lib/server/startup-tracking-metrics.ts`
@@ -215,6 +215,14 @@ Current truth:
   - `SL-010` is complete (centralized Slack service controls wired in `/dashboard/services`)
   - `SL-011` is complete (focused Slack integration test pass and hardening)
   - `SL-012` is complete (Alie pilot rollout/evidence runbook for operator execution)
+  - `SL-013` is complete (scheduled startup Slack cadence path enqueues due deep-audit jobs for eligible workspaces)
+  - `SL-014` is complete (report completion path now auto-posts `new_audit_ready` Slack delivery for eligible startup workspaces)
+  - verification posture for this slice is backend-focused (scheduler + queue path); no new browser UI path was added, so Playwright expansion is not required for `SL-013`/`SL-014`
+- startup theme-system rollout byte is now in repo:
+  - class-based global theme mode support with persisted user choice and system fallback
+  - startup dashboard + long-wait overlay converted to semantic light/dark-safe tokens
+  - focused browser proof at `tests/e2e/startup-theme.spec.ts` verifies toggle behavior and reload persistence on `/dashboard/startup`
+  - compact cross-route parity smoke at `tests/e2e/theme-parity.spec.ts` verifies toggle + reload persistence on `/`, `/dashboard`, and `/dashboard/startup`
 
 ## What Is Implemented
 

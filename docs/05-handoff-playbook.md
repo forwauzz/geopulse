@@ -25,6 +25,7 @@ This file is the shortest path for a new developer or LLM to continue work safel
 
 ### The product is real
 This is not a prototype-only repo. The paid flow, queue, report generation, dashboard, admin eval analytics, and guided results journey all exist.
+Shared light/dark mode infrastructure is now active across app chrome, with startup-dashboard persistence covered by a focused Playwright spec.
 
 ### The main unfinished work is operational
 The highest priority unfinished work is launch closure, not another feature branch.

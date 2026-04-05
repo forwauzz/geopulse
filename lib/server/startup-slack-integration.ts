@@ -316,12 +316,15 @@ export async function upsertStartupSlackDestination(args: {
     if (unsetError) throw unsetError;
   }
 
+  const trimmedName = args.channelName?.trim() ?? '';
+  const channelNameStored = trimmedName.length > 0 ? trimmedName : args.channelId;
+
   const { error } = await args.supabase.from('startup_slack_destinations').upsert(
     {
       startup_workspace_id: args.startupWorkspaceId,
       installation_id: args.installationId,
       channel_id: args.channelId,
-      channel_name: args.channelName ?? null,
+      channel_name: channelNameStored,
       status: 'active',
       is_default: args.isDefaultDestination,
       metadata: {

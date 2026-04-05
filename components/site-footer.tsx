@@ -21,7 +21,7 @@ export function SiteFooter() {
             </span>
             <span
               className={`font-headline text-2xl font-bold ${
-                isBlogRoute ? 'text-white' : 'text-[#0f172a]'
+                isBlogRoute ? 'text-white' : 'text-on-background'
               }`}
             >
               GEO-Pulse

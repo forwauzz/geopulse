@@ -12,6 +12,7 @@ import { structuredError } from '../lib/server/structured-log';
 import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
 import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
 import { runScheduledDistributionDispatch } from '../lib/server/distribution-job-schedule';
+import { runScheduledStartupSlackAutoPost } from '../lib/server/startup-slack-schedule';
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -108,6 +109,20 @@ export default {
         await runScheduledDistributionDispatch(supabase as any, env as any);
       } catch (err) {
         structuredError('distribution_schedule_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        await runScheduledStartupSlackAutoPost({
+          supabase: supabase as any,
+          env: env as any,
+        });
+      } catch (err) {
+        structuredError('startup_slack_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

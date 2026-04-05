@@ -295,9 +295,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
 
   const statusClasses =
     journey.statusTone === 'success'
-      ? 'border-emerald-500/20 bg-emerald-50'
+      ? 'border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10'
       : journey.statusTone === 'warning'
-        ? 'border-amber-500/20 bg-amber-50'
+        ? 'border-amber-500/20 bg-amber-50 dark:bg-amber-500/10'
         : 'border-primary/20 bg-surface-container-low';
 
   return (
@@ -340,7 +340,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
           {journey.steps.map((step, index) => {
             const badgeClasses =
               step.state === 'complete'
-                ? 'border-emerald-600 bg-emerald-600 text-white'
+                ? 'border-emerald-600 bg-emerald-600 text-on-primary'
                 : step.state === 'current'
                   ? 'border-primary bg-primary text-on-primary'
                   : 'border-outline-variant/35 bg-surface-container-low text-on-surface-variant';
@@ -419,7 +419,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
                   actionCard.secondaryHref ? (
                     <Link
                       href={actionCard.secondaryHref}
-                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-white/5"
+                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-surface/10"
                     >
                       <span className="material-symbols-outlined text-base">
                         {data.reportStatus === 'delivered' ? 'login' : data.reportStatus === 'generating' ? 'login' : 'bookmark'}
@@ -435,7 +435,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
                           : null;
                         target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-white/5"
+                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-surface/10"
                     >
                       <span className="material-symbols-outlined text-base">bookmark</span>
                       {actionCard.secondaryLabel}

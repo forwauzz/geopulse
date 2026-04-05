@@ -50,9 +50,9 @@ function severityLabel(weight: number | undefined): 'High' | 'Medium' | 'Low' {
 }
 
 function severityStyle(sev: 'High' | 'Medium' | 'Low'): string {
-  if (sev === 'High') return 'bg-red-100 text-red-800';
-  if (sev === 'Medium') return 'bg-amber-100 text-amber-800';
-  return 'bg-slate-100 text-slate-600';
+  if (sev === 'High') return 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200';
+  if (sev === 'Medium') return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200';
+  return 'bg-surface-container-low text-on-surface-variant';
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -73,9 +73,9 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 function categoryScoreColor(score: number): string {
   if (score < 0) return 'text-outline-variant bg-surface-container-low';
-  if (score >= 75) return 'text-green-700 bg-green-50';
-  if (score >= 45) return 'text-amber-700 bg-amber-50';
-  return 'text-red-700 bg-red-50';
+  if (score >= 75) return 'text-green-700 bg-green-50 dark:bg-green-500/15 dark:text-green-200';
+  if (score >= 45) return 'text-amber-700 bg-amber-50 dark:bg-amber-500/15 dark:text-amber-200';
+  return 'text-red-700 bg-red-50 dark:bg-red-500/15 dark:text-red-200';
 }
 
 function readinessStatus(score: number): 'Good' | 'Needs improvement' | 'Critical' {
@@ -266,7 +266,7 @@ export function ScoreDisplay({
                       <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sevClasses}`}>{sev}</span>
                       <span className="font-medium text-on-background">{i.check ?? i.checkId ?? 'Check'}</span>
                       {i.confidence ? (
-                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${i.confidence === 'high' ? 'bg-green-50 text-green-700' : i.confidence === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${i.confidence === 'high' ? 'bg-green-50 text-green-700 dark:bg-green-500/15 dark:text-green-200' : i.confidence === 'medium' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-200' : 'bg-surface-container-low text-on-surface-variant'}`}>
                           {i.confidence} conf.
                         </span>
                       ) : null}

@@ -11,6 +11,7 @@ Deliver a minimal Slack integration so startup teams can send audit/report updat
 - connect one or more Slack workspaces to one startup workspace
 - save one or more channel destinations
 - manually send report/audit updates to a chosen destination
+- optionally auto-post report updates on scheduled deep-audit cadence when `slack_auto_post=true`
 - log delivery status (`sent` / `failed`) for operator visibility
 
 Not in MVP:
@@ -33,6 +34,8 @@ Not in MVP:
 - `SL-010` complete: centralized Slack service controls wired in `/dashboard/services`
 - `SL-011` complete: focused Slack tests and edge-case hardening
 - `SL-012` complete: Alie pilot rollout runbook + evidence checklist (`docs/18-startup-slack-pilot-rollout-runbook.md`)
+- `SL-013` complete: cron scheduler auto-enqueues due startup deep audits for Slack-enabled workspaces
+- `SL-014` complete: report queue consumer auto-posts `new_audit_ready` Slack messages after report completion when gates allow
 
 ## SL-001 Contract (first slice complete)
 
@@ -96,6 +99,17 @@ Slack send is allowed only when all are true:
 9. `SL-010`: wire Slack keys into centralized `/dashboard/services` controls
 10. `SL-011`: add focused tests for gates, formatter, and delivery logging
 11. `SL-012`: run Alie pilot rollout and capture evidence (operator runbook now in repo)
+12. `SL-013`: add cron scheduler to find due `slack_auto_post` workspaces and enqueue deep-audit jobs
+13. `SL-014`: auto-send Slack delivery from report completion path for eligible startup workspaces
+
+## Verification posture for `SL-013` + `SL-014`
+
+- Add backend-focused tests for scheduling logic and gating/eligibility behavior.
+- Keep E2E browser scope unchanged for this slice because no new browser interaction path was introduced.
+- Current targeted proof:
+  - `lib/server/startup-slack-schedule.test.ts`
+  - `npx vitest run lib/server/startup-slack-schedule.test.ts`
+  - `npx tsc --noEmit`
 
 ## Acceptance criteria for MVP release
 
