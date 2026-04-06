@@ -11163,3 +11163,21 @@ Verification:
 - `npx.cmd tsc --noEmit` — 0 errors
 
 Files: `app/dashboard/startups/actions.ts`, `agents/memory/PROJECT_STATE.md`
+
+---
+
+### 2026-04-06 — BF-004
+Completed BF-004: Add `removeAgencyMember` + `deleteAgencyAccount` server actions.
+
+What was done:
+- Added `removeAgencyMemberSchema` + `removeAgencyMember` action — deletes from `agency_users` matching agencyAccountId + userId, revalidates `/dashboard/agencies`
+- Added `deleteAgencyAccountSchema` + `deleteAgencyAccount` action — fetches account name, verifies case-insensitive name match, deletes from `agency_accounts` (CASCADE handles users, clients, client_domains, feature_flags, model_policies), revalidates path
+- Both actions follow the exact same patterns as existing actions in the file
+
+What was NOT changed:
+- All existing create/upsert/flag/model-policy actions — unchanged
+
+Verification:
+- `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `app/dashboard/agencies/actions.ts`, `agents/memory/PROJECT_STATE.md`

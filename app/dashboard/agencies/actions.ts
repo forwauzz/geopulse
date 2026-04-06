@@ -421,3 +421,91 @@ export async function createAgencyUser(
   revalidatePath('/dashboard/agencies');
   return { ok: true, message: 'Agency user saved.' };
 }
+
+const removeAgencyMemberSchema = z.object({
+  agencyAccountId: z.string().uuid('Choose a valid agency account.'),
+  userId: z.string().uuid('Choose a valid user.'),
+});
+
+export async function removeAgencyMember(
+  _prev: AgencyAdminActionState | null,
+  formData: FormData
+): Promise<AgencyAdminActionState> {
+  const context = await loadAdminActionContext();
+  if (!context.ok) return context;
+
+  const parsed = removeAgencyMemberSchema.safeParse({
+    agencyAccountId: normalizeText(formData.get('agencyAccountId')),
+    userId: normalizeText(formData.get('userId')),
+  });
+  if (!parsed.success) {
+    const errors = parsed.error.flatten().fieldErrors;
+    return {
+      ok: false,
+      message:
+        errors['agencyAccountId']?.[0] ?? errors['userId']?.[0] ?? 'Check the values.',
+    };
+  }
+
+  const { error } = await context.adminDb
+    .from('agency_users')
+    .delete()
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .eq('user_id', parsed.data.userId);
+
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath('/dashboard/agencies');
+  return { ok: true, message: 'Member removed.' };
+}
+
+const deleteAgencyAccountSchema = z.object({
+  agencyAccountId: z.string().uuid('Choose a valid agency account.'),
+  confirmName: z.string().min(1, 'Type the account name to confirm.'),
+});
+
+export async function deleteAgencyAccount(
+  _prev: AgencyAdminActionState | null,
+  formData: FormData
+): Promise<AgencyAdminActionState> {
+  const context = await loadAdminActionContext();
+  if (!context.ok) return context;
+
+  const parsed = deleteAgencyAccountSchema.safeParse({
+    agencyAccountId: normalizeText(formData.get('agencyAccountId')),
+    confirmName: normalizeText(formData.get('confirmName')),
+  });
+  if (!parsed.success) {
+    const errors = parsed.error.flatten().fieldErrors;
+    return {
+      ok: false,
+      message:
+        errors['agencyAccountId']?.[0] ?? errors['confirmName']?.[0] ?? 'Check the values.',
+    };
+  }
+
+  const { data: account, error: fetchErr } = await context.adminDb
+    .from('agency_accounts')
+    .select('name')
+    .eq('id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  if (fetchErr) return { ok: false, message: fetchErr.message };
+  if (!account) return { ok: false, message: 'Account not found.' };
+
+  if (account.name.trim().toLowerCase() !== parsed.data.confirmName.trim().toLowerCase()) {
+    return {
+      ok: false,
+      message: 'Account name does not match. Type the exact name to confirm.',
+    };
+  }
+
+  const { error } = await context.adminDb
+    .from('agency_accounts')
+    .delete()
+    .eq('id', parsed.data.agencyAccountId);
+
+  if (error) return { ok: false, message: error.message };
+
+  revalidatePath('/dashboard/agencies');
+  return { ok: true, message: `Account "${account.name}" deleted.` };
+}
