@@ -655,7 +655,7 @@ pm run benchmark:schedule:run-now so the recurring benchmark lane can be execute
 | Task ID | Task | Agent | Status | Evidence |
 |---------|------|-------|--------|----------|
 | BF-001 | Fix `/api/scans/[id]`: add `startup_workspace_id` select + startup membership check + `startup_bypass` checkoutMode | Backend | ✅ DONE | `app/api/scans/[id]/route.ts`; COMPLETION_LOG BF-001 |
-| BF-002 | Fix `/api/checkout`: add `startup_workspace_id` select + startup bypass block before Stripe | Backend | ❌ PENDING | — |
+| BF-002 | Fix `/api/checkout`: add `startup_workspace_id` select + startup bypass block before Stripe | Backend | ✅ DONE | `app/api/checkout/route.ts`; COMPLETION_LOG BF-002 |
 | BF-003 | Add `removeStartupWorkspaceMember` + `deleteStartupWorkspace` server actions to `app/dashboard/startups/actions.ts` | Backend | ❌ PENDING | — |
 | BF-004 | Add `removeAgencyMember` + `deleteAgencyAccount` server actions to `app/dashboard/agencies/actions.ts` | Backend | ❌ PENDING | — |
 | BF-005 | Add remove member + delete workspace UI to `components/startup-admin-control-view.tsx` | Frontend | ❌ PENDING | — |

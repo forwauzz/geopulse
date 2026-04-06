@@ -7,6 +7,7 @@ import {
 import { getClientIp, getPaymentApiEnv } from '@/lib/server/cf-env';
 import { checkCheckoutRateLimit } from '@/lib/server/rate-limit-kv';
 import { createStripeClient } from '@/lib/server/stripe-client';
+import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
@@ -78,7 +79,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const { data: scan, error: scanErr } = await supabase
     .from('scans')
-    .select('id,user_id,status,agency_account_id,agency_client_id')
+    .select('id,user_id,status,agency_account_id,agency_client_id,startup_workspace_id')
     .eq('id', parsed.data.scanId)
     .maybeSingle();
 
@@ -183,6 +184,44 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
 
+      return Response.json({ url: `${baseUrl}/results/${scanId}?checkout=success` });
+    }
+  }
+
+  // Startup workspace bypass — members never pay; enqueue report via synthetic session
+  if (sessionUserId && sessionUserEmail && scan.startup_workspace_id) {
+    const isStartupMember = await validateStartupWorkspaceScanContext({
+      supabase,
+      userId: sessionUserId,
+      startupWorkspaceId: scan.startup_workspace_id,
+    });
+    if (isStartupMember) {
+      structuredLog('deep_audit_checkout_startup_bypass_started', {
+        scanId,
+        userId: sessionUserId,
+        startupWorkspaceId: scan.startup_workspace_id,
+      }, 'info');
+      const syntheticSessionId = `startup-bypass:${scanId}`;
+      const syntheticEventId = `startup-bypass-completed:${scanId}`;
+      const result = await handleCheckoutSessionCompleted(
+        supabase as any,
+        {
+          id: syntheticSessionId,
+          metadata: { scan_id: scanId },
+          customer_email: sessionUserEmail,
+          customer_details: { email: sessionUserEmail },
+          amount_total: 0,
+          currency: 'usd',
+        } as any,
+        syntheticEventId,
+        env
+      );
+      if (!result.ok) {
+        return Response.json(
+          { error: { code: result.reason, message: result.reason } },
+          { status: result.status }
+        );
+      }
       return Response.json({ url: `${baseUrl}/results/${scanId}?checkout=success` });
     }
   }

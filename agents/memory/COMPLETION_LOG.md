@@ -11123,3 +11123,24 @@ Verification:
 - `npx.cmd tsc --noEmit` — 0 errors
 
 Files: `app/api/scans/[id]/route.ts`
+
+---
+
+### 2026-04-06 — BF-002
+Completed BF-002: Fix `/api/checkout/route.ts` — startup workspace bypass before Stripe redirect.
+
+What was done:
+- Added `startup_workspace_id` to the Supabase scan select (line 81)
+- Imported `validateStartupWorkspaceScanContext` from `lib/server/startup-scan-context`
+- Added startup bypass block after the existing agency bypass block: checks if the authenticated user is an active member of the scan's startup workspace, then calls `handleCheckoutSessionCompleted` with a synthetic session (same pattern as agency bypass) so `ensureDeepAuditJobQueued` enqueues the Cloudflare Worker report job without touching Stripe
+- Startup bypass fires only when `scan.startup_workspace_id` is set AND user is an active member — all other flows unchanged
+
+What was NOT changed:
+- Agency bypass path — unchanged
+- Stripe path — unchanged for non-workspace users
+- Rate limiting, Turnstile, auth flows — unchanged
+
+Verification:
+- `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `app/api/checkout/route.ts`
