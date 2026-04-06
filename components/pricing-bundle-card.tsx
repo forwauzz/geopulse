@@ -1,9 +1,56 @@
 'use client';
 
-import { useEffect, useTransition } from 'react';
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
+
+const E2E_BYPASS_TURNSTILE =
+  process.env['NEXT_PUBLIC_E2E_BYPASS_TURNSTILE'] === '1' &&
+  process.env.NODE_ENV !== 'production';
+
+function isTurnstileBypassEnabled(): boolean {
+  if (!E2E_BYPASS_TURNSTILE) return false;
+  if (typeof window === 'undefined') return true;
+
+  const maybeWindow = window as typeof window & {
+    __GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__?: boolean;
+  };
+  return maybeWindow.__GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__ !== true;
+}
+
+function turnstileWidgetErrorMessage(errorCode: string | number | undefined): string {
+  const code = String(errorCode ?? '').trim();
+  if (code === '110200') {
+    return 'Verification is blocked for this domain. The Turnstile widget must allow this hostname.';
+  }
+  if (code === '110100' || code === '110110' || code === '400020') {
+    return 'Verification is misconfigured (invalid site key). Contact support.';
+  }
+  if (code === '400070') {
+    return 'Verification is misconfigured (site key disabled). Contact support.';
+  }
+  return code ? `Verification failed (${code}). Refresh and try again.` : 'Verification failed. Refresh and try again.';
+}
+
+function formatSubscribeErrorMessage(data: unknown): string {
+  if (!data || typeof data !== 'object' || !('error' in data)) {
+    return 'Checkout could not be started. Please try again.';
+  }
+  const err = (data as { error?: { code?: string; message?: unknown } }).error;
+  if (!err) return 'Checkout could not be started. Please try again.';
+  const raw = err.message;
+  if (typeof raw === 'string') return raw;
+  if (raw !== undefined) {
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return err.code ?? 'Checkout could not be started. Please try again.';
+    }
+  }
+  return err.code ?? 'Checkout could not be started. Please try again.';
+}
 
 export type PricingBundleCardProps = {
   readonly bundleKey: string;
@@ -15,6 +62,8 @@ export type PricingBundleCardProps = {
   readonly isAuthenticated: boolean;
   readonly isCurrentPlan: boolean;  // user already has this subscription active/trialing
   readonly isFree: boolean;         // startup_lite — no Stripe, just link to scan
+  /** Cloudflare Turnstile site key (empty if not configured). Required for paid checkout except E2E bypass. */
+  readonly turnstileSiteKey: string;
 };
 
 export function PricingBundleCard({
@@ -27,23 +76,83 @@ export function PricingBundleCard({
   isAuthenticated,
   isCurrentPlan,
   isFree,
+  turnstileSiteKey,
 }: PricingBundleCardProps) {
   const [isPending, startTransition] = useTransition();
   const sp = useSearchParams();
+  const bypassTurnstile = isTurnstileBypassEnabled();
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(
+    bypassTurnstile ? 'e2e-bypass-token' : null
+  );
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
+  const autoSubscribeFiredRef = useRef(false);
+
+  const needsPaidCheckout = !isFree && !isCurrentPlan;
+  const turnstileConfigured = bypassTurnstile || Boolean(turnstileSiteKey.trim());
+
+  useEffect(() => {
+    setTurnstileToken((current) => {
+      if (bypassTurnstile) return current ?? 'e2e-bypass-token';
+      return current === 'e2e-bypass-token' ? null : current;
+    });
+  }, [bypassTurnstile]);
 
   // Auto-subscribe if redirected back here after login with ?autosubscribe=1&bundle=X
   const autoSubscribe =
-    !isFree &&
-    !isCurrentPlan &&
+    needsPaidCheckout &&
     sp.get('autosubscribe') === '1' &&
     sp.get('bundle') === bundleKey;
 
-  useEffect(() => {
-    if (autoSubscribe) {
-      handleSubscribe();
+  function resetTurnstile(): void {
+    setTurnstileToken(bypassTurnstile ? 'e2e-bypass-token' : null);
+    turnstileRef.current?.reset();
+  }
+
+  function effectiveToken(): string | null {
+    if (bypassTurnstile) return turnstileToken ?? 'e2e-bypass-token';
+    return turnstileToken?.trim() ? turnstileToken : null;
+  }
+
+  async function postSubscribe(tokenStr: string): Promise<void> {
+    const res = await fetch('/api/billing/subscribe', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ bundleKey, turnstileToken: tokenStr }),
+    });
+
+    const data: unknown = await res.json().catch(() => null);
+    const url =
+      data && typeof data === 'object' && 'url' in data && typeof (data as { url?: unknown }).url === 'string'
+        ? (data as { url: string }).url
+        : null;
+
+    if (!res.ok || !url) {
+      autoSubscribeFiredRef.current = false;
+      setCheckoutError(formatSubscribeErrorMessage(data));
+      resetTurnstile();
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoSubscribe]);
+
+    window.location.href = url;
+  }
+
+  useEffect(() => {
+    if (!autoSubscribe || !isAuthenticated || autoSubscribeFiredRef.current) return;
+    const t = effectiveToken();
+    if (!t) return;
+    autoSubscribeFiredRef.current = true;
+    startTransition(async () => {
+      try {
+        await postSubscribe(t);
+      } catch {
+        setCheckoutError('Something went wrong. Please try again.');
+        autoSubscribeFiredRef.current = false;
+        resetTurnstile();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- effectiveToken derived from turnstileToken / bypass
+  }, [autoSubscribe, isAuthenticated, turnstileToken, bypassTurnstile, bundleKey]);
 
   useLongWaitEffect(isPending, {
     title: trialDays > 0 ? 'Starting your free trial…' : 'Setting up checkout…',
@@ -53,38 +162,29 @@ export function PricingBundleCard({
   });
 
   function handleSubscribe() {
+    setCheckoutError(null);
     if (!isAuthenticated) {
-      // Redirect to login, passing back to pricing with autosubscribe intent
       window.location.href = `/login?next=/pricing&bundle=${bundleKey}`;
+      return;
+    }
+
+    if (needsPaidCheckout && !turnstileConfigured) {
+      setCheckoutError('Subscription checkout is not available (verification not configured). Contact support.');
+      return;
+    }
+
+    const t = effectiveToken();
+    if (needsPaidCheckout && !t) {
+      setCheckoutError('Please complete the verification.');
       return;
     }
 
     startTransition(async () => {
       try {
-        const res = await fetch('/api/billing/subscribe', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            bundleKey,
-            // Turnstile is bypassed server-side when TURNSTILE_SECRET_KEY is not set in dev.
-            // In production the page-level Turnstile widget supplies the token.
-            // For now we pass an empty string — the server's verifyTurnstileToken handles
-            // the dev-bypass path. Production usage wires in Turnstile via a form widget.
-            turnstileToken: '',
-          }),
-        });
-
-        const data = (await res.json()) as { url?: string; error?: { code: string; message: string } };
-
-        if (!res.ok || !data.url) {
-          const msg = data.error?.message ?? 'Checkout could not be started. Please try again.';
-          alert(msg);
-          return;
-        }
-
-        window.location.href = data.url;
+        await postSubscribe(t!);
       } catch {
-        alert('Something went wrong. Please try again.');
+        setCheckoutError('Something went wrong. Please try again.');
+        resetTurnstile();
       }
     });
   }
@@ -136,14 +236,36 @@ export function PricingBundleCard({
             Current plan
           </span>
         ) : (
-          <button
-            type="button"
-            onClick={handleSubscribe}
-            disabled={isPending}
-            className="inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isPending ? 'Preparing…' : ctaLabel}
-          </button>
+          <div className="flex flex-col gap-3">
+            {needsPaidCheckout && turnstileSiteKey.trim() && !bypassTurnstile ? (
+              <Turnstile
+                ref={turnstileRef}
+                siteKey={turnstileSiteKey}
+                onSuccess={(next) => {
+                  setTurnstileToken(next);
+                  setCheckoutError(null);
+                }}
+                onExpire={() => setTurnstileToken(null)}
+                onError={(code) => {
+                  setTurnstileToken(null);
+                  setCheckoutError(turnstileWidgetErrorMessage(code));
+                }}
+              />
+            ) : null}
+            {checkoutError ? (
+              <p className="font-body text-xs text-red-600 dark:text-red-400" role="alert">
+                {checkoutError}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={handleSubscribe}
+              disabled={isPending || (needsPaidCheckout && !turnstileConfigured)}
+              className="inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isPending ? 'Preparing…' : ctaLabel}
+            </button>
+          </div>
         )}
 
         {/* Fine print for paid plans */}

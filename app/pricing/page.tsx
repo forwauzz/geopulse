@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { PricingBundleCard, type PricingBundleCardProps } from '@/components/pricing-bundle-card';
 import { SubscriptionStatusBanner } from '@/components/subscription-status-banner';
+import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,6 +139,7 @@ export default async function PricingPage() {
 
   const isAuthenticated = Boolean(user);
   const { bundles, activeSubs } = await loadPricingData(user?.id ?? null);
+  const turnstileSiteKey = getTurnstileSiteKey();
 
   const activeSubKeys = new Set(activeSubs.map((s) => s.bundle_key));
 
@@ -162,6 +164,7 @@ export default async function PricingPage() {
         isAuthenticated,
         isCurrentPlan: activeSubKeys.has(key),
         isFree: billingMode === 'free',
+        turnstileSiteKey,
       } satisfies PricingBundleCardProps,
     ];
   });
