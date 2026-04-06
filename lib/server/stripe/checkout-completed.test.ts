@@ -98,11 +98,21 @@ describe('handleCheckoutSessionCompleted', () => {
                 eq() {
                   return {
                     maybeSingle: async () => ({
-                      data: { id: 'scan-uuid', domain: 'example.com' },
+                      data: {
+                        id: 'scan-uuid',
+                        domain: 'example.com',
+                        agency_account_id: null,
+                        agency_client_id: null,
+                      },
                       error: null,
                     }),
                   };
                 },
+              };
+            },
+            update() {
+              return {
+                eq: async () => ({ error: null }),
               };
             },
           };
@@ -128,6 +138,11 @@ describe('handleCheckoutSessionCompleted', () => {
                     }),
                   };
                 },
+              };
+            },
+            update() {
+              return {
+                eq: async () => ({ error: null }),
               };
             },
           };

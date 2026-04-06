@@ -20,7 +20,7 @@ describe('resend-delivery-helpers', () => {
       ctaHref: 'https://app.example.com/results/scan-123',
       ctaLabel: 'View your results online',
       attachNote:
-        '<p style="color:#586162;font-size:13px;text-align:center;margin-top:12px;">Your full report is attached to this email.</p>',
+        '<p style="color:#586162;font-size:13px;text-align:center;margin-top:12px;">Your full report is attached to this email. Sign in later with the same checkout email if you want this report saved in your dashboard.</p>',
     });
   });
 
@@ -34,7 +34,7 @@ describe('resend-delivery-helpers', () => {
       ctaHref: 'https://files.example.com/report.pdf',
       ctaLabel: 'Download full report',
       attachNote:
-        '<p style="color:#586162;font-size:13px;text-align:center;margin-top:12px;">Your report is available via the link above.</p>',
+        '<p style="color:#586162;font-size:13px;text-align:center;margin-top:12px;">Your report is available via the link above. Sign in later with the same checkout email if you want this report saved in your dashboard.</p>',
     });
   });
 

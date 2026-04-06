@@ -438,14 +438,6 @@ export default async function DashboardPage({ searchParams }: Props) {
   const startupBanner =
     startupDashboard.workspaces.length > 0 ? getStartupBanner() : null;
 
-  const selectedAgencyAccount =
-    agencyDashboard.accounts.find((account) => account.id === agencyDashboard.selectedAccountId) ?? null;
-  const selectedAgencyClient =
-    selectedAgencyAccount?.clients.find((client) => client.id === agencyDashboard.selectedClientId) ?? null;
-  const agencyUiGates = buildAgencyDashboardUiGates(agencyDashboard.entitlements);
-  const selectedStartupWorkspace =
-    startupDashboard.workspaces.find((workspace) => workspace.id === startupDashboard.selectedWorkspaceId) ?? null;
-
   return (
     <section className="min-h-[60vh] space-y-10">
 
