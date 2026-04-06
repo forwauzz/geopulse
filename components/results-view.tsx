@@ -7,7 +7,6 @@ import { EmailGate } from '@/components/email-gate';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { ScoreDisplay } from '@/components/score-display';
 import { reportLoadingJourney, resultsLoadingJourney } from '@/lib/client/loading-journeys';
-import { buildResultsJourneyModel } from '@/lib/client/results-journey';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -251,13 +250,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
   const hasDirectReportAccess = !!(data.pdfUrl || data.markdownUrl);
   const showCheckout = !data.hasPaidReport && turnstileSiteKey && data.deepAuditAvailable;
   const showEmailGate = !data.hasPaidReport && turnstileSiteKey;
-  const journey = buildResultsJourneyModel({
-    host,
-    hasPaidReport: data.hasPaidReport,
-    reportStatus: data.reportStatus,
-    checkoutState,
-    hasDirectReportAccess,
-  });
   async function handleShareSnapshot(): Promise<void> {
     const shareUrl = window.location.href;
     const shareData = {
@@ -294,13 +286,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     });
   }
 
-  const statusClasses =
-    journey.statusTone === 'success'
-      ? 'border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10'
-      : journey.statusTone === 'warning'
-        ? 'border-amber-500/20 bg-amber-50 dark:bg-amber-500/10'
-        : 'border-primary/20 bg-surface-container-low';
-
   return (
     <>
       <section className="mb-12 md:mb-16">
@@ -314,54 +299,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
           Diagnostic for <span className="italic text-primary">{host}</span>
         </h1>
         <p className="mt-4 max-w-2xl font-body text-on-surface-variant">
-          Score, progress, and the next best step to move from preview to full audit delivery.
+          Your AI search readiness score for <span className="font-medium text-on-background">{host}</span>.
         </p>
-      </section>
-
-      <section className="mb-8 rounded-[28px] border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-float md:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">
-              Audit Journey
-            </p>
-            <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
-              One path, with a preview first and the full audit second
-            </h2>
-            <p className="mt-3 font-body text-sm leading-6 text-on-surface-variant">
-              Start with the preview below. If you want the full audit, continue to checkout. If not, you can save this preview quietly for later.
-            </p>
-          </div>
-          <div className={`w-full max-w-xl rounded-2xl border px-5 py-4 ${statusClasses}`}>
-            <p className="font-headline text-lg font-semibold text-on-background">{journey.statusTitle}</p>
-            <p className="mt-2 font-body text-sm leading-6 text-on-surface-variant">{journey.statusBody}</p>
-          </div>
-        </div>
-
-        <ol className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {journey.steps.map((step, index) => {
-            const badgeClasses =
-              step.state === 'complete'
-                ? 'border-emerald-600 bg-emerald-600 text-on-primary'
-                : step.state === 'current'
-                  ? 'border-primary bg-primary text-on-primary'
-                  : 'border-outline-variant/35 bg-surface-container-low text-on-surface-variant';
-            const cardClasses =
-              step.state === 'current'
-                ? 'border-primary/30 bg-primary/[0.07]'
-                : 'border-outline-variant/20 bg-surface-container-low';
-            return (
-              <li key={step.label} className={`rounded-2xl border p-4 ${cardClasses}`}>
-                <div className="flex items-center gap-3">
-                  <span className={`flex h-8 w-8 items-center justify-center rounded-full border text-sm font-semibold ${badgeClasses}`}>
-                    {step.state === 'complete' ? '✓' : index + 1}
-                  </span>
-                  <p className="font-headline text-base font-semibold text-on-background">{step.label}</p>
-                </div>
-                <p className="mt-3 font-body text-sm leading-6 text-on-surface-variant">{step.detail}</p>
-              </li>
-            );
-          })}
-        </ol>
       </section>
 
       {(() => {
