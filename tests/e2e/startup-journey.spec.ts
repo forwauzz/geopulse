@@ -43,7 +43,8 @@ test.describe('startup dashboard home', () => {
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
-    await expect(page.getByText(/admin@example\.com/i).first()).toBeVisible();
+    // Scope to main content to avoid the sidebar's truncated/hidden copy
+    await expect(page.getByRole('main').getByText(/admin@example\.com/i)).toBeVisible();
   });
 
   test('renders startup workspace section with workspace name', async ({ page }) => {
@@ -66,8 +67,8 @@ test.describe('startup dashboard home', () => {
     await signInAsStartup(page);
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
-    // example.com appears in workspace context bar
-    await expect(page.getByText(/example\.com/i).first()).toBeVisible();
+    // The chip renders exactly "example.com" — use exact match so we don't pick up "admin@example.com"
+    await expect(page.getByText('example.com', { exact: true }).first()).toBeVisible();
   });
 
   test('shows role chip', async ({ page }) => {
@@ -106,12 +107,16 @@ test.describe('startup dashboard home', () => {
     await expect(page.getByText(/74/i).first()).toBeVisible();
   });
 
-  test('renders action backlog with fixture recommendation', async ({ page }) => {
+  test('renders action backlog widget', async ({ page }) => {
     await signInAsStartup(page);
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/action backlog/i)).toBeVisible();
-    await expect(page.getByText(/add missing schema blocks/i)).toBeVisible();
+    // The fixture scan (score 74, report linked) produces no scan-level blockers →
+    // buildStartupActionBacklog returns the "no blockers" fallback item
+    await expect(
+      page.getByText(/no blocking implementation items/i)
+    ).toBeVisible();
   });
 
   test('renders recent scans section with example.com scan', async ({ page }) => {
@@ -211,23 +216,24 @@ test.describe('connectors page', () => {
     ).toBeVisible();
   });
 
-  test('GitHub card body explains not-enabled state in E2E', async ({ page }) => {
-    // In E2E, SUPABASE_SERVICE_ROLE_KEY is not set → service gates null → githubEnabled = false
+  test('GitHub card body shows Connect GitHub button when not connected', async ({ page }) => {
+    // Service catalog has default_access_mode: free → githubEnabled = true in E2E
+    // No fixture installation → disconnected state → "Connect GitHub" button renders
     await signInAsStartup(page);
     await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
 
     await expect(
-      page.getByText(/github integration is not enabled for this workspace/i)
+      page.getByRole('button', { name: /connect github/i })
     ).toBeVisible();
   });
 
-  test('Slack card body explains not-enabled state in E2E', async ({ page }) => {
-    // slackEnabled = false in E2E for same reason
+  test('Slack card body shows Connect Slack button when not connected', async ({ page }) => {
+    // No fixture Slack installation → disconnected state → "Connect Slack" button renders
     await signInAsStartup(page);
     await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
 
     await expect(
-      page.getByText(/slack integration is not enabled for this workspace/i)
+      page.getByRole('button', { name: /connect slack/i })
     ).toBeVisible();
   });
 
@@ -247,6 +253,63 @@ test.describe('connectors page', () => {
     );
 
     await expect(page.getByRole('heading', { name: /^connectors$/i })).toBeVisible();
+  });
+});
+
+// ── Slack section detail (slackEnabled = true via real service catalog) ────
+
+test.describe('slack section', () => {
+  test('shows "No Slack workspaces connected" empty state', async ({ page }) => {
+    await signInAsStartup(page);
+    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+
+    await expect(
+      page.getByText(/no slack workspaces connected/i)
+    ).toBeVisible();
+  });
+
+  test('recurring audits section renders for founder role', async ({ page }) => {
+    // canManageSlackAutoPost = true when role is founder/admin AND slackEnabled = true
+    await signInAsStartup(page);
+    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByText(/recurring audits/i)).toBeVisible();
+  });
+
+  test('auto-post toggle checkbox is present', async ({ page }) => {
+    await signInAsStartup(page);
+    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+
+    // Label: "Enable recurring auto-scan + Slack delivery"
+    await expect(
+      page.getByRole('checkbox', { name: /enable recurring auto-scan/i })
+    ).toBeVisible();
+  });
+
+  test('cadence selector renders with monthly default (30 days)', async ({ page }) => {
+    await signInAsStartup(page);
+    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+
+    // Workspace fixture has no audit_cadence_days set → auditCadenceDays = 30
+    const cadenceSelect = page.locator('select[name="cadenceDays"]');
+    await expect(cadenceSelect).toBeVisible();
+    await expect(cadenceSelect).toHaveValue('30');
+  });
+
+  test('cadence selector has 5 options', async ({ page }) => {
+    await signInAsStartup(page);
+    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+
+    const options = page.locator('select[name="cadenceDays"] option');
+    await expect(options).toHaveCount(5);
+  });
+
+  test('delivery log section is absent when no events exist', async ({ page }) => {
+    // Fixture has 0 delivery events → section only renders when length > 0
+    await signInAsStartup(page);
+    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByText(/recent deliveries/i)).not.toBeVisible();
   });
 });
 
@@ -292,7 +355,7 @@ test.describe('workspace settings page', () => {
     await signInAsStartup(page);
     await page.goto('/dashboard/workspace', { waitUntil: 'domcontentloaded' });
 
-    // Should render heading-level content without error
-    await expect(page.getByRole('heading', { name: /workspace/i })).toBeVisible();
+    // Multiple "Workspace" headings can appear (page h1 + section h2); use first()
+    await expect(page.getByRole('heading', { name: /workspace/i }).first()).toBeVisible();
   });
 });

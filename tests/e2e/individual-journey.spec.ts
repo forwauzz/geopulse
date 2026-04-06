@@ -62,8 +62,8 @@ test.describe('authenticated dashboard home', () => {
     await signInAsIndividual(page);
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
-    // Email appears multiple times (sidebar + page body); use first() to avoid strict mode error
-    await expect(page.getByText(/admin@example\.com/i).first()).toBeVisible();
+    // Scope to main content to avoid the sidebar's truncated/hidden copy
+    await expect(page.getByRole('main').getByText(/admin@example\.com/i)).toBeVisible();
   });
 
   test('Run a Scan link is visible in the sidebar', async ({ page }) => {
