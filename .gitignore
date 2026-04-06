@@ -61,6 +61,9 @@ coverage/
 playwright-report/
 test-results/
 
+# Claude Code — local worktrees are gitlinks without .gitmodules; never commit
+.claude/worktrees/
+
 # IDE
 .idea/
 .vscode/settings.json
