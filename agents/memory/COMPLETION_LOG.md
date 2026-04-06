@@ -11181,3 +11181,24 @@ Verification:
 - `npx.cmd tsc --noEmit` — 0 errors
 
 Files: `app/dashboard/agencies/actions.ts`, `agents/memory/PROJECT_STATE.md`
+
+---
+
+### 2026-04-06 — BF-005
+Completed BF-005: Add remove member + delete workspace UI to `StartupAdminControlView`.
+
+What was done:
+- Imported `removeStartupWorkspaceMember` + `deleteStartupWorkspace` from startup actions
+- Added `useActionState` hooks for both new actions (removeMemberAction, deleteWorkspaceAction)
+- Per-member row: added inline Remove form (hidden workspaceId + userId, submit button styled with text-error) alongside the existing member display text; error message shown below the list if action fails
+- Per-workspace: added a `<details>` disclosure at the bottom of each workspace card with a delete form — name-confirm text input, red submit button, inline success/error feedback. The disclosure is collapsed by default so it's not prominent but accessible.
+- All existing rollout flags form and add-member form unchanged
+
+What was NOT changed:
+- No server-side logic in this file — only imports and JSX
+- All existing create/rollout UI patterns unchanged
+
+Verification:
+- `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `components/startup-admin-control-view.tsx`, `agents/memory/PROJECT_STATE.md`

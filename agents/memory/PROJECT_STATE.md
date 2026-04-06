@@ -350,7 +350,7 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | BF-002 | Fix `/api/checkout`: add `startup_workspace_id` select + startup bypass block before Stripe | Backend | ✅ DONE | `app/api/checkout/route.ts`, COMPLETION_LOG BF-002 |
 | BF-003 | Add `removeStartupWorkspaceMember` + `deleteStartupWorkspace` server actions | Backend | ✅ DONE | `app/dashboard/startups/actions.ts`, COMPLETION_LOG BF-003 |
 | BF-004 | Add `removeAgencyMember` + `deleteAgencyAccount` server actions | Backend | ✅ DONE | `app/dashboard/agencies/actions.ts`, COMPLETION_LOG BF-004 |
-| BF-005 | Add remove member + delete workspace UI to `StartupAdminControlView` | Frontend | ❌ PENDING | — |
+| BF-005 | Add remove member + delete workspace UI to `StartupAdminControlView` | Frontend | ✅ DONE | `components/startup-admin-control-view.tsx`, COMPLETION_LOG BF-005 |
 | BF-006 | Add remove member + delete account UI to `AgencyAdminControlView` | Frontend | ❌ PENDING | — |
 
 ### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)

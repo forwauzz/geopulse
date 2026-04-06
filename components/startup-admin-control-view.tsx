@@ -4,6 +4,8 @@ import { useActionState } from 'react';
 import {
   createStartupWorkspace,
   createStartupWorkspaceUser,
+  deleteStartupWorkspace,
+  removeStartupWorkspaceMember,
   type StartupAdminActionState,
   updateStartupWorkspaceRolloutFlags,
 } from '@/app/dashboard/startups/actions';
@@ -44,6 +46,14 @@ export function StartupAdminControlView({ workspaces }: Props) {
   );
   const [rolloutState, rolloutAction, rolloutPending] = useActionState(
     updateStartupWorkspaceRolloutFlags,
+    initialState
+  );
+  const [removeMemberState, removeMemberAction, removeMemberPending] = useActionState(
+    removeStartupWorkspaceMember,
+    initialState
+  );
+  const [deleteWorkspaceState, deleteWorkspaceAction, deleteWorkspacePending] = useActionState(
+    deleteStartupWorkspace,
     initialState
   );
 
@@ -314,10 +324,26 @@ export function StartupAdminControlView({ workspaces }: Props) {
                     <li>No members assigned yet.</li>
                   ) : (
                     workspace.users.map((user) => (
-                      <li key={user.id}>
-                        {user.email ?? user.user_id} · {formatLabel(user.role)} · {formatLabel(user.status)}
+                      <li key={user.id} className="flex items-center justify-between gap-3">
+                        <span>
+                          {user.email ?? user.user_id} · {formatLabel(user.role)} · {formatLabel(user.status)}
+                        </span>
+                        <form action={removeMemberAction} className="shrink-0">
+                          <input type="hidden" name="startupWorkspaceId" value={workspace.id} />
+                          <input type="hidden" name="userId" value={user.user_id} />
+                          <button
+                            type="submit"
+                            disabled={removeMemberPending}
+                            className="text-xs text-error hover:underline disabled:opacity-50"
+                          >
+                            Remove
+                          </button>
+                        </form>
                       </li>
                     ))
+                  )}
+                  {removeMemberState?.ok === false && (
+                    <li className="text-xs text-error">{removeMemberState.message}</li>
                   )}
                 </ul>
               </div>
@@ -345,6 +371,42 @@ export function StartupAdminControlView({ workspaces }: Props) {
                   )}
                 </ul>
               </div>
+
+              <details className="mt-4">
+                <summary className="cursor-pointer text-xs text-error hover:underline">
+                  Delete workspace
+                </summary>
+                <form action={deleteWorkspaceAction} className="mt-3 flex flex-col gap-3 rounded-xl border border-error/20 bg-surface-container-low p-4">
+                  <input type="hidden" name="startupWorkspaceId" value={workspace.id} />
+                  <label className="flex flex-col gap-1 text-sm text-on-background">
+                    <span className="font-medium">
+                      Type <span className="font-mono text-error">{workspace.name}</span> to confirm
+                    </span>
+                    <input
+                      type="text"
+                      name="confirmName"
+                      autoComplete="off"
+                      placeholder={workspace.name}
+                      className="rounded-lg border border-outline-variant/20 bg-surface-container px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={deleteWorkspacePending}
+                      className="rounded-lg bg-error px-4 py-2 text-sm font-medium text-on-error disabled:opacity-50"
+                    >
+                      {deleteWorkspacePending ? 'Deleting…' : 'Delete workspace'}
+                    </button>
+                    {deleteWorkspaceState?.ok === false && (
+                      <p className="text-xs text-error">{deleteWorkspaceState.message}</p>
+                    )}
+                    {deleteWorkspaceState?.ok === true && (
+                      <p className="text-xs text-primary">{deleteWorkspaceState.message}</p>
+                    )}
+                  </div>
+                </form>
+              </details>
             </article>
           ))
         )}
