@@ -178,6 +178,14 @@ export async function runScheduledStartupSlackAutoPost(args: {
         continue;
       }
 
+      const workspaceCadenceDays = parsePositiveInt(
+        (workspace.metadata as Record<string, unknown> | null)?.[
+          'audit_cadence_days'
+        ],
+        config.intervalDays,
+        180
+      );
+
       const siteUrl = toSiteUrl(workspace.primary_domain, workspace.canonical_domain);
       if (!siteUrl) {
         skipped += 1;
@@ -194,7 +202,7 @@ export async function runScheduledStartupSlackAutoPost(args: {
         .maybeSingle();
       if (latestReportError) throw latestReportError;
 
-      if (!isDue((latestReport?.created_at as string | null) ?? null, now, config.intervalDays)) {
+      if (!isDue((latestReport?.created_at as string | null) ?? null, now, workspaceCadenceDays)) {
         skipped += 1;
         continue;
       }
@@ -244,7 +252,7 @@ export async function runScheduledStartupSlackAutoPost(args: {
             scheduler: {
               source: 'startup_slack_auto_post',
               queued_at: now.toISOString(),
-              cadence_days: config.intervalDays,
+              cadence_days: workspaceCadenceDays,
             },
           },
         })
@@ -290,7 +298,7 @@ export async function runScheduledStartupSlackAutoPost(args: {
           startup_workspace_id: workspace.id,
           scan_id: insertedScan.id,
           recipient_email: recipientEmail,
-          cadence_days: config.intervalDays,
+          cadence_days: workspaceCadenceDays,
         },
         'info'
       );

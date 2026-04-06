@@ -20,6 +20,7 @@ import {
   getStartupSlackDestination,
   updateStartupSlackDeliveryEventStatus,
   sendStartupSlackMessage,
+  uploadStartupSlackFile,
   upsertStartupSlackDestination,
 } from '@/lib/server/startup-slack-integration';
 import { resolveStartupServiceModelPolicy } from '@/lib/server/startup-model-policy';
@@ -368,6 +369,7 @@ export async function saveStartupSlackDestination(formData: FormData): Promise<v
     createdByUserId: user.id,
   });
 
+  revalidatePath('/dashboard/connectors');
   revalidatePath('/dashboard/startup');
   redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_destination_saved'));
 }
@@ -376,6 +378,7 @@ export async function updateStartupSlackAutoPostSetting(formData: FormData): Pro
   const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
   if (!workspaceId) throw new Error('Missing startup workspace id.');
   const enabled = formData.get('slackAutoPostEnabled') === 'on';
+  const returnTo = String(formData.get('returnTo') ?? '').trim() || null;
 
   const supabase = await createSupabaseServerClient();
   const {
@@ -431,9 +434,10 @@ export async function updateStartupSlackAutoPostSetting(formData: FormData): Pro
     'info'
   );
 
+  revalidatePath('/dashboard/connectors');
   revalidatePath('/dashboard/startup');
   revalidatePath('/dashboard/startups');
-  redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_auto_post_updated'));
+  redirect(returnTo ?? buildStartupUrl(workspaceId, undefined, undefined, 'slack_auto_post_updated'));
 }
 
 export async function sendStartupReportToSlack(formData: FormData): Promise<void> {
@@ -442,6 +446,7 @@ export async function sendStartupReportToSlack(formData: FormData): Promise<void
   const destinationId = String(formData.get('destinationId') ?? '').trim();
   const eventTypeRaw = String(formData.get('eventType') ?? 'new_audit_ready').trim();
   const eventType = eventTypeRaw === 'plan_ready' ? 'plan_ready' : 'new_audit_ready';
+  const returnTo = String(formData.get('returnTo') ?? '').trim() || null;
 
   if (!workspaceId || !reportId || !destinationId) {
     redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_send_invalid'));
@@ -622,7 +627,7 @@ export async function sendStartupReportToSlack(formData: FormData): Promise<void
       },
       'warning'
     );
-    redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_send_failed'));
+    redirect(returnTo ? `${returnTo}&status=slack_send_failed` : buildStartupUrl(workspaceId, undefined, undefined, 'slack_send_failed'));
   }
 
   structuredLog(
@@ -640,7 +645,7 @@ export async function sendStartupReportToSlack(formData: FormData): Promise<void
   );
 
   revalidatePath('/dashboard/startup');
-  redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_send_ok'));
+  redirect(returnTo ? `${returnTo}&status=slack_send_ok` : buildStartupUrl(workspaceId, undefined, undefined, 'slack_send_ok'));
 }
 
 export async function queueStartupRecommendationPrRunAction(formData: FormData): Promise<void> {
@@ -827,4 +832,246 @@ export async function markStartupPrRunFailedAction(formData: FormData): Promise<
 
   revalidatePath('/dashboard/startup');
   redirect(buildStartupUrl(workspaceId, undefined, 'pr_failed'));
+}
+
+export async function updateStartupAuditCadence(formData: FormData): Promise<void> {
+  const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
+  const cadenceDaysRaw = Number(formData.get('cadenceDays') ?? '30');
+  const returnTo = String(formData.get('returnTo') ?? '').trim() || null;
+
+  const VALID_CADENCES = [7, 14, 30, 60, 90];
+  const cadenceDays = VALID_CADENCES.includes(cadenceDaysRaw) ? cadenceDaysRaw : 30;
+
+  if (!workspaceId) redirect('/dashboard/connectors');
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/connectors');
+
+  await requireWorkspaceMember({ supabase, userId: user.id, workspaceId });
+  await requireWorkspaceRole({
+    supabase,
+    userId: user.id,
+    workspaceId,
+    roles: ['founder', 'admin'],
+  });
+
+  const env = await getScanApiEnv();
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    redirect(returnTo ?? `/dashboard/connectors?startupWorkspace=${workspaceId}&status=env_missing`);
+  }
+  const serviceSupabase = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
+
+  const { data: existing, error: existingError } = await serviceSupabase
+    .from('startup_workspaces')
+    .select('metadata')
+    .eq('id', workspaceId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  const currentMeta = (existing?.metadata as Record<string, unknown> | null) ?? {};
+  const nextMeta = { ...currentMeta, audit_cadence_days: cadenceDays };
+
+  const { error: updateError } = await serviceSupabase
+    .from('startup_workspaces')
+    .update({ metadata: nextMeta })
+    .eq('id', workspaceId);
+  if (updateError) throw updateError;
+
+  structuredLog(
+    'startup_audit_cadence_updated',
+    {
+      startup_workspace_id: workspaceId,
+      cadence_days: cadenceDays,
+      updated_by_user_id: user.id,
+    },
+    'info'
+  );
+
+  revalidatePath('/dashboard/connectors');
+  redirect(
+    returnTo ??
+      `/dashboard/connectors?startupWorkspace=${workspaceId}&status=cadence_updated`
+  );
+}
+
+export async function sendStartupMarkdownToSlack(formData: FormData): Promise<void> {
+  const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
+  const reportId = String(formData.get('reportId') ?? '').trim();
+  const destinationId = String(formData.get('destinationId') ?? '').trim();
+  const returnTo = String(formData.get('returnTo') ?? '').trim() || null;
+
+  const fallbackUrl = returnTo ?? `/dashboard/connectors?startupWorkspace=${workspaceId}&status=slack_markdown_failed`;
+
+  if (!workspaceId || !reportId || !destinationId) {
+    redirect(fallbackUrl);
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/connectors');
+
+  await requireWorkspaceMember({ supabase, userId: user.id, workspaceId });
+
+  const env = await getScanApiEnv();
+  const rollout = await resolveStartupWorkspaceRolloutFlags({
+    supabase,
+    startupWorkspaceId: workspaceId,
+    env,
+  });
+  if (!rollout.startupDashboard || !rollout.slackAgent) {
+    redirect(fallbackUrl);
+  }
+
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    redirect(fallbackUrl);
+  }
+  const serviceSupabase = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const gates = await resolveStartupDashboardUiGates({
+    memberSupabase: supabase,
+    serviceSupabase,
+    startupWorkspaceId: workspaceId,
+    userId: user.id,
+  });
+  if (!gates.slackIntegration.enabled || !gates.slackNotifications.enabled) {
+    redirect(fallbackUrl);
+  }
+
+  const destination = await getStartupSlackDestination({
+    supabase,
+    startupWorkspaceId: workspaceId,
+    destinationId,
+  });
+  if (!destination) redirect(fallbackUrl);
+
+  const { data: report, error: reportError } = await supabase
+    .from('reports')
+    .select('id,type,created_at,markdown_url,scan_id')
+    .eq('startup_workspace_id', workspaceId)
+    .eq('id', reportId)
+    .maybeSingle();
+  if (reportError) throw reportError;
+  if (!report?.id || !report.markdown_url) {
+    redirect(fallbackUrl);
+  }
+
+  const { data: scan } = report.scan_id
+    ? await supabase
+        .from('scans')
+        .select('id,domain,score')
+        .eq('id', report.scan_id)
+        .eq('startup_workspace_id', workspaceId)
+        .maybeSingle()
+    : ({ data: null } as const);
+
+  const domainValue = (scan?.domain as string | null) ?? 'site';
+  const scoreValue = typeof scan?.score === 'number' ? Math.round(scan.score) : null;
+  const reportDateStr = new Date(report.created_at as string).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  // Fetch the markdown content
+  let markdownContent: string;
+  try {
+    const mdRes = await fetch(report.markdown_url as string);
+    if (!mdRes.ok) throw new Error(`Failed to fetch markdown: HTTP ${mdRes.status}`);
+    markdownContent = await mdRes.text();
+  } catch (err) {
+    redirect(fallbackUrl);
+    return; // unreachable but keeps TypeScript happy
+  }
+
+  const destinationLabel = destination.channelName
+    ? `${destination.channelName} (${destination.channelId})`
+    : destination.channelId;
+
+  const { id: deliveryEventId } = await createStartupSlackDeliveryEvent({
+    supabase,
+    startupWorkspaceId: workspaceId,
+    installationId: destination.installation.id,
+    destinationId: destination.id,
+    eventType: 'new_audit_ready',
+    sentByUserId: user.id,
+    payload: {
+      startup_workspace_id: workspaceId,
+      destination_id: destination.id,
+      event_type: 'new_audit_ready',
+      site_domain: domainValue,
+      score: scoreValue,
+      report_id: reportId,
+      destination_label: destinationLabel,
+      send_type: 'markdown_file',
+    },
+  });
+
+  try {
+    const successRedirect =
+      returnTo ??
+      `/dashboard/connectors?startupWorkspace=${workspaceId}&status=slack_markdown_ok`;
+    await uploadStartupSlackFile({
+      destination,
+      filename: `geo-pulse-audit-${domainValue}-${reportDateStr.replace(/\s/g, '-')}.md`,
+      title: `GEO-Pulse Audit: ${domainValue}${scoreValue != null ? ` — Score ${scoreValue}/100` : ''}`,
+      content: markdownContent,
+      initialComment: `Audit report for *${domainValue}*${scoreValue != null ? ` · Score: *${scoreValue}/100*` : ''} · ${reportDateStr}`,
+    });
+
+    await updateStartupSlackDeliveryEventStatus({
+      supabase,
+      startupWorkspaceId: workspaceId,
+      deliveryEventId,
+      status: 'sent',
+      response: { destination_label: destinationLabel, send_type: 'markdown_file' },
+    });
+
+    structuredLog(
+      'startup_slack_markdown_send_succeeded',
+      {
+        startup_workspace_id: workspaceId,
+        report_id: reportId,
+        destination_id: destinationId,
+        delivery_event_id: deliveryEventId,
+        user_id: user.id,
+      },
+      'info'
+    );
+
+    revalidatePath('/dashboard/connectors');
+    redirect(successRedirect);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await updateStartupSlackDeliveryEventStatus({
+      supabase,
+      startupWorkspaceId: workspaceId,
+      deliveryEventId,
+      status: 'failed',
+      response: { destination_label: destinationLabel },
+      errorMessage,
+    });
+    structuredLog(
+      'startup_slack_markdown_send_failed',
+      {
+        startup_workspace_id: workspaceId,
+        report_id: reportId,
+        destination_id: destinationId,
+        delivery_event_id: deliveryEventId,
+        user_id: user.id,
+        error_message: errorMessage,
+      },
+      'warning'
+    );
+    redirect(fallbackUrl);
+  }
 }

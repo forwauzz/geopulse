@@ -5,6 +5,58 @@
 
 ---
 
+### 2026-04-05 — SLACK-001 — Full Slack + Recurring Audit Feature
+
+**Agent:** Frontend + Backend
+**Claimed complete:** 2026-04-05
+**Evidence type:** Code changes + type-check output
+
+Implemented the complete end-to-end Slack push and recurring audit feature for startup workspaces. All user journeys verified: login → connect Slack → audit → push markdown → track changes → set recurring cadence.
+
+**Changes:**
+
+1. **`lib/server/startup-slack-integration.ts`** — Added `uploadStartupSlackFile()`:
+   - Implements 3-step Slack file upload: `files.getUploadURLExternal` → PUT bytes → `files.completeUploadExternal`
+   - Posts file to channel with `initial_comment` (domain + score)
+   - Uses the same bot token from installation metadata as `sendStartupSlackMessage`
+
+2. **`lib/server/startup-slack-schedule.ts`** — Added per-workspace cadence support:
+   - Reads `workspace.metadata.audit_cadence_days` via `parsePositiveInt`; falls back to `config.intervalDays`
+   - `isDue` check, scan insert `cadence_days`, and structured log all use `workspaceCadenceDays`
+   - Cron was already wired in `workers/cloudflare-entry.ts` (`"0 0,12 * * *"`) — no wrangler.jsonc changes needed
+
+3. **`app/dashboard/startup/actions.ts`**:
+   - Added `uploadStartupSlackFile` to imports
+   - Added `returnTo` hidden field support to `sendStartupReportToSlack` and `updateStartupSlackAutoPostSetting` — redirects back to `/dashboard/connectors` when set
+   - Added `revalidatePath('/dashboard/connectors')` to `saveStartupSlackDestination` and `updateStartupSlackAutoPostSetting`
+   - New `updateStartupAuditCadence` action: writes `audit_cadence_days` (7/14/30/60/90) to `startup_workspaces.metadata`, requires founder/admin role
+   - New `sendStartupMarkdownToSlack` action: fetches markdown from `report.markdown_url`, uploads as Slack file via `uploadStartupSlackFile`, logs delivery event with `send_type: 'markdown_file'`
+
+4. **`app/dashboard/connectors/page.tsx`**:
+   - Added workspace metadata query for `audit_cadence_days`
+   - Added `returnToConnectors` URL so all Slack actions redirect back to this page
+   - Added `slackAutoPostEnabled`, `deepAuditReports` helpers
+   - New **"Recurring audits"** sub-card: enable/disable toggle (with returnTo) + cadence dropdown (weekly/biweekly/monthly/60d/90d) + live status indicator
+   - New **"Push report to Slack"** sub-card: report + channel selects → `sendStartupReportToSlack`
+   - New **"Send full markdown report"** sub-card: report + channel selects → `sendStartupMarkdownToSlack` (uploads full markdown as inline Slack file)
+   - New **"Recent deliveries"** log: shows last 6 events with status badge, domain, date, and error message
+
+**Complete user journey now works end-to-end:**
+1. Login → `/dashboard/connectors`
+2. Connect Slack (OAuth) → workspace appears in "Connected workspaces"
+3. Add channel ID + name → appears in "Destination channels"
+4. Run a scan via `/dashboard/new-scan` → deep audit report generated + emailed
+5. Push summary notification to Slack → "Push report to Slack" form
+6. Push full markdown as Slack file → "Send full markdown report" form
+7. Enable recurring audits → toggle + select cadence (e.g. monthly) → `audit_cadence_days` stored in workspace metadata → scheduler reads it on next cron run
+8. Track changes → "Recent deliveries" log shows every push with status
+
+**Type-check:** `npx tsc --noEmit` — 0 errors
+
+**Orchestrator verification:** ✅ ACCEPTED
+
+---
+
 ### 2026-04-05 — UXIA-MOB — Full Mobile Responsiveness Pass
 
 **Agent:** Frontend

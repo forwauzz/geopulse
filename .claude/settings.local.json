@@ -7,7 +7,12 @@
       "Bash(dir \"C:\\\\Users\\\\Carine Tamon\\\\Desktop\\\\CLAUDE WORKSPACE\\\\projects\\\\geopulse\\\\geo-pulse\\\\workers\\\\report\")",
       "Bash(npm run:*)",
       "Bash(npx vitest:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"slackAutoPost\\\\s*&&\\\\|slackAutoPost\\\\s*==\\\\|slackAutoPost\\\\s*===\" --include=*.ts --include=*.tsx app/ lib/ workers/)",
+      "Bash(grep -r \"\\\\.slackAutoPost\\\\|flags\\\\.slack\" --include=*.ts --include=*.tsx app/ lib/ workers/)",
+      "Bash(npx playwright:*)",
+      "Bash(Remove-Item -Force \"C:\\\\Users\\\\Carine Tamon\\\\Desktop\\\\CLAUDE WORKSPACE\\\\projects\\\\geopulse\\\\geo-pulse\\\\.git\\\\index.lock\" -ErrorAction SilentlyContinue)"
     ]
   }
 }

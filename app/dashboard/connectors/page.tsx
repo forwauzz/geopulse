@@ -6,6 +6,9 @@ import {
   disconnectStartupSlack,
   saveStartupGithubAllowlist,
   saveStartupSlackDestination,
+  sendStartupMarkdownToSlack,
+  sendStartupReportToSlack,
+  updateStartupAuditCadence,
   updateStartupSlackAutoPostSetting,
 } from '@/app/dashboard/startup/actions';
 import { loadStartupDashboardContext } from '@/app/dashboard/startup/lib/load-startup-dashboard-context';
@@ -141,13 +144,39 @@ export default async function ConnectorsPage({ searchParams }: Props) {
     slackActiveInstallations,
     slackActiveDestinations,
     canManageSlackAutoPost,
+    slackDeliveryEvents,
   } = tabContext;
 
   const workspaceId = dashboard.selectedWorkspaceId ?? '';
+
+  const workspaceMetadata = workspaceId
+    ? await (async () => {
+        const { data } = await supabase
+          .from('startup_workspaces')
+          .select('metadata')
+          .eq('id', workspaceId)
+          .maybeSingle();
+        return (data?.metadata as Record<string, unknown> | null) ?? {};
+      })()
+    : {};
+  const auditCadenceDays = typeof workspaceMetadata.audit_cadence_days === 'number'
+    ? workspaceMetadata.audit_cadence_days
+    : 30;
+
+  const returnToConnectors = workspaceId
+    ? `/dashboard/connectors?startupWorkspace=${workspaceId}`
+    : '/dashboard/connectors';
+
   const githubEnabled = !!startupRolloutFlags?.githubAgent && !!startupServiceGates?.githubIntegration.enabled;
   const slackEnabled = !!startupRolloutFlags?.slackAgent && !!startupServiceGates?.slackIntegration.enabled;
   const githubConnected = githubState.installation?.status === 'connected';
   const slackConnected = slackActiveInstallations.length > 0;
+  const slackAutoPostEnabled = !!startupRolloutFlags?.slackAutoPost;
+
+  // Deep audit reports for push form
+  const deepAuditReports = dashboard.reports
+    .filter((r) => r.type === 'deep_audit')
+    .slice(0, 10);
 
   return (
     <section className="space-y-6">
@@ -470,32 +499,250 @@ export default async function ConnectorsPage({ searchParams }: Props) {
                 ) : null}
               </div>
 
-              {/* Auto-post toggle */}
+              {/* Recurring audits */}
               {canManageSlackAutoPost ? (
                 <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
                   <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                    Auto-post
+                    Recurring audits
                   </p>
                   <p className="mt-2 text-sm text-on-surface-variant">
-                    Automatically post audit results to the default Slack destination when a report is delivered.
+                    When enabled, GEO-Pulse automatically runs a new audit and posts results to your default Slack channel on the configured cadence.
                   </p>
-                  <form action={updateStartupSlackAutoPostSetting} className="mt-3 flex items-center gap-3">
-                    <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
-                    <label className="flex items-center gap-2 text-sm text-on-background">
-                      <input
-                        type="checkbox"
-                        name="slackAutoPostEnabled"
-                        className="h-4 w-4 rounded border-outline-variant accent-primary"
-                      />
-                      Enable auto-post
-                    </label>
-                    <button
-                      type="submit"
-                      className="rounded-xl border border-outline-variant/20 bg-surface-container-high px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface"
-                    >
-                      Save
-                    </button>
-                  </form>
+                  <div className="mt-4 space-y-4">
+                    {/* Auto-post toggle */}
+                    <form action={updateStartupSlackAutoPostSetting} className="flex flex-wrap items-center gap-3">
+                      <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
+                      <input type="hidden" name="returnTo" value={returnToConnectors} />
+                      <label className="flex items-center gap-2 text-sm text-on-background">
+                        <input
+                          type="checkbox"
+                          name="slackAutoPostEnabled"
+                          defaultChecked={slackAutoPostEnabled}
+                          className="h-4 w-4 rounded border-outline-variant accent-primary"
+                        />
+                        Enable recurring auto-scan + Slack delivery
+                      </label>
+                      <button
+                        type="submit"
+                        className="rounded-xl border border-outline-variant/20 bg-surface-container-high px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface"
+                      >
+                        Save
+                      </button>
+                    </form>
+                    {/* Cadence selector */}
+                    <form action={updateStartupAuditCadence} className="flex flex-wrap items-end gap-3">
+                      <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
+                      <input type="hidden" name="returnTo" value={returnToConnectors} />
+                      <div>
+                        <label className="mb-1 block text-xs text-on-surface-variant">Scan cadence</label>
+                        <select
+                          name="cadenceDays"
+                          defaultValue={String(auditCadenceDays)}
+                          className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                        >
+                          <option value="7">Weekly (every 7 days)</option>
+                          <option value="14">Bi-weekly (every 14 days)</option>
+                          <option value="30">Monthly (every 30 days)</option>
+                          <option value="60">Every 2 months</option>
+                          <option value="90">Quarterly (every 90 days)</option>
+                        </select>
+                      </div>
+                      <button
+                        type="submit"
+                        className="rounded-xl border border-outline-variant/20 bg-surface-container-high px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface"
+                      >
+                        Save cadence
+                      </button>
+                    </form>
+                    {slackAutoPostEnabled ? (
+                      <p className="rounded-xl bg-primary/5 px-4 py-3 text-xs text-on-surface-variant">
+                        <span className="material-symbols-outlined mr-1.5 align-middle text-[14px] text-primary" aria-hidden>
+                          check_circle
+                        </span>
+                        Auto-scan is active. Audits run every{' '}
+                        <strong className="text-on-background">{auditCadenceDays} days</strong> and are
+                        delivered to your default Slack channel. The next audit will be triggered
+                        automatically by the platform.
+                      </p>
+                    ) : (
+                      <p className="rounded-xl bg-surface-container-low px-4 py-3 text-xs text-on-surface-variant">
+                        Auto-scan is disabled. Enable it above to start receiving automatic recurring audits.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Push report (notification) */}
+              {slackActiveInstallations.length > 0 && slackActiveDestinations.length > 0 ? (
+                <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Push report to Slack
+                  </p>
+                  <p className="mt-2 text-sm text-on-surface-variant">
+                    Send an audit summary notification to a channel. Includes score, delta, and top recommendations.
+                  </p>
+                  {deepAuditReports.length === 0 ? (
+                    <p className="mt-3 rounded-xl bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
+                      No deep audit reports yet. Run a deep audit to push results to Slack.
+                    </p>
+                  ) : (
+                    <form action={sendStartupReportToSlack} className="mt-4 space-y-3">
+                      <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
+                      <input type="hidden" name="returnTo" value={returnToConnectors} />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs text-on-surface-variant">Report</label>
+                          <select
+                            name="reportId"
+                            className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                          >
+                            {deepAuditReports.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {new Date(r.createdAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                                {r.pdfUrl ? ' · PDF ready' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-on-surface-variant">Channel</label>
+                          <select
+                            name="destinationId"
+                            className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                          >
+                            {slackActiveDestinations.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                #{d.channelName ?? d.channelId}
+                                {d.isDefaultDestination ? ' (default)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <input type="hidden" name="eventType" value="new_audit_ready" />
+                      <button
+                        type="submit"
+                        className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
+                      >
+                        Push notification
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Push full markdown as file */}
+              {slackActiveInstallations.length > 0 && slackActiveDestinations.length > 0 ? (
+                <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Send full markdown report
+                  </p>
+                  <p className="mt-2 text-sm text-on-surface-variant">
+                    Upload the complete audit markdown as a Slack file. The full report will appear inline in the channel.
+                  </p>
+                  {deepAuditReports.length === 0 ? (
+                    <p className="mt-3 rounded-xl bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
+                      No deep audit reports yet.
+                    </p>
+                  ) : (
+                    <form action={sendStartupMarkdownToSlack} className="mt-4 space-y-3">
+                      <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
+                      <input type="hidden" name="returnTo" value={returnToConnectors} />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-xs text-on-surface-variant">Report</label>
+                          <select
+                            name="reportId"
+                            className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                          >
+                            {deepAuditReports.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {new Date(r.createdAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                                {r.pdfUrl ? ' · PDF ready' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-on-surface-variant">Channel</label>
+                          <select
+                            name="destinationId"
+                            className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                          >
+                            {slackActiveDestinations.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                #{d.channelName ?? d.channelId}
+                                {d.isDefaultDestination ? ' (default)' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        className="rounded-xl border border-outline-variant/20 bg-surface-container-high px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface"
+                      >
+                        Upload markdown to Slack
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Delivery log */}
+              {slackDeliveryEvents.length > 0 ? (
+                <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                    Recent deliveries
+                  </p>
+                  <ul className="mt-3 space-y-2">
+                    {slackDeliveryEvents.map((event) => {
+                      const statusColors: Record<string, string> = {
+                        sent: 'bg-primary/10 text-primary',
+                        failed: 'bg-error/10 text-error',
+                        skipped: 'bg-surface-container-high text-on-surface-variant',
+                        queued: 'bg-warning/10 text-on-background',
+                      };
+                      const colorClass =
+                        statusColors[event.status] ?? 'bg-surface-container-high text-on-surface-variant';
+                      const eventDate = new Date(event.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      });
+                      const siteDomain =
+                        typeof event.payload.site_domain === 'string' ? event.payload.site_domain : '';
+                      return (
+                        <li
+                          key={event.id}
+                          className="flex flex-wrap items-start justify-between gap-2 rounded-lg bg-surface-container-low px-3 py-2.5 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium text-on-background">
+                              {siteDomain || (event.eventType === 'plan_ready' ? 'Plan ready' : 'Audit ready')}
+                            </p>
+                            <p className="mt-0.5 text-on-surface-variant">{eventDate}</p>
+                            {event.errorMessage ? (
+                              <p className="mt-1 text-error">{event.errorMessage}</p>
+                            ) : null}
+                          </div>
+                          <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${colorClass}`}>
+                            {event.status}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               ) : null}
             </div>

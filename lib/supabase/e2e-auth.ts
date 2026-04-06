@@ -5,6 +5,11 @@ const E2E_STARTUP_MEMBER_ID = '00000000-0000-4000-8000-000000000102';
 const E2E_STARTUP_SCAN_ID = '00000000-0000-4000-8000-000000000103';
 const E2E_STARTUP_REPORT_ID = '00000000-0000-4000-8000-000000000104';
 const E2E_STARTUP_RECOMMENDATION_ID = '00000000-0000-4000-8000-000000000105';
+// Agency fixture identifiers
+const E2E_AGENCY_USER_ID = '00000000-0000-4000-8000-000000000200';
+const E2E_AGENCY_ACCOUNT_ID = '00000000-0000-4000-8000-000000000201';
+const E2E_AGENCY_CLIENT_ID = '00000000-0000-4000-8000-000000000202';
+const E2E_AGENCY_SCAN_ID = '00000000-0000-4000-8000-000000000203';
 
 type E2EAuthUser = {
   readonly id: string;
@@ -29,6 +34,13 @@ export function resolveE2EAuthUserFromCookieValue(
     return {
       id: E2E_ADMIN_USER_ID,
       email: resolveAdminEmail(),
+    };
+  }
+
+  if (cookieValue === 'agency') {
+    return {
+      id: E2E_AGENCY_USER_ID,
+      email: 'agency@example.com',
     };
   }
 
@@ -313,11 +325,25 @@ function createE2EQueryBuilder(table: string) {
       {
         id: E2E_STARTUP_SCAN_ID,
         startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
+        agency_account_id: null,
+        agency_client_id: null,
         url: 'https://example.com',
         domain: 'example.com',
         score: 74,
         letter_grade: 'B',
         run_source: 'startup_dashboard',
+        created_at: now,
+      },
+      {
+        id: E2E_AGENCY_SCAN_ID,
+        startup_workspace_id: null,
+        agency_account_id: E2E_AGENCY_ACCOUNT_ID,
+        agency_client_id: E2E_AGENCY_CLIENT_ID,
+        url: 'https://client.example',
+        domain: 'client.example',
+        score: 61,
+        letter_grade: 'C+',
+        run_source: 'agency_dashboard',
         created_at: now,
       },
     ],
@@ -359,6 +385,55 @@ function createE2EQueryBuilder(table: string) {
     startup_agent_pr_runs: [],
     startup_implementation_plans: [],
     startup_implementation_plan_tasks: [],
+    // Agency fixture tables — used by the 'agency' cookie session
+    agency_users: [
+      {
+        id: E2E_AGENCY_USER_ID,
+        agency_account_id: E2E_AGENCY_ACCOUNT_ID,
+        user_id: E2E_AGENCY_USER_ID,
+        role: 'owner',
+        status: 'active',
+        created_at: now,
+      },
+    ],
+    agency_accounts: [
+      {
+        id: E2E_AGENCY_ACCOUNT_ID,
+        account_key: 'e2e-agency',
+        name: 'E2E Agency Inc',
+        billing_mode: 'agency',
+        status: 'active',
+        benchmark_vertical: null,
+        benchmark_subvertical: null,
+        created_at: now,
+        updated_at: now,
+      },
+    ],
+    agency_clients: [
+      {
+        id: E2E_AGENCY_CLIENT_ID,
+        agency_account_id: E2E_AGENCY_ACCOUNT_ID,
+        client_key: 'e2e-client',
+        name: 'E2E Client Co',
+        canonical_domain: 'client.example',
+        vertical: null,
+        subvertical: null,
+        icp_tag: null,
+        status: 'active',
+        created_at: now,
+      },
+    ],
+    agency_client_domains: [
+      {
+        id: '00000000-0000-4000-8000-000000000204',
+        agency_client_id: E2E_AGENCY_CLIENT_ID,
+        domain: 'client.example',
+        canonical_domain: 'client.example',
+        site_url: 'https://client.example',
+        is_primary: true,
+        created_at: now,
+      },
+    ],
   };
 
   let rows = [...(rowsByTable[table] ?? [])];
