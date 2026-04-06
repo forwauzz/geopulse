@@ -11144,3 +11144,22 @@ Verification:
 - `npx.cmd tsc --noEmit` — 0 errors
 
 Files: `app/api/checkout/route.ts`
+
+---
+
+### 2026-04-06 — BF-003
+Completed BF-003: Add `removeStartupWorkspaceMember` + `deleteStartupWorkspace` server actions.
+
+What was done:
+- Added `removeMemberSchema` (uuid for workspaceId + userId) and `removeStartupWorkspaceMember` action — deletes from `startup_workspace_users` matching both workspace and user IDs, logs event, revalidates `/dashboard/startups`
+- Added `deleteWorkspaceSchema` (uuid + confirmName string) and `deleteStartupWorkspace` action — fetches workspace name, verifies case-insensitive name match, deletes from `startup_workspaces` (CASCADE handles users/installations/destinations), logs event, revalidates path
+- Both actions use existing `loadAdminActionContext()`, `z`, `normalizeText()`, `structuredLog`, `revalidatePath` patterns consistent with the file
+
+What was NOT changed:
+- All existing create/upsert/rollout actions — unchanged
+- No auth or RLS changes
+
+Verification:
+- `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `app/dashboard/startups/actions.ts`, `agents/memory/PROJECT_STATE.md`

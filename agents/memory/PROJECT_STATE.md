@@ -341,6 +341,18 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | SL-013 | Add scheduled startup Slack autopost cadence trigger (find due workspaces, enqueue deep-audit queue jobs) | Backend | âœ… DONE | `lib/server/startup-slack-schedule.ts`, `workers/cloudflare-entry.ts`, `lib/server/startup-slack-schedule.test.ts`, COMPLETION_LOG 2026-04-04 |
 | SL-014 | Auto-post Slack `new_audit_ready` delivery from report completion path for eligible startup workspaces | Backend | âœ… DONE | `workers/queue/report-queue-consumer.ts`, `lib/server/startup-slack-integration.ts`, COMPLETION_LOG 2026-04-04 |
 
+### Production Bug Fix Stream (BF-001 … BF-006)
+> **Context:** Three production bugs reported 2026-04-06. Bugs A+B: startup workspace users incorrectly hit Stripe for deep audit — `startup_workspace_id` missing from scan + checkout route selects, no startup bypass path existed. Bug C: no delete path for members or workspace/account objects in admin console.
+
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| BF-001 | Fix `/api/scans/[id]`: add `startup_workspace_id` select + startup membership check + `startup_bypass` checkoutMode | Backend | ✅ DONE | `app/api/scans/[id]/route.ts`, COMPLETION_LOG BF-001 |
+| BF-002 | Fix `/api/checkout`: add `startup_workspace_id` select + startup bypass block before Stripe | Backend | ✅ DONE | `app/api/checkout/route.ts`, COMPLETION_LOG BF-002 |
+| BF-003 | Add `removeStartupWorkspaceMember` + `deleteStartupWorkspace` server actions | Backend | ✅ DONE | `app/dashboard/startups/actions.ts`, COMPLETION_LOG BF-003 |
+| BF-004 | Add `removeAgencyMember` + `deleteAgencyAccount` server actions | Backend | ❌ PENDING | — |
+| BF-005 | Add remove member + delete workspace UI to `StartupAdminControlView` | Frontend | ❌ PENDING | — |
+| BF-006 | Add remove member + delete account UI to `AgencyAdminControlView` | Frontend | ❌ PENDING | — |
+
 ### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)
 > Restructure the startup dashboard into Overview / Audits / Delivery / Settings via `?tab=` (default `overview`). Plan: `.cursor/plans/startup_dashboard_tab_redesign_997f45c9.plan.md`. Shared types: `app/dashboard/startup/components/startup-tab-types.ts`.
 

@@ -259,3 +259,109 @@ export async function updateStartupWorkspaceRolloutFlags(
   revalidatePath('/dashboard/startup');
   return { ok: true, message: 'Startup rollout flags updated.' };
 }
+
+const removeMemberSchema = z.object({
+  startupWorkspaceId: z.string().uuid('Choose a valid startup workspace.'),
+  userId: z.string().uuid('Choose a valid user.'),
+});
+
+export async function removeStartupWorkspaceMember(
+  _prev: StartupAdminActionState | null,
+  formData: FormData
+): Promise<StartupAdminActionState> {
+  const context = await loadAdminActionContext();
+  if (!context.ok) return context;
+
+  const parsed = removeMemberSchema.safeParse({
+    startupWorkspaceId: normalizeText(formData.get('startupWorkspaceId')),
+    userId: normalizeText(formData.get('userId')),
+  });
+  if (!parsed.success) {
+    const errors = parsed.error.flatten().fieldErrors;
+    return {
+      ok: false,
+      message:
+        errors['startupWorkspaceId']?.[0] ?? errors['userId']?.[0] ?? 'Check the values.',
+    };
+  }
+
+  const { error } = await context.adminDb
+    .from('startup_workspace_users')
+    .delete()
+    .eq('startup_workspace_id', parsed.data.startupWorkspaceId)
+    .eq('user_id', parsed.data.userId);
+
+  if (error) return { ok: false, message: error.message };
+
+  structuredLog(
+    'startup_workspace_member_removed',
+    {
+      startup_workspace_id: parsed.data.startupWorkspaceId,
+      user_id: parsed.data.userId,
+    },
+    'info'
+  );
+
+  revalidatePath('/dashboard/startups');
+  return { ok: true, message: 'Member removed.' };
+}
+
+const deleteWorkspaceSchema = z.object({
+  startupWorkspaceId: z.string().uuid('Choose a valid startup workspace.'),
+  confirmName: z.string().min(1, 'Type the workspace name to confirm.'),
+});
+
+export async function deleteStartupWorkspace(
+  _prev: StartupAdminActionState | null,
+  formData: FormData
+): Promise<StartupAdminActionState> {
+  const context = await loadAdminActionContext();
+  if (!context.ok) return context;
+
+  const parsed = deleteWorkspaceSchema.safeParse({
+    startupWorkspaceId: normalizeText(formData.get('startupWorkspaceId')),
+    confirmName: normalizeText(formData.get('confirmName')),
+  });
+  if (!parsed.success) {
+    const errors = parsed.error.flatten().fieldErrors;
+    return {
+      ok: false,
+      message:
+        errors['startupWorkspaceId']?.[0] ?? errors['confirmName']?.[0] ?? 'Check the values.',
+    };
+  }
+
+  const { data: workspace, error: fetchErr } = await context.adminDb
+    .from('startup_workspaces')
+    .select('name')
+    .eq('id', parsed.data.startupWorkspaceId)
+    .maybeSingle();
+  if (fetchErr) return { ok: false, message: fetchErr.message };
+  if (!workspace) return { ok: false, message: 'Workspace not found.' };
+
+  if (workspace.name.trim().toLowerCase() !== parsed.data.confirmName.trim().toLowerCase()) {
+    return {
+      ok: false,
+      message: 'Workspace name does not match. Type the exact name to confirm.',
+    };
+  }
+
+  const { error } = await context.adminDb
+    .from('startup_workspaces')
+    .delete()
+    .eq('id', parsed.data.startupWorkspaceId);
+
+  if (error) return { ok: false, message: error.message };
+
+  structuredLog(
+    'startup_workspace_deleted',
+    {
+      startup_workspace_id: parsed.data.startupWorkspaceId,
+      workspace_name: workspace.name,
+    },
+    'info'
+  );
+
+  revalidatePath('/dashboard/startups');
+  return { ok: true, message: `Workspace "${workspace.name}" deleted.` };
+}
