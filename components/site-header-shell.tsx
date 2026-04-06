@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { GeoPulseLogo } from '@/components/geopulse-logo';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 type SiteHeaderShellProps = {
@@ -21,12 +22,6 @@ export function SiteHeaderShell({
   const headerClassName = isBlogRoute
     ? 'sticky top-0 z-50 border-b border-white/10 bg-black/95 backdrop-blur'
     : 'sticky top-0 z-50 bg-surface';
-  const brandTextClassName = isBlogRoute
-    ? 'font-headline text-xl font-bold text-blue-300 sm:text-2xl'
-    : 'font-headline text-xl font-bold text-blue-600 sm:text-2xl';
-  const brandIconClassName = isBlogRoute
-    ? 'material-symbols-outlined text-blue-300'
-    : 'material-symbols-outlined text-blue-600';
   const primaryNavLinkClassName = isBlogRoute
     ? 'hidden font-headline text-lg font-semibold text-white md:inline'
     : 'hidden font-headline text-lg font-semibold text-on-background md:inline';
@@ -45,10 +40,8 @@ export function SiteHeaderShell({
         }`}
       >
         <Link href="/" className="flex items-center gap-2">
-          <span className={brandIconClassName} aria-hidden>
-            explore
-          </span>
-          <span className={brandTextClassName}>GEO-Pulse</span>
+          <GeoPulseLogo size="md" />
+          <span className="sr-only">GEO-Pulse</span>
         </Link>
 
         <div className="flex items-center gap-3 sm:gap-6 md:gap-10">

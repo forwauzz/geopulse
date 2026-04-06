@@ -20,6 +20,10 @@ const newsreader = Newsreader({
 export const metadata: Metadata = {
   title: 'GEO-Pulse — AI Search Readiness',
   description: 'Free AI Search Readiness audit for your site.',
+  icons: {
+    icon: '/branding/geopulse-logo.png',
+    apple: '/branding/geopulse-logo.png',
+  },
 };
 
 export default function RootLayout({

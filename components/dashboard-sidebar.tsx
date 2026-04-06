@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { GeoPulseLogo } from '@/components/geopulse-logo';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 type DashboardSidebarProps = {
@@ -172,10 +173,8 @@ export function DashboardSidebar({ userEmail, isAdmin, signOutAction }: Dashboar
           className="flex items-center gap-2 text-on-background"
           onClick={closeMenu}
         >
-          <span className="material-symbols-outlined text-primary" aria-hidden>
-            explore
-          </span>
-          <span className="font-headline text-xl font-bold sm:text-2xl">GEO-Pulse</span>
+          <GeoPulseLogo size="md" />
+          <span className="sr-only">GEO-Pulse</span>
         </Link>
 
         {/* Hamburger — mobile only */}

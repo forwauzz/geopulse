@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { GeoPulseLogo } from '@/components/geopulse-logo';
 
 type AdminNavItem = {
   readonly href: string;
@@ -110,9 +111,10 @@ export function AdminSidebar() {
           <Link
             href="/admin"
             onClick={closeMenu}
-            className="font-headline text-xl font-bold tracking-tight text-on-background"
+            className="flex min-w-0 items-center"
           >
-            GEO-Pulse
+            <GeoPulseLogo size="sm" />
+            <span className="sr-only">GEO-Pulse</span>
           </Link>
           <span className="rounded-lg bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
             Admin

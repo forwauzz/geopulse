@@ -25,6 +25,23 @@ STRIPE_WEBHOOK_SECRET=whsec_your_webhook_signing_secret
 STRIPE_PRICE_ID_DEEP_AUDIT=price_your_price_id
 # Get the webhook secret from: stripe listen --forward-to localhost:8787/api/webhooks/stripe
 # (use the port shown by `npm run preview` / `wrangler dev` — queue + webhook need the Worker)
+#
+# --- Subscription billing (BILL stream) ---
+# No new secrets required. STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET above cover:
+#   POST /api/billing/subscribe   — subscription checkout with free trial
+#   POST /api/webhooks/stripe     — subscription lifecycle (created/updated/deleted/invoice)
+#
+# Stripe price IDs for bundles (startup_dev, agency_core, agency_pro) are stored in the
+# `service_bundles` DB table — NOT as env vars. Seed them via:
+#   /dashboard/services → Set Bundle Service Control → stripe_price_id + monthly_price_cents
+#   (Run migration 033_subscription_billing_foundation.sql on Supabase first)
+#
+# Local webhook forwarding — include subscription events:
+#   stripe listen --forward-to localhost:8787/api/webhooks/stripe \
+#     --events checkout.session.completed,customer.subscription.created,\
+#     customer.subscription.updated,customer.subscription.deleted,\
+#     invoice.payment_succeeded,invoice.payment_failed,\
+#     customer.subscription.trial_will_end
 
 # Optional: POST /api/admin/reconcile-deep-audit (header x-reconcile-secret) to backfill payments + PDF queue
 # for paid Checkout sessions that never created a `payments` row (e.g. webhook URL wrong or offline).

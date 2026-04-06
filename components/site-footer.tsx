@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { GeoPulseLogo } from '@/components/geopulse-logo';
 
 export function SiteFooter() {
   const pathname = usePathname();
@@ -16,16 +17,8 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-screen-2xl grid-cols-1 gap-12 md:grid-cols-2 md:items-end">
         <div className="space-y-6">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined" aria-hidden>
-              explore
-            </span>
-            <span
-              className={`font-headline text-2xl font-bold ${
-                isBlogRoute ? 'text-white' : 'text-on-background'
-              }`}
-            >
-              GEO-Pulse
-            </span>
+            <GeoPulseLogo size="lg" />
+            <span className="sr-only">GEO-Pulse</span>
           </div>
           <p
             className={`max-w-sm font-label text-xs uppercase tracking-widest ${

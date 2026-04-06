@@ -1,7 +1,9 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AgencyClientManagementView } from '@/components/agency-client-management-view';
 import { WhatNextBanner } from '@/components/what-next-banner';
+import { NewSubscriberWelcomeBanner } from '@/components/new-subscriber-welcome-banner';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getAgencyDashboardData } from '@/lib/server/agency-dashboard-data';
 import { buildAgencyDashboardUiGates } from '@/lib/server/agency-access';
@@ -18,6 +20,7 @@ type Props = {
     agencyAccount?: string;
     agencyClient?: string;
     startupWorkspace?: string;
+    onboarding?: string;
   }>;
 };
 
@@ -440,6 +443,14 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   return (
     <section className="min-h-[60vh] space-y-10">
+
+      {/* ── New subscriber welcome banner (BILL-007) ─────────── */}
+      <Suspense fallback={null}>
+        <NewSubscriberWelcomeBanner
+          startupWorkspaceId={startupDashboard.workspaces[0]?.id ?? null}
+          agencyAccountId={agencyDashboard.accounts[0]?.id ?? null}
+        />
+      </Suspense>
 
       {/* ── Page header ─────────────────────────────────────── */}
       <div>
