@@ -25,7 +25,12 @@ import {
 } from '@/lib/server/startup-slack-integration';
 import { resolveStartupServiceModelPolicy } from '@/lib/server/startup-model-policy';
 import { applyStartupRolloutFlagPatch, resolveStartupWorkspaceRolloutFlags } from '@/lib/server/startup-rollout-flags';
-import { resolveStartupDashboardUiGates, resolveStartupServiceGate } from '@/lib/server/startup-service-gates';
+import {
+  resolveStartupDashboardUiGates,
+  resolveStartupServiceGate,
+  resolveStartupSlackConnectorUiGates,
+  resolveStartupSlackIntegrationGate,
+} from '@/lib/server/startup-service-gates';
 import { formatStartupSlackMessage, type StartupSlackMessagePayload } from '@/lib/server/startup-slack-message';
 import { structuredLog } from '@/lib/server/structured-log';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -236,27 +241,27 @@ export async function beginStartupSlackInstall(formData: FormData): Promise<void
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.SUPABASE_SERVICE_ROLE_KEY
   );
-  const gates = await resolveStartupDashboardUiGates({
+  const slackGate = await resolveStartupSlackIntegrationGate({
     memberSupabase: supabase,
     serviceSupabase,
     startupWorkspaceId: workspaceId,
     userId: user.id,
   });
-  if (!gates.slackIntegration.enabled) {
+  if (!slackGate.enabled) {
     structuredLog(
       'startup_service_gate_blocked',
       {
         startup_workspace_id: workspaceId,
         service_key: 'slack_integration',
-        blocked_reason: gates.slackIntegration.blockedReason ?? 'service_disabled',
+        blocked_reason: slackGate.blockedReason ?? 'service_disabled',
         user_id: user.id,
       },
       'warning'
     );
     if (
-      gates.slackIntegration.blockedReason === 'workspace_requires_paid_mode' ||
-      gates.slackIntegration.blockedReason === 'stripe_mapping_missing' ||
-      gates.slackIntegration.blockedReason === 'stripe_mapping_inactive'
+      slackGate.blockedReason === 'workspace_requires_paid_mode' ||
+      slackGate.blockedReason === 'stripe_mapping_missing' ||
+      slackGate.blockedReason === 'stripe_mapping_inactive'
     ) {
       redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_billing_blocked'));
     }
@@ -349,13 +354,13 @@ export async function saveStartupSlackDestination(formData: FormData): Promise<v
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.SUPABASE_SERVICE_ROLE_KEY
   );
-  const gates = await resolveStartupDashboardUiGates({
+  const slackGate = await resolveStartupSlackIntegrationGate({
     memberSupabase: supabase,
     serviceSupabase,
     startupWorkspaceId: workspaceId,
     userId: user.id,
   });
-  if (!gates.slackIntegration.enabled) {
+  if (!slackGate.enabled) {
     redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_not_entitled'));
   }
 
@@ -477,7 +482,7 @@ export async function sendStartupReportToSlack(formData: FormData): Promise<void
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.SUPABASE_SERVICE_ROLE_KEY
   );
-  const gates = await resolveStartupDashboardUiGates({
+  const gates = await resolveStartupSlackConnectorUiGates({
     memberSupabase: supabase,
     serviceSupabase,
     startupWorkspaceId: workspaceId,
@@ -486,13 +491,6 @@ export async function sendStartupReportToSlack(formData: FormData): Promise<void
   if (!gates.slackIntegration.enabled || !gates.slackNotifications.enabled) {
     redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_not_entitled'));
   }
-  const markdownGate = await resolveStartupServiceGate({
-    memberSupabase: supabase,
-    serviceSupabase,
-    startupWorkspaceId: workspaceId,
-    userId: user.id,
-    serviceKey: 'markdown_audit_export',
-  });
 
   const destination = await getStartupSlackDestination({
     supabase,
@@ -511,6 +509,19 @@ export async function sendStartupReportToSlack(formData: FormData): Promise<void
     .maybeSingle();
   if (reportError) throw reportError;
   if (!report?.id) redirect(buildStartupUrl(workspaceId, undefined, undefined, 'slack_report_missing'));
+
+  const markdownUrlRaw = typeof report.markdown_url === 'string' ? report.markdown_url.trim() : '';
+  const markdownGate =
+    markdownUrlRaw.length > 0
+      ? await resolveStartupServiceGate({
+          memberSupabase: supabase,
+          serviceSupabase,
+          startupWorkspaceId: workspaceId,
+          userId: user.id,
+          serviceKey: 'markdown_audit_export',
+          bundleKey: gates.slackIntegration.bundleKey,
+        })
+      : null;
 
   const { data: scan, error: scanError } = report.scan_id
     ? await supabase
@@ -568,7 +579,7 @@ export async function sendStartupReportToSlack(formData: FormData): Promise<void
     summary_bullets: recommendationTitles,
     report_url: reportUrl,
     markdown_url:
-      markdownGate.enabled && typeof report.markdown_url === 'string' ? report.markdown_url : null,
+      markdownGate?.enabled && markdownUrlRaw.length > 0 ? report.markdown_url as string : null,
     sent_by_user_id: user.id,
   };
   const text = formatStartupSlackMessage(payload);
@@ -937,7 +948,7 @@ export async function sendStartupMarkdownToSlack(formData: FormData): Promise<vo
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.SUPABASE_SERVICE_ROLE_KEY
   );
-  const gates = await resolveStartupDashboardUiGates({
+  const gates = await resolveStartupSlackConnectorUiGates({
     memberSupabase: supabase,
     serviceSupabase,
     startupWorkspaceId: workspaceId,

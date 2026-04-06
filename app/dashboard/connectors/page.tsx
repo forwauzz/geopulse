@@ -11,7 +11,7 @@ import {
   updateStartupAuditCadence,
   updateStartupSlackAutoPostSetting,
 } from '@/app/dashboard/startup/actions';
-import { loadStartupDashboardContext } from '@/app/dashboard/startup/lib/load-startup-dashboard-context';
+import { loadStartupConnectorsContext } from '@/app/dashboard/connectors/lib/load-startup-connectors-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -69,7 +69,7 @@ export default async function ConnectorsPage({ searchParams }: Props) {
   const githubMsg = statusMessage(sp.github);
   const slackMsg = statusMessage(sp.slack);
 
-  const loaded = await loadStartupDashboardContext({
+  const loaded = await loadStartupConnectorsContext({
     supabase,
     userId: user.id,
     sp: {
