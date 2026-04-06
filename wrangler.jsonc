@@ -108,6 +108,26 @@
   //   STARTUP_SLACK_CLIENT_ID
   //   STARTUP_SLACK_CLIENT_SECRET
   //
+  // Subscription billing (BILL stream — self-serve bundle subscriptions):
+  //   No new secrets required. The existing STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET cover
+  //   POST /api/billing/subscribe and the extended webhook handler.
+  //
+  //   Stripe price IDs for paid bundles (startup_dev, agency_core, agency_pro) are stored
+  //   in the `service_bundles` DB table (columns: stripe_price_id, monthly_price_cents,
+  //   trial_period_days) — NOT as env vars. Seed them via the admin console:
+  //     /dashboard/services → Set Bundle Service Control → stripe_price_id + monthly_price_cents
+  //
+  //   New Stripe webhook events to register in the Stripe dashboard:
+  //     customer.subscription.created
+  //     customer.subscription.updated
+  //     customer.subscription.deleted
+  //     customer.subscription.trial_will_end
+  //     invoice.payment_succeeded
+  //     invoice.payment_failed
+  //
+  //   DB migration to apply on Supabase before first subscription:
+  //     supabase/migrations/033_subscription_billing_foundation.sql
+  //
   // Benchmark secret:
   //   BENCHMARK_EXECUTION_API_KEY
   //   Optional if benchmark execution should not fall back to GEMINI_API_KEY.

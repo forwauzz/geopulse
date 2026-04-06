@@ -11223,3 +11223,147 @@ Verification:
 - `npx.cmd tsc --noEmit` — 0 errors
 
 Files: `components/agency-admin-control-view.tsx`, `agents/memory/PROJECT_STATE.md`
+
+---
+
+### 2026-04-06 — BILL-001
+Completed BILL-001: DB migration — subscription billing foundation.
+
+What was done:
+- Added 4 columns to `service_bundles`: `billing_mode` (free/monthly/annual, default 'free'), `stripe_price_id` (TEXT, null until operator seeds), `monthly_price_cents` (INTEGER, null until operator seeds), `trial_period_days` (INTEGER, default 0)
+- Seeded `billing_mode = 'monthly'` for `startup_dev`, `agency_core`, `agency_pro`; `'free'` for `startup_lite`
+- Seeded `trial_period_days = 7` for all paid tiers (operator can change via direct UPDATE, no redeploy needed)
+- Created `user_subscriptions` table with: user_id FK, bundle_key, stripe_customer_id, stripe_subscription_id (UNIQUE), stripe_price_id, status (active/trialing/past_due/cancelled/incomplete), current_period_start/end, startup_workspace_id FK (SET NULL on delete), agency_account_id FK (SET NULL on delete), cancelled_at, metadata JSONB, created_at, updated_at
+- RLS enabled on `user_subscriptions`; `user_subscriptions_self_read` policy — users can SELECT their own rows
+- Indexes on user_id, stripe_subscription_id, status
+- `updated_at` auto-trigger on UPDATE
+
+Design decisions:
+- `trial_period_days` is per-bundle in DB (not env var) so admin can adjust trial length without a code deploy
+- `trial_settings.end_behavior.missing_payment_method = 'cancel'` will be set in Stripe checkout (BILL-002) so subscriptions without a card after trial end are auto-cancelled
+- `user_subscriptions` status includes `'trialing'` — workspace will be provisioned immediately on trialing status (card was provided, user is real)
+- Service role bypasses RLS — webhook handlers use service role client exclusively
+
+Files: `supabase/migrations/033_subscription_billing_foundation.sql`, `agents/memory/PROJECT_STATE.md`, `agents/memory/COMPLETION_LOG.md`
+
+---
+
+### 2026-04-06 — BILL-002
+Completed BILL-002: New `/api/billing/subscribe` POST route — subscription checkout with free trial support.
+
+What was done:
+- Created `app/api/billing/subscribe/route.ts` (`export const runtime = 'nodejs'`)
+- Reused: `getPaymentApiEnv`, `getClientIp`, `checkCheckoutRateLimit`, `verifyTurnstileToken`, `createStripeClient`, `createSupabaseServerClient`, `createServiceRoleClient`, `structuredLog`
+- Request body schema: `{ bundleKey: string, turnstileToken: string }`
+- Guard sequence: rate limit → parse body → validate bundleKey is paid tier → Turnstile → auth required (401 if not signed in)
+- DB: looks up `service_bundles` for `stripe_price_id` + `trial_period_days` + `billing_mode`; 400 if bundle is free or price not yet seeded by operator
+- Duplicate check: queries `user_subscriptions` for existing `active|trialing|incomplete` row for same user+bundle → 409 if found
+- Stripe customer: reads `users.stripe_customer_id`; creates Stripe customer + writes back to DB if null
+- Stripe Checkout: `mode: 'subscription'`, passes `trial_period_days` + `trial_settings.end_behavior.missing_payment_method: 'cancel'` when `trial_period_days > 0`
+- Success/cancel URLs: `/pricing?subscription=success&bundle=X` and `/pricing?subscription=cancel`
+- Returns `{ url: session.url }`
+- `structuredLog` events: `billing_subscribe_bundle_not_found`, `billing_subscribe_bundle_not_paid`, `billing_subscribe_already_subscribed`, `billing_stripe_customer_created`, `billing_subscribe_session_created`
+
+Verification:
+- `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `app/api/billing/subscribe/route.ts`, `agents/memory/PROJECT_STATE.md`
+
+---
+
+### 2026-04-06 — BILL-003
+Completed BILL-003: Extend Stripe webhook with subscription lifecycle handlers.
+
+What was done:
+- Created `lib/server/stripe/subscription-handlers.ts` with 4 handlers:
+  - `handleSubscriptionUpserted` — maps Stripe sub status → our enum, upserts `user_subscriptions` by `stripe_subscription_id`, updates `users.plan`, calls provisioner on first `active|trialing` event when workspace not yet linked
+  - `handleSubscriptionCancelled` — sets status = 'cancelled', cancelled_at = now(), resets users.plan = 'free'; workspace/account data retained
+  - `handleInvoicePaid` — updates current_period_start/end on subscription row, forces status = 'active' (handles trial→paid conversion)
+  - `handleInvoiceFailed` — sets status = 'past_due'
+- Updated `app/api/webhooks/stripe/route.ts`:
+  - Added import for 4 subscription handlers
+  - Added subscription event block BEFORE the existing checkout.session.completed path (so events are never swallowed by the 200 fallback)
+  - Handles: `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.trial_will_end` (log-only for now)
+  - Returns 500 on unexpected handler throws (triggers Stripe retry); returns 200 after successful handling
+  - Existing `checkout.session.completed` handler untouched
+
+Status mapping: `active`→`active`, `trialing`→`trialing`, `past_due`→`past_due`, `incomplete`→`incomplete`, `canceled`/`incomplete_expired`→`cancelled`, anything else→`past_due`.
+
+Verification: `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `lib/server/stripe/subscription-handlers.ts`, `app/api/webhooks/stripe/route.ts`
+
+---
+
+### 2026-04-06 — BILL-004
+Completed BILL-004: Auto-provision workspace on subscription (trialing OR active).
+
+What was done:
+- Replaced stub in `lib/server/billing/provision-workspace-for-subscription.ts` with full implementation
+- `slugFromEmail(email)`: derives slug from email domain parts (strips TLD), lowercase alphanumeric + hyphen only (matches workspace_key CHECK constraint `'^[a-z0-9-]+$'`)
+- `deduplicateKey(supabase, table, column, base)`: tries base, then base-2…base-99, then base-{timestamp} as last resort
+- `provisionStartupWorkspace()` for `startup_dev`:
+  - Derives workspace_key from email domain, deduplicates
+  - Inserts `startup_workspaces` (status: 'active', billing_mode: 'paid', default_bundle_id from service_bundles lookup, metadata.source = 'self_serve')
+  - Inserts `startup_workspace_users` (role: 'founder', status: 'active')
+  - Updates `user_subscriptions.startup_workspace_id`
+- `provisionAgencyAccount()` for `agency_core` / `agency_pro`:
+  - Same slug derivation and deduplication
+  - Inserts `agency_accounts` (status: 'active', billing_mode: 'public_checkout' — closest valid enum value)
+  - Inserts `agency_users` (role: 'owner', status: 'active')
+  - Updates `user_subscriptions.agency_account_id`
+- Caller (`handleSubscriptionUpserted`) guards idempotency: only calls provisioner when `startup_workspace_id IS NULL AND agency_account_id IS NULL`
+
+Verification: `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `lib/server/billing/provision-workspace-for-subscription.ts`
+
+---
+
+### 2026-04-06 — BILL-005
+Completed BILL-005: Redesigned `/pricing` page with real bundle cards, trial CTAs, and subscription status banner.
+
+What was done:
+- Created `components/subscription-status-banner.tsx` (client): reads `?subscription=success/cancel` from URL, shows "You're on the X plan — workspace being set up" + link to dashboard on success, or "No charge was made" on cancel
+- Created `components/pricing-bundle-card.tsx` (client): Props: bundleKey, name, tagline, priceLabel, trialDays, features[], isAuthenticated, isCurrentPlan, isFree. Uses `useTransition` + `useLongWaitEffect` for loading overlay. If not authenticated → redirects to `/login?next=/pricing&bundle=X`. If `?autosubscribe=1&bundle=X` in URL → auto-triggers subscribe on mount (for BILL-006 resume flow). Calls `POST /api/billing/subscribe`. Shows "Start free N-day trial" / "Subscribe" / "Current plan" based on state. Fine print: "Credit card required. Cancel anytime before trial ends."
+- Rewrote `app/pricing/page.tsx` (server component, `force-dynamic`): Loads `service_bundles` (billing_mode, stripe_price_id, monthly_price_cents, trial_period_days) via service role client. Loads active/trialing `user_subscriptions` for logged-in users. 4-card 2x2 grid (startup_lite, startup_dev, agency_core, agency_pro). Formats price as "$X/mo" or "Free" or "Price TBD" (if operator hasn't seeded monthly_price_cents yet). Feature lists are static per bundle key (mirrors seeded service_bundle_services). Bundles wrapped in Suspense.
+
+Verification: `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `app/pricing/page.tsx`, `components/pricing-bundle-card.tsx`, `components/subscription-status-banner.tsx`
+
+---
+
+### 2026-04-06 — BILL-006
+Completed BILL-006: Auth callback new user detection.
+
+What was done:
+- Extended `app/auth/callback/route.ts` inside the `if (user?.email && serviceKey)` block after `linkGuestPurchasesToUser`
+- Queries `users.created_at` + `users.plan` via service role client
+- `isNewUser` = created_at within last 90 seconds (window accounts for slow auth exchange)
+- Two new redirects:
+  1. If `?bundle=X&next=/pricing` → resumes subscribe flow: redirect to `/pricing?bundle=X&autosubscribe=1`
+  2. If new user + no `?next` param → redirect to `/pricing?onboarding=1`
+- Existing `next` param redirect is unchanged (runs only when neither condition above matched)
+
+Verification: `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `app/auth/callback/route.ts`
+
+---
+
+### 2026-04-06 — BILL-007
+Completed BILL-007: Post-subscribe dashboard onboarding state.
+
+What was done:
+- Created `components/new-subscriber-welcome-banner.tsx` (client): Only renders when `?onboarding=1` is in the URL. If user has a provisioned startup workspace or agency account (passed as props), shows "Your workspace is ready → Open workspace". If not yet provisioned (webhook hasn't fired yet), shows "being set up — refresh if not shown" + link to pricing.
+- Updated `app/dashboard/page.tsx`:
+  - Added `Suspense` import
+  - Added `NewSubscriberWelcomeBanner` import
+  - Added `onboarding?: string` to `Props.searchParams` type
+  - Added `<Suspense fallback={null}><NewSubscriberWelcomeBanner startupWorkspaceId={...} agencyAccountId={...} /></Suspense>` as first element inside the main return, before the page header
+  - Banner receives `startupDashboard.workspaces[0]?.id` and `agencyDashboard.accounts[0]?.id` for workspace links
+
+Verification: `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `components/new-subscriber-welcome-banner.tsx`, `app/dashboard/page.tsx`

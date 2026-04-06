@@ -58,6 +58,35 @@ export async function GET(request: NextRequest) {
     if (user?.email && serviceKey) {
       const admin = createServiceRoleClient(url, serviceKey);
       await linkGuestPurchasesToUser(admin, user.id, user.email);
+
+      // ── New-user detection (BILL-006) ───────────────────────────────────────
+      // Detect first-time sign-in by checking how recently the user row was created.
+      // `created_at` is written on first OAuth/magic-link login by our upsert trigger.
+      const { data: userRow } = await admin
+        .from('users')
+        .select('created_at, plan')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const isNewUser =
+        userRow != null &&
+        Date.now() - new Date(userRow.created_at as string).getTime() < 90_000; // 90s window
+
+      const nextParam = searchParams.get('next');
+      const bundleParam = searchParams.get('bundle');
+
+      // If user came from pricing CTA before they were logged in → resume subscribe
+      if (bundleParam && nextParam === '/pricing') {
+        return NextResponse.redirect(
+          new URL(`/pricing?bundle=${encodeURIComponent(bundleParam)}&autosubscribe=1`, appUrl)
+        );
+      }
+
+      // New user with no explicit next destination → send to pricing to pick a bundle
+      if (isNewUser && !nextParam) {
+        return NextResponse.redirect(new URL('/pricing?onboarding=1', appUrl));
+      }
+      // ── End BILL-006 ────────────────────────────────────────────────────────
     }
 
     return NextResponse.redirect(new URL(next, appUrl));

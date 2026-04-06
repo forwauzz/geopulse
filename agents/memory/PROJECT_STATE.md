@@ -353,6 +353,19 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | BF-005 | Add remove member + delete workspace UI to `StartupAdminControlView` | Frontend | ✅ DONE | `components/startup-admin-control-view.tsx`, COMPLETION_LOG BF-005 |
 | BF-006 | Add remove member + delete account UI to `AgencyAdminControlView` | Frontend | ✅ DONE | `components/agency-admin-control-view.tsx`, COMPLETION_LOG BF-006 |
 
+### Self-Serve Bundle Subscriptions + Onboarding (BILL-001 … BILL-007)
+> **Context:** Users need to self-onboard by selecting a bundle on `/pricing`, entering card info, and having their workspace auto-provisioned. Paid tiers (`startup_dev`, `agency_core`, `agency_pro`) use Stripe recurring monthly subscriptions with a configurable free trial (default 7 days, card required upfront). `startup_lite` stays free. Plan: `C:\Users\Carine Tamon\.claude\plans\snoopy-hatching-scroll.md`.
+
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|--------|--------|----------|
+| BILL-001 | DB migration: `billing_mode` + `stripe_price_id` + `trial_period_days` on `service_bundles` + new `user_subscriptions` table | Database | ✅ DONE | `supabase/migrations/033_subscription_billing_foundation.sql` |
+| BILL-002 | New `/api/billing/subscribe` route — subscription checkout with trial support | Backend | ✅ DONE | `app/api/billing/subscribe/route.ts`, COMPLETION_LOG BILL-002 |
+| BILL-003 | Extend `/api/webhooks/stripe` — subscription lifecycle handlers (created/updated/deleted/invoice/trial_will_end) | Backend | ✅ DONE | `lib/server/stripe/subscription-handlers.ts`, `app/api/webhooks/stripe/route.ts`, COMPLETION_LOG BILL-003 |
+| BILL-004 | Auto-provision workspace on subscription (trialing OR active) | Backend | ✅ DONE | `lib/server/billing/provision-workspace-for-subscription.ts`, COMPLETION_LOG BILL-004 |
+| BILL-005 | Redesign `/pricing` — real bundle cards with trial CTA + pricing display | Frontend | ✅ DONE | `app/pricing/page.tsx`, `components/pricing-bundle-card.tsx`, `components/subscription-status-banner.tsx`, COMPLETION_LOG BILL-005 |
+| BILL-006 | Auth callback — new user detection → redirect to `/pricing` | Backend | ✅ DONE | `app/auth/callback/route.ts`, COMPLETION_LOG BILL-006 |
+| BILL-007 | Post-subscribe redirect + dashboard onboarding state | Frontend | ✅ DONE | `components/new-subscriber-welcome-banner.tsx`, `app/dashboard/page.tsx`, COMPLETION_LOG BILL-007 |
+
 ### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)
 > Restructure the startup dashboard into Overview / Audits / Delivery / Settings via `?tab=` (default `overview`). Plan: `.cursor/plans/startup_dashboard_tab_redesign_997f45c9.plan.md`. Shared types: `app/dashboard/startup/components/startup-tab-types.ts`.
 
