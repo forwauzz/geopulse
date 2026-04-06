@@ -8,6 +8,7 @@ Ship one narrow Slack path for startup teams:
 - connect Slack
 - pick channel destination
 - send report updates manually
+- optionally auto-send report updates on schedule for explicitly enabled workspaces
 
 ## Product defaults
 
@@ -37,3 +38,4 @@ Pilot with one workspace (`Alie`) first:
 3. send manual updates for real reports
 4. review delivery logs
 5. only then consider `slack_auto_post`
+6. if `slack_auto_post` is enabled, keep rollout to one workspace first and verify scheduler + delivery logs before broader enablement

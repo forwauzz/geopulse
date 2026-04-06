@@ -47,10 +47,10 @@ const mdComponents: Components = {
     if (text === 'FAIL') return <td className="font-semibold text-red-700">{children}</td>;
     if (text === 'LOW_CONFIDENCE')
       return <td className="font-semibold text-amber-700">{children}</td>;
-    if (text === 'BLOCKED') return <td className="font-semibold text-slate-700">{children}</td>;
+    if (text === 'BLOCKED') return <td className="font-semibold text-on-background">{children}</td>;
     if (text === 'WARNING') return <td className="font-semibold text-amber-700">{children}</td>;
     if (text === 'NOT_EVALUATED' || text === 'N/A' || text === '-')
-      return <td className="text-slate-400">{children}</td>;
+      return <td className="text-on-surface-variant">{children}</td>;
     return <td>{children}</td>;
   },
 };

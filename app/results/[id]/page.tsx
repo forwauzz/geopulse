@@ -14,7 +14,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   try {
     const env = await getScanApiEnv();
     if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-      return { title: titleBase, description };
+      return {
+        title: titleBase,
+        description,
+        openGraph: { title: titleBase, description, type: 'website' },
+        twitter: { card: 'summary', title: titleBase, description },
+      };
     }
     const result = await getScanForPublicShare(
       id,
@@ -22,16 +27,30 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       env.SUPABASE_SERVICE_ROLE_KEY
     );
     if (!result.ok) {
-      return { title: titleBase, description };
+      return {
+        title: titleBase,
+        description,
+        openGraph: { title: titleBase, description, type: 'website' },
+        twitter: { card: 'summary', title: titleBase, description },
+      };
     }
     const { url, score } = result.data;
     const scorePart = score != null ? `${score} — ` : '';
+    const title = `${scorePart}${titleBase}`;
+    const desc = `Results for ${url}`;
     return {
-      title: `${scorePart}${titleBase}`,
-      description: `Results for ${url}`,
+      title,
+      description: desc,
+      openGraph: { title, description: desc, type: 'website' },
+      twitter: { card: 'summary', title, description: desc },
     };
   } catch {
-    return { title: titleBase, description };
+    return {
+      title: titleBase,
+      description,
+      openGraph: { title: titleBase, description, type: 'website' },
+      twitter: { card: 'summary', title: titleBase, description },
+    };
   }
 }
 

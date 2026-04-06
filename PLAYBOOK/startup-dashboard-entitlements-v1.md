@@ -38,7 +38,7 @@ Both paths must run on one centralized control plane.
 
 ## Startup Dashboard Product Rules
 
-1. Dark visual system by default.
+1. Shared dual-mode visual system (light + dark) from semantic theme tokens, with user-toggle persistence.
 2. No vanity widgets.
 3. Every graph must map to an action list.
 4. Core views:

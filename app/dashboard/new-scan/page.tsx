@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ScanForm } from '@/components/scan-form';
+import { WhatNextBanner } from '@/components/what-next-banner';
 import { getAgencyDashboardData } from '@/lib/server/agency-dashboard-data';
 import { getStartupDashboardData } from '@/lib/server/startup-dashboard-data';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -63,67 +64,110 @@ export default async function DashboardNewScanPage({ searchParams }: Props) {
   });
 
   const selectedAgencyAccount =
-    agencyDashboard.accounts.find((account) => account.id === agencyDashboard.selectedAccountId) ?? null;
+    agencyDashboard.accounts.find((a) => a.id === agencyDashboard.selectedAccountId) ?? null;
   const selectedAgencyClient =
-    selectedAgencyAccount?.clients.find((client) => client.id === agencyDashboard.selectedClientId) ?? null;
+    selectedAgencyAccount?.clients.find((c) => c.id === agencyDashboard.selectedClientId) ?? null;
   const selectedStartupWorkspace =
-    startupDashboard.workspaces.find((workspace) => workspace.id === startupDashboard.selectedWorkspaceId) ?? null;
+    startupDashboard.workspaces.find((w) => w.id === startupDashboard.selectedWorkspaceId) ?? null;
+
+  // Derive the active context label for the pre-scan banner
+  const contextLabel = selectedAgencyClient
+    ? selectedAgencyClient.name
+    : selectedAgencyAccount
+      ? selectedAgencyAccount.name
+      : selectedStartupWorkspace
+        ? selectedStartupWorkspace.name
+        : null;
+
+  const bannerBody = contextLabel
+    ? `Scan will be linked to ${contextLabel}. Results and reports stay scoped to this workspace.`
+    : 'Enter any URL to run an instant AI search readiness check. Free, under 30 seconds.';
+
+  const scanDisabled =
+    !!agencyDashboard.selectedAccountId && !agencyDashboard.entitlements.scanLaunchEnabled;
 
   return (
-    <main className="mx-auto max-w-screen-xl px-6 py-16 md:px-10">
+    <section className="mx-auto max-w-2xl space-y-6">
+
+      {/* ── Page header ─────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">Dashboard</p>
-          <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Run a new scan</h1>
-          <p className="mt-2 max-w-2xl font-body text-on-surface-variant">
-            Start a fresh diagnostic without leaving the app. If you are working inside an agency client context, the
-            scan will stay linked to that client.
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">
+            Dashboard
           </p>
+          <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">
+            Run a Scan
+          </h1>
         </div>
         <Link
           href={backHref}
-          className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+          className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface-container-high"
         >
-          Back to dashboard
+          <span className="material-symbols-outlined text-[16px]" aria-hidden>arrow_back</span>
+          Dashboard
         </Link>
       </div>
 
+      {/* ── Pre-scan guidance ────────────────────────────────── */}
+      <WhatNextBanner
+        eyebrow={contextLabel ? 'Active context' : 'Start here'}
+        title={contextLabel ? `Scanning for ${contextLabel}` : 'Run an AI search readiness audit'}
+        body={bannerBody}
+        ctaLabel="Learn what we check"
+        ctaHref="/blog"
+      />
+
+      {/* ── Context card (agency or startup) ────────────────── */}
       {selectedAgencyAccount ? (
-        <div className="mt-8 rounded-2xl bg-surface-container-low p-6 shadow-float">
-          <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Agency context</p>
-          <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low px-5 py-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
+            Agency context
+          </p>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-3 sm:gap-x-8">
             <div>
-              <p className="font-body text-sm text-on-surface-variant">Agency</p>
-              <p className="mt-1 font-headline text-xl font-bold text-on-background">{selectedAgencyAccount.name}</p>
+              <p className="text-xs text-on-surface-variant">Agency</p>
+              <p className="mt-0.5 text-sm font-semibold text-on-background">
+                {selectedAgencyAccount.name}
+              </p>
             </div>
             <div>
-              <p className="font-body text-sm text-on-surface-variant">Client</p>
-              <p className="mt-1 font-headline text-xl font-bold text-on-background">
-                {selectedAgencyClient?.name ?? 'No client selected'}
+              <p className="text-xs text-on-surface-variant">Client</p>
+              <p className="mt-0.5 text-sm font-semibold text-on-background">
+                {selectedAgencyClient?.name ?? (
+                  <span className="text-on-surface-variant">No client selected</span>
+                )}
               </p>
             </div>
           </div>
-          {!agencyDashboard.entitlements.scanLaunchEnabled ? (
-            <p className="mt-4 rounded-xl bg-surface-container-lowest px-4 py-3 text-sm text-on-surface-variant">
-              Scan launch is disabled for this agency context by GEO-Pulse admin.
+          {scanDisabled ? (
+            <p className="mt-3 rounded-xl bg-surface-container-lowest px-4 py-3 text-sm text-on-surface-variant">
+              Scan launch is disabled for this agency context. Contact GEO-Pulse admin to re-enable.
             </p>
           ) : null}
         </div>
-      ) : null}
-
-      {!selectedAgencyAccount && selectedStartupWorkspace ? (
-        <div className="mt-8 rounded-2xl bg-surface-container-low p-6 shadow-float">
-          <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Startup context</p>
-          <div className="mt-3 grid gap-4 md:grid-cols-2">
+      ) : selectedStartupWorkspace ? (
+        <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low px-5 py-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
+            Startup context
+          </p>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-3 sm:gap-x-8">
             <div>
-              <p className="font-body text-sm text-on-surface-variant">Workspace</p>
-              <p className="mt-1 font-headline text-xl font-bold text-on-background">
+              <p className="text-xs text-on-surface-variant">Workspace</p>
+              <p className="mt-0.5 text-sm font-semibold text-on-background">
                 {selectedStartupWorkspace.name}
               </p>
             </div>
+            {selectedStartupWorkspace.canonicalDomain ? (
+              <div>
+                <p className="text-xs text-on-surface-variant">Canonical domain</p>
+                <p className="mt-0.5 text-sm font-semibold text-on-background">
+                  {selectedStartupWorkspace.canonicalDomain}
+                </p>
+              </div>
+            ) : null}
             <div>
-              <p className="font-body text-sm text-on-surface-variant">Role</p>
-              <p className="mt-1 font-headline text-xl font-bold text-on-background">
+              <p className="text-xs text-on-surface-variant">Role</p>
+              <p className="mt-0.5 text-sm font-semibold text-on-background">
                 {selectedStartupWorkspace.role}
               </p>
             </div>
@@ -131,27 +175,28 @@ export default async function DashboardNewScanPage({ searchParams }: Props) {
         </div>
       ) : null}
 
-      <section className="mt-10 rounded-2xl bg-surface-container-low p-8 shadow-float">
-        {siteKey ? (
-          agencyDashboard.selectedAccountId && !agencyDashboard.entitlements.scanLaunchEnabled ? (
-            <div className="rounded-xl bg-surface-container-lowest px-5 py-5 text-sm text-on-surface-variant">
-              This agency account cannot launch new scans right now. Return to the dashboard or ask GEO-Pulse admin to
-              re-enable scan launch.
-            </div>
-          ) : (
-            <ScanForm
-              siteKey={siteKey}
-              defaultUrl={sp.url}
-              agencyAccountId={agencyDashboard.selectedAccountId}
-              agencyClientId={agencyDashboard.selectedClientId}
-            />
-          )
-        ) : (
-          <div className="rounded-xl bg-surface-container-lowest px-5 py-5 text-sm text-error">
+      {/* ── Scan form ────────────────────────────────────────── */}
+      <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+        {!siteKey ? (
+          <p className="rounded-xl bg-surface-container-lowest px-5 py-5 text-sm text-error">
             Turnstile is not configured for this deployment.
-          </div>
+          </p>
+        ) : scanDisabled ? (
+          <p className="rounded-xl bg-surface-container-lowest px-5 py-5 text-sm text-on-surface-variant">
+            This agency account cannot launch new scans right now. Return to the dashboard or ask
+            GEO-Pulse admin to re-enable scan launch.
+          </p>
+        ) : (
+          <ScanForm
+            siteKey={siteKey}
+            defaultUrl={sp.url}
+            agencyAccountId={agencyDashboard.selectedAccountId}
+            agencyClientId={agencyDashboard.selectedClientId}
+            startupWorkspaceId={startupDashboard.selectedWorkspaceId}
+          />
         )}
-      </section>
-    </main>
+      </div>
+
+    </section>
   );
 }

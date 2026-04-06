@@ -14,7 +14,7 @@ Run the first real startup Slack pilot in a controlled way for `Alie`, capture e
 - `slack_notifications` enabled for the target startup bundle/workspace.
 3. Startup rollout flags allow Slack:
 - `slack_agent=true` for manual sends.
-- `slack_auto_post=false` for initial pilot safety.
+- `slack_auto_post=false` for initial pilot safety (phase A).
 4. Slack app credentials are configured in runtime:
 - `STARTUP_SLACK_CLIENT_ID`
 - `STARTUP_SLACK_CLIENT_SECRET`
@@ -53,6 +53,13 @@ Run the first real startup Slack pilot in a controlled way for `Alie`, capture e
 - Leave `slack_auto_post=false` through first pilot cycle.
 - Change only after explicit operator sign-off.
 
+7. Optional autopost validation (phase B)
+- Enable `slack_auto_post=true` for one pilot workspace only after phase A evidence is complete.
+- Wait for the scheduled cadence window or run the scheduler path through controlled operator execution.
+- Confirm a new deep audit is enqueued and completed.
+- Confirm one `new_audit_ready` auto-post message is delivered to the configured default active destination.
+- Confirm delivery events include a row sourced from autopost (`source=auto_post` in payload metadata).
+
 ## Evidence Capture Checklist
 
 Collect this for `Alie`:
@@ -71,9 +78,15 @@ Collect this for `Alie`:
 - Screenshot of delivery event list showing `sent` rows.
 - If a failure occurred, capture row with `error_message`.
 
-5. Structured log evidence (optional but recommended)
+5. Autopost evidence (phase B only)
+- Screenshot or logs showing scheduled deep-audit enqueue for the workspace.
+- Screenshot of Slack channel showing auto-posted audit message.
+- Screenshot or SQL output showing delivery event written for the auto-post send.
+
+6. Structured log evidence (optional but recommended)
 - Record at least one `startup_slack_manual_send_succeeded` log row.
 - Record at least one `startup_slack_manual_send_failed` log row if a failure test is run.
+- Record `startup_slack_schedule_enqueued` and `startup_slack_auto_post_succeeded` rows for phase B.
 
 ## SQL Verification Snippets (optional)
 
@@ -101,7 +114,10 @@ select
 from public.app_logs
 where event_type in (
   'startup_slack_manual_send_succeeded',
-  'startup_slack_manual_send_failed'
+  'startup_slack_manual_send_failed',
+  'startup_slack_schedule_enqueued',
+  'startup_slack_auto_post_succeeded',
+  'startup_slack_auto_post_failed'
 )
 order by created_at desc
 limit 20;
@@ -124,3 +140,4 @@ Pilot is considered complete when all are true:
 2. One `new_audit_ready` and one `plan_ready` manual send are successful.
 3. Delivery history confirms `sent` statuses for those sends.
 4. Evidence artifacts are captured and linked in operator notes.
+5. If phase B is executed, one scheduled auto-post cycle is verified end to end.

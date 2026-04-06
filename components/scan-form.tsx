@@ -12,6 +12,8 @@ type ScanFormProps = {
   defaultUrl?: string;
   agencyAccountId?: string | null;
   agencyClientId?: string | null;
+  /** When set and user is a workspace member, scan is stored with `startup_workspace_id` for the startup dashboard. */
+  startupWorkspaceId?: string | null;
 };
 
 const E2E_BYPASS_TURNSTILE =
@@ -55,7 +57,13 @@ function turnstileErrorMessage(errorCode: string | number | undefined): string {
   return code ? `Verification failed (${code}). Refresh and try again.` : 'Verification failed. Refresh and try again.';
 }
 
-export function ScanForm({ siteKey, defaultUrl, agencyAccountId, agencyClientId }: ScanFormProps) {
+export function ScanForm({
+  siteKey,
+  defaultUrl,
+  agencyAccountId,
+  agencyClientId,
+  startupWorkspaceId,
+}: ScanFormProps) {
   const router = useRouter();
   const [url, setUrl] = useState(defaultUrl ?? '');
   const bypassTurnstile = isTurnstileBypassEnabled();
@@ -92,6 +100,7 @@ export function ScanForm({ siteKey, defaultUrl, agencyAccountId, agencyClientId 
           turnstileToken: token,
           agencyAccountId: agencyAccountId ?? null,
           agencyClientId: agencyClientId ?? null,
+          startupWorkspaceId: startupWorkspaceId ?? null,
           ...getAttributionContext(),
         }),
       });

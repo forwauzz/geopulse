@@ -30,13 +30,19 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('theme');var d=t?t:(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');document.documentElement.classList.toggle('dark',d==='dark');}catch(e){}})();",
+          }}
+        />
         <link
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,300,0,0&display=swap"
           rel="stylesheet"
         />
       </head>
       <body
-        className={`${inter.variable} ${newsreader.variable} flex min-h-screen flex-col bg-surface font-body text-on-surface antialiased`}
+        className={`${inter.variable} ${newsreader.variable} flex min-h-screen flex-col overflow-x-hidden bg-surface font-body text-on-surface antialiased`}
       >
         <LongWaitProvider>
           <AttributionInit />

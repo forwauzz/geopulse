@@ -30,7 +30,7 @@ export default async function ServiceControlAdminPage() {
   const adminContext = await loadAdminPageContext('/dashboard/services');
   if (!adminContext.ok) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-16">
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
         <p className="text-error">{adminContext.message}</p>
       </main>
     );
@@ -48,7 +48,7 @@ export default async function ServiceControlAdminPage() {
       );
 
     return (
-      <main className="mx-auto max-w-6xl px-6 py-16">
+      <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16">
         <h1 className="font-headline text-3xl font-bold text-on-background">
           Service control center
         </h1>
@@ -68,3 +68,4 @@ export default async function ServiceControlAdminPage() {
     );
   }
 }
+

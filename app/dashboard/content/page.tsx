@@ -83,7 +83,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
   const adminContext = await loadAdminPageContext('/dashboard/content');
   if (!adminContext.ok) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-16">
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
         <p className="text-error">{adminContext.message}</p>
       </main>
     );
@@ -139,7 +139,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
       .slice(0, 3);
 
     return (
-      <main className="mx-auto max-w-6xl px-6 py-16">
+      <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="font-label text-sm font-semibold uppercase tracking-widest text-primary">
@@ -237,7 +237,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        <section className="mt-10 grid gap-4 md:grid-cols-4">
+        <section className="mt-10 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
             <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
               Items
@@ -311,7 +311,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
             </p>
           </div>
 
-          <form action="/dashboard/content" method="get" className="mt-4 grid gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4 md:grid-cols-[1fr_220px_auto]">
+          <form action="/dashboard/content" method="get" className="mt-4 grid gap-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
             <label className="text-xs uppercase tracking-widest text-on-surface-variant">
               Queue owner
               <input
@@ -426,7 +426,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
                         <p className="mt-1 font-body text-xs text-on-surface-variant">
                           Owner: {row.queue_owner ?? '-'} / Week: {row.queue_target_week ?? '-'}
                         </p>
-                        <form action={updateContentQueueAssignment} className="mt-3 grid gap-2 sm:grid-cols-[1fr_140px_auto]">
+                        <form action={updateContentQueueAssignment} className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1fr)_140px_auto]">
                           <input type="hidden" name="contentId" value={row.content_id} />
                           <input
                             type="text"
@@ -537,7 +537,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
             </p>
           </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
               <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
                 Total planned
@@ -627,7 +627,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
             </Link>
           </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
               <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
                 Ready to publish
@@ -768,7 +768,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
             </p>
           </div>
 
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl bg-surface-container-lowest px-4 py-4 shadow-float">
               <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
                 Articles with snapshots
@@ -1108,7 +1108,7 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
       );
 
     return (
-      <main className="mx-auto max-w-5xl px-6 py-16">
+      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
         <h1 className="font-headline text-3xl font-bold text-on-background">Content machine</h1>
         <p className="mt-4 text-error">
           Could not load content inventory.
@@ -1127,3 +1127,4 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
     );
   }
 }
+

@@ -90,14 +90,17 @@ function buildActionCard(input: {
   }
 
   return {
-    eyebrow: input.hasPaidReport ? 'Step 2' : 'Step 2',
-    title: 'Choose what to do next',
-    body: `Start with the preview for ${input.host}, then either continue to the full audit or save this preview for later. The paid path is the main next step.`,
-    primaryLabel: 'Continue to full audit',
-    primaryTargetId: 'full-audit-checkout',
-    secondaryLabel: 'Save preview instead',
-    secondaryTargetId: 'preview-save',
-    note: 'Use the full audit if you want the complete report and action plan. Use save preview only if you are not ready to buy yet.',
+    eyebrow: 'Step 2',
+    title: input.hasPaidReport ? 'Report queued — check back soon' : 'Choose what to do next',
+    body: input.hasPaidReport
+      ? `Your payment was received for ${input.host}. The full audit will begin shortly — you'll get an email when it's ready.`
+      : `You've seen your score for ${input.host}. Upgrade to a full audit to get prioritized recommendations, technical fixes, and a downloadable PDF report.`,
+    primaryLabel: input.hasPaidReport ? 'Check dashboard' : 'Start full audit',
+    primaryHref: input.hasPaidReport ? '/dashboard' : undefined,
+    primaryTargetId: input.hasPaidReport ? undefined : 'full-audit-checkout',
+    secondaryLabel: input.hasPaidReport ? undefined : 'Save preview',
+    secondaryHref: undefined,
+    secondaryTargetId: input.hasPaidReport ? undefined : 'preview-save',
   };
 }
 
@@ -255,8 +258,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     checkoutState,
     hasDirectReportAccess,
   });
-  const snapshotHref = `/results/${data.scanId}/opengraph-image`;
-
   async function handleShareSnapshot(): Promise<void> {
     const shareUrl = window.location.href;
     const shareData = {
@@ -270,7 +271,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         await navigator.share(shareData);
         setShareState({
           label: 'Snapshot ready to share',
-          helper: 'The results link includes the branded preview image for social and chat link previews.',
+          helper: 'The results link carries your score in the page title for social and chat link previews.',
         });
         return;
       }
@@ -279,7 +280,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         await navigator.clipboard.writeText(shareUrl);
         setShareState({
           label: 'Link copied',
-          helper: 'Paste it anywhere to share this score snapshot. Link previews use the public score image.',
+          helper: 'Paste it anywhere to share this score snapshot. Previews show your score in the link title.',
         });
         return;
       }
@@ -295,9 +296,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
 
   const statusClasses =
     journey.statusTone === 'success'
-      ? 'border-emerald-500/20 bg-emerald-50'
+      ? 'border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/10'
       : journey.statusTone === 'warning'
-        ? 'border-amber-500/20 bg-amber-50'
+        ? 'border-amber-500/20 bg-amber-50 dark:bg-amber-500/10'
         : 'border-primary/20 bg-surface-container-low';
 
   return (
@@ -340,7 +341,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
           {journey.steps.map((step, index) => {
             const badgeClasses =
               step.state === 'complete'
-                ? 'border-emerald-600 bg-emerald-600 text-white'
+                ? 'border-emerald-600 bg-emerald-600 text-on-primary'
                 : step.state === 'current'
                   ? 'border-primary bg-primary text-on-primary'
                   : 'border-outline-variant/35 bg-surface-container-low text-on-surface-variant';
@@ -419,7 +420,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
                   actionCard.secondaryHref ? (
                     <Link
                       href={actionCard.secondaryHref}
-                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-white/5"
+                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-surface/10"
                     >
                       <span className="material-symbols-outlined text-base">
                         {data.reportStatus === 'delivered' ? 'login' : data.reportStatus === 'generating' ? 'login' : 'bookmark'}
@@ -435,7 +436,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
                           : null;
                         target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                       }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-white/5"
+                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-surface/10"
                     >
                       <span className="material-symbols-outlined text-base">bookmark</span>
                       {actionCard.secondaryLabel}
@@ -454,7 +455,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         issues={data.topIssues}
         categoryScores={data.categoryScores}
         snapshotAction={handleShareSnapshot}
-        snapshotHref={snapshotHref}
         snapshotState={shareState}
       />
 

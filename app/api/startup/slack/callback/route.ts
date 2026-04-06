@@ -18,12 +18,25 @@ type SlackOauthExchange = {
   readonly scope: string | null;
 };
 
+function slackJsonString(v: unknown): string | null {
+  if (typeof v === 'string' && v.trim().length > 0) return v.trim();
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return null;
+}
+
+function sanitizeSlackApiError(raw: unknown): string | null {
+  const s = slackJsonString(raw);
+  if (!s) return null;
+  const cleaned = s.replace(/[^a-z0-9_]/gi, '').toLowerCase();
+  return cleaned.length > 0 ? cleaned.slice(0, 64) : null;
+}
+
 async function exchangeSlackOauthCode(args: {
   readonly code: string;
   readonly redirectUri: string;
   readonly clientId: string;
   readonly clientSecret: string;
-}): Promise<SlackOauthExchange | null> {
+}): Promise<{ readonly exchange: SlackOauthExchange | null; readonly slackApiError: string | null }> {
   const response = await fetch('https://slack.com/api/oauth.v2.access', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -35,18 +48,38 @@ async function exchangeSlackOauthCode(args: {
     }),
   });
 
-  if (!response.ok) return null;
+  let payload: Record<string, unknown>;
+  try {
+    payload = (await response.json()) as Record<string, unknown>;
+  } catch {
+    return { exchange: null, slackApiError: 'slack_json_parse_failed' };
+  }
 
-  const payload = (await response.json()) as Record<string, unknown>;
-  if (!payload.ok) return null;
+  if (!response.ok) {
+    return {
+      exchange: null,
+      slackApiError: sanitizeSlackApiError(payload['error']) ?? 'slack_http_not_ok',
+    };
+  }
+
+  if (!payload.ok) {
+    return {
+      exchange: null,
+      slackApiError: sanitizeSlackApiError(payload['error']) ?? 'slack_ok_false',
+    };
+  }
+
   const team = (payload.team as Record<string, unknown> | undefined) ?? {};
 
   return {
-    teamId: typeof team.id === 'string' ? team.id : null,
-    teamName: typeof team.name === 'string' ? team.name : null,
-    teamDomain: typeof team.domain === 'string' ? team.domain : null,
-    botAccessToken: typeof payload.access_token === 'string' ? payload.access_token : null,
-    scope: typeof payload.scope === 'string' ? payload.scope : null,
+    exchange: {
+      teamId: slackJsonString(team.id),
+      teamName: slackJsonString(team.name),
+      teamDomain: slackJsonString(team.domain),
+      botAccessToken: slackJsonString(payload.access_token),
+      scope: slackJsonString(payload.scope),
+    },
+    slackApiError: null,
   };
 }
 
@@ -98,26 +131,38 @@ export async function GET(request: Request) {
   const callbackUri = `${appUrl.replace(/\/+$/, '')}/api/startup/slack/callback`;
   const code = url.searchParams.get('code');
   const rawTeam = resolveTeamDetails(url);
-  const exchangedTeam =
+  const oauthResult =
     code &&
     env.STARTUP_SLACK_CLIENT_ID &&
-    env.STARTUP_SLACK_CLIENT_SECRET
+    env.STARTUP_SLACK_CLIENT_SECRET?.trim()
       ? await exchangeSlackOauthCode({
           code,
           redirectUri: callbackUri,
           clientId: env.STARTUP_SLACK_CLIENT_ID,
           clientSecret: env.STARTUP_SLACK_CLIENT_SECRET,
         })
-      : null;
+      : { exchange: null as SlackOauthExchange | null, slackApiError: null as string | null };
+  const exchangedTeam = oauthResult.exchange;
   const teamId = rawTeam.teamId ?? exchangedTeam?.teamId ?? null;
   const teamName = rawTeam.teamName ?? exchangedTeam?.teamName ?? null;
   const teamDomain = rawTeam.teamDomain ?? exchangedTeam?.teamDomain ?? null;
 
   if (!teamId) {
-    return buildRedirect(
-      appUrl,
-      `/dashboard/startup?startupWorkspace=${session.startupWorkspaceId}&slack=slack_callback_invalid`
-    );
+    const next = new URL('/dashboard/startup', appUrl);
+    next.searchParams.set('startupWorkspace', session.startupWorkspaceId);
+    next.searchParams.set('slack', 'slack_callback_invalid');
+    if (!code) {
+      next.searchParams.set('slack_detail', 'missing_oauth_code');
+    } else if (!env.STARTUP_SLACK_CLIENT_ID?.trim()) {
+      next.searchParams.set('slack_detail', 'missing_client_id');
+    } else if (!env.STARTUP_SLACK_CLIENT_SECRET?.trim()) {
+      next.searchParams.set('slack_detail', 'missing_client_secret');
+    } else if (oauthResult.slackApiError) {
+      next.searchParams.set('slack_detail', oauthResult.slackApiError);
+    } else if (!exchangedTeam?.teamId) {
+      next.searchParams.set('slack_detail', 'missing_team_after_exchange');
+    }
+    return NextResponse.redirect(next);
   }
 
   await upsertStartupSlackInstallationFromCallback({

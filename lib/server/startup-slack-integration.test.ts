@@ -135,7 +135,57 @@ describe('startup slack integration helpers', () => {
     expect(upserts).toHaveLength(1);
     expect(upserts[0]?.onConflict).toBe('startup_workspace_id,installation_id,channel_id');
     expect(upserts[0]?.payload.channel_id).toBe('C123');
+    expect(upserts[0]?.payload.channel_name).toBe('geo-audits');
     expect(upserts[0]?.payload.is_default).toBe(true);
+  });
+
+  it('uses channel id as stored channel_name when optional name is blank (DB NOT NULL)', async () => {
+    const upserts: Array<{ payload: Record<string, unknown> }> = [];
+    const supabase = {
+      from(table: string) {
+        if (table === 'startup_slack_installations') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            maybeSingle() {
+              return Promise.resolve({ data: { id: 'install-1', status: 'active' }, error: null });
+            },
+          };
+        }
+        if (table === 'startup_slack_destinations') {
+          return {
+            update() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            upsert(payload: Record<string, unknown>, options: { onConflict: string }) {
+              upserts.push({ payload });
+              return Promise.resolve({ error: null });
+            },
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      },
+    } as any;
+
+    await upsertStartupSlackDestination({
+      supabase,
+      startupWorkspaceId: 'ws-1',
+      installationId: 'install-1',
+      channelId: 'C999',
+      channelName: null,
+      isDefaultDestination: false,
+      createdByUserId: 'user-1',
+    });
+
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]?.payload.channel_name).toBe('C999');
   });
 
   it('posts message to slack chat api for active destination with token', async () => {

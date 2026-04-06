@@ -21,6 +21,18 @@ import { browserRenderConfigFromEnv } from '../scan-engine/browser-rendering';
 import { parseCrawlPending, runDeepAuditCrawl } from '../scan-engine/deep-audit-crawl';
 import { computeCategoryScores, letterGrade, type WeightedResult } from '../scan-engine/scoring';
 import { replayReportJobFromDlq } from './dlq-replay';
+import { resolveStartupRolloutFlagsFromMetadata } from '../../lib/server/startup-rollout-flags';
+import { resolveStartupWorkspaceBundleKey } from '../../lib/server/startup-github-integration';
+import { resolveServiceEntitlement } from '../../lib/server/service-entitlements';
+import { resolveServiceBillingGuard } from '../../lib/server/service-billing-guard';
+import {
+  createStartupSlackDeliveryEvent,
+  getStartupSlackDestination,
+  listStartupSlackDestinations,
+  sendStartupSlackMessage,
+  updateStartupSlackDeliveryEventStatus,
+} from '../../lib/server/startup-slack-integration';
+import { formatStartupSlackMessage, type StartupSlackMessagePayload } from '../../lib/server/startup-slack-message';
 
 const DLQ_NAME = 'geo-pulse-dlq';
 
@@ -215,6 +227,196 @@ function appendixSummaryForCheck(
     .join(' | ');
 }
 
+async function maybeAutoPostStartupSlack(args: {
+  readonly supabase: ReturnType<typeof createServiceRoleClient>;
+  readonly env: CloudflareEnv;
+  readonly startupWorkspaceId: string;
+  readonly scanId: string;
+  readonly reportId: string;
+  readonly domain: string;
+  readonly score: number;
+  readonly pdfUrl: string | null;
+  readonly markdownUrl: string | null;
+}): Promise<void> {
+  const { data: workspace, error: workspaceError } = await args.supabase
+    .from('startup_workspaces')
+    .select('id,metadata')
+    .eq('id', args.startupWorkspaceId)
+    .maybeSingle();
+  if (workspaceError) throw workspaceError;
+  if (!workspace?.id) return;
+
+  const rollout = resolveStartupRolloutFlagsFromMetadata({
+    metadata: (workspace.metadata as Record<string, unknown> | null) ?? {},
+    env: args.env as any,
+  });
+  if (!rollout.startupDashboard || !rollout.slackAgent || !rollout.slackAutoPost) {
+    return;
+  }
+
+  const bundleKey = await resolveStartupWorkspaceBundleKey({
+    memberSupabase: args.supabase as any,
+    serviceSupabase: args.supabase as any,
+    startupWorkspaceId: args.startupWorkspaceId,
+  });
+  const [slackIntegrationEntitlement, slackNotificationsEntitlement] = await Promise.all([
+    resolveServiceEntitlement({
+      supabase: args.supabase as any,
+      serviceKey: 'slack_integration',
+      bundleKey,
+    }),
+    resolveServiceEntitlement({
+      supabase: args.supabase as any,
+      serviceKey: 'slack_notifications',
+      bundleKey,
+    }),
+  ]);
+  const [slackIntegrationBilling, slackNotificationsBilling] = await Promise.all([
+    resolveServiceBillingGuard({
+      supabase: args.supabase as any,
+      startupWorkspaceId: args.startupWorkspaceId,
+      bundleKey,
+      serviceKey: 'slack_integration',
+      entitlement: slackIntegrationEntitlement,
+    }),
+    resolveServiceBillingGuard({
+      supabase: args.supabase as any,
+      startupWorkspaceId: args.startupWorkspaceId,
+      bundleKey,
+      serviceKey: 'slack_notifications',
+      entitlement: slackNotificationsEntitlement,
+    }),
+  ]);
+  if (!slackIntegrationBilling.allowed || !slackNotificationsBilling.allowed) {
+    return;
+  }
+
+  const destinations = await listStartupSlackDestinations({
+    supabase: args.supabase as any,
+    startupWorkspaceId: args.startupWorkspaceId,
+  });
+  const activeDestinations = destinations.filter((destination) => destination.status === 'active');
+  const selectedDestination = activeDestinations.find((destination) => destination.isDefaultDestination) ?? activeDestinations[0];
+  if (!selectedDestination) return;
+
+  const destination = await getStartupSlackDestination({
+    supabase: args.supabase as any,
+    startupWorkspaceId: args.startupWorkspaceId,
+    destinationId: selectedDestination.id,
+  });
+  if (!destination) return;
+
+  const { data: recommendations, error: recommendationsError } = await args.supabase
+    .from('startup_recommendations')
+    .select('title')
+    .eq('startup_workspace_id', args.startupWorkspaceId)
+    .or(`report_id.eq.${args.reportId},scan_id.eq.${args.scanId}`)
+    .order('created_at', { ascending: false })
+    .limit(6);
+  if (recommendationsError) throw recommendationsError;
+  const recommendationTitles = ((recommendations ?? []) as Array<{ title: string | null }>)
+    .map((item) => (item.title ?? '').trim())
+    .filter((title) => title.length > 0)
+    .slice(0, 3);
+
+  const { data: previousScan, error: previousScanError } = await args.supabase
+    .from('scans')
+    .select('id,score')
+    .eq('startup_workspace_id', args.startupWorkspaceId)
+    .neq('id', args.scanId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (previousScanError) throw previousScanError;
+  const previousScore = typeof previousScan?.score === 'number' ? previousScan.score : null;
+  const scoreDelta = previousScore == null ? null : Math.round(args.score - previousScore);
+
+  const reportUrl = `${(args.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, '')}/dashboard/startup?startupWorkspace=${args.startupWorkspaceId}`;
+  const payload: StartupSlackMessagePayload = {
+    startup_workspace_id: args.startupWorkspaceId,
+    destination_id: destination.id,
+    event_type: 'new_audit_ready',
+    site_domain: args.domain,
+    score: args.score,
+    score_delta: scoreDelta,
+    summary_bullets: recommendationTitles,
+    report_url: reportUrl,
+    markdown_url: args.markdownUrl,
+    sent_by_user_id: 'system',
+  };
+  const text = formatStartupSlackMessage(payload);
+  const pdfLine = args.pdfUrl ? `\nPDF: ${args.pdfUrl}` : '';
+
+  const destinationLabel = destination.channelName
+    ? `${destination.channelName} (${destination.channelId})`
+    : destination.channelId;
+  const { id: deliveryEventId } = await createStartupSlackDeliveryEvent({
+    supabase: args.supabase as any,
+    startupWorkspaceId: args.startupWorkspaceId,
+    installationId: destination.installation.id,
+    destinationId: destination.id,
+    eventType: 'new_audit_ready',
+    sentByUserId: null,
+    payload: {
+      ...payload,
+      destination_label: destinationLabel,
+      source: 'auto_post',
+    },
+  });
+
+  try {
+    const sendResult = await sendStartupSlackMessage({
+      destination,
+      text: `${text}${pdfLine}`,
+    });
+    await updateStartupSlackDeliveryEventStatus({
+      supabase: args.supabase as any,
+      startupWorkspaceId: args.startupWorkspaceId,
+      deliveryEventId,
+      status: 'sent',
+      response: {
+        slack_ts: sendResult.timestamp,
+        destination_label: destinationLabel,
+      },
+    });
+    structuredLog(
+      'startup_slack_auto_post_succeeded',
+      {
+        startup_workspace_id: args.startupWorkspaceId,
+        report_id: args.reportId,
+        scan_id: args.scanId,
+        destination_id: destination.id,
+        delivery_event_id: deliveryEventId,
+      },
+      'info'
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    await updateStartupSlackDeliveryEventStatus({
+      supabase: args.supabase as any,
+      startupWorkspaceId: args.startupWorkspaceId,
+      deliveryEventId,
+      status: 'failed',
+      response: {
+        destination_label: destinationLabel,
+      },
+      errorMessage,
+    });
+    structuredLog(
+      'startup_slack_auto_post_failed',
+      {
+        startup_workspace_id: args.startupWorkspaceId,
+        report_id: args.reportId,
+        scan_id: args.scanId,
+        destination_id: destination.id,
+        delivery_event_id: deliveryEventId,
+        error_message: errorMessage,
+      },
+      'warning'
+    );
+  }
+}
+
 async function resolveScanRunId(
   supabase: ReturnType<typeof createServiceRoleClient>,
   job: ReportQueueMessage
@@ -326,7 +528,9 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
 
   const { data: scan, error: scanErr } = await supabase
     .from('scans')
-    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,user_id,agency_account_id,agency_client_id')
+    .select(
+      'id,url,domain,score,letter_grade,issues_json,full_results_json,user_id,agency_account_id,agency_client_id,startup_workspace_id'
+    )
     .eq('id', job.scanId)
     .maybeSingle();
 
@@ -571,23 +775,29 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   }, 'info');
 
   const now = new Date().toISOString();
-  const { error: repErr } = await supabase.from('reports').insert({
-    scan_id: job.scanId,
-    user_id: scan.user_id ?? null,
-    agency_account_id: scan.agency_account_id ?? null,
-    agency_client_id: scan.agency_client_id ?? null,
-    guest_email: job.customerEmail.trim().toLowerCase(),
-    pdf_url: pdfUrl,
-    markdown_url: downloadLinks?.markdownUrl ?? null,
-    report_payload_version: payload.version,
-    pdf_generated_at: now,
-    email_delivered_at: now,
-    type: 'deep_audit',
-  });
+  const { data: insertedReport, error: repErr } = await supabase
+    .from('reports')
+    .insert({
+      scan_id: job.scanId,
+      user_id: scan.user_id ?? null,
+      agency_account_id: scan.agency_account_id ?? null,
+      agency_client_id: scan.agency_client_id ?? null,
+      startup_workspace_id: scan.startup_workspace_id ?? null,
+      guest_email: job.customerEmail.trim().toLowerCase(),
+      pdf_url: pdfUrl,
+      markdown_url: downloadLinks?.markdownUrl ?? null,
+      report_payload_version: payload.version,
+      pdf_generated_at: now,
+      email_delivered_at: now,
+      type: 'deep_audit',
+    })
+    .select('id')
+    .single();
 
   if (repErr) {
     throw new Error(repErr.message);
   }
+  const reportId = typeof insertedReport?.id === 'string' ? insertedReport.id : null;
 
   try {
     await writeGeneratedReportEval(supabase as any, {
@@ -672,6 +882,28 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       scanId: job.scanId,
       message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
     });
+  }
+
+  if (scan.startup_workspace_id && reportId) {
+    try {
+      await maybeAutoPostStartupSlack({
+        supabase,
+        env,
+        startupWorkspaceId: String(scan.startup_workspace_id),
+        scanId: job.scanId,
+        reportId,
+        domain: scan.domain,
+        score: aggregateScore,
+        pdfUrl,
+        markdownUrl: downloadLinks?.markdownUrl ?? null,
+      });
+    } catch (error) {
+      structuredLog('startup_slack_auto_post_error', {
+        scanId: job.scanId,
+        startupWorkspaceId: String(scan.startup_workspace_id),
+        message: error instanceof Error ? error.message.slice(0, 200) : 'unknown',
+      });
+    }
   }
 
   structuredLog('report_job_completed', {

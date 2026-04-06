@@ -316,12 +316,15 @@ export async function upsertStartupSlackDestination(args: {
     if (unsetError) throw unsetError;
   }
 
+  const trimmedName = args.channelName?.trim() ?? '';
+  const channelNameStored = trimmedName.length > 0 ? trimmedName : args.channelId;
+
   const { error } = await args.supabase.from('startup_slack_destinations').upsert(
     {
       startup_workspace_id: args.startupWorkspaceId,
       installation_id: args.installationId,
       channel_id: args.channelId,
-      channel_name: args.channelName ?? null,
+      channel_name: channelNameStored,
       status: 'active',
       is_default: args.isDefaultDestination,
       metadata: {
@@ -532,4 +535,95 @@ export async function listStartupSlackDeliveryEvents(args: {
     errorMessage: (row.error_message as string | null) ?? null,
     createdAt: String(row.created_at),
   }));
+}
+
+/**
+ * Uploads markdown content as a file to Slack using the current files API
+ * (files.getUploadURLExternal → PUT → files.completeUploadExternal).
+ */
+export async function uploadStartupSlackFile(args: {
+  readonly destination: ResolvedStartupSlackDestination;
+  readonly filename: string;
+  readonly title: string;
+  readonly content: string;
+  readonly initialComment?: string;
+}): Promise<{ readonly ok: true; readonly fileId: string | null }> {
+  const tokenRaw =
+    args.destination.installation.metadata['bot_access_token'] ??
+    args.destination.installation.metadata['access_token'];
+  const botToken = typeof tokenRaw === 'string' ? tokenRaw.trim() : '';
+  if (!botToken) throw new Error('Slack installation token is missing.');
+  if (args.destination.status !== 'active' || args.destination.installation.status !== 'active') {
+    throw new Error('Slack destination is not active.');
+  }
+
+  const encoder = new TextEncoder();
+  const contentBytes = encoder.encode(args.content);
+  const contentLength = contentBytes.length;
+
+  // Step 1: Get upload URL
+  const getUrlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${botToken}`,
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      filename: args.filename,
+      length: String(contentLength),
+    }).toString(),
+  });
+  if (!getUrlRes.ok) {
+    throw new Error(`Slack getUploadURLExternal failed with HTTP ${getUrlRes.status}`);
+  }
+  const getUrlPayload = (await getUrlRes.json()) as Record<string, unknown>;
+  if (!getUrlPayload.ok) {
+    throw new Error(
+      `Slack getUploadURLExternal error: ${typeof getUrlPayload.error === 'string' ? getUrlPayload.error : 'unknown'}`
+    );
+  }
+  const uploadUrl =
+    typeof getUrlPayload.upload_url === 'string' ? getUrlPayload.upload_url : '';
+  const fileId =
+    typeof getUrlPayload.file_id === 'string' ? getUrlPayload.file_id : null;
+  if (!uploadUrl || !fileId) {
+    throw new Error('Slack getUploadURLExternal returned no upload_url or file_id');
+  }
+
+  // Step 2: PUT content to upload URL
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'content-type': 'text/plain; charset=utf-8' },
+    body: args.content,
+  });
+  if (!putRes.ok) {
+    throw new Error(`Slack file upload PUT failed with HTTP ${putRes.status}`);
+  }
+
+  // Step 3: Complete upload and share to channel
+  const completeBody: Record<string, unknown> = {
+    files: [{ id: fileId, title: args.title }],
+    channel_id: args.destination.channelId,
+  };
+  if (args.initialComment) completeBody.initial_comment = args.initialComment;
+
+  const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${botToken}`,
+      'content-type': 'application/json; charset=utf-8',
+    },
+    body: JSON.stringify(completeBody),
+  });
+  if (!completeRes.ok) {
+    throw new Error(`Slack completeUploadExternal failed with HTTP ${completeRes.status}`);
+  }
+  const completePayload = (await completeRes.json()) as Record<string, unknown>;
+  if (!completePayload.ok) {
+    throw new Error(
+      `Slack completeUploadExternal error: ${typeof completePayload.error === 'string' ? completePayload.error : 'unknown'}`
+    );
+  }
+
+  return { ok: true, fileId };
 }

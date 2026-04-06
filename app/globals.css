@@ -5,12 +5,58 @@
 :root {
   --foreground: #2c3435;
   --background: #f8f9f9;
+  --color-background: 248 249 249;
+  --color-surface: 248 249 249;
+  --color-surface-container: 234 239 239;
+  --color-surface-container-low: 241 244 244;
+  --color-surface-container-high: 227 233 234;
+  --color-surface-container-lowest: 255 255 255;
+  --color-on-background: 44 52 53;
+  --color-on-surface: 44 52 53;
+  --color-on-surface-variant: 88 97 98;
+  --color-primary: 86 94 116;
+  --color-primary-dim: 74 82 104;
+  --color-on-primary: 247 247 255;
+  --color-secondary: 82 96 117;
+  --color-secondary-container: 213 227 253;
+  --color-tertiary: 0 91 196;
+  --color-tertiary-dim: 0 79 173;
+  --color-on-tertiary: 249 248 255;
+  --color-tertiary-container: 67 136 253;
+  --color-outline-variant: 171 180 181;
+  --color-error: 159 64 61;
+}
+
+.dark {
+  --foreground: #e6ebef;
+  --background: #090d12;
+  --color-background: 9 13 18;
+  --color-surface: 9 13 18;
+  --color-surface-container: 16 23 32;
+  --color-surface-container-low: 21 29 39;
+  --color-surface-container-high: 28 38 50;
+  --color-surface-container-lowest: 35 46 61;
+  --color-on-background: 230 235 239;
+  --color-on-surface: 230 235 239;
+  --color-on-surface-variant: 159 173 186;
+  --color-primary: 125 146 191;
+  --color-primary-dim: 110 131 177;
+  --color-on-primary: 6 12 22;
+  --color-secondary: 146 165 201;
+  --color-secondary-container: 35 49 72;
+  --color-tertiary: 93 157 255;
+  --color-tertiary-dim: 74 138 236;
+  --color-on-tertiary: 8 18 36;
+  --color-tertiary-container: 41 82 148;
+  --color-outline-variant: 78 95 113;
+  --color-error: 235 116 116;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
 }
+
 
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
