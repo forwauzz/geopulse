@@ -11100,3 +11100,26 @@ What was not implemented:
 Verification:
 - `npm run type-check`
 - `npx vitest run lib/server/content-admin-data.test.ts lib/server/content-topic-registry-progress.test.ts lib/server/content-topic-registry-seed.test.ts`
+
+---
+
+### 2026-04-06 — BF-001
+Completed BF-001: Fix `/api/scans/[id]/route.ts` — startup workspace scan access + `startup_bypass` checkoutMode.
+
+What was done:
+- Added `startup_workspace_id` to the Supabase select on the authenticated scan fetch path
+- Imported `validateStartupWorkspaceScanContext` from `lib/server/startup-scan-context`
+- Added `canAccessAsStartupMember` check: fires only when user is an active member of the scan's startup workspace (only when not already resolved as agency member)
+- Extended ownership gate to include `canAccessAsStartupMember`
+- Extended main data branch condition to include `canAccessAsStartupMember`
+- Added `startup_bypass` checkoutMode: startup members now get `checkoutMode: 'startup_bypass'` instead of `'stripe'`; agency bypass path unchanged
+
+What was NOT changed:
+- Agency access resolution path — unchanged
+- Public/guest scan fallback path — unchanged
+- Any other route or component
+
+Verification:
+- `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `app/api/scans/[id]/route.ts`

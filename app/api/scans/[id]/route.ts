@@ -4,6 +4,7 @@ import {
   resolveAgencyScanAccess,
 } from '@/lib/server/agency-access';
 import { getScanApiEnv } from '@/lib/server/cf-env';
+import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
@@ -35,7 +36,7 @@ export async function GET(
 
       const { data: scan, error: scanErr } = await adminDb
         .from('scans')
-        .select('id,url,domain,score,letter_grade,issues_json,full_results_json,user_id,agency_account_id,agency_client_id')
+        .select('id,url,domain,score,letter_grade,issues_json,full_results_json,user_id,agency_account_id,agency_client_id,startup_workspace_id')
         .eq('id', id)
         .maybeSingle();
 
@@ -65,11 +66,20 @@ export async function GET(
         agencyClientId: scan.agency_client_id ?? null,
       });
 
-      if (scan.user_id !== null && !(canAccessAsOwner || canAccessAsAgency)) {
+      const canAccessAsStartupMember =
+        !canAccessAsAgency &&
+        !!scan.startup_workspace_id &&
+        !!(await validateStartupWorkspaceScanContext({
+          supabase: adminDb,
+          userId: user.id,
+          startupWorkspaceId: scan.startup_workspace_id,
+        }));
+
+      if (scan.user_id !== null && !(canAccessAsOwner || canAccessAsAgency || canAccessAsStartupMember)) {
         return Response.json({ error: { code: 'forbidden' } }, { status: 403 });
       }
 
-      if (canAccessAsOwner || canAccessAsAgency) {
+      if (canAccessAsOwner || canAccessAsAgency || canAccessAsStartupMember) {
         const [paymentRes, reportRes] = await Promise.all([
           adminDb
             .from('payments')
@@ -104,7 +114,11 @@ export async function GET(
           reportStatus,
           pdfUrl: report?.pdf_url ?? null,
           markdownUrl: report?.markdown_url ?? null,
-          checkoutMode: canAccessAsAgency && !agencyAccess.paymentRequired ? 'agency_bypass' : 'stripe',
+          checkoutMode: canAccessAsStartupMember
+            ? 'startup_bypass'
+            : canAccessAsAgency && !agencyAccess.paymentRequired
+              ? 'agency_bypass'
+              : 'stripe',
           deepAuditAvailable: canAccessAsAgency ? agencyEntitlements.deepAuditEnabled : true,
         });
       }
