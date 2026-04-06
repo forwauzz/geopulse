@@ -258,8 +258,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     checkoutState,
     hasDirectReportAccess,
   });
-  const snapshotHref = `/results/${data.scanId}/opengraph-image`;
-
   async function handleShareSnapshot(): Promise<void> {
     const shareUrl = window.location.href;
     const shareData = {
@@ -273,7 +271,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         await navigator.share(shareData);
         setShareState({
           label: 'Snapshot ready to share',
-          helper: 'The results link includes the branded preview image for social and chat link previews.',
+          helper: 'The results link carries your score in the page title for social and chat link previews.',
         });
         return;
       }
@@ -282,7 +280,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         await navigator.clipboard.writeText(shareUrl);
         setShareState({
           label: 'Link copied',
-          helper: 'Paste it anywhere to share this score snapshot. Link previews use the public score image.',
+          helper: 'Paste it anywhere to share this score snapshot. Previews show your score in the link title.',
         });
         return;
       }
@@ -457,7 +455,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         issues={data.topIssues}
         categoryScores={data.categoryScores}
         snapshotAction={handleShareSnapshot}
-        snapshotHref={snapshotHref}
         snapshotState={shareState}
       />
 

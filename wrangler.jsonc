@@ -3,6 +3,7 @@
   // GEO-Pulse Cloudflare Workers configuration
   // Docs: https://developers.cloudflare.com/workers/wrangler/configuration/
   // Stack: Next.js via @opennextjs/cloudflare
+  // Worker gzip size: 3 MiB (Free) / 10 MiB (Paid) — see workers/platform/limits#worker-size
 
   // Local `wrangler deploy` / `wrangler dev`: runs before bundling.
   // Git-connected Workers Builds does NOT use this automatically.
