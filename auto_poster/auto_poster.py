@@ -223,10 +223,11 @@ def run():
     except Exception as e:
         log(log_lines, f"  ❌ Twitter/X failed: {e}")
 
-    log(log_lines, "\n--- Done ---\n")
-
+    # ── Write log
     with open(LOG_PATH, "a") as f:
-        f.write("\n".join(log_lines) + "\n")
+        f.write("\n".join(log_lines) + "\n\n")
+
+    print("\n".join(log_lines))
 
 
 if __name__ == "__main__":
