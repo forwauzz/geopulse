@@ -11202,3 +11202,24 @@ Verification:
 - `npx.cmd tsc --noEmit` — 0 errors
 
 Files: `components/startup-admin-control-view.tsx`, `agents/memory/PROJECT_STATE.md`
+
+---
+
+### 2026-04-06 — BF-006
+Completed BF-006: Add remove member + delete account UI to `AgencyAdminControlView`.
+
+What was done:
+- Imported `removeAgencyMember` + `deleteAgencyAccount` from agency actions
+- Added `useActionState` hooks for both new actions (removeMemberAction, deleteAccountAction)
+- Agency users list: each user row is now flex with inline Remove form (hidden agencyAccountId + userId); error feedback shown below the list
+- Per-account: added collapsed `<details>` disclosure at the bottom of each account card with a name-confirm delete form, red submit button, and inline success/error feedback — mirrors the startup pattern from BF-005
+- All existing create/flag/policy/user forms unchanged
+
+What was NOT changed:
+- No server-side logic in this file
+- Clients table, feature flags list, model policies list — display-only, unchanged
+
+Verification:
+- `npx.cmd tsc --noEmit` — 0 errors
+
+Files: `components/agency-admin-control-view.tsx`, `agents/memory/PROJECT_STATE.md`

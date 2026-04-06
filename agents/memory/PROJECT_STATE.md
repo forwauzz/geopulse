@@ -351,7 +351,7 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | BF-003 | Add `removeStartupWorkspaceMember` + `deleteStartupWorkspace` server actions | Backend | ✅ DONE | `app/dashboard/startups/actions.ts`, COMPLETION_LOG BF-003 |
 | BF-004 | Add `removeAgencyMember` + `deleteAgencyAccount` server actions | Backend | ✅ DONE | `app/dashboard/agencies/actions.ts`, COMPLETION_LOG BF-004 |
 | BF-005 | Add remove member + delete workspace UI to `StartupAdminControlView` | Frontend | ✅ DONE | `components/startup-admin-control-view.tsx`, COMPLETION_LOG BF-005 |
-| BF-006 | Add remove member + delete account UI to `AgencyAdminControlView` | Frontend | ❌ PENDING | — |
+| BF-006 | Add remove member + delete account UI to `AgencyAdminControlView` | Frontend | ✅ DONE | `components/agency-admin-control-view.tsx`, COMPLETION_LOG BF-006 |
 
 ### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)
 > Restructure the startup dashboard into Overview / Audits / Delivery / Settings via `?tab=` (default `overview`). Plan: `.cursor/plans/startup_dashboard_tab_redesign_997f45c9.plan.md`. Shared types: `app/dashboard/startup/components/startup-tab-types.ts`.
