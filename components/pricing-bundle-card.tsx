@@ -210,13 +210,13 @@ export function PricingBundleCard({
       : 'Subscribe';
 
   return (
-    <article className="flex flex-col rounded-2xl bg-surface-container-low p-8 shadow-float">
+    <article className={`flex flex-col rounded-2xl bg-surface-container-low p-8 shadow-float${!isFree ? ' border-t-2 border-gold/40' : ''}`}>
       {/* Header */}
       <div>
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
           {name}
         </p>
-        <h2 className="mt-3 font-headline text-3xl font-bold text-on-background">{priceLabel}</h2>
+        <h2 className="mt-3 font-sans text-3xl font-bold text-on-background">{priceLabel}</h2>
         {trialDays > 0 && !isCurrentPlan && (
           <p className="mt-1 font-body text-xs text-on-surface-variant">
             Free for {trialDays} days, then {priceLabel} after trial

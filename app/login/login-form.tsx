@@ -27,7 +27,7 @@ export function LoginForm({ nextPath, isSignUp = false }: Props) {
       <form action={passwordAction} className="flex flex-col gap-4 rounded-2xl bg-surface-container-low p-5">
         <input type="hidden" name="next" value={nextPath} />
         <div>
-          <h2 className="font-headline text-lg font-semibold text-on-background">Password sign-in</h2>
+          <h2 className="font-sans text-lg font-semibold text-on-background">Password sign-in</h2>
           <p className="mt-1 font-body text-sm text-on-surface-variant">
             Use this for agency or pilot accounts that have a Supabase password.
           </p>
@@ -69,7 +69,7 @@ export function LoginForm({ nextPath, isSignUp = false }: Props) {
       <form action={magicLinkAction} className="flex flex-col gap-4 rounded-2xl bg-surface-container-low p-5">
         <input type="hidden" name="next" value={nextPath} />
         <div>
-          <h2 className="font-headline text-lg font-semibold text-on-background">
+          <h2 className="font-sans text-lg font-semibold text-on-background">
             {isSignUp ? 'Get started with email' : 'Magic link'}
           </h2>
           <p className="mt-1 font-body text-sm text-on-surface-variant">

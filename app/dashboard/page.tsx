@@ -78,12 +78,12 @@ function StatCard({
   readonly accent?: boolean;
 }) {
   return (
-    <div className="rounded-xl bg-surface-container-lowest px-4 py-4">
+    <div className={`rounded-xl bg-surface-container-lowest px-4 py-4${accent ? ' border-l-2 border-gold/50' : ''}`}>
       <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
         {label}
       </p>
       <p
-        className={`mt-1 font-headline text-2xl font-bold ${accent ? 'text-primary' : 'text-on-background'}`}
+        className={`mt-1 font-sans text-2xl font-bold ${accent ? 'text-primary' : 'text-on-background'}`}
       >
         {value}
       </p>

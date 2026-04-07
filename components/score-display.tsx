@@ -38,8 +38,8 @@ function scoreNarrative(score: number): string {
   if (score >= 90) return 'Excellent readiness. Minor refinements only.';
   if (score >= 75) return 'Strong readiness. Close a few gaps to improve clarity.';
   if (score >= 55) return 'Mixed readiness. Key signals are missing or inconsistent.';
-  if (score >= 35) return 'Low readiness. Address the critical gaps first.';
-  return 'Critical readiness gaps. Prioritize the fixes below.';
+  if (score >= 35) return 'Low readiness. Start with the key visibility gaps below.';
+  return 'Significant visibility gaps. Start with the highest-impact fixes below.';
 }
 
 function severityLabel(weight: number | undefined): 'High' | 'Medium' | 'Low' {
@@ -78,16 +78,16 @@ function categoryScoreColor(score: number): string {
   return 'text-red-700 bg-red-50 dark:bg-red-500/15 dark:text-red-200';
 }
 
-function readinessStatus(score: number): 'Good' | 'Needs improvement' | 'Critical' {
+function readinessStatus(score: number): 'Good' | 'Needs improvement' | 'Needs attention' {
   if (score >= 75) return 'Good';
   if (score >= 45) return 'Needs improvement';
-  return 'Critical';
+  return 'Needs attention';
 }
 
 function readinessBadgeClasses(status: ReturnType<typeof readinessStatus>): string {
   if (status === 'Good') return 'bg-primary/10 text-primary';
-  if (status === 'Needs improvement') return 'bg-warning/15 text-on-background';
-  return 'bg-error/10 text-error';
+  if (status === 'Needs improvement') return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200';
+  return 'bg-surface-container-high text-on-surface-variant';
 }
 
 export function ScoreDisplay({
@@ -141,13 +141,13 @@ export function ScoreDisplay({
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="font-headline text-5xl font-bold text-on-background md:text-6xl">{s}</span>
+              <span className="font-sans text-5xl font-bold text-on-background md:text-6xl">{s}</span>
               <span className="font-label text-xs uppercase tracking-tighter text-outline-variant">out of 100</span>
             </div>
           </div>
           <div className="min-w-0 flex-1 text-center md:text-left">
             <div className="mb-3 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-              <span className="font-headline text-4xl font-bold text-primary">{letterGrade}</span>
+              <span className="font-sans text-4xl font-bold text-primary">{letterGrade}</span>
               <span className="rounded-md bg-secondary-container/80 px-3 py-1 font-label text-xs font-semibold uppercase tracking-widest text-on-background">
                 AI Search Readiness
               </span>
@@ -169,12 +169,12 @@ export function ScoreDisplay({
         <aside className="relative flex min-h-[280px] flex-col justify-between overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-lowest p-8 text-on-background shadow-float lg:col-span-4">
           <div>
             <span className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">Share</span>
-            <h3 className="mt-4 font-headline text-2xl leading-snug">Your score snapshot</h3>
+            <h3 className="mt-4 font-sans text-2xl font-semibold leading-snug">Your score snapshot</h3>
           </div>
           <div className="mt-8 space-y-4">
             <div className="flex items-end justify-between gap-4">
               <div>
-                <div className="font-headline text-4xl font-bold">{s} / 100</div>
+                <div className="font-sans text-4xl font-bold">{s} / 100</div>
                 <p className="mt-1 font-body text-sm text-on-surface-variant">
                   Share this results page and the score preview will travel with it.
                 </p>
@@ -218,7 +218,7 @@ export function ScoreDisplay({
 
       {/* Category scores — v2 five-pillar model */}
       <section>
-        <h2 className="mb-4 font-headline text-lg font-bold text-on-background">Category breakdown</h2>
+        <h2 className="mb-4 font-sans text-lg font-bold text-on-background">Category breakdown</h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           {displayCategories.map((cat) => {
             const label = CATEGORY_LABELS[cat.category] ?? cat.category;
@@ -230,7 +230,7 @@ export function ScoreDisplay({
                 <span className="text-center font-label text-xs font-semibold">{label}</span>
                 {hasScore ? (
                   <>
-                    <span className="font-headline text-2xl font-bold">{cat.score}</span>
+                    <span className="font-sans text-2xl font-bold">{cat.score}</span>
                     <span className="text-[11px] font-bold uppercase tracking-wider">{cat.letterGrade}</span>
                   </>
                 ) : (
@@ -244,7 +244,7 @@ export function ScoreDisplay({
 
       {/* Issue list with severity chips + numbered priority */}
       <section>
-        <h2 className="mb-6 font-headline text-2xl font-bold text-on-background">Top issues to fix</h2>
+        <h2 className="mb-6 font-sans text-2xl font-bold text-on-background">Top issues to fix</h2>
         <ul className="space-y-4">
           {sortedFailed.length === 0 ? (
             <li className="font-body text-on-surface-variant">
@@ -260,7 +260,7 @@ export function ScoreDisplay({
                   key={`${String(i.check ?? i.checkId)}-${String(idx)}`}
                   className="flex gap-4 rounded-xl bg-surface-container-lowest p-5 shadow-float"
                 >
-                  <span className="font-headline text-2xl font-bold text-outline-variant/40">{num}</span>
+                  <span className="font-sans text-2xl font-bold text-outline-variant/40">{num}</span>
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${sevClasses}`}>{sev}</span>

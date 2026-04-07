@@ -154,7 +154,7 @@ export default async function HomePage({
               </div>
               <div className="mb-10 grid grid-cols-1 gap-8 md:grid-cols-3">
                 <div>
-                  <div className="mb-2 font-headline text-5xl font-bold text-primary">—</div>
+                  <div className="mb-2 font-sans text-5xl font-bold text-primary">—</div>
                   <div className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
                     AI Search Readiness Score
                   </div>

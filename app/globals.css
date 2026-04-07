@@ -25,6 +25,7 @@
   --color-tertiary-container: 67 136 253;
   --color-outline-variant: 171 180 181;
   --color-error: 159 64 61;
+  --color-gold: 183 156 96;          /* muted gold — structural use only (dividers, accents, separators) */
 }
 
 .dark {
@@ -50,6 +51,7 @@
   --color-tertiary-container: 41 82 148;
   --color-outline-variant: 78 95 113;
   --color-error: 235 116 116;
+  --color-gold: 196 170 108;         /* muted gold — slightly lighter in dark mode */
 }
 
 body {
@@ -93,6 +95,6 @@ body {
   position: absolute;
   inset: 0;
   width: 30%;
-  background: linear-gradient(90deg, transparent, rgba(247, 201, 95, 0.8), transparent);
+  background: linear-gradient(90deg, transparent, rgb(var(--color-gold) / 0.7), transparent);
   animation: loading-stripe-slide 1.8s ease-in-out infinite;
 }

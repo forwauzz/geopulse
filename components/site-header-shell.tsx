@@ -23,8 +23,8 @@ export function SiteHeaderShell({
     ? 'sticky top-0 z-50 border-b border-white/10 bg-black/95 backdrop-blur'
     : 'sticky top-0 z-50 bg-surface';
   const primaryNavLinkClassName = isBlogRoute
-    ? 'hidden font-headline text-lg font-semibold text-white md:inline'
-    : 'hidden font-headline text-lg font-semibold text-on-background md:inline';
+    ? 'hidden font-sans text-lg font-semibold text-white md:inline'
+    : 'hidden font-sans text-lg font-semibold text-on-background md:inline';
   const subtleNavLinkClassName = isBlogRoute
     ? 'text-xs font-semibold uppercase tracking-widest text-zinc-300 transition-colors hover:text-white'
     : 'text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background';

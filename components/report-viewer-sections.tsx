@@ -105,7 +105,7 @@ export function ReportSummary({ scan }: { scan: ScanResponse }) {
     <section className="space-y-6 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-float md:p-8">
       <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
         <div className="rounded-2xl bg-surface-container-low p-6 text-center">
-          <div className="font-headline text-5xl font-bold text-primary">{score}</div>
+          <div className="font-sans text-5xl font-bold text-primary">{score}</div>
           <div className="mt-1 font-label text-xs uppercase tracking-widest text-on-surface-variant">
             Overall score
           </div>
@@ -161,7 +161,7 @@ export function ReportSummary({ scan }: { scan: ScanResponse }) {
                       {category.letterGrade}
                     </span>
                   </div>
-                  <div className="mt-3 font-headline text-2xl font-bold">
+                  <div className="mt-3 font-sans text-2xl font-bold">
                     {category.score}
                   </div>
                   <div className="mt-1 font-body text-xs">{label}</div>

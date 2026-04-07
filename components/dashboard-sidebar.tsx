@@ -94,7 +94,8 @@ const WORKSPACE_NAV: readonly NavItem[] = [
     highlight: true,
   },
   { href: '/dashboard/connectors', label: 'Connectors', icon: 'cable', exact: true },
-  { href: '/dashboard/workspace', label: 'Workspace', icon: 'settings', exact: true },
+  { href: '/dashboard/billing', label: 'Billing', icon: 'credit_card', exact: true },
+  { href: '/dashboard/workspace', label: 'Settings', icon: 'settings', exact: true },
   { href: '/blog', label: 'Blog', icon: 'article' },
 ];
 
@@ -112,10 +113,10 @@ export function DashboardSidebar({ userEmail, isAdmin, signOutAction }: Dashboar
       </div>
 
       {/* ── Bottom: admin link + user info ───────────────── */}
-      <div className="mt-6 space-y-1 lg:mt-8">
+      <div className="mt-6 border-t border-gold/20 pt-4 space-y-1 lg:mt-8 lg:pt-5">
         {/* Admin Console — only visible to operators */}
         {isAdmin ? (
-          <div className="mb-2 border-b border-outline-variant/30 pb-3">
+          <div className="mb-2 border-b border-gold/30 pb-3">
             <Link
               href="/admin"
               onClick={closeMenu}

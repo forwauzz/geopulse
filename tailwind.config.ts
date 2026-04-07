@@ -41,6 +41,7 @@ export default {
         'tertiary-container': 'rgb(var(--color-tertiary-container) / <alpha-value>)',
         'outline-variant': 'rgb(var(--color-outline-variant) / <alpha-value>)',
         error: 'rgb(var(--color-error) / <alpha-value>)',
+        gold: 'rgb(var(--color-gold) / <alpha-value>)',
       },
       boxShadow: {
         float: '0 12px 48px rgba(17, 17, 17, 0.04)',
