@@ -188,6 +188,34 @@ export async function POST(request: Request): Promise<Response> {
     structuredLog('billing_stripe_customer_created', { userId: user.id, customerId: stripeCustomerId }, 'info');
   }
 
+  // ── Secondary duplicate guard: check Stripe directly ──────────────────────
+  // The DB check above can miss duplicates during the race window between
+  // checkout completion and the webhook writing the user_subscriptions row.
+  // Querying Stripe directly catches an in-flight subscription that isn't in
+  // our DB yet.
+  if (stripeCustomerId.trim() && bundle.stripe_price_id?.trim()) {
+    const existingStripeSubs = await stripe.subscriptions.list({
+      customer: stripeCustomerId,
+      price: bundle.stripe_price_id,
+      status: 'all',
+      limit: 5,
+    });
+    const liveStripeSub = existingStripeSubs.data.find(
+      (s) => s.status === 'active' || s.status === 'trialing' || s.status === 'incomplete'
+    );
+    if (liveStripeSub) {
+      structuredLog(
+        'billing_subscribe_stripe_duplicate_detected',
+        { userId: user.id, bundleKey, stripeSubId: liveStripeSub.id, status: liveStripeSub.status },
+        'warning'
+      );
+      return Response.json(
+        { error: { code: 'already_subscribed', message: 'You already have an active subscription for this bundle.' } },
+        { status: 409 }
+      );
+    }
+  }
+
   // ── Create Stripe Checkout session ─────────────────────────────────────────
   const trialDays = typeof bundle.trial_period_days === 'number' && bundle.trial_period_days > 0
     ? bundle.trial_period_days

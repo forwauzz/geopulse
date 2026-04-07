@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { getScanApiEnv, type ScanApiEnv } from '@/lib/server/cf-env';
-import { isAdminEmail, requireAdminOrRedirect } from '@/lib/server/require-admin';
+import { isAdminEmail, isUserPlatformAdmin, requireAdminOrRedirect } from '@/lib/server/require-admin';
 import { buildE2EAdminDb, isE2EAuthEnabled } from '@/lib/supabase/e2e-auth';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -57,12 +57,19 @@ export async function loadAdminPageContext(nextPath: string): Promise<AdminPageC
     redirect(`/admin/login?next=${nextPath}`);
   }
 
-  requireAdminOrRedirect(user.email);
-
   const env = await getScanApiEnv();
   const adminDbResult = buildAdminDbOrMessage(env);
   if (!adminDbResult.ok) {
     return adminDbResult;
+  }
+
+  // DB-backed admin check (primary). Falls back gracefully if migration not yet applied.
+  const isAdmin = await isUserPlatformAdmin(user.id, adminDbResult.adminDb);
+  if (!isAdmin) {
+    // Legacy fallback: allow ADMIN_EMAIL during transition period
+    if (!isAdminEmail(user.email)) {
+      redirect('/dashboard');
+    }
   }
 
   return {
@@ -79,7 +86,7 @@ export async function loadAdminActionContext(): Promise<AdminActionContextResult
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user || !isAdminEmail(user.email)) {
+  if (!user) {
     return { ok: false, message: 'Admin access required.' };
   }
 
@@ -87,6 +94,15 @@ export async function loadAdminActionContext(): Promise<AdminActionContextResult
   const adminDbResult = buildAdminDbOrMessage(env);
   if (!adminDbResult.ok) {
     return adminDbResult;
+  }
+
+  // DB-backed admin check (primary). Falls back gracefully if migration not yet applied.
+  const isAdmin = await isUserPlatformAdmin(user.id, adminDbResult.adminDb);
+  if (!isAdmin) {
+    // Legacy fallback: allow ADMIN_EMAIL during transition period
+    if (!isAdminEmail(user.email)) {
+      return { ok: false, message: 'Admin access required.' };
+    }
   }
 
   return {

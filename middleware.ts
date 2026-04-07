@@ -29,10 +29,23 @@ export async function middleware(request: NextRequest) {
 
   ensureAnonymousId(request, response);
 
-  if (request.nextUrl.pathname.startsWith('/dashboard') && !userId) {
+  const { pathname } = request.nextUrl;
+
+  // Guard: /dashboard requires authentication
+  if (pathname.startsWith('/dashboard') && !userId) {
     const login = new URL('/login', request.url);
-    login.searchParams.set('next', `${request.nextUrl.pathname}${request.nextUrl.search}`);
+    login.searchParams.set('next', `${pathname}${request.nextUrl.search}`);
     const redirect = NextResponse.redirect(login);
+    ensureAnonymousId(request, redirect);
+    return redirect;
+  }
+
+  // Guard: /admin/* (except /admin/login) requires an authenticated session.
+  // The full DB-backed admin check happens inside app/admin/layout.tsx —
+  // this gate only prevents completely unauthenticated users from hitting admin routes.
+  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login') && !userId) {
+    const adminLogin = new URL('/admin/login', request.url);
+    const redirect = NextResponse.redirect(adminLogin);
     ensureAnonymousId(request, redirect);
     return redirect;
   }

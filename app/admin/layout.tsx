@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { isAdminEmail } from '@/lib/server/require-admin';
+import { isAdminEmail, isUserPlatformAdmin } from '@/lib/server/require-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,13 @@ export default async function AdminLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user || !isAdminEmail(user.email)) {
+  if (!user) {
+    redirect('/admin/login');
+  }
+
+  // DB-backed admin check (primary). Legacy ADMIN_EMAIL env var as fallback.
+  const isAdmin = await isUserPlatformAdmin(user.id);
+  if (!isAdmin && !isAdminEmail(user.email)) {
     redirect('/dashboard');
   }
 
