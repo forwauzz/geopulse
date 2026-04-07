@@ -96,12 +96,25 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(null, { status: 200 });
   }
 
-  // ── checkout.session.completed (existing — DO NOT modify) ──────────────────
+  // ── checkout.session.completed ─────────────────────────────────────────────
   if (event.type !== 'checkout.session.completed') {
     return new Response(null, { status: 200 });
   }
 
   const sessionObj = event.data.object as Stripe.Checkout.Session;
+
+  // Subscription-mode checkouts (BILL stream) only have bundle_key + user_id in metadata.
+  // Workspace provisioning is handled by customer.subscription.created — skip here.
+  if (sessionObj.mode === 'subscription') {
+    structuredLog('stripe_subscription_checkout_completed_skipped', {
+      stripeEventId: event.id,
+      sessionId: sessionObj.id,
+      bundleKey: sessionObj.metadata?.['bundle_key'] ?? '',
+      userId: sessionObj.metadata?.['user_id'] ?? '',
+    }, 'info');
+    return new Response(null, { status: 200 });
+  }
+
   const session =
     sessionObj.customer_details?.email || sessionObj.customer_email
       ? sessionObj
