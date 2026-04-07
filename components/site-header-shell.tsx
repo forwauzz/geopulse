@@ -113,12 +113,7 @@ export function SiteHeaderShell({
               >
                 Sign in
               </Link>
-              <Link
-                href="/admin/login?next=/dashboard"
-                className={`hidden md:inline ${subtleNavLinkClassName}`}
-              >
-                Admin sign in
-              </Link>
+              {/* Admin link removed — admins use /login then navigate to /admin directly */}
             </>
           )}
           {!isBlogRoute ? <ThemeToggle /> : null}

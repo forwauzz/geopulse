@@ -16,8 +16,9 @@ export default async function AdminLoginPage(props: Props) {
       <p className="font-label text-sm font-semibold uppercase tracking-widest text-primary">Admin</p>
       <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Operator sign-in</h1>
       <p className="mt-2 font-body text-on-surface-variant">
-        Use the email that matches <code className="rounded bg-surface-container-high px-1.5 py-0.5 text-sm">ADMIN_EMAIL</code>{' '}
-        and your Supabase password.
+        Sign in with your GEO-Pulse account. Access is granted to users listed in{' '}
+        <strong>Platform Admins</strong> — or the <code className="rounded bg-surface-container-high px-1.5 py-0.5 text-sm">ADMIN_EMAIL</code>{' '}
+        env var during transition.
       </p>
       <AdminLoginForm nextPath={nextPath} />
       <p className="mt-8 font-body text-sm text-on-surface-variant">
