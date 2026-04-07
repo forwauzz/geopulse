@@ -59,6 +59,16 @@ export async function GET(request: NextRequest) {
       const admin = createServiceRoleClient(url, serviceKey);
       await linkGuestPurchasesToUser(admin, user.id, user.email);
 
+      // ── Persist name from signup form (optional) ────────────────────────────
+      const nameParam = searchParams.get('name')?.trim();
+      if (nameParam) {
+        await admin
+          .from('users')
+          .update({ full_name: nameParam })
+          .eq('id', user.id);
+      }
+      // ── End name persist ────────────────────────────────────────────────────
+
       // ── New-user detection (BILL-006) ───────────────────────────────────────
       // Detect first-time sign-in by checking how recently the user row was created.
       // `created_at` is written on first OAuth/magic-link login by our upsert trigger.

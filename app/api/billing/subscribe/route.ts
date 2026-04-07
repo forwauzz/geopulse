@@ -193,7 +193,7 @@ export async function POST(request: Request): Promise<Response> {
     ? bundle.trial_period_days
     : 0;
 
-  const successUrl = `${baseUrl}/pricing?subscription=success&bundle=${bundleKey}`;
+  const successUrl = `${baseUrl}/dashboard?onboarded=true&bundle=${bundleKey}`;
   const cancelUrl = `${baseUrl}/pricing?subscription=cancel`;
 
   const session = await stripe.checkout.sessions.create({

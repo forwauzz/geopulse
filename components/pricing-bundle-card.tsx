@@ -85,6 +85,7 @@ export function PricingBundleCard({
     bypassTurnstile ? 'e2e-bypass-token' : null
   );
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [isAwaitingTurnstile, setIsAwaitingTurnstile] = useState(false);
   const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
   const autoSubscribeFiredRef = useRef(false);
 
@@ -106,7 +107,14 @@ export function PricingBundleCard({
 
   function resetTurnstile(): void {
     setTurnstileToken(bypassTurnstile ? 'e2e-bypass-token' : null);
+    setIsAwaitingTurnstile(false);
     turnstileRef.current?.reset();
+  }
+
+  function requestTurnstileToken(): void {
+    if (bypassTurnstile) return; // already has a token
+    turnstileRef.current?.execute();
+    setIsAwaitingTurnstile(true);
   }
 
   function effectiveToken(): string | null {
@@ -140,7 +148,12 @@ export function PricingBundleCard({
   useEffect(() => {
     if (!autoSubscribe || !isAuthenticated || autoSubscribeFiredRef.current) return;
     const t = effectiveToken();
-    if (!t) return;
+    if (!t) {
+      // With options.execution "execute", token won't arrive until we trigger it
+      if (!bypassTurnstile && turnstileSiteKey.trim()) requestTurnstileToken();
+      return;
+    }
+    setIsAwaitingTurnstile(false);
     autoSubscribeFiredRef.current = true;
     startTransition(async () => {
       try {
@@ -164,7 +177,7 @@ export function PricingBundleCard({
   function handleSubscribe() {
     setCheckoutError(null);
     if (!isAuthenticated) {
-      window.location.href = `/login?next=/pricing&bundle=${bundleKey}`;
+      window.location.href = `/login?mode=signup&next=/pricing&bundle=${bundleKey}`;
       return;
     }
 
@@ -175,7 +188,8 @@ export function PricingBundleCard({
 
     const t = effectiveToken();
     if (needsPaidCheckout && !t) {
-      setCheckoutError('Please complete the verification.');
+      // Token not ready yet — trigger Turnstile and proceed automatically on success
+      requestTurnstileToken();
       return;
     }
 
@@ -241,13 +255,29 @@ export function PricingBundleCard({
               <Turnstile
                 ref={turnstileRef}
                 siteKey={turnstileSiteKey}
+                options={{ execution: 'execute' }}
                 onSuccess={(next) => {
                   setTurnstileToken(next);
                   setCheckoutError(null);
+                  if (isAwaitingTurnstile) {
+                    setIsAwaitingTurnstile(false);
+                    startTransition(async () => {
+                      try {
+                        await postSubscribe(next);
+                      } catch {
+                        setCheckoutError('Something went wrong. Please try again.');
+                        resetTurnstile();
+                      }
+                    });
+                  }
                 }}
-                onExpire={() => setTurnstileToken(null)}
+                onExpire={() => {
+                  setTurnstileToken(null);
+                  setIsAwaitingTurnstile(false);
+                }}
                 onError={(code) => {
                   setTurnstileToken(null);
+                  setIsAwaitingTurnstile(false);
                   setCheckoutError(turnstileWidgetErrorMessage(code));
                 }}
               />
@@ -260,10 +290,10 @@ export function PricingBundleCard({
             <button
               type="button"
               onClick={handleSubscribe}
-              disabled={isPending || (needsPaidCheckout && !turnstileConfigured)}
+              disabled={isPending || isAwaitingTurnstile}
               className="inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isPending ? 'Preparing…' : ctaLabel}
+              {isPending ? 'Preparing…' : isAwaitingTurnstile ? 'Verifying…' : ctaLabel}
             </button>
           </div>
         )}

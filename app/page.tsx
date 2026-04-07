@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { ScanForm } from '@/components/scan-form';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
@@ -85,6 +86,14 @@ export default async function HomePage({
             <span className="material-symbols-outlined text-sm">bolt</span>
             <span className="font-label text-xs uppercase tracking-wider">Fast results</span>
           </div>
+        </div>
+        <div className="mt-6">
+          <Link
+            href="/pricing"
+            className="font-body text-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
+          >
+            Want ongoing audits? See plans →
+          </Link>
         </div>
       </section>
 
@@ -204,9 +213,17 @@ export default async function HomePage({
         <h2 className="mb-10 font-headline text-3xl font-bold text-on-background md:text-4xl lg:text-5xl">
           See how clearly your site reads for AI search
         </h2>
-        <p className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
-          Immediate results · No credit card for the free scan
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/pricing"
+            className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-medium text-on-primary transition-opacity hover:opacity-90"
+          >
+            Get started free
+          </Link>
+          <p className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
+            No credit card for the free scan
+          </p>
+        </div>
       </section>
     </main>
   );

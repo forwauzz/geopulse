@@ -7,9 +7,10 @@ import { sendMagicLink, signInWithPassword } from './actions';
 
 type Props = {
   readonly nextPath: string;
+  readonly isSignUp?: boolean;
 };
 
-export function LoginForm({ nextPath }: Props) {
+export function LoginForm({ nextPath, isSignUp = false }: Props) {
   const [passwordState, passwordAction, passwordPending] = useActionState(
     signInWithPassword,
     null
@@ -68,11 +69,27 @@ export function LoginForm({ nextPath }: Props) {
       <form action={magicLinkAction} className="flex flex-col gap-4 rounded-2xl bg-surface-container-low p-5">
         <input type="hidden" name="next" value={nextPath} />
         <div>
-          <h2 className="font-headline text-lg font-semibold text-on-background">Magic link</h2>
+          <h2 className="font-headline text-lg font-semibold text-on-background">
+            {isSignUp ? 'Get started with email' : 'Magic link'}
+          </h2>
           <p className="mt-1 font-body text-sm text-on-surface-variant">
-            Use this for normal customer recovery and existing report access.
+            {isSignUp
+              ? 'No password needed — we\'ll email you a link to complete signup.'
+              : 'Use this for normal customer recovery and existing report access.'}
           </p>
         </div>
+        {isSignUp && (
+          <label className="flex flex-col gap-2 font-body text-sm font-medium text-on-background">
+            Name <span className="font-normal text-on-surface-variant">(optional)</span>
+            <input
+              name="full_name"
+              type="text"
+              autoComplete="name"
+              className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 font-body text-base text-on-background outline-none ring-0 focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40"
+              placeholder="Your name"
+            />
+          </label>
+        )}
         <label className="flex flex-col gap-2 font-body text-sm font-medium text-on-background">
           Email
           <input
@@ -89,7 +106,7 @@ export function LoginForm({ nextPath }: Props) {
           disabled={magicLinkPending}
           className="rounded-xl bg-primary px-4 py-3 font-semibold text-on-primary transition hover:bg-primary-dim disabled:opacity-50"
         >
-          {magicLinkPending ? 'Sending...' : 'Email me a sign-in link'}
+          {magicLinkPending ? 'Sending...' : isSignUp ? 'Email me a sign-up link' : 'Email me a sign-in link'}
         </button>
         {magicLinkState?.ok === true ? (
           <p className="font-body text-sm text-tertiary-dim">{magicLinkState.message}</p>

@@ -21,6 +21,8 @@ type Props = {
     agencyClient?: string;
     startupWorkspace?: string;
     onboarding?: string;
+    onboarded?: string;
+    bundle?: string;
   }>;
 };
 

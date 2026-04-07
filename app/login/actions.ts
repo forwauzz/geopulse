@@ -39,6 +39,9 @@ export async function sendMagicLink(
   }
 
   const nextPath = safeNextPath(formData.get('next'));
+  const fullName = typeof formData.get('full_name') === 'string'
+    ? (formData.get('full_name') as string).trim()
+    : '';
   let supabase;
   try {
     supabase = await createSupabaseServerClient();
@@ -46,7 +49,9 @@ export async function sendMagicLink(
     return { ok: false, message: 'Authentication is not configured.' };
   }
 
-  const redirectTo = `${appUrl}/auth/callback?next=${encodeURIComponent(nextPath)}`;
+  const redirectTo =
+    `${appUrl}/auth/callback?next=${encodeURIComponent(nextPath)}` +
+    (fullName ? `&name=${encodeURIComponent(fullName)}` : '');
 
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,
