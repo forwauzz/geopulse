@@ -8,6 +8,8 @@ Last consolidated: 2026-04-08
 
 Admin UX: `/dashboard` sidebar admin affordances use `platform_admin_users`; `/dashboard/content` is wrapped by `app/dashboard/(admin)/layout.tsx` for a single admin gate — failed admin context (other than service-role misconfiguration) redirects to `/dashboard` instead of an inline error; `app/admin/layout.tsx`, the admin login action, and the distribution OAuth gate all enforce the same DB-backed platform admin allowlist; the middleware only enforces ordinary session presence for `/admin/*`; distribution OAuth callback uses the same DB-backed check.
 
+The admin user detail page now has a hard-delete danger zone for test accounts: it requires exact-email confirmation, blocks self-delete and platform-admin deletion, cancels live subscriptions, removes user-owned operational artifacts, deletes scans/payments, and then deletes auth access so the account disappears from the product path.
+
 GEO-Pulse is a working Next.js + Cloudflare Workers product with these end-to-end paths implemented:
 - free scan
 - guided results journey

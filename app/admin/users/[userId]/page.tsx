@@ -5,6 +5,7 @@ import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscriptio
 import {
   assignUserPlan,
   cancelUserSubscription,
+  deleteUserAccount,
   provisionWorkspaceAdmin,
 } from '../actions';
 
@@ -247,6 +248,42 @@ export default async function AdminUserDetailPage({
             })}
           </div>
         )}
+      </section>
+
+      <section className="space-y-3 rounded-2xl border border-error/20 bg-error/5 p-6">
+        <div className="space-y-1">
+          <h2 className="font-headline text-lg font-semibold text-error">Danger zone</h2>
+          <p className="text-sm text-on-surface-variant">
+            This permanently removes the user account, related billing records, operational
+            artifacts, and auth access. Use only for test accounts or accounts you intend to
+            fully purge.
+          </p>
+        </div>
+
+        <form action={deleteUserAccount} className="flex flex-col gap-3 sm:max-w-xl">
+          <input type="hidden" name="userId" value={userId} />
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-on-surface-variant">Type the user email to confirm</span>
+            <input
+              type="email"
+              name="confirmEmail"
+              required
+              placeholder={user.email ?? 'user@example.com'}
+              className="rounded-xl border border-outline-variant/40 bg-surface-container-low px-3 py-2 text-sm text-on-background focus:border-error focus:outline-none focus:ring-1 focus:ring-error"
+            />
+          </label>
+          <p className="text-xs text-on-surface-variant">
+            The email must match exactly. This action cannot be undone.
+          </p>
+          <div>
+            <button
+              type="submit"
+              className="rounded-xl border border-error/30 bg-error px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+            >
+              Delete user permanently
+            </button>
+          </div>
+        </form>
       </section>
     </div>
   );

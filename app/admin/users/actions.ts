@@ -1,5 +1,6 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
@@ -9,6 +10,7 @@ import { syncAdminCompSubscription } from '@/lib/server/admin-comp-subscription'
 import { isValidPlanType } from '@/lib/server/plan-type';
 import { structuredLog } from '@/lib/server/structured-log';
 import { syncUserPlanFromSubscriptions } from '@/lib/server/subscription-plan-sync';
+import { hardDeleteUserAccount } from '@/lib/server/user-deletion';
 
 // ── Assign plan directly (for B2B / comp accounts — no Stripe change) ────────
 export async function assignUserPlan(formData: FormData): Promise<void> {
@@ -138,4 +140,39 @@ export async function provisionWorkspaceAdmin(formData: FormData): Promise<void>
 
   revalidatePath('/admin/users');
   revalidatePath(`/admin/users/${subRow.user_id}`);
+}
+
+export async function deleteUserAccount(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) throw new Error(ctx.message);
+
+  const userId = (formData.get('userId') as string | null)?.trim();
+  const confirmEmail = (formData.get('confirmEmail') as string | null)?.trim();
+  if (!userId || !confirmEmail) {
+    throw new Error('userId and confirmEmail are required.');
+  }
+
+  const result = await hardDeleteUserAccount({
+    adminDb: ctx.adminDb,
+    requestedByUserId: ctx.user.id,
+    targetUserId: userId,
+    confirmEmail,
+  });
+
+  structuredLog(
+    'admin_delete_user_account',
+    {
+      adminId: ctx.user.id,
+      userId,
+      deletedEmail: result.deletedEmail,
+      deletedScans: result.deletedScans,
+      deletedPayments: result.deletedPayments,
+      cancelledStripeSubscriptionCount: result.cancelledStripeSubscriptionIds.length,
+      cancelledStripeSubscriptionSample: result.cancelledStripeSubscriptionIds[0] ?? null,
+    },
+    'warning',
+  );
+
+  revalidatePath('/admin/users');
+  redirect('/admin/users');
 }

@@ -1,13 +1,54 @@
-import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-
-type CookieRow = { name: string; value: string; options: CookieOptions };
+import { NextResponse, type NextRequest } from 'next/server';
 import { resolvePostSignupRedirect } from '@/lib/server/billing-onboarding-flow';
 import { linkGuestPurchasesToUser } from '@/lib/server/link-guest-purchases';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
+type CookieRow = { name: string; value: string; options: CookieOptions };
+
 export const dynamic = 'force-dynamic';
+
+function isSafeInternalPath(raw: string | null, fallback: string): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) {
+    return fallback;
+  }
+  return raw;
+}
+
+function buildLoginRedirect(
+  appUrl: string,
+  args: { next: string; error?: string | null; mode?: string | null; bundle?: string | null },
+): URL {
+  const url = new URL('/login', appUrl);
+  url.searchParams.set('next', args.next);
+  if (args.mode) {
+    url.searchParams.set('mode', args.mode);
+  }
+  if (args.bundle) {
+    url.searchParams.set('bundle', args.bundle);
+  }
+  if (args.error) {
+    url.searchParams.set('error', args.error);
+  }
+  return url;
+}
+
+async function buildSupabaseServerClient(url: string, anon: string) {
+  const cookieStore = await cookies();
+  return createServerClient(url, anon, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet: CookieRow[]) {
+        cookiesToSet.forEach(({ name, value, options }: CookieRow) => {
+          cookieStore.set(name, value, options);
+        });
+      },
+    },
+  });
+}
 
 export async function GET(request: NextRequest) {
   const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
@@ -21,85 +62,82 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const code = searchParams.get('code');
-  const nextRaw = searchParams.get('next') ?? '/dashboard';
-  const next =
-    nextRaw.startsWith('/') && !nextRaw.startsWith('//') ? nextRaw : '/dashboard';
+  const tokenHash = searchParams.get('token_hash');
+  const otpType = searchParams.get('type');
+  const next = isSafeInternalPath(searchParams.get('next'), '/dashboard');
+  const bundle = searchParams.get('bundle');
+  const mode = searchParams.get('mode') ?? (bundle ? 'signup' : null);
   const err = searchParams.get('error_description') ?? searchParams.get('error');
 
   if (err) {
-    return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(err)}`, appUrl)
-    );
+    return NextResponse.redirect(buildLoginRedirect(appUrl, { next, error: err, mode, bundle }));
   }
+
+  const supabase = await buildSupabaseServerClient(url, anon);
 
   if (code) {
-    const cookieStore = await cookies();
-    const supabase = createServerClient(url, anon, {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll();
-        },
-        setAll(cookiesToSet: CookieRow[]) {
-          cookiesToSet.forEach(({ name, value, options }: CookieRow) => {
-            cookieStore.set(name, value, options);
-          });
-        },
-      },
-    });
-
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      return NextResponse.redirect(new URL('/login?error=session', appUrl));
+      return NextResponse.redirect(
+        buildLoginRedirect(appUrl, {
+          next,
+          error: error.message || 'session',
+          mode,
+          bundle,
+        }),
+      );
     }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user?.email && serviceKey) {
-      const admin = createServiceRoleClient(url, serviceKey);
-      await linkGuestPurchasesToUser(admin, user.id, user.email);
-
-      // ── Persist name from signup form (optional) ────────────────────────────
-      const nameParam = searchParams.get('name')?.trim();
-      if (nameParam) {
-        await admin
-          .from('users')
-          .update({ full_name: nameParam })
-          .eq('id', user.id);
-      }
-      // ── End name persist ────────────────────────────────────────────────────
-
-      // ── New-user detection (BILL-006) ───────────────────────────────────────
-      // Detect first-time sign-in by checking how recently the user row was created.
-      // `created_at` is written on first OAuth/magic-link login by our upsert trigger.
-      const { data: userRow } = await admin
-        .from('users')
-        .select('created_at, plan')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      const isNewUser =
-        userRow != null &&
-        Date.now() - new Date(userRow.created_at as string).getTime() < 90_000; // 90s window
-
-      const nextParam = searchParams.get('next');
-      const bundleParam = searchParams.get('bundle');
-
-      // If user came from pricing CTA before they were logged in → resume subscribe
-      const redirectPath = resolvePostSignupRedirect({
-        nextParam,
-        bundleParam,
-        isNewUser,
-      });
-      if (redirectPath) {
-        return NextResponse.redirect(new URL(redirectPath, appUrl));
-      }
-      // ── End BILL-006 ────────────────────────────────────────────────────────
+  } else if (tokenHash && otpType === 'email') {
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: 'email',
+    });
+    if (error) {
+      return NextResponse.redirect(
+        buildLoginRedirect(appUrl, {
+          next,
+          error: error.message || 'link-invalid-or-expired',
+          mode,
+          bundle,
+        }),
+      );
     }
-
-    return NextResponse.redirect(new URL(next, appUrl));
+  } else {
+    return NextResponse.redirect(buildLoginRedirect(appUrl, { next, mode, bundle }));
   }
 
-  return NextResponse.redirect(new URL('/login', appUrl));
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user?.email && serviceKey) {
+    const admin = createServiceRoleClient(url, serviceKey);
+    await linkGuestPurchasesToUser(admin, user.id, user.email);
+
+    const nameParam = searchParams.get('name')?.trim();
+    if (nameParam) {
+      await admin.from('users').update({ full_name: nameParam }).eq('id', user.id);
+    }
+
+    const { data: userRow } = await admin
+      .from('users')
+      .select('created_at, plan')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    const isNewUser =
+      userRow != null &&
+      Date.now() - new Date(userRow.created_at as string).getTime() < 90_000;
+
+    const redirectPath = resolvePostSignupRedirect({
+      nextParam: searchParams.get('next'),
+      bundleParam: bundle,
+      isNewUser,
+    });
+    if (redirectPath) {
+      return NextResponse.redirect(new URL(redirectPath, appUrl));
+    }
+  }
+
+  return NextResponse.redirect(new URL(next, appUrl));
 }
