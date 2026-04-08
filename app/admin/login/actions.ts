@@ -2,8 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { isAdminEmail } from '@/lib/server/require-admin';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -54,7 +54,8 @@ export async function signInAdminWithPassword(
     return { ok: false, message: GENERIC_AUTH_ERROR };
   }
 
-  if (!isAdminEmail(data.user.email)) {
+  const dbPlatformAdmin = await isUserPlatformAdmin(data.user.id);
+  if (!dbPlatformAdmin) {
     await supabase.auth.signOut();
     return { ok: false, message: GENERIC_AUTH_ERROR };
   }

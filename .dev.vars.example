@@ -15,7 +15,7 @@
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 #
 # Admin password sign-in uses the same Supabase project: enable Email "password" in Auth settings
-# and set a password for the user whose email matches ADMIN_EMAIL (see .env.local for Next dev).
+# and add the user to `platform_admin_users` through `/admin/admins` after the account exists.
 # Optional: npm run eval:smoke (inserts report_eval_runs) uses NEXT_PUBLIC_SUPABASE_URL + this key from .env.local
 
 # Stripe — use test mode keys during development (sk_test_...)
@@ -25,23 +25,6 @@ STRIPE_WEBHOOK_SECRET=whsec_your_webhook_signing_secret
 STRIPE_PRICE_ID_DEEP_AUDIT=price_your_price_id
 # Get the webhook secret from: stripe listen --forward-to localhost:8787/api/webhooks/stripe
 # (use the port shown by `npm run preview` / `wrangler dev` — queue + webhook need the Worker)
-#
-# --- Subscription billing (BILL stream) ---
-# No new secrets required. STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET above cover:
-#   POST /api/billing/subscribe   — subscription checkout with free trial
-#   POST /api/webhooks/stripe     — subscription lifecycle (created/updated/deleted/invoice)
-#
-# Stripe price IDs for bundles (startup_dev, agency_core, agency_pro) are stored in the
-# `service_bundles` DB table — NOT as env vars. Seed them via:
-#   /dashboard/services → Set Bundle Service Control → stripe_price_id + monthly_price_cents
-#   (Run migration 033_subscription_billing_foundation.sql on Supabase first)
-#
-# Local webhook forwarding — include subscription events:
-#   stripe listen --forward-to localhost:8787/api/webhooks/stripe \
-#     --events checkout.session.completed,customer.subscription.created,\
-#     customer.subscription.updated,customer.subscription.deleted,\
-#     invoice.payment_succeeded,invoice.payment_failed,\
-#     customer.subscription.trial_will_end
 
 # Optional: POST /api/admin/reconcile-deep-audit (header x-reconcile-secret) to backfill payments + PDF queue
 # for paid Checkout sessions that never created a `payments` row (e.g. webhook URL wrong or offline).
@@ -56,19 +39,7 @@ GEMINI_API_KEY=your-gemini-api-key-here
 # BENCHMARK_EXECUTION_PROVIDER=gemini
 # BENCHMARK_EXECUTION_API_KEY=your-benchmark-api-key-here
 # BENCHMARK_EXECUTION_MODEL=gemini-2.0-flash
-# BENCHMARK_EXECUTION_ENABLED_MODELS=gemini-2.0-flash,gemini-2.5-flash
 # BENCHMARK_EXECUTION_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/models
-# BENCHMARK_SCHEDULE_ENABLED=true
-# BENCHMARK_SCHEDULE_QUERY_SET_ID=00000000-0000-0000-0000-000000000000
-# BENCHMARK_SCHEDULE_MODEL_ID=gemini-2.0-flash
-# BENCHMARK_SCHEDULE_RUN_MODES=ungrounded_inference,grounded_site
-# BENCHMARK_SCHEDULE_VERTICAL=law_firms
-# BENCHMARK_SCHEDULE_SEED_PRIORITIES=1
-# BENCHMARK_SCHEDULE_DOMAIN_LIMIT=20
-# BENCHMARK_SCHEDULE_MAX_RUNS=40
-# BENCHMARK_SCHEDULE_MAX_FAILURES=5
-# BENCHMARK_SCHEDULE_WINDOW_HOURS=12
-# BENCHMARK_SCHEDULE_VERSION=v1
 
 # Resend — transactional email
 # Get key: https://resend.com/api-keys
@@ -99,28 +70,11 @@ TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
 
 # Weekly marketing attribution report — email recipient (opt-in).
 # If set, the Monday cron sends a funnel + conversion summary via Resend.
-# MARKETING_REPORT_TO=you@example.com
+# MARKETING_REPORT_TO=uzzielt@techehealthservices.com
 
-# Admin-only dashboard access (matches Supabase user email).
-# ADMIN_EMAIL=uzzielt@techehealthservices.com
-
-# Optional text-first social adapter credentials (distribution slice 1B).
-# X_ACCESS_TOKEN=
-# X_API_BASE_URL=https://api.x.com
-# LINKEDIN_ACCESS_TOKEN=
-# LINKEDIN_AUTHOR_URN=urn:li:person:xxxxxxxx
-# LINKEDIN_API_BASE_URL=https://api.linkedin.com
-# Optional social OAuth credentials (distribution slice 2A).
-# X_OAUTH_CLIENT_ID=
-# X_OAUTH_CLIENT_SECRET=
-# X_OAUTH_SCOPE=tweet.read tweet.write users.read offline.access
-# X_OAUTH_AUTH_URL=https://twitter.com/i/oauth2/authorize
-# X_OAUTH_TOKEN_URL=https://api.x.com/2/oauth2/token
-# LINKEDIN_OAUTH_CLIENT_ID=
-# LINKEDIN_OAUTH_CLIENT_SECRET=
-# LINKEDIN_OAUTH_SCOPE=openid profile w_member_social
-# LINKEDIN_OAUTH_AUTH_URL=https://www.linkedin.com/oauth/v2/authorization
-# LINKEDIN_OAUTH_TOKEN_URL=https://www.linkedin.com/oauth/v2/accessToken
+# Admin-only dashboard access is DB-backed only.
+# Add the user to `platform_admin_users` through `/admin/admins`.
+# The app no longer reads an `ADMIN_EMAIL` fallback.
 
 # ============================================================
 # NON-SECRET CONFIG (also in wrangler.jsonc [vars] for production)
@@ -135,12 +89,3 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 # wrangler preview / npm run preview: use the URL Wrangler prints, e.g. http://127.0.0.1:8787
 NEXT_PUBLIC_APP_URL=http://127.0.0.1:8787
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA
-# Distribution engine admin shell flags. Keep false until intentionally testing the new UI.
-DISTRIBUTION_ENGINE_UI_ENABLED=false
-DISTRIBUTION_ENGINE_WRITE_ENABLED=false
-# Keep false until social OAuth connect is intentionally enabled.
-DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED=false
-# Background cron dispatch flag. Keep false until the new runtime path is intentionally enabled.
-DISTRIBUTION_ENGINE_BACKGROUND_ENABLED=false
-# Bounded number of due jobs the cron dispatcher will process per sweep.
-DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT=20

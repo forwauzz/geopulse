@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const constructEvent = vi.fn();
 const retrieveSession = vi.fn();
 const handleCheckoutSessionCompleted = vi.fn();
+const handleSubscriptionUpserted = vi.fn();
+const handleSubscriptionCancelled = vi.fn();
+const handleInvoicePaid = vi.fn();
+const handleInvoiceFailed = vi.fn();
 const emitMarketingEvent = vi.fn();
 const createServiceRoleClient = vi.fn();
 const getPaymentApiEnv = vi.fn();
@@ -26,6 +30,13 @@ vi.mock('@/lib/server/stripe-client', () => ({
 
 vi.mock('@/lib/server/stripe/checkout-completed', () => ({
   handleCheckoutSessionCompleted,
+}));
+
+vi.mock('@/lib/server/stripe/subscription-handlers', () => ({
+  handleSubscriptionUpserted,
+  handleSubscriptionCancelled,
+  handleInvoicePaid,
+  handleInvoiceFailed,
 }));
 
 vi.mock('@/lib/supabase/service-role', () => ({
@@ -104,6 +115,118 @@ describe('POST /api/webhooks/stripe', () => {
 
     expect(response.status).toBe(200);
     expect(handleCheckoutSessionCompleted).not.toHaveBeenCalled();
+  });
+
+  it('dispatches subscription lifecycle events to the subscription handlers', async () => {
+    getPaymentApiEnv.mockResolvedValue({
+      STRIPE_SECRET_KEY: 'sk_test',
+      STRIPE_WEBHOOK_SECRET: 'whsec_test',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://supabase.example.com',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+    });
+    constructEvent.mockReturnValue({
+      id: 'evt_sub_created',
+      type: 'customer.subscription.created',
+      data: {
+        object: {
+          id: 'sub_123',
+        },
+      },
+    });
+    const supabase = { from: vi.fn() };
+    createServiceRoleClient.mockReturnValue(supabase);
+    handleSubscriptionUpserted.mockResolvedValue(undefined);
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new Request('https://example.com/api/webhooks/stripe', {
+        method: 'POST',
+        headers: { 'stripe-signature': 'good' },
+        body: '{"id":"evt_sub_created"}',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(handleSubscriptionUpserted).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ id: 'sub_123' })
+    );
+    expect(handleSubscriptionCancelled).not.toHaveBeenCalled();
+    expect(handleInvoicePaid).not.toHaveBeenCalled();
+    expect(handleInvoiceFailed).not.toHaveBeenCalled();
+  });
+
+  it('dispatches invoice lifecycle events to the invoice handlers', async () => {
+    getPaymentApiEnv.mockResolvedValue({
+      STRIPE_SECRET_KEY: 'sk_test',
+      STRIPE_WEBHOOK_SECRET: 'whsec_test',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://supabase.example.com',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+    });
+    constructEvent.mockReturnValue({
+      id: 'evt_invoice_paid',
+      type: 'invoice.payment_succeeded',
+      data: {
+        object: {
+          id: 'in_123',
+          subscription: 'sub_123',
+        },
+      },
+    });
+    const supabase = { from: vi.fn() };
+    createServiceRoleClient.mockReturnValue(supabase);
+    handleInvoicePaid.mockResolvedValue(undefined);
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new Request('https://example.com/api/webhooks/stripe', {
+        method: 'POST',
+        headers: { 'stripe-signature': 'good' },
+        body: '{"id":"evt_invoice_paid"}',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(handleInvoicePaid).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ id: 'in_123', subscription: 'sub_123' })
+    );
+    expect(handleSubscriptionUpserted).not.toHaveBeenCalled();
+    expect(handleSubscriptionCancelled).not.toHaveBeenCalled();
+    expect(handleInvoiceFailed).not.toHaveBeenCalled();
+  });
+
+  it('skips subscription-mode checkout completions', async () => {
+    getPaymentApiEnv.mockResolvedValue({
+      STRIPE_SECRET_KEY: 'sk_test',
+      STRIPE_WEBHOOK_SECRET: 'whsec_test',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://supabase.example.com',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+    });
+    constructEvent.mockReturnValue({
+      id: 'evt_checkout_sub',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_sub',
+          mode: 'subscription',
+          metadata: { bundle_key: 'startup_dev', user_id: 'user-1' },
+        },
+      },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new Request('https://example.com/api/webhooks/stripe', {
+        method: 'POST',
+        headers: { 'stripe-signature': 'good' },
+        body: '{"id":"evt_checkout_sub"}',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(handleCheckoutSessionCompleted).not.toHaveBeenCalled();
+    expect(retrieveSession).not.toHaveBeenCalled();
   });
 
   it('handles checkout.session.completed after verified signature', async () => {

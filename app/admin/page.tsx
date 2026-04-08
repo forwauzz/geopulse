@@ -143,9 +143,8 @@ export default function AdminConsolePage() {
             <span className="material-symbols-outlined shrink-0 text-[14px] text-on-surface-variant mt-0.5" aria-hidden>
               info
             </span>
-            The admin console is gated by the{' '}
-            <code className="font-mono text-xs">ADMIN_EMAIL</code> environment variable.
-            Only the configured email address can access these pages.
+            The admin console is gated by the <code className="font-mono text-xs">platform_admin_users</code>{' '}
+            table. Only seeded platform admins can access these pages.
           </li>
         </ul>
       </div>

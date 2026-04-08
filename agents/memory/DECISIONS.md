@@ -144,3 +144,23 @@ interface PDFGenerator {
 ```
 
 **Consequences:** Swapping Gemini → Cloudflare Workers AI requires only a new `LLMProvider` implementation. Testing uses mock implementations. The interfaces are defined in `workers/lib/interfaces/` and are the single source of truth.
+
+---
+
+## ADR-009 — Subscription truth: `user_subscriptions` + coarse `users.plan` (`plan_type`)
+
+**Status:** Accepted
+**Date:** 2026-04-08
+**Decided by:** Architect (implementation alignment with Orchestrator backlog BILL-010)
+
+**Context:** Self-serve bundles (`startup_lite`, `startup_dev`, `agency_core`, `agency_pro`) and Stripe webhooks coexist with an older `users.plan` column typed as `plan_type` (`free`, `pro`, `agency` from `001_initial_schema.sql`). Handlers and admin tools risk writing divergent values.
+
+**Decision:**
+
+1. **Canonical subscription and paid-tier identity for Stripe-backed customers** is the row in **`user_subscriptions`**: `bundle_key`, `status`, Stripe ids, billing periods, and links to provisioned workspaces. This is the source of truth for “what they pay for” and for entitlement resolution that keys off active subscription + bundle.
+
+2. **`users.plan`** remains a **denormalized** column constrained by Postgres **`plan_type`** (`free` | `pro` | `agency`). Stripe subscription webhooks update it via **`bundleToPlan`** in `lib/server/stripe/subscription-handlers.ts` (e.g. `startup_dev` → `pro`, `agency_core` / `agency_pro` → `agency`). It exists for coarse legacy/analytics-style reads, not for bundle-granular product logic.
+
+3. **Known gap (to close in BILL-011):** `assignUserPlan` currently allows string labels such as `startup_dev` that are **not** members of `plan_type`. Either admin assignment must be narrowed to valid enum values (and comped “bundle” semantics expressed via `user_subscriptions` or a follow-up migration), or **`plan_type`** must be extended in a migration and all writers updated consistently.
+
+**Consequences:** New code that needs “which bundle” should read **`user_subscriptions.bundle_key`** (and status), not assume `users.plan` encodes bundle. Resolvers such as `resolveUserCapabilities` already emphasize subscription rows. Admin comp flows must not leave `users.plan` and `user_subscriptions` in conflicting states once BILL-011 is implemented.

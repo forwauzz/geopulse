@@ -3,6 +3,7 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 type CookieRow = { name: string; value: string; options: CookieOptions };
+import { resolvePostSignupRedirect } from '@/lib/server/billing-onboarding-flow';
 import { linkGuestPurchasesToUser } from '@/lib/server/link-guest-purchases';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
@@ -86,15 +87,13 @@ export async function GET(request: NextRequest) {
       const bundleParam = searchParams.get('bundle');
 
       // If user came from pricing CTA before they were logged in → resume subscribe
-      if (bundleParam && nextParam === '/pricing') {
-        return NextResponse.redirect(
-          new URL(`/pricing?bundle=${encodeURIComponent(bundleParam)}&autosubscribe=1`, appUrl)
-        );
-      }
-
-      // New user with no explicit next destination → send to pricing to pick a bundle
-      if (isNewUser && !nextParam) {
-        return NextResponse.redirect(new URL('/pricing?onboarding=1', appUrl));
+      const redirectPath = resolvePostSignupRedirect({
+        nextParam,
+        bundleParam,
+        isNewUser,
+      });
+      if (redirectPath) {
+        return NextResponse.redirect(new URL(redirectPath, appUrl));
       }
       // ── End BILL-006 ────────────────────────────────────────────────────────
     }

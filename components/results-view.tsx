@@ -7,6 +7,10 @@ import { EmailGate } from '@/components/email-gate';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { ScoreDisplay } from '@/components/score-display';
 import { reportLoadingJourney, resultsLoadingJourney } from '@/lib/client/loading-journeys';
+import {
+  normalizeDeepAuditCheckoutMode,
+  type DeepAuditCheckoutMode,
+} from '@/lib/shared/deep-audit-checkout-mode';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -23,7 +27,7 @@ type ScanData = {
   reportStatus: ReportStatus;
   pdfUrl: string | null;
   markdownUrl: string | null;
-  checkoutMode: 'stripe' | 'agency_bypass';
+  checkoutMode: DeepAuditCheckoutMode;
   deepAuditAvailable: boolean;
 };
 
@@ -41,6 +45,16 @@ type ResultsActionCard = {
   secondaryTargetId?: string;
   note?: string;
 };
+
+function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
+  if (mode === 'startup_bypass') {
+    return 'This startup workspace is eligible for deep-audit bypass. GEO-Pulse will queue the full audit directly under the current workspace entitlement.';
+  }
+  if (mode === 'agency_bypass') {
+    return 'This agency client is eligible for deep-audit bypass. GEO-Pulse will queue the full audit directly under the current agency entitlement.';
+  }
+  return 'The preview shows the score and top issues. The paid audit keeps going: more coverage, more detail, and delivery to the email you enter in Stripe checkout.';
+}
 
 function domainFromUrl(url: string): string {
   try {
@@ -135,7 +149,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       reportStatus?: ReportStatus;
       pdfUrl?: string | null;
       markdownUrl?: string | null;
-      checkoutMode?: 'stripe' | 'agency_bypass';
+      checkoutMode?: DeepAuditCheckoutMode;
       deepAuditAvailable?: boolean;
     };
     return {
@@ -150,7 +164,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         reportStatus: j.reportStatus ?? 'none',
         pdfUrl: j.pdfUrl ?? null,
         markdownUrl: j.markdownUrl ?? null,
-        checkoutMode: j.checkoutMode === 'agency_bypass' ? 'agency_bypass' : 'stripe',
+        checkoutMode: normalizeDeepAuditCheckoutMode(j.checkoutMode),
         deepAuditAvailable: j.deepAuditAvailable !== false,
       },
       error: null,
@@ -497,9 +511,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
               Continue from preview to the full audit
             </h2>
             <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
-              {data.checkoutMode === 'agency_bypass'
-                ? 'This agency client is eligible for pilot deep-audit bypass. GEO-Pulse will queue the full audit directly under the current agency entitlement.'
-                : 'The preview shows the score and top issues. The paid audit keeps going: more coverage, more detail, and delivery to the email you enter in Stripe checkout.'}
+              {getCheckoutModeCopy(data.checkoutMode)}
             </p>
             <div className="mt-5">
               <DeepAuditCheckout

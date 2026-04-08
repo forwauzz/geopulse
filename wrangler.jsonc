@@ -42,7 +42,6 @@
     "DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED": "true",
     "DISTRIBUTION_ENGINE_BACKGROUND_ENABLED": "true",
     "DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT": "20",
-    "ADMIN_EMAIL": "uzziel@getgeopulse.com",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
 

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { AgencyClientManagementView } from '@/components/agency-client-management-view';
 import { WhatNextBanner } from '@/components/what-next-banner';
 import { NewSubscriberWelcomeBanner } from '@/components/new-subscriber-welcome-banner';
+import { SubscriptionWorkspacePendingBanner } from '@/components/subscription-workspace-pending-banner';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getAgencyDashboardData } from '@/lib/server/agency-dashboard-data';
 import { buildAgencyDashboardUiGates } from '@/lib/server/agency-access';
@@ -12,6 +13,7 @@ import {
   buildStartupTrendSeries,
   buildStartupActionBacklog,
 } from '@/lib/server/startup-dashboard-shell';
+import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscription-provisioning-gap';
 
 export const dynamic = 'force-dynamic';
 
@@ -223,33 +225,46 @@ export default async function DashboardPage({ searchParams }: Props) {
     redirect('/login?next=/dashboard');
   }
 
-  const [{ data: scans, error: scansErr }, { data: reports }, agencyDashboard, startupDashboard] =
-    await Promise.all([
-      supabase
-        .from('scans')
-        .select('id, url, domain, score, letter_grade, created_at')
-        .eq('user_id', user.id)
-        .is('agency_account_id', null)
-        .is('startup_workspace_id', null)
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('reports')
-        .select('id, scan_id, type, email_delivered_at, pdf_generated_at, pdf_url')
-        .eq('user_id', user.id)
-        .is('agency_account_id', null)
-        .is('startup_workspace_id', null),
-      getAgencyDashboardData({
-        supabase,
-        userId: user.id,
-        selectedAccountId: sp.agencyAccount ?? null,
-        selectedClientId: sp.agencyClient ?? null,
-      }),
-      getStartupDashboardData({
-        supabase,
-        userId: user.id,
-        selectedWorkspaceId: sp.startupWorkspace ?? null,
-      }),
-    ]);
+  const [
+    { data: scans, error: scansErr },
+    { data: reports },
+    { data: userSubs },
+    agencyDashboard,
+    startupDashboard,
+  ] = await Promise.all([
+    supabase
+      .from('scans')
+      .select('id, url, domain, score, letter_grade, created_at')
+      .eq('user_id', user.id)
+      .is('agency_account_id', null)
+      .is('startup_workspace_id', null)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('reports')
+      .select('id, scan_id, type, email_delivered_at, pdf_generated_at, pdf_url')
+      .eq('user_id', user.id)
+      .is('agency_account_id', null)
+      .is('startup_workspace_id', null),
+    supabase
+      .from('user_subscriptions')
+      .select('id, bundle_key, status, startup_workspace_id, agency_account_id')
+      .eq('user_id', user.id),
+    getAgencyDashboardData({
+      supabase,
+      userId: user.id,
+      selectedAccountId: sp.agencyAccount ?? null,
+      selectedClientId: sp.agencyClient ?? null,
+    }),
+    getStartupDashboardData({
+      supabase,
+      userId: user.id,
+      selectedWorkspaceId: sp.startupWorkspace ?? null,
+    }),
+  ]);
+
+  const pendingWorkspaceProvision = (userSubs ?? [])
+    .filter(subscriptionNeedsWorkspaceProvisioning)
+    .map((r) => ({ id: r.id, bundle_key: r.bundle_key }));
 
   const reportList = reports ?? [];
 
@@ -453,6 +468,8 @@ export default async function DashboardPage({ searchParams }: Props) {
           agencyAccountId={agencyDashboard.accounts[0]?.id ?? null}
         />
       </Suspense>
+
+      <SubscriptionWorkspacePendingBanner pending={pendingWorkspaceProvision} />
 
       {/* ── Page header ─────────────────────────────────────── */}
       <div>

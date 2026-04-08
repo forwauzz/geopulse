@@ -7,6 +7,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { type DeepAuditCheckoutMode } from '@/lib/shared/deep-audit-checkout-mode';
 
 export const runtime = 'nodejs';
 
@@ -114,11 +115,13 @@ export async function GET(
           reportStatus,
           pdfUrl: report?.pdf_url ?? null,
           markdownUrl: report?.markdown_url ?? null,
-          checkoutMode: canAccessAsStartupMember
-            ? 'startup_bypass'
-            : canAccessAsAgency && !agencyAccess.paymentRequired
-              ? 'agency_bypass'
-              : 'stripe',
+          checkoutMode: (
+            canAccessAsStartupMember
+              ? 'startup_bypass'
+              : canAccessAsAgency && !agencyAccess.paymentRequired
+                ? 'agency_bypass'
+                : 'stripe'
+          ) as DeepAuditCheckoutMode,
           deepAuditAvailable: canAccessAsAgency ? agencyEntitlements.deepAuditEnabled : true,
         });
       }

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import {
   bulkAdvanceContentQueueStatus,
   importContentMachineDrafts,
@@ -10,8 +11,9 @@ import {
   seedTopicPagesFromClusters,
   updateContentQueueAssignment,
   updateContentDestinationConfig,
-} from './actions';
-import { loadAdminPageContext } from '@/lib/server/admin-runtime';
+} from '../../content/actions';
+import { getAdminPageContext } from '@/lib/server/admin-page-context-cache';
+import { ADMIN_PAGE_CONTEXT_MISCONFIGURED_MESSAGE } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
@@ -80,13 +82,16 @@ function availabilityTone(status: string): string {
 }
 
 export default async function ContentAdminPage({ searchParams }: PageProps) {
-  const adminContext = await loadAdminPageContext('/dashboard/content');
+  const adminContext = await getAdminPageContext('/dashboard/content');
   if (!adminContext.ok) {
-    return (
-      <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
-        <p className="text-error">{adminContext.message}</p>
-      </main>
-    );
+    if (adminContext.message === ADMIN_PAGE_CONTEXT_MISCONFIGURED_MESSAGE) {
+      return (
+        <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 md:py-16">
+          <p className="text-error">{adminContext.message}</p>
+        </main>
+      );
+    }
+    redirect('/dashboard');
   }
 
   const contentAdminData = createContentAdminData(adminContext.adminDb);

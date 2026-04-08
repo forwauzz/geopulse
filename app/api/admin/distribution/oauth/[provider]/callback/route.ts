@@ -7,7 +7,7 @@ import {
   type SocialOAuthProvider,
 } from '@/lib/server/distribution-social-oauth';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
-import { isAdminEmail } from '@/lib/server/require-admin';
+import { isDistributionOAuthAdmin } from '@/lib/server/distribution-oauth-admin-gate';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
@@ -45,11 +45,22 @@ export async function GET(
   const {
     data: { user },
   } = await supabaseSession.auth.getUser();
-  if (!user || !isAdminEmail(user.email)) {
+  if (!user) {
     return buildRedirect(appUrl, 'admin_required', provider);
   }
 
-  const stateSecret = (process.env['SUPABASE_SERVICE_ROLE_KEY'] || env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const serviceKeyRaw = (process.env['SUPABASE_SERVICE_ROLE_KEY'] || env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const allowed = await isDistributionOAuthAdmin(
+    user.id,
+    user.email,
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    serviceKeyRaw || undefined,
+  );
+  if (!allowed) {
+    return buildRedirect(appUrl, 'admin_required', provider);
+  }
+
+  const stateSecret = serviceKeyRaw;
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !stateSecret) {
     return buildRedirect(appUrl, 'config_error', provider);
   }

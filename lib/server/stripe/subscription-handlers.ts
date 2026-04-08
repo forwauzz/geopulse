@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import { structuredLog, structuredError } from '@/lib/server/structured-log';
 import { provisionWorkspaceForSubscription } from '@/lib/server/billing/provision-workspace-for-subscription';
+import { syncUserPlanFromSubscriptions } from '@/lib/server/subscription-plan-sync';
 
 // ── Status mapping ───────────────────────────────────────────────────────────
 
@@ -94,11 +95,7 @@ export async function handleSubscriptionUpserted(
     return;
   }
 
-  // Update users.plan to match current bundle
-  await supabase
-    .from('users')
-    .update({ plan: bundleToPlan(bundleKey) })
-    .eq('id', userId);
+  await syncUserPlanFromSubscriptions({ supabase, userId });
 
   // Provision workspace on first active or trialing event (card provided = real user)
   const shouldProvision =
@@ -169,13 +166,9 @@ export async function handleSubscriptionCancelled(
     return;
   }
 
-  // Reset plan to free — workspace data is retained
   const userId = subscription.metadata?.['user_id'];
   if (userId) {
-    await supabase
-      .from('users')
-      .update({ plan: 'free' })
-      .eq('id', userId);
+    await syncUserPlanFromSubscriptions({ supabase, userId });
   }
 
   structuredLog('subscription_cancelled', {
@@ -211,6 +204,12 @@ export async function handleInvoicePaid(
     ? new Date(invoice.period_end * 1000).toISOString()
     : null;
 
+  const { data: subRow } = await supabase
+    .from('user_subscriptions')
+    .select('user_id')
+    .eq('stripe_subscription_id', subscriptionId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('user_subscriptions')
     .update({
@@ -227,6 +226,11 @@ export async function handleInvoicePaid(
       error: error.message,
     });
     return;
+  }
+
+  const userId = subRow?.user_id ?? null;
+  if (userId) {
+    await syncUserPlanFromSubscriptions({ supabase, userId });
   }
 
   structuredLog('subscription_invoice_paid', {
@@ -254,6 +258,12 @@ export async function handleInvoiceFailed(
     return;
   }
 
+  const { data: subRow } = await supabase
+    .from('user_subscriptions')
+    .select('user_id')
+    .eq('stripe_subscription_id', subscriptionId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from('user_subscriptions')
     .update({ status: 'past_due' })
@@ -268,6 +278,11 @@ export async function handleInvoiceFailed(
     return;
   }
 
+  const userId = subRow?.user_id ?? null;
+  if (userId) {
+    await syncUserPlanFromSubscriptions({ supabase, userId });
+  }
+
   structuredLog('subscription_invoice_failed', {
     subscriptionId,
     invoiceId: invoice.id ?? '',
@@ -277,14 +292,3 @@ export async function handleInvoiceFailed(
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function bundleToPlan(bundleKey: string): string {
-  switch (bundleKey) {
-    case 'startup_dev':
-      return 'pro';
-    case 'agency_core':
-    case 'agency_pro':
-      return 'agency';
-    default:
-      return 'free';
-  }
-}

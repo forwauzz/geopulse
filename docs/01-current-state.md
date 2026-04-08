@@ -1,8 +1,12 @@
 # Current State
 
-Last consolidated: 2026-04-04
+Last consolidated: 2026-04-08
 
 ## Product Status
+
+**Billing & plan columns:** Stripe-backed subscription truth lives in **`user_subscriptions`** (`bundle_key`, status, Stripe ids). **`users.plan`** is the coarse Postgres enum **`plan_type`** (`free` \| `pro` \| `agency`); webhooks map bundle → plan via `bundleToPlan`. Bundle-level product logic should use `user_subscriptions`, not assume `users.plan` encodes a bundle. Admin plan override uses only `plan_type` values (`lib/server/plan-type.ts`, BILL-011). See **ADR-009** in `agents/memory/DECISIONS.md`.
+
+Admin UX: `/dashboard` sidebar admin affordances use `platform_admin_users`; `/dashboard/content` is wrapped by `app/dashboard/(admin)/layout.tsx` for a single admin gate — failed admin context (other than service-role misconfiguration) redirects to `/dashboard` instead of an inline error; `app/admin/layout.tsx`, the admin login action, and the distribution OAuth gate all enforce the same DB-backed platform admin allowlist; the middleware only enforces ordinary session presence for `/admin/*`; distribution OAuth callback uses the same DB-backed check.
 
 GEO-Pulse is a working Next.js + Cloudflare Workers product with these end-to-end paths implemented:
 - free scan
@@ -26,6 +30,26 @@ Launch is not fully closed yet.
 ## Current planning stream
 
 A separate planning-only content-machine stream now exists on branch `planning/content-machine-v1`.
+
+A separate billing/onboarding byte-task stream is now frozen in `docs/19-billing-onboarding-implementation-plan.md` and `PLAYBOOK/billing-onboarding-v1.md`. It keeps the self-serve path narrow: lock product truth first, then runtime checkout-mode truth, then UI alignment, admin readiness checks, and end-to-end onboarding proof.
+
+The product truth for bundles is now explicit in the billing playbook: `startup_lite` stays free, `startup_dev` is paid but still uses the explicit startup workspace bypass for full-audit access, and `agency_core` / `agency_pro` include deep-audit entitlement while still honoring backend checkout modes and payment guardrails.
+
+The deep-audit checkout-mode contract is now explicit too: `stripe`, `agency_bypass`, and `startup_bypass` are shared through `lib/shared/deep-audit-checkout-mode.ts`, and the scan results UI normalizes unknown values back to `stripe`.
+
+The results and checkout UI now reads the bypass state distinctly for startup workspaces and agency clients, so neither path falls back to Stripe phrasing when the backend has already declared a bypass.
+
+The admin bundle page now includes a readiness summary that separates billing config, Stripe mapping coverage, and entitlement override coverage before a bundle is treated as launch-ready.
+
+The onboarding handoff now has explicit shared helpers for post-signup redirects and subscription success URLs, plus a focused flow test that covers signup -> subscribe -> provisioning -> dashboard recovery -> audit-access state.
+
+Subscription workspace/account provisioning now uses a subscription-derived key plus conflict-aware membership writes, so webhook retries and near-simultaneous deliveries converge on one child record instead of creating duplicate workspaces or agency accounts.
+
+The coarse `users.plan` field now syncs from the remaining live subscriptions instead of being forced to `free` on every cancellation, so the plan column stays aligned when a user still has another active or trialing bundle.
+
+The Stripe webhook route now has explicit dispatch coverage for subscription lifecycle events, invoice lifecycle events, and the subscription-mode checkout skip path, so the router contract stays stable as the billing stream evolves.
+
+Admin bundle configuration is now annotated so operators can distinguish bundle-local billing/service settings from the cross-bundle service control center. The bundle page now points admins to `/admin/services` for deep-audit bypass rules and payment-required overrides instead of implying those rules belong in the bundle editor.
 
 Current truth:
 - planning docs still exist on `planning/content-machine-v1`

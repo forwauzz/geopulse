@@ -1,5 +1,13 @@
 import Link from 'next/link';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
+import {
+  buildBundleReadinessSummary,
+  type BundleReadinessBillingMappingRow,
+  type BundleReadinessBundleRow,
+  type BundleReadinessBundleServiceRow,
+  type BundleReadinessEntitlementOverrideRow,
+  type BundleReadinessServiceRow,
+} from '@/lib/server/bundle-readiness';
 import { updateBundleBilling, upsertBundleServices } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +37,21 @@ type BundleServiceRow = {
   enabled: boolean;
   access_mode: string | null;
   usage_limit: number | null;
+};
+
+type BillingMappingRow = {
+  service_id: string;
+  is_active: boolean;
+  stripe_product_id: string | null;
+  stripe_price_id: string | null;
+  billing_mode: string;
+};
+
+type EntitlementOverrideRow = {
+  service_id: string;
+  scope_type: 'global' | 'bundle_default';
+  enabled: boolean;
+  access_mode: string | null;
 };
 
 export default async function AdminBundlePage({
@@ -70,15 +93,39 @@ export default async function AdminBundlePage({
     );
   }
 
-  // Now fetch bundle services with the real bundle UUID
-  const { data: bundleServices } = await ctx.adminDb
-    .from('service_bundle_services')
-    .select('service_id, enabled, access_mode, usage_limit')
-    .eq('bundle_id', bundle.id)
-    .returns<BundleServiceRow[]>();
+  // Now fetch bundle services and readiness inputs with the real bundle UUID
+  const [bundleServicesResult, billingMappingsResult, overridesResult] = await Promise.all([
+    ctx.adminDb
+      .from('service_bundle_services')
+      .select('service_id, enabled, access_mode, usage_limit')
+      .eq('bundle_id', bundle.id)
+      .returns<BundleServiceRow[]>(),
+    ctx.adminDb
+      .from('service_billing_mappings')
+      .select('service_id, is_active, stripe_product_id, stripe_price_id, billing_mode')
+      .eq('bundle_id', bundle.id)
+      .eq('provider', 'stripe')
+      .returns<BillingMappingRow[]>(),
+    ctx.adminDb
+      .from('service_entitlement_overrides')
+      .select('service_id, scope_type, enabled, access_mode')
+      .eq('bundle_id', bundle.id)
+      .in('scope_type', ['bundle_default', 'global'])
+      .returns<EntitlementOverrideRow[]>(),
+  ]);
 
   const services = servicesResult.data ?? [];
-  const bsMap = new Map((bundleServices ?? []).map((r) => [r.service_id, r]));
+  const bundleServices = bundleServicesResult.data ?? [];
+  const billingMappings = billingMappingsResult.data ?? [];
+  const overrides = overridesResult.data ?? [];
+  const bsMap = new Map(bundleServices.map((r) => [r.service_id, r]));
+  const readiness = buildBundleReadinessSummary({
+    bundle: bundle as BundleReadinessBundleRow,
+    services: services as BundleReadinessServiceRow[],
+    bundleServices: bundleServices as BundleReadinessBundleServiceRow[],
+    billingMappings: billingMappings as BundleReadinessBillingMappingRow[],
+    overrides: overrides as BundleReadinessEntitlementOverrideRow[],
+  });
 
   const ACCESS_MODES = ['free', 'paid', 'trial', 'off'];
   const BILLING_MODES = ['free', 'monthly', 'annual'];
@@ -101,7 +148,119 @@ export default async function AdminBundlePage({
           {' · '}
           {bundle.workspace_type} · {bundle.status}
         </p>
+        <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">
+          <p className="font-medium text-on-background">What this page controls</p>
+          <ul className="mt-2 space-y-1">
+            <li>- Billing mode, Stripe price id, monthly price, and trial period for this bundle.</li>
+            <li>- Which services are included in the bundle after subscription purchase.</li>
+            <li>- Which bundle-default overrides are present for launch readiness checks.</li>
+          </ul>
+          <p className="mt-3 font-medium text-on-background">What this page does not control</p>
+          <p className="mt-2">
+            Deep-audit bypass behavior is controlled by service entitlements and payment-required
+            overrides in the service control center at <Link href="/admin/services" className="text-primary hover:underline">/admin/services</Link>.
+          </p>
+        </div>
       </div>
+
+      {/* Section 0: Readiness summary */}
+      <section className="space-y-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-headline text-xl font-semibold text-on-background">
+              Bundle readiness check
+            </h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Operator-facing summary for billing config, Stripe mappings, and entitlement coverage.
+              Use this before enabling self-serve onboarding for a bundle.
+            </p>
+          </div>
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wider ${
+              readiness.status === 'ready'
+                ? 'bg-emerald-500/15 text-emerald-700'
+                : readiness.status === 'review'
+                  ? 'bg-amber-500/15 text-amber-700'
+                  : 'bg-red-500/15 text-red-700'
+            }`}
+          >
+            {readiness.status.replace('_', ' ')}
+          </span>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Billing
+            </p>
+            <p className="mt-2 text-sm font-medium text-on-background">
+              {readiness.billing.ready ? 'Ready' : 'Needs setup'}
+            </p>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Mode:{' '}
+              <code className="rounded bg-surface-container px-1 py-0.5 text-xs">
+                {readiness.billing.label}
+              </code>
+            </p>
+            <ul className="mt-3 space-y-1 text-sm text-on-surface-variant">
+              {readiness.billing.issues.length > 0 ? (
+                readiness.billing.issues.map((issue) => <li key={issue}>- {issue}</li>)
+              ) : (
+                <li>- Billing mode, price, and trial config are internally consistent for subscription checkout.</li>
+              )}
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Mappings
+            </p>
+            <p className="mt-2 text-sm font-medium text-on-background">
+              {readiness.mappings.ready ? 'Ready' : 'Needs setup'}
+            </p>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              {readiness.mappings.mappedServices} mapped of {readiness.mappings.enabledServices} enabled services
+            </p>
+            <ul className="mt-3 space-y-1 text-sm text-on-surface-variant">
+              {readiness.mappings.issues.length > 0 ? (
+                readiness.mappings.issues.map((issue) => <li key={issue}>- {issue}</li>)
+              ) : (
+                <li>- Every enabled paid/trial service has an active Stripe mapping.</li>
+              )}
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+              Entitlements
+            </p>
+            <p className="mt-2 text-sm font-medium text-on-background">
+              {readiness.entitlements.ready ? 'Ready' : 'Review'}
+            </p>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              {readiness.entitlements.bundleOverrides} bundle overrides,{' '}
+              {readiness.entitlements.globalOverrides} global overrides
+            </p>
+            <ul className="mt-3 space-y-1 text-sm text-on-surface-variant">
+              {readiness.entitlements.issues.length > 0 ? (
+                readiness.entitlements.issues.map((issue) => <li key={issue}>- {issue}</li>)
+              ) : (
+                <li>- Bundle and global overrides are present where this bundle expects them.</li>
+              )}
+            </ul>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4 text-sm text-on-surface-variant">
+          <p className="font-medium text-on-background">Launch checklist</p>
+          <ul className="mt-2 space-y-1">
+            <li>- Paid bundles should have `billing_mode` set to `monthly` or `annual`.</li>
+            <li>- Paid bundles should have a Stripe price id and monthly price in cents.</li>
+            <li>- Every enabled paid or trial service should have an active Stripe mapping.</li>
+            <li>- Any deep-audit bypass rule should be configured in the service control center, not here.</li>
+          </ul>
+        </div>
+      </section>
 
       {/* Section 1: Billing config */}
       <section className="space-y-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-6">

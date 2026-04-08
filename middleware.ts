@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { shouldRejectForMiddlewareSubrequest } from '@/lib/server/middleware-cve';
 import { updateSession } from '@/lib/supabase/middleware';
 
@@ -25,7 +25,14 @@ export async function middleware(request: NextRequest) {
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  const { response, userId } = await updateSession(request);
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', request.nextUrl.pathname);
+  const requestWithPath = new NextRequest(request.url, {
+    headers: requestHeaders,
+    method: request.method,
+  });
+
+  const { response, userId } = await updateSession(requestWithPath);
 
   ensureAnonymousId(request, response);
 

@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
+import { normalizePlanTypeForAdmin, PLAN_TYPE_VALUES } from '@/lib/server/plan-type';
+import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscription-provisioning-gap';
 import {
   assignUserPlan,
   cancelUserSubscription,
@@ -7,8 +9,6 @@ import {
 } from '../actions';
 
 export const dynamic = 'force-dynamic';
-
-const VALID_PLANS = ['free', 'startup_lite', 'startup_dev', 'agency_core', 'agency_pro'];
 
 type SubRow = {
   id: string;
@@ -136,10 +136,10 @@ export default async function AdminUserDetailPage({
             <select
               id="plan"
               name="plan"
-              defaultValue={user.plan ?? 'free'}
+              defaultValue={normalizePlanTypeForAdmin(user.plan)}
               className="rounded-xl border border-outline-variant/40 bg-surface-container-low px-3 py-2 text-sm text-on-background focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             >
-              {VALID_PLANS.map((p) => (
+              {PLAN_TYPE_VALUES.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
@@ -171,6 +171,7 @@ export default async function AdminUserDetailPage({
                 sub.status === 'trialing' ||
                 sub.status === 'incomplete';
               const hasWorkspace = !!sub.startup_workspace_id || !!sub.agency_account_id;
+              const showProvisionButton = subscriptionNeedsWorkspaceProvisioning(sub);
 
               return (
                 <div
@@ -229,7 +230,7 @@ export default async function AdminUserDetailPage({
                     )}
 
                     {/* Provision workspace */}
-                    {isLive && !hasWorkspace && (
+                    {showProvisionButton && (
                       <form action={provisionWorkspaceAdmin}>
                         <input type="hidden" name="subRowId" value={sub.id} />
                         <button

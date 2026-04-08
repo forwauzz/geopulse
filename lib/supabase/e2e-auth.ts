@@ -21,7 +21,7 @@ export function isE2EAuthEnabled(): boolean {
 }
 
 function resolveAdminEmail(): string {
-  return process.env['ADMIN_EMAIL'] ?? 'admin@example.com';
+  return 'uzzielt@techehealthservices.com';
 }
 
 export function resolveE2EAuthUserFromCookieValue(

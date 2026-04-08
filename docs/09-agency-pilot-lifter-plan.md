@@ -153,7 +153,7 @@ Use a small account hierarchy:
 Do not encode this pilot through:
 - one-off email allowlists
 - special cases in Stripe checkout only
-- dashboard branching based only on `ADMIN_EMAIL`
+- dashboard branching based on a single platform-admin allowlist
 
 Do not encode this pilot in a way that loses future benchmark lineage:
 - no generic untyped client rows

@@ -16,52 +16,34 @@ export type ProvisionWorkspaceResult = {
 // ── Key derivation ───────────────────────────────────────────────────────────
 
 /**
- * Derives a slug from an email domain.
+ * Derives a readable slug from an email domain for display names only.
  * "john@some-company.com" → "some-company"
  * "user@sub.domain.io" → "sub-domain"   (join host parts with -)
- * Only lowercase letters, numbers, hyphens (matches workspace_key CHECK constraint).
  */
 function slugFromEmail(email: string): string {
   const domain = email.split('@').at(1) ?? 'workspace';
-  // Take all parts except TLD (e.g., "sub.domain.io" → ["sub","domain"])
   const parts = domain.split('.');
   const meaningful = parts.length > 1 ? parts.slice(0, -1) : parts;
-  const raw = meaningful.join('-').toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const raw = meaningful
+    .join('-')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
   return raw.length > 0 ? raw.slice(0, 48) : 'workspace';
 }
 
 /**
- * Appends numeric suffix to avoid uniqueness collisions.
- * Returns the first available key up to suffix -99.
+ * Builds a stable child-record key from the Stripe subscription id.
+ * This keeps workspace/account provisioning idempotent under webhook retries.
  */
-async function deduplicateKey(
-  supabase: SupabaseClient,
-  table: 'startup_workspaces' | 'agency_accounts',
-  column: 'workspace_key' | 'account_key',
-  base: string
-): Promise<string> {
-  // Check base key first
-  const { data: row } = await supabase
-    .from(table)
-    .select('id')
-    .eq(column, base)
-    .maybeSingle();
-
-  if (!row) return base;
-
-  // Try -2, -3, … -99
-  for (let i = 2; i <= 99; i++) {
-    const candidate = `${base}-${i}`;
-    const { data: existing } = await supabase
-      .from(table)
-      .select('id')
-      .eq(column, candidate)
-      .maybeSingle();
-    if (!existing) return candidate;
-  }
-
-  // Fallback: append timestamp millis (always unique)
-  return `${base}-${Date.now()}`.slice(0, 63);
+export function subscriptionProvisioningKey(
+  scope: 'startup' | 'agency',
+  subscriptionId: string
+): string {
+  const raw = `${scope}-${subscriptionId}`.toLowerCase();
+  const normalized = raw.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return normalized.slice(0, 63);
 }
 
 // ── Provision startup workspace ──────────────────────────────────────────────
@@ -70,16 +52,10 @@ async function provisionStartupWorkspace(
   supabase: SupabaseClient,
   args: ProvisionWorkspaceArgs
 ): Promise<string | null> {
-  const baseSlug = slugFromEmail(args.userEmail);
-  const workspaceKey = await deduplicateKey(
-    supabase,
-    'startup_workspaces',
-    'workspace_key',
-    baseSlug
-  );
+  const workspaceKey = subscriptionProvisioningKey('startup', args.subscriptionId);
 
   // Derive display name from slug
-  const name = workspaceKey
+  const name = slugFromEmail(args.userEmail)
     .split('-')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
@@ -95,19 +71,22 @@ async function provisionStartupWorkspace(
 
   const { data: workspace, error: wsErr } = await supabase
     .from('startup_workspaces')
-    .insert({
-      workspace_key: workspaceKey,
-      name,
-      status: 'active',
-      billing_mode: 'paid',
-      primary_domain: emailDomain,
+    .upsert(
+      {
+        workspace_key: workspaceKey,
+        name,
+        status: 'active',
+        billing_mode: 'paid',
+        primary_domain: emailDomain,
       default_bundle_id: bundle?.id ?? null,
-      metadata: {
-        source: 'self_serve',
-        bundle_key: args.bundleKey,
-        subscription_id: args.subscriptionId,
+        metadata: {
+          source: 'self_serve',
+          bundle_key: args.bundleKey,
+          subscription_id: args.subscriptionId,
+        },
       },
-    })
+      { onConflict: 'workspace_key' }
+    )
     .select('id')
     .single();
 
@@ -123,13 +102,16 @@ async function provisionStartupWorkspace(
   // Add user as founder
   const { error: memberErr } = await supabase
     .from('startup_workspace_users')
-    .insert({
-      startup_workspace_id: workspace.id,
-      user_id: args.userId,
-      role: 'founder',
-      status: 'active',
-      metadata: { source: 'self_serve_subscription' },
-    });
+    .upsert(
+      {
+        startup_workspace_id: workspace.id,
+        user_id: args.userId,
+        role: 'founder',
+        status: 'active',
+        metadata: { source: 'self_serve_subscription' },
+      },
+      { onConflict: 'startup_workspace_id,user_id' }
+    );
 
   if (memberErr) {
     structuredError('provision_startup_workspace_member_failed', {
@@ -162,13 +144,7 @@ async function provisionAgencyAccount(
   supabase: SupabaseClient,
   args: ProvisionWorkspaceArgs
 ): Promise<string | null> {
-  const baseSlug = slugFromEmail(args.userEmail);
-  const accountKey = await deduplicateKey(
-    supabase,
-    'agency_accounts',
-    'account_key',
-    baseSlug
-  );
+  const accountKey = subscriptionProvisioningKey('agency', args.subscriptionId);
 
   const name = accountKey
     .split('-')
@@ -177,17 +153,20 @@ async function provisionAgencyAccount(
 
   const { data: account, error: accErr } = await supabase
     .from('agency_accounts')
-    .insert({
-      account_key: accountKey,
-      name,
-      status: 'active',
-      billing_mode: 'public_checkout', // closest existing value for self-serve paid
-      metadata: {
-        source: 'self_serve',
-        bundle_key: args.bundleKey,
-        subscription_id: args.subscriptionId,
+    .upsert(
+      {
+        account_key: accountKey,
+        name,
+        status: 'active',
+        billing_mode: 'public_checkout', // closest existing value for self-serve paid
+        metadata: {
+          source: 'self_serve',
+          bundle_key: args.bundleKey,
+          subscription_id: args.subscriptionId,
+        },
       },
-    })
+      { onConflict: 'account_key' }
+    )
     .select('id')
     .single();
 
@@ -203,13 +182,16 @@ async function provisionAgencyAccount(
   // Add user as owner
   const { error: memberErr } = await supabase
     .from('agency_users')
-    .insert({
-      agency_account_id: account.id,
-      user_id: args.userId,
-      role: 'owner',
-      status: 'active',
-      metadata: { source: 'self_serve_subscription' },
-    });
+    .upsert(
+      {
+        agency_account_id: account.id,
+        user_id: args.userId,
+        role: 'owner',
+        status: 'active',
+        metadata: { source: 'self_serve_subscription' },
+      },
+      { onConflict: 'agency_account_id,user_id' }
+    );
 
   if (memberErr) {
     structuredError('provision_agency_account_member_failed', {

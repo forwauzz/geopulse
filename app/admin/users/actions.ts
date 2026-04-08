@@ -5,7 +5,10 @@ import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createStripeClient } from '@/lib/server/stripe-client';
 import { provisionWorkspaceForSubscription } from '@/lib/server/billing/provision-workspace-for-subscription';
+import { syncAdminCompSubscription } from '@/lib/server/admin-comp-subscription';
+import { isValidPlanType } from '@/lib/server/plan-type';
 import { structuredLog } from '@/lib/server/structured-log';
+import { syncUserPlanFromSubscriptions } from '@/lib/server/subscription-plan-sync';
 
 // ── Assign plan directly (for B2B / comp accounts — no Stripe change) ────────
 export async function assignUserPlan(formData: FormData): Promise<void> {
@@ -16,8 +19,17 @@ export async function assignUserPlan(formData: FormData): Promise<void> {
   const plan = (formData.get('plan') as string | null)?.trim();
   if (!userId || !plan) throw new Error('userId and plan are required.');
 
-  const validPlans = ['free', 'pro', 'agency', 'startup_lite', 'startup_dev', 'agency_core', 'agency_pro'];
-  if (!validPlans.includes(plan)) throw new Error(`Invalid plan: ${plan}`);
+  if (!isValidPlanType(plan)) throw new Error(`Invalid plan: ${plan}`);
+
+  const { data: userRow, error: fetchErr } = await ctx.adminDb
+    .from('users')
+    .select('stripe_customer_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (fetchErr) throw new Error(`Failed to load user: ${fetchErr.message}`);
+
+  await syncAdminCompSubscription(ctx.adminDb, userId, plan, userRow?.stripe_customer_id ?? null);
 
   const { error } = await ctx.adminDb
     .from('users')
@@ -63,11 +75,9 @@ export async function cancelUserSubscription(formData: FormData): Promise<void> 
     .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq('id', subRowId);
 
-  // Update users.plan to free if this was their active sub
-  await ctx.adminDb
-    .from('users')
-    .update({ plan: 'free' })
-    .eq('id', subRow.user_id);
+  await syncUserPlanFromSubscriptions({ supabase: ctx.adminDb, userId: subRow.user_id });
+
+  await syncAdminCompSubscription(ctx.adminDb, subRow.user_id, 'free', null);
 
   structuredLog('admin_cancel_subscription', {
     adminId: ctx.user.id,

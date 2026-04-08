@@ -52,8 +52,9 @@ export function ServiceControlAdminView({ overview }: Props) {
             Service control center
           </h1>
           <p className="mt-1 max-w-3xl font-body text-on-surface-variant">
-            Centralized service defaults, bundle toggles, and scoped entitlement overrides. Every
-            change is audit logged to admin logs.
+            Centralized service defaults, bundle toggles, and scoped entitlement overrides. Use
+            this page for cross-bundle behavior, including deep-audit access and payment-required
+            overrides. Every change is audit logged to admin logs.
           </p>
         </div>
       </div>
@@ -99,7 +100,8 @@ export function ServiceControlAdminView({ overview }: Props) {
             Service defaults
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Set free/paid/trial/off defaults and active status per service.
+            Set free/paid/trial/off defaults and active status per service. Changes here affect
+            how services resolve across bundles unless a more specific mapping or override exists.
           </p>
           <div className="mt-4 grid gap-4">
             <label className="flex flex-col gap-2 text-sm text-on-background">
@@ -159,7 +161,8 @@ export function ServiceControlAdminView({ overview }: Props) {
             Bundle service mapping
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Toggle services per bundle and set Stripe placeholder IDs.
+            Toggle services per bundle and set Stripe placeholder IDs. This is the place to align
+            a bundle’s included services with its subscription tier.
           </p>
           <div className="mt-4 grid gap-4">
             <label className="flex flex-col gap-2 text-sm text-on-background">
@@ -263,7 +266,9 @@ export function ServiceControlAdminView({ overview }: Props) {
             Entitlement override
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Set scoped runtime overrides for global, bundle, agency, client, or user.
+            Set scoped runtime overrides for global, bundle, agency, client, or user. Use this for
+            bypasses, payment-required changes, and other runtime exceptions that should not live in
+            the bundle editor.
           </p>
           <div className="mt-4 grid gap-4">
             <label className="flex flex-col gap-2 text-sm text-on-background">

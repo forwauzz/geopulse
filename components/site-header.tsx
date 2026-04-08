@@ -1,23 +1,26 @@
 import Link from 'next/link';
 import { signOut } from '@/app/dashboard/actions';
-import { isAdminEmail } from '@/lib/server/require-admin';
+import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { SiteHeaderShell } from '@/components/site-header-shell';
 
 export async function SiteHeader() {
   let userEmail: string | null = null;
+  let userId: string | null = null;
   try {
     const supabase = await createSupabaseServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
     userEmail = user?.email ?? null;
+    userId = user?.id ?? null;
   } catch {
     userEmail = null;
+    userId = null;
   }
 
   const isSignedIn = !!userEmail;
-  const isAdmin = isAdminEmail(userEmail);
+  const isAdmin = userId ? await isUserPlatformAdmin(userId) : false;
 
   return (
     <SiteHeaderShell

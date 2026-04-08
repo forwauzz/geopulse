@@ -4,6 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { resolveAgencyFeatureEntitlements, validateAgencyContext } from '@/lib/server/agency-access';
+import { provisionWorkspaceForSubscription } from '@/lib/server/billing/provision-workspace-for-subscription';
+import { structuredLog } from '@/lib/server/structured-log';
+import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscription-provisioning-gap';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
@@ -11,6 +14,69 @@ export async function signOut(): Promise<void> {
   const supabase = await createSupabaseServerClient();
   await supabase.auth.signOut();
   redirect('/');
+}
+
+/** Self-serve: same provisioning path as admin + Stripe webhook; verifies subscription belongs to session user. */
+export async function provisionMyWorkspaceForSubscription(formData: FormData): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.id) throw new Error('Sign in again.');
+
+  const subRowId = (formData.get('subRowId') as string | null)?.trim();
+  if (!subRowId) throw new Error('Missing subscription.');
+
+  const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+  if (!url || !key) throw new Error('Billing is not configured.');
+
+  const adminDb = createServiceRoleClient(url, key);
+
+  const { data: subRow, error: fetchErr } = await adminDb
+    .from('user_subscriptions')
+    .select(
+      'id, user_id, bundle_key, stripe_subscription_id, startup_workspace_id, agency_account_id, status',
+    )
+    .eq('id', subRowId)
+    .maybeSingle();
+
+  if (fetchErr || !subRow) throw new Error('Subscription not found.');
+  if (subRow.user_id !== user.id) throw new Error('Forbidden.');
+
+  if (!subscriptionNeedsWorkspaceProvisioning(subRow)) {
+    throw new Error('Workspace already exists or subscription is not eligible.');
+  }
+
+  const { data: userRow } = await adminDb.from('users').select('email').eq('id', user.id).maybeSingle();
+  if (!userRow?.email) throw new Error('User email not found.');
+
+  const result = await provisionWorkspaceForSubscription(adminDb, {
+    userId: subRow.user_id,
+    userEmail: userRow.email,
+    bundleKey: subRow.bundle_key,
+    subscriptionId: subRow.stripe_subscription_id,
+  });
+
+  if (!result.startupWorkspaceId && !result.agencyAccountId) {
+    throw new Error('Could not create workspace. Try again or contact support.');
+  }
+
+  structuredLog(
+    'user_self_provision_workspace',
+    { userId: user.id, subRowId, bundleKey: subRow.bundle_key },
+    'info',
+  );
+
+  revalidatePath('/dashboard');
+
+  if (result.startupWorkspaceId) {
+    redirect(`/dashboard?startupWorkspace=${result.startupWorkspaceId}`);
+  }
+  if (result.agencyAccountId) {
+    redirect(`/dashboard?agencyAccount=${result.agencyAccountId}`);
+  }
+  throw new Error('Could not create workspace. Try again or contact support.');
 }
 
 const agencyClientSchema = z.object({

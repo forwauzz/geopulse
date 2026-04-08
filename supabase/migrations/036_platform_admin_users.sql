@@ -1,6 +1,6 @@
 -- Migration 036: Platform admin users table
 --
--- Replaces the single ADMIN_EMAIL env var with a proper DB-backed allowlist.
+-- Defines the DB-backed allowlist for platform-admin access.
 -- Multiple users can be platform admins. Access is managed via /admin/admins UI.
 --
 -- Security: table has RLS enabled with NO select policy for anon/authenticated roles.
@@ -49,11 +49,10 @@ COMMENT ON FUNCTION public.is_platform_admin(UUID) IS
 -- After applying this migration, seed the initial admin by running:
 --
 --   INSERT INTO public.platform_admin_users (user_id, notes)
---   SELECT id, 'Initial admin seeded from ADMIN_EMAIL env var'
+--   SELECT id, 'Initial platform admin seeded manually'
 --   FROM public.users
 --   WHERE email = '<your-admin-email>'
 --   ON CONFLICT (user_id) DO NOTHING;
 --
 -- Then you can manage additional admins via /admin/admins in the UI.
--- The ADMIN_EMAIL env var remains as a fallback during transition and can be
--- removed once all admins are confirmed in the DB.
+-- There is no env-var fallback path for admin access.

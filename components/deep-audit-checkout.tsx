@@ -5,11 +5,12 @@ import { useRef, useState } from 'react';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { checkoutLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
+import { type DeepAuditCheckoutMode } from '@/lib/shared/deep-audit-checkout-mode';
 
 type Props = {
   siteKey: string;
   scanId: string;
-  mode?: 'stripe' | 'agency_bypass';
+  mode?: DeepAuditCheckoutMode;
 };
 
 function turnstileUserMessage(serverMessage: string): string {
@@ -17,6 +18,16 @@ function turnstileUserMessage(serverMessage: string): string {
     return 'Verification expired or was already used. Complete the checkbox again, then try once more.';
   }
   return serverMessage;
+}
+
+function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
+  if (mode === 'startup_bypass') {
+    return 'Run the expanded multi-page audit for this startup workspace without checkout. GEO-Pulse will queue the full report directly under the current workspace entitlement.';
+  }
+  if (mode === 'agency_bypass') {
+    return 'Run the expanded multi-page audit for this agency client without checkout. GEO-Pulse will queue the full report directly under the current agency entitlement.';
+  }
+  return 'Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan. One-time purchase, no subscription. After payment, we send the finished report to the email collected in Stripe checkout.';
 }
 
 export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
@@ -90,9 +101,7 @@ export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
         Unlock the full picture
       </h2>
       <p className="font-body text-sm text-surface-container-low/80">
-        {mode === 'agency_bypass'
-          ? 'Run the expanded multi-page audit for this agency client without checkout. GEO-Pulse will queue the full report directly under the current pilot entitlement.'
-          : 'Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan. One-time purchase, no subscription. After payment, we send the finished report to the email collected in Stripe checkout.'}
+        {getCheckoutModeCopy(mode)}
       </p>
       <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-surface-container-low/70">
         <li className="flex items-center gap-1.5">
@@ -122,10 +131,10 @@ export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
         className="rounded-xl bg-surface-container-lowest px-6 py-3.5 text-sm font-semibold text-on-background transition hover:bg-surface disabled:opacity-50"
       >
         {loading
-          ? mode === 'agency_bypass'
+          ? mode === 'agency_bypass' || mode === 'startup_bypass'
             ? 'Starting audit...'
             : 'Redirecting...'
-          : mode === 'agency_bypass'
+          : mode === 'agency_bypass' || mode === 'startup_bypass'
             ? 'Run full audit now'
             : 'Continue to full audit - $29'}
       </button>

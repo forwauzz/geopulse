@@ -1,10 +1,14 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { redirect } from 'next/navigation';
 import { getScanApiEnv, type ScanApiEnv } from '@/lib/server/cf-env';
-import { isAdminEmail, isUserPlatformAdmin, requireAdminOrRedirect } from '@/lib/server/require-admin';
+import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { buildE2EAdminDb, isE2EAuthEnabled } from '@/lib/supabase/e2e-auth';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+
+/** Stable copy for `app/dashboard/(admin)/layout.tsx` — only this case keeps an inline error UI. */
+export const ADMIN_PAGE_CONTEXT_MISCONFIGURED_MESSAGE =
+  'Server misconfigured: missing Supabase service role.' as const;
 
 type AdminPageContextResult =
   | {
@@ -38,7 +42,7 @@ function buildAdminDbOrMessage(
   }
 
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, message: 'Server misconfigured: missing Supabase service role.' };
+    return { ok: false, message: ADMIN_PAGE_CONTEXT_MISCONFIGURED_MESSAGE };
   }
 
   return {
@@ -63,13 +67,10 @@ export async function loadAdminPageContext(nextPath: string): Promise<AdminPageC
     return adminDbResult;
   }
 
-  // DB-backed admin check (primary). Falls back gracefully if migration not yet applied.
+  // DB-backed admin check (primary).
   const isAdmin = await isUserPlatformAdmin(user.id, adminDbResult.adminDb);
   if (!isAdmin) {
-    // Legacy fallback: allow ADMIN_EMAIL during transition period
-    if (!isAdminEmail(user.email)) {
-      redirect('/dashboard');
-    }
+    redirect('/dashboard');
   }
 
   return {
@@ -96,13 +97,10 @@ export async function loadAdminActionContext(): Promise<AdminActionContextResult
     return adminDbResult;
   }
 
-  // DB-backed admin check (primary). Falls back gracefully if migration not yet applied.
+  // DB-backed admin check (primary).
   const isAdmin = await isUserPlatformAdmin(user.id, adminDbResult.adminDb);
   if (!isAdmin) {
-    // Legacy fallback: allow ADMIN_EMAIL during transition period
-    if (!isAdminEmail(user.email)) {
-      return { ok: false, message: 'Admin access required.' };
-    }
+    return { ok: false, message: 'Admin access required.' };
   }
 
   return {

@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation';
 import { DashboardSidebar } from '@/components/dashboard-sidebar';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { isAdminEmail } from '@/lib/server/require-admin';
+import { resolveDashboardShellIsAdmin } from '@/lib/server/dashboard-shell-admin';
+import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { signOut } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,8 @@ export default async function DashboardLayout({
     redirect('/login?next=/dashboard');
   }
 
-  const isAdmin = isAdminEmail(user.email);
+  const isPlatformAdmin = await isUserPlatformAdmin(user.id);
+  const isAdmin = resolveDashboardShellIsAdmin(isPlatformAdmin);
 
   return (
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-8 sm:px-6 md:px-10">

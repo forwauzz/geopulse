@@ -49,7 +49,6 @@ Required:
 - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
 - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
 - `STRIPE_PRICE_ID_DEEP_AUDIT`
-- `ADMIN_EMAIL`
 - `DEEP_AUDIT_R2_PUBLIC_BASE`
 - `DEEP_AUDIT_DEFAULT_PAGE_LIMIT`
 - `DEEP_AUDIT_BROWSER_RENDER_MODE`
@@ -289,7 +288,7 @@ If a page says `Could not load analytics`, first verify the active DB has the at
   - `npm run benchmark:run:diagnostic -- --run-group-ids run-1,run-2`
   - it summarizes page-URL citations, domain-only citations, matched provenance, and overlap status before manual review
 - service role key
-- admin user email in auth/db
+- `platform_admin_users` table for platform-admin access
 - optional local write tooling:
   - `npm run eval:smoke`
   - `npm run eval:promptfoo:write:report -- --site-url https://example.com`
@@ -345,7 +344,6 @@ To match the current repo/runtime features in Cloudflare production, make sure t
 - `DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED`
 - `DISTRIBUTION_ENGINE_BACKGROUND_ENABLED`
 - `DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT`
-- `ADMIN_EMAIL`
 - `STRIPE_PRICE_ID_DEEP_AUDIT`
 - `GEMINI_MODEL`
 - `GEMINI_ENDPOINT`

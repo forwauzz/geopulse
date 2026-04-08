@@ -57,9 +57,8 @@ export default async function AdminAdminsPage() {
       <div>
         <h1 className="font-headline text-3xl font-bold text-on-background">Platform admins</h1>
         <p className="mt-2 font-body text-sm text-on-surface-variant">
-          Users with full admin access to this console. Replaces the{' '}
-          <code className="rounded bg-surface-container px-1 py-0.5 text-xs">ADMIN_EMAIL</code> env
-          var — add all admins here, then the env var can be removed.
+          Users with full admin access to this console. This table is the only source of truth for
+          platform admin access.
         </p>
       </div>
 
@@ -71,9 +70,7 @@ export default async function AdminAdminsPage() {
 
         {!admins?.length ? (
           <p className="text-sm text-on-surface-variant">
-            No admins in the DB yet. Add one below — or check{' '}
-            <code className="rounded bg-surface-container px-1 py-0.5 text-xs">ADMIN_EMAIL</code>{' '}
-            env var (legacy fallback still active).
+            No admins are seeded yet. Add the first platform admin below.
           </p>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-outline-variant/20">

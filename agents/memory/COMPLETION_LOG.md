@@ -11367,3 +11367,178 @@ What was done:
 Verification: `npx.cmd tsc --noEmit` — 0 errors
 
 Files: `components/new-subscriber-welcome-banner.tsx`, `app/dashboard/page.tsx`
+
+---
+
+### 2026-04-08 — BILL-008
+
+**Agent:** Frontend + Backend
+**Claimed complete:** 2026-04-08
+**Evidence type:** Type-check + Vitest
+
+**What was done:**
+- Exported `ADMIN_PAGE_CONTEXT_MISCONFIGURED_MESSAGE` from `lib/server/admin-runtime.ts` and used it in `buildAdminDbOrMessage` so the string stays a single source of truth.
+- Updated `app/dashboard/(admin)/layout.tsx`: on `!getAdminPageContext(...).ok`, show the existing inline error only when the message equals that constant; otherwise `redirect('/dashboard')`.
+- Updated `app/dashboard/(admin)/content/page.tsx` with the same branch for consistency.
+- Added `lib/server/admin-runtime.test.ts` (stable message contract).
+
+**Evidence:**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+
+ RUN  v4.1.2
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+```
+
+(command: `npm run type-check`; `npx vitest run lib/server/admin-runtime.test.ts`)
+
+**Files:** `lib/server/admin-runtime.ts`, `app/dashboard/(admin)/layout.tsx`, `app/dashboard/(admin)/content/page.tsx`, `lib/server/admin-runtime.test.ts`
+
+---
+
+### 2026-04-08 — BILL-009
+
+**Agent:** Backend + Security
+**Claimed complete:** 2026-04-08
+**Evidence type:** Type-check + Vitest
+
+**What was done:**
+- Added `lib/server/legacy-admin-email.ts` with `isLegacyAdminEmailEnvMatch` (edge-safe, env-only). `isAdminEmail` in `require-admin.ts` delegates to it.
+- Extended `updateSession` (`lib/supabase/middleware.ts`) to return `userEmail` (Supabase user or E2E fixture).
+- `middleware.ts`: when `ADMIN_EMAIL` is non-empty, authenticated requests to `/admin/*` except `/admin/login` whose session email does not match are redirected to `/dashboard`; refreshed auth cookies are copied onto the redirect response via `redirectWithSessionCookies`.
+- Documented operator caveat in `.env.local.example`: DB-only platform admins must unset `ADMIN_EMAIL` or set it to their login email.
+
+**Limitation (intentional):** Session email must match `ADMIN_EMAIL` to pass this gate when the var is set; `platform_admin_users` remains enforced in `app/admin/layout.tsx` for users who pass middleware.
+
+**Evidence:**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+
+ RUN  v4.1.2
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+```
+
+(command: `npm run type-check`; `npx vitest run lib/server/legacy-admin-email.test.ts`)
+
+**Files:** `middleware.ts`, `lib/supabase/middleware.ts`, `lib/server/legacy-admin-email.ts`, `lib/server/legacy-admin-email.test.ts`, `lib/server/require-admin.ts`, `.env.local.example`
+
+---
+
+### 2026-04-08 — BILL-010
+
+**Agent:** Architect + Product
+**Claimed complete:** 2026-04-08
+**Evidence type:** Documentation only (ADR + current-state)
+
+**What was done:**
+- Added **ADR-009** to `agents/memory/DECISIONS.md`: canonical Stripe subscription data in `user_subscriptions` (`bundle_key`, etc.); `users.plan` as coarse `plan_type` denormalized via webhook `bundleToPlan`; explicit note that `assignUserPlan` allowed values vs Postgres enum must be aligned in BILL-011.
+- Updated `docs/01-current-state.md` (Product Status) with a short **Billing & plan columns** paragraph and pointer to ADR-009.
+
+**Files:** `agents/memory/DECISIONS.md`, `docs/01-current-state.md`
+
+---
+
+### 2026-04-08 — BILL-011
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-08
+**Evidence type:** Type-check + Vitest
+
+**What was done:**
+- Added `lib/server/plan-type.ts`: `PLAN_TYPE_VALUES` (`free`, `pro`, `agency`), `isValidPlanType`, `normalizePlanTypeForAdmin` (invalid/legacy display → `free`).
+- `assignUserPlan` validates with `isValidPlanType` only (ADR-009).
+- `app/admin/users/[userId]/page.tsx`: dropdown uses `PLAN_TYPE_VALUES`, helper text notes coarse `plan_type` vs `user_subscriptions`; `defaultValue` uses `normalizePlanTypeForAdmin`.
+
+**Evidence:**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+```
+
+(command: `npm run type-check`; `npx vitest run lib/server/plan-type.test.ts`)
+
+**Files:** `lib/server/plan-type.ts`, `lib/server/plan-type.test.ts`, `app/admin/users/actions.ts`, `app/admin/users/[userId]/page.tsx`, `docs/01-current-state.md`
+
+---
+
+### 2026-04-08 — BILL-012
+
+**Agent:** Backend
+**Claimed complete:** 2026-04-08
+**Evidence type:** Type-check + full Vitest
+
+**What was done:**
+- Added `lib/server/admin-comp-subscription.ts`: `syncAdminCompSubscription` upserts a deterministic synthetic row (`stripe_subscription_id` = `admin_comp:<userId>`, `stripe_price_id` = `admin_comp`) when admin assigns `pro` or `agency`; maps `pro`→`startup_dev`, `agency`→`agency_core`. Skips upsert when a non-synthetic active/trialing row already exists for that bundle (avoids duplicate per `user_subscriptions_one_active_per_bundle`). Cancels synthetic row on `free`.
+- `assignUserPlan` loads `stripe_customer_id`, runs sync before `users.plan` update; `cancelUserSubscription` runs sync after setting `users.plan` to `free` so comp rows are cleared.
+
+**Evidence:**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+
+ Test Files  113 passed (113)
+      Tests  495 passed (495)
+```
+
+(command: `npm run type-check`; `npm run test -- --run`)
+
+**Files:** `lib/server/admin-comp-subscription.ts`, `lib/server/admin-comp-subscription.test.ts`, `app/admin/users/actions.ts`
+
+---
+
+### 2026-04-08 — BILL-013
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-08
+**Evidence type:** Type-check + full Vitest
+
+**What was done:**
+- `lib/server/subscription-provisioning-gap.ts`: `subscriptionNeedsWorkspaceProvisioning` + `bundleNeedsWorkspaceProvisioning` — idempotent predicate for “live” subscription (`active` \| `trialing` \| `incomplete`) on `startup_dev` \| `agency_core` \| `agency_pro` with no `startup_workspace_id` / `agency_account_id`.
+- `provisionMyWorkspaceForSubscription` in `app/dashboard/actions.ts`: session user must own the subscription row; service-role client runs `provisionWorkspaceForSubscription` (same as webhook/admin); redirects to `/dashboard` with `startupWorkspace` or `agencyAccount` query.
+- `components/subscription-workspace-pending-banner.tsx` + `app/dashboard/page.tsx`: parallel load of `user_subscriptions` (RLS), banner with primary CTA for first pending row.
+- `app/admin/users/[userId]/page.tsx`: provision button uses shared predicate.
+
+**Evidence:**
+
+```
+> geo-pulse@0.1.0 type-check
+> tsc --noEmit
+
+ Test Files  114 passed (114)
+      Tests  499 passed (499)
+```
+
+(command: `npm run type-check`; `npm run test -- --run`)
+
+**Files:** `lib/server/subscription-provisioning-gap.ts`, `lib/server/subscription-provisioning-gap.test.ts`, `app/dashboard/actions.ts`, `components/subscription-workspace-pending-banner.tsx`, `app/dashboard/page.tsx`, `app/admin/users/[userId]/page.tsx`
+
+---
+
+### 2026-04-08 — BILL-014
+
+**Agent:** Database
+**Claimed complete:** 2026-04-08
+**Evidence type:** Migration SQL (apply via Supabase CLI / hosted migrate)
+
+**What was done:**
+- `021_service_entitlements_foundation.sql` enabled RLS on service catalog tables but added **no** policies, so `authenticated` JWT queries returned no rows (or failed resolution paths).
+- `037_service_entitlements_rls_policies.sql` adds **SELECT** only for `authenticated`:
+  - `service_catalog`, `service_bundles`, `service_bundle_services`: full read (product config).
+  - `service_entitlement_overrides`: `global` + `bundle_default` for any signed-in user; `agency_account` / `agency_client` when the user has active `agency_users` membership (and client under that account); `user` when `user_id = auth.uid()`.
+  - `service_model_policies`: `service_default` + `bundle` for any signed-in user; agency scopes via membership; `startup_workspace` via `public.is_startup_workspace_member(startup_workspace_id)`.
+- Mutations remain via **service role** (server actions / webhooks); no INSERT/UPDATE/DELETE policies for `authenticated`.
+
+**Files:** `supabase/migrations/037_service_entitlements_rls_policies.sql`

@@ -36,7 +36,6 @@ export default defineConfig({
         process.env['NEXT_PUBLIC_SUPABASE_ANON_KEY'] ??
         'playwright-placeholder-anon-key-not-for-production',
       E2E_BLOG_FIXTURE: '1',
-      ADMIN_EMAIL: process.env['ADMIN_EMAIL'] ?? 'admin@example.com',
     },
   },
   projects: [

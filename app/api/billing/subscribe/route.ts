@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { getClientIp, getPaymentApiEnv } from '@/lib/server/cf-env';
 import { checkCheckoutRateLimit } from '@/lib/server/rate-limit-kv';
+import { buildBillingSubscribeSuccessUrl } from '@/lib/server/billing-onboarding-flow';
 import { createStripeClient } from '@/lib/server/stripe-client';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -221,7 +222,7 @@ export async function POST(request: Request): Promise<Response> {
     ? bundle.trial_period_days
     : 0;
 
-  const successUrl = `${baseUrl}/dashboard?onboarded=true&bundle=${bundleKey}`;
+  const successUrl = buildBillingSubscribeSuccessUrl({ baseUrl, bundleKey });
   const cancelUrl = `${baseUrl}/pricing?subscription=cancel`;
 
   const session = await stripe.checkout.sessions.create({

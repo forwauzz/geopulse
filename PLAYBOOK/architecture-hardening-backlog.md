@@ -171,13 +171,12 @@ Current truth:
 - it is not the final long-term admin authorization model
 
 Current repo truth:
-- `lib/server/require-admin.ts` currently authorizes admin access by exact match against `ADMIN_EMAIL`
-- `app/admin/login/actions.ts` currently allows password login only when the authenticated user email matches that same admin identity, then signs the user back out on mismatch
-- this is intentionally fail-closed and acceptable for founder-led internal operations only
-- AH-007 is now complete as a design slice: the maturity path is documented here, but no runtime auth behavior changed in this step
+- `platform_admin_users` is the live source of truth for admin access
+- `app/admin/login/actions.ts`, `app/admin/layout.tsx`, `middleware.ts`, and the distribution OAuth gate all enforce that same DB-backed allowlist
+- AH-007 is now complete as a design slice: the maturity path is documented here, and the runtime auth model has moved to the DB allowlist
 
 Next-stage target:
-- move from env-only admin authorization to a table-driven allowlist such as `admin_users`
+- keep the allowlist table small and operator-managed
 - keep provisioning operator-controlled; do not add self-service admin grants
 - support a small explicit role set only when the product genuinely needs it, for example:
   - `founder_admin`
