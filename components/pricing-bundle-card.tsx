@@ -86,6 +86,7 @@ export function PricingBundleCard({
   );
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [isAwaitingTurnstile, setIsAwaitingTurnstile] = useState(false);
+  const [isTurnstileWidgetReady, setIsTurnstileWidgetReady] = useState(false);
   const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
   const autoSubscribeFiredRef = useRef(false);
 
@@ -111,10 +112,12 @@ export function PricingBundleCard({
     turnstileRef.current?.reset();
   }
 
-  function requestTurnstileToken(): void {
-    if (bypassTurnstile) return; // already has a token
+  function requestTurnstileToken(): boolean {
+    if (bypassTurnstile) return true; // already has a token
+    if (!turnstileRef.current) return false;
     turnstileRef.current?.execute();
     setIsAwaitingTurnstile(true);
+    return true;
   }
 
   function effectiveToken(): string | null {
@@ -149,8 +152,6 @@ export function PricingBundleCard({
     if (!autoSubscribe || !isAuthenticated || autoSubscribeFiredRef.current) return;
     const t = effectiveToken();
     if (!t) {
-      // With options.execution "execute", token won't arrive until we trigger it
-      if (!bypassTurnstile && turnstileSiteKey.trim()) requestTurnstileToken();
       return;
     }
     setIsAwaitingTurnstile(false);
@@ -166,6 +167,13 @@ export function PricingBundleCard({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- effectiveToken derived from turnstileToken / bypass
   }, [autoSubscribe, isAuthenticated, turnstileToken, bypassTurnstile, bundleKey]);
+
+  useEffect(() => {
+    if (!autoSubscribe || !isAuthenticated || autoSubscribeFiredRef.current) return;
+    if (!isTurnstileWidgetReady) return;
+    if (effectiveToken()) return;
+    requestTurnstileToken();
+  }, [autoSubscribe, isAuthenticated, isTurnstileWidgetReady, turnstileToken, bypassTurnstile, bundleKey]);
 
   useLongWaitEffect(isPending, {
     title: trialDays > 0 ? 'Starting your free trial…' : 'Setting up checkout…',
@@ -189,7 +197,9 @@ export function PricingBundleCard({
     const t = effectiveToken();
     if (needsPaidCheckout && !t) {
       // Token not ready yet — trigger Turnstile and proceed automatically on success
-      requestTurnstileToken();
+      if (!requestTurnstileToken()) {
+        setCheckoutError('Verification is still loading. Please try again in a moment.');
+      }
       return;
     }
 
@@ -256,6 +266,12 @@ export function PricingBundleCard({
                 ref={turnstileRef}
                 siteKey={turnstileSiteKey}
                 options={{ execution: 'execute' }}
+                onWidgetLoad={() => {
+                  setIsTurnstileWidgetReady(true);
+                  if (autoSubscribe && isAuthenticated && !autoSubscribeFiredRef.current) {
+                    requestTurnstileToken();
+                  }
+                }}
                 onSuccess={(next) => {
                   setTurnstileToken(next);
                   setCheckoutError(null);
