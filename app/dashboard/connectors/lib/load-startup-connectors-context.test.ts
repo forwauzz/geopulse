@@ -32,6 +32,20 @@ const mocks = vi.hoisted(() => ({
   readSlackStatusMessage: vi.fn(() => null),
 }));
 
+function createQueryResult(data: unknown) {
+  const result = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn(async () => ({ data, error: null })),
+    then: (resolve: (value: { data: unknown; error: null }) => unknown) =>
+      Promise.resolve({ data, error: null }).then(resolve),
+  };
+  return result;
+}
+
 vi.mock('@/lib/server/startup-dashboard-data', () => ({
   getStartupDashboardData: mocks.getStartupDashboardData,
 }));
@@ -83,6 +97,37 @@ describe('loadStartupConnectorsContext', () => {
     expect(mocks.resolveStartupServiceGate).toHaveBeenCalledWith(
       expect.objectContaining({ serviceKey: 'slack_integration' })
     );
+  });
+
+  it('shows workspace provisioning when the subscription exists but no workspace is linked yet', async () => {
+    mocks.getStartupDashboardData.mockResolvedValueOnce({
+      selectedWorkspaceId: null,
+      workspaces: [],
+      scans: [],
+      recommendations: [],
+      reports: [],
+    } as any);
+
+    const supabase = {
+      from: vi.fn(() => createQueryResult([
+        {
+          bundle_key: 'startup_dev',
+          status: 'active',
+          startup_workspace_id: null,
+          agency_account_id: null,
+        },
+      ])),
+    } as any;
+
+    const result = await loadStartupConnectorsContext({
+      supabase,
+      userId: 'user_1',
+      sp: {},
+    });
+
+    expect(result.kind).toBe('workspace-provisioning');
+    if (result.kind !== 'workspace-provisioning') return;
+    expect(result.bundleKey).toBe('startup_dev');
   });
 });
 

@@ -13,6 +13,7 @@ import {
 } from '@/lib/server/startup-dashboard-status-messages';
 import { resolveStartupServiceGate } from '@/lib/server/startup-service-gates';
 import { resolveStartupWorkspaceBundleKey } from '@/lib/server/startup-github-integration';
+import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscription-provisioning-gap';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -25,6 +26,10 @@ type SearchSlice = {
 
 export type StartupConnectorsPageLoadResult =
   | { readonly kind: 'no-workspaces' }
+  | {
+      readonly kind: 'workspace-provisioning';
+      readonly bundleKey: string;
+    }
   | {
       readonly kind: 'rollout-blocked';
       readonly selectedWorkspace: { readonly id: string; readonly name: string } | null;
@@ -70,6 +75,16 @@ export async function loadStartupConnectorsContext(args: {
   });
 
   if (dashboard.workspaces.length === 0) {
+    const { data: subscriptions } = await supabase
+      .from('user_subscriptions')
+      .select('bundle_key,status,startup_workspace_id,agency_account_id')
+      .eq('user_id', userId);
+
+    const pending = (subscriptions ?? []).find(subscriptionNeedsWorkspaceProvisioning);
+    if (pending) {
+      return { kind: 'workspace-provisioning', bundleKey: pending.bundle_key };
+    }
+
     return { kind: 'no-workspaces' };
   }
 

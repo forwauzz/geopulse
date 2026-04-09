@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import {
   beginStartupGithubInstall,
   beginStartupSlackInstall,
@@ -12,6 +13,7 @@ import {
   updateStartupSlackAutoPostSetting,
 } from '@/app/dashboard/startup/actions';
 import { loadStartupConnectorsContext } from '@/app/dashboard/connectors/lib/load-startup-connectors-context';
+import { buildProvisioningPendingCopy } from '@/app/dashboard/connectors/lib/provisioning-pending-copy';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -81,6 +83,38 @@ export default async function ConnectorsPage({ searchParams }: Props) {
   });
 
   // ── No startup workspace ─────────────────────────────────────
+  if (loaded.kind === 'workspace-provisioning') {
+    const provisioningCopy = buildProvisioningPendingCopy(loaded.bundleKey);
+    return (
+      <section className="space-y-6">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">Dashboard</p>
+          <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Connectors</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Integrate GitHub and Slack with your startup workspace.
+          </p>
+        </div>
+        <div className="rounded-2xl bg-surface-container-low px-6 py-8 text-center">
+          <span className="material-symbols-outlined text-[40px] text-on-surface-variant" aria-hidden>
+            hourglass_top
+          </span>
+          <p className="mt-4 font-headline text-lg font-semibold text-on-background">
+            {provisioningCopy.title}
+          </p>
+          <p className="mt-2 text-sm text-on-surface-variant">
+            {provisioningCopy.body}
+          </p>
+          <Link
+            href={provisioningCopy.ctaHref}
+            className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
+          >
+            {provisioningCopy.ctaLabel}
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
   if (loaded.kind === 'no-workspaces') {
     return (
       <section className="space-y-6">

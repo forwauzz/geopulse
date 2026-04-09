@@ -30,6 +30,12 @@ export const checkoutLoadingJourney: LongWaitConfig = {
   steps: ['Verifying the request', 'Creating the checkout session', 'Redirecting to secure payment'],
 };
 
+export const pricingCheckoutWaitJourney: LongWaitConfig = {
+  title: 'Preparing secure checkout',
+  description: 'We are getting your Stripe payment screen ready.',
+  steps: ['Opening secure payment'],
+};
+
 export const loginLoadingJourney: LongWaitConfig = {
   title: 'Sending your sign-in link',
   description: 'We are creating a secure login link and handing it off to your inbox.',

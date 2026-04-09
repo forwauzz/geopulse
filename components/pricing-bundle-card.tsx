@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
+import { pricingCheckoutWaitJourney } from '@/lib/client/loading-journeys';
 
 const E2E_BYPASS_TURNSTILE =
   process.env['NEXT_PUBLIC_E2E_BYPASS_TURNSTILE'] === '1' &&
@@ -89,6 +90,7 @@ export function PricingBundleCard({
   const [isTurnstileWidgetReady, setIsTurnstileWidgetReady] = useState(false);
   const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
   const autoSubscribeFiredRef = useRef(false);
+  const isCheckoutWaiting = isPending || isAwaitingTurnstile;
 
   const needsPaidCheckout = !isFree && !isCurrentPlan;
   const turnstileConfigured = bypassTurnstile || Boolean(turnstileSiteKey.trim());
@@ -175,10 +177,9 @@ export function PricingBundleCard({
     requestTurnstileToken();
   }, [autoSubscribe, isAuthenticated, isTurnstileWidgetReady, turnstileToken, bypassTurnstile, bundleKey]);
 
-  useLongWaitEffect(isPending, {
-    title: trialDays > 0 ? 'Starting your free trial…' : 'Setting up checkout…',
-    description: 'Preparing your Stripe checkout session.',
-    steps: ['Verifying your account', 'Creating checkout session', 'Redirecting to Stripe…'],
+  useLongWaitEffect(isCheckoutWaiting, {
+    ...pricingCheckoutWaitJourney,
+    title: trialDays > 0 ? 'Starting your free trial…' : pricingCheckoutWaitJourney.title,
     delayMs: 800,
   });
 
@@ -309,10 +310,10 @@ export function PricingBundleCard({
               disabled={isPending || isAwaitingTurnstile}
               className="inline-flex rounded-xl bg-primary px-5 py-3 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isPending ? 'Preparing…' : isAwaitingTurnstile ? 'Verifying…' : ctaLabel}
-            </button>
-          </div>
-        )}
+            {isCheckoutWaiting ? 'Preparing secure checkout…' : ctaLabel}
+          </button>
+        </div>
+      )}
 
         {/* Fine print for paid plans */}
         {!isFree && !isCurrentPlan && (

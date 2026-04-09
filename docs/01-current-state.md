@@ -57,6 +57,8 @@ The admin bundle page now includes a readiness summary that separates billing co
 
 The onboarding handoff now has explicit shared helpers for post-signup redirects and subscription success URLs, plus a focused flow test that covers signup -> subscribe -> provisioning -> dashboard recovery -> audit-access state.
 
+The checkout and workspace-provisioning flow now has a dedicated byte-task stream in `docs/21-checkout-workspace-provisioning-implementation-plan.md` and `PLAYBOOK/checkout-workspace-provisioning-v1.md`. The pricing page now uses one stable checkout wait state before Stripe appears, and the connectors page now shows a provisioning-pending state with a dashboard return path when a live startup/agency subscription exists but the workspace/account link has not landed yet.
+
 Subscription workspace/account provisioning now uses a subscription-derived key plus conflict-aware membership writes, so webhook retries and near-simultaneous deliveries converge on one child record instead of creating duplicate workspaces or agency accounts.
 
 The coarse `users.plan` field now syncs from the remaining live subscriptions instead of being forced to `free` on every cancellation, so the plan column stays aligned when a user still has another active or trialing bundle.

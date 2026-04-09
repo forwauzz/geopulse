@@ -424,6 +424,20 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | 2026-04-09 | **BT-005 - COMPLETE (implementation + verification).** Added focused regression coverage for the signup shell and the password signup/sign-in redirect behavior. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/login/actions.test.ts app/login/page.test.tsx`. |
 | 2026-04-09 | **BT-006 - COMPLETE (documentation).** Updated the auth/signup playbook, implementation plan, current-state doc, and project memory to reflect the shipped password-based signup flow. |
 
+### Checkout + Workspace Provisioning byte-task stream (BT-001 ... BT-003)
+> Frozen implementation plan in `docs/21-checkout-workspace-provisioning-implementation-plan.md` and `PLAYBOOK/checkout-workspace-provisioning-v1.md`. This stream stays docs-first, narrow, and focused on one stable checkout wait state plus subscription-derived workspace provisioning visibility.
+
+| TASK ID | Description | Owner | Status | Evidence |
+|---|---|---|---|---|
+| BT-001 | Collapse the pricing-page autosubscribe flow into one stable checkout wait state before Stripe is ready | Frontend | DONE | `components/pricing-bundle-card.tsx`, `lib/client/loading-journeys.ts`, `lib/client/loading-journeys.test.ts`, `npx.cmd tsc --noEmit`, `npx.cmd vitest run lib/client/loading-journeys.test.ts` |
+| BT-002 | Show connectors as provisioning-pending when a live startup/agency subscription exists but no workspace/account is linked yet | Backend + Frontend | DONE | `app/dashboard/connectors/lib/load-startup-connectors-context.ts`, `app/dashboard/connectors/page.tsx`, `app/dashboard/connectors/lib/load-startup-connectors-context.test.ts`, `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/dashboard/connectors/lib/load-startup-connectors-context.test.ts` |
+| BT-003 | Update repo docs and current-state notes to record the checkout and workspace-provisioning contract | Orchestrator | DONE | `PLAYBOOK/checkout-workspace-provisioning-v1.md`, `docs/21-checkout-workspace-provisioning-implementation-plan.md`, `docs/01-current-state.md`, `agents/memory/PROJECT_STATE.md` |
+
+| 2026-04-09 | **Checkout + workspace-provisioning byte-task stream opened.** Added `PLAYBOOK/checkout-workspace-provisioning-v1.md` and `docs/21-checkout-workspace-provisioning-implementation-plan.md`; registered `BT-001` ... `BT-003` in `PROJECT_STATE.md`. Sequencing freeze: collapse checkout wait first, then surface subscription-derived provisioning state on connectors, then update docs/state. |
+| 2026-04-09 | **BT-002 - COMPLETE (implementation + verification).** Connectors now show a provisioning-pending state when a live startup/agency subscription exists but the workspace/account link has not landed yet, reusing the existing subscription-derived provisioning source of truth instead of a second onboarding path. The pending state now includes a dashboard return path so users can keep moving while provisioning finishes. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/dashboard/connectors/lib/load-startup-connectors-context.test.ts`. |
+| 2026-04-09 | **BT-001 - COMPLETE (implementation + verification).** Pricing autosubscribe now uses one stable checkout wait state before Stripe is ready, replacing the visible multi-step verification/preparing redirect sequence. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run lib/client/loading-journeys.test.ts`. |
+| 2026-04-09 | **BT-003 - COMPLETE (documentation).** Updated the checkout/workspace-provisioning playbook, implementation plan, current-state doc, and project memory to reflect the shipped checkout wait state and provisioning-pending connectors state. |
+
 ### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)
 > Restructure the startup dashboard into Overview / Audits / Delivery / Settings via `?tab=` (default `overview`). Plan: `.cursor/plans/startup_dashboard_tab_redesign_997f45c9.plan.md`. Shared types: `app/dashboard/startup/components/startup-tab-types.ts`.
 
