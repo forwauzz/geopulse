@@ -17,6 +17,10 @@ export type PublicShareScanRow = {
   reportStatus: ReportStatus;
   pdfUrl: string | null;
   markdownUrl: string | null;
+  startupWorkspaceId: string | null;
+  agencyAccountId: string | null;
+  agencyClientId: string | null;
+  viewerEmail: string | null;
 };
 
 export type PublicShareScanError =
@@ -122,6 +126,10 @@ export async function getScanForPublicShare(
       reportStatus,
       pdfUrl: report?.pdf_url ?? null,
       markdownUrl: report?.markdown_url ?? null,
+      startupWorkspaceId: null,
+      agencyAccountId: null,
+      agencyClientId: null,
+      viewerEmail: null,
     },
   };
 }

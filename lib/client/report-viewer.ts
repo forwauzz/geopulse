@@ -28,6 +28,12 @@ export type ScanResponse = {
   categoryScores: CategoryScore[];
   pdfUrl?: string | null;
   markdownUrl?: string | null;
+  reportStatus?: 'none' | 'generating' | 'delivered';
+  hasPaidReport?: boolean;
+  startupWorkspaceId?: string | null;
+  agencyAccountId?: string | null;
+  agencyClientId?: string | null;
+  viewerEmail?: string | null;
 };
 
 export type ViewState =

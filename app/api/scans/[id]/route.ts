@@ -115,6 +115,10 @@ export async function GET(
           reportStatus,
           pdfUrl: report?.pdf_url ?? null,
           markdownUrl: report?.markdown_url ?? null,
+          startupWorkspaceId: scan.startup_workspace_id ?? null,
+          agencyAccountId: scan.agency_account_id ?? null,
+          agencyClientId: scan.agency_client_id ?? null,
+          viewerEmail: user.email ?? null,
           checkoutMode: (
             canAccessAsStartupMember
               ? 'startup_bypass'
@@ -176,6 +180,10 @@ export async function GET(
     reportStatus: data.reportStatus,
     pdfUrl: data.pdfUrl,
     markdownUrl: data.markdownUrl,
+    startupWorkspaceId: data.startupWorkspaceId,
+    agencyAccountId: data.agencyAccountId,
+    agencyClientId: data.agencyClientId,
+    viewerEmail: data.viewerEmail,
     deepAuditAvailable: true,
   });
 }

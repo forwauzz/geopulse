@@ -41,7 +41,20 @@ export async function POST(): Promise<Response> {
     .eq('id', user.id)
     .maybeSingle();
 
-  if (!userRow?.stripe_customer_id) {
+  let stripeCustomerId = userRow?.stripe_customer_id ?? '';
+
+  if (!stripeCustomerId) {
+    const { data: subRow } = await adminDb
+      .from('user_subscriptions')
+      .select('stripe_customer_id')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    stripeCustomerId = subRow?.stripe_customer_id ?? '';
+  }
+
+  if (!stripeCustomerId) {
     return Response.json(
       { error: { code: 'no_customer', message: 'No billing account found for your user.' } },
       { status: 404 }
@@ -52,7 +65,7 @@ export async function POST(): Promise<Response> {
   try {
     const stripe = createStripeClient(env.STRIPE_SECRET_KEY);
     const session = await stripe.billingPortal.sessions.create({
-      customer: userRow.stripe_customer_id,
+      customer: stripeCustomerId,
       return_url: `${baseUrl}/dashboard/billing`,
     });
     return Response.json({ url: session.url });

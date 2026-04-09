@@ -11,6 +11,7 @@ import {
   normalizeDeepAuditCheckoutMode,
   type DeepAuditCheckoutMode,
 } from '@/lib/shared/deep-audit-checkout-mode';
+import { buildReportPath } from '@/lib/shared/report-route';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -82,7 +83,7 @@ function buildActionCard(input: {
         ? 'Open the interactive report, download the PDF, or sign in with the checkout email if you want it saved in your dashboard.'
         : 'Your report was delivered to the Stripe checkout email. Sign in with that same email if you want to recover it in your dashboard later.',
       primaryLabel: input.markdownUrl ? 'Open report now' : input.pdfUrl ? 'Download PDF' : 'Open dashboard',
-      primaryHref: input.markdownUrl ? `/results/${input.scanId}/report` : input.pdfUrl ?? '/dashboard',
+      primaryHref: input.markdownUrl ? buildReportPath(input.scanId) : input.pdfUrl ?? '/dashboard',
       secondaryLabel: 'Sign in to dashboard',
       secondaryHref: '/login?next=/dashboard',
       note: 'Delivery email remains the source of truth for the paid report, but the same checkout email can also unlock dashboard recovery.',
@@ -431,7 +432,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
               <div className="mt-4 flex flex-wrap gap-3">
                 {data.markdownUrl && (
                   <a
-                    href={`/results/${data.scanId}/report`}
+                  href={buildReportPath(data.scanId)}
                     className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
                   >
                     <span className="material-symbols-outlined text-base">article</span>

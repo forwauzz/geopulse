@@ -214,7 +214,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (stripeCustomerId.trim() && bundle.stripe_price_id?.trim()) {
-      let existingStripeSubs;
+      let existingStripeSubs: { data: Array<{ id?: string; status?: string }> };
       try {
         existingStripeSubs = await stripe.subscriptions.list({
           customer: stripeCustomerId,
@@ -223,16 +223,16 @@ export async function POST(request: Request): Promise<Response> {
           limit: 5,
         });
       } catch (error) {
-        return checkoutFailure(
-          'stripe_duplicate_check_failed',
-          'Unable to verify existing Stripe subscriptions.',
-          502,
+        structuredLog(
+          'billing_subscribe_stripe_duplicate_check_failed',
           {
             userId: user.id,
             bundleKey,
             error: error instanceof Error ? error.message : 'unknown',
-          }
+          },
+          'warning'
         );
+        existingStripeSubs = { data: [] };
       }
 
       const liveStripeSub = existingStripeSubs.data.find(

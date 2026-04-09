@@ -2,10 +2,12 @@
 
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { checkoutLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
 import { type DeepAuditCheckoutMode } from '@/lib/shared/deep-audit-checkout-mode';
+import { resolveDeepAuditCheckoutRedirect } from '@/lib/shared/deep-audit-checkout-redirect';
 
 type Props = {
   siteKey: string;
@@ -36,6 +38,7 @@ export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
   const [loading, setLoading] = useState(false);
   const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
   const submittingRef = useRef(false);
+  const router = useRouter();
   useLongWaitEffect(loading, checkoutLoadingJourney);
 
   function resetTurnstile(): void {
@@ -85,7 +88,9 @@ export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
         return;
       }
 
-      window.location.href = url;
+      const redirect = resolveDeepAuditCheckoutRedirect(url, window.location.origin);
+      if (redirect.kind === 'replace') router.replace(redirect.href);
+      else window.location.assign(redirect.href);
     } catch {
       setError('Network error');
       resetTurnstile();

@@ -13,6 +13,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { structuredLog } from '@/lib/server/structured-log';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
+import { buildReportUrl } from '@/lib/shared/report-route';
 
 export const runtime = 'nodejs';
 
@@ -184,7 +185,7 @@ export async function POST(request: Request): Promise<Response> {
         );
       }
 
-      return Response.json({ url: `${baseUrl}/results/${scanId}?checkout=success` });
+      return Response.json({ url: buildReportUrl(baseUrl, scanId) });
     }
   }
 
@@ -222,7 +223,7 @@ export async function POST(request: Request): Promise<Response> {
           { status: result.status }
         );
       }
-      return Response.json({ url: `${baseUrl}/results/${scanId}?checkout=success` });
+      return Response.json({ url: buildReportUrl(baseUrl, scanId) });
     }
   }
 
@@ -239,7 +240,7 @@ export async function POST(request: Request): Promise<Response> {
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       line_items: [{ price: env.STRIPE_PRICE_ID_DEEP_AUDIT, quantity: 1 }],
-      success_url: `${baseUrl}/results/${scanId}?checkout=success`,
+      success_url: buildReportUrl(baseUrl, scanId),
       cancel_url: `${baseUrl}/results/${scanId}?checkout=cancel`,
       metadata: { scan_id: scanId },
     });
