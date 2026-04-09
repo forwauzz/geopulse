@@ -8,9 +8,10 @@ import { sendMagicLink, signInWithPassword } from './actions';
 type Props = {
   readonly nextPath: string;
   readonly isSignUp?: boolean;
+  readonly bundleKey?: string;
 };
 
-export function LoginForm({ nextPath, isSignUp = false }: Props) {
+export function LoginForm({ nextPath, isSignUp = false, bundleKey }: Props) {
   const [passwordState, passwordAction, passwordPending] = useActionState(
     signInWithPassword,
     null
@@ -68,6 +69,8 @@ export function LoginForm({ nextPath, isSignUp = false }: Props) {
 
       <form action={magicLinkAction} className="flex flex-col gap-4 rounded-2xl bg-surface-container-low p-5">
         <input type="hidden" name="next" value={nextPath} />
+        {isSignUp ? <input type="hidden" name="mode" value="signup" /> : null}
+        {bundleKey ? <input type="hidden" name="bundle" value={bundleKey} /> : null}
         <div>
           <h2 className="font-sans text-lg font-semibold text-on-background">
             {isSignUp ? 'Get started with email' : 'Magic link'}

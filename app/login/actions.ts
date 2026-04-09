@@ -13,6 +13,8 @@ const passwordLoginSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters.'),
 });
 
+const bundleKeySchema = z.enum(['startup_dev', 'agency_core', 'agency_pro']);
+
 export type LoginActionState =
   | { ok: true; message: string }
   | { ok: false; message: string };
@@ -22,6 +24,11 @@ function safeNextPath(raw: FormDataEntryValue | null): string {
     return '/dashboard';
   }
   return raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+}
+
+function readTrimmedField(formData: FormData, name: string): string {
+  const raw = formData.get(name);
+  return typeof raw === 'string' ? raw.trim() : '';
 }
 
 export async function sendMagicLink(
@@ -39,9 +46,9 @@ export async function sendMagicLink(
   }
 
   const nextPath = safeNextPath(formData.get('next'));
-  const fullName = typeof formData.get('full_name') === 'string'
-    ? (formData.get('full_name') as string).trim()
-    : '';
+  const mode = readTrimmedField(formData, 'mode');
+  const bundleRaw = readTrimmedField(formData, 'bundle');
+  const fullName = readTrimmedField(formData, 'full_name');
   let supabase;
   try {
     supabase = await createSupabaseServerClient();
@@ -49,9 +56,19 @@ export async function sendMagicLink(
     return { ok: false, message: 'Authentication is not configured.' };
   }
 
-  const redirectTo =
-    `${appUrl}/auth/callback?next=${encodeURIComponent(nextPath)}` +
-    (fullName ? `&name=${encodeURIComponent(fullName)}` : '');
+  const redirectParams = new URLSearchParams();
+  redirectParams.set('next', nextPath);
+  if (mode === 'signup') {
+    redirectParams.set('mode', 'signup');
+  }
+  const bundle = bundleKeySchema.safeParse(bundleRaw);
+  if (bundle.success) {
+    redirectParams.set('bundle', bundle.data);
+  }
+  if (fullName) {
+    redirectParams.set('name', fullName);
+  }
+  const redirectTo = `${appUrl}/auth/callback?${redirectParams.toString()}`;
 
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,

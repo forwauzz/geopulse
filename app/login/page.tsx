@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { LoginForm } from './login-form';
 
 type Props = {
-  searchParams: Promise<{ next?: string; error?: string; mode?: string }>;
+  searchParams: Promise<{ next?: string; error?: string; mode?: string; bundle?: string }>;
 };
 
 function safeNextPath(raw: string | undefined): string {
@@ -17,6 +17,7 @@ export default async function LoginPage({ searchParams }: Props) {
   const nextPath = safeNextPath(sp.next);
   const err = sp.error;
   const isSignUp = sp.mode === 'signup';
+  const bundleKey = sp.bundle?.trim() || undefined;
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col px-6 py-16">
@@ -45,7 +46,7 @@ export default async function LoginPage({ searchParams }: Props) {
           {decodeURIComponent(err)}
         </p>
       ) : null}
-      <LoginForm nextPath={nextPath} isSignUp={isSignUp} />
+      <LoginForm nextPath={nextPath} isSignUp={isSignUp} bundleKey={bundleKey} />
     </main>
   );
 }
