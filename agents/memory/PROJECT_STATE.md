@@ -404,6 +404,26 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | 2026-04-08 | **BT-010 â€” COMPLETE (implementation + docs).** Clarified the operator boundary between bundle-local billing/service settings and the cross-bundle service control center. The bundle page now points admins at `/admin/services` for deep-audit bypass and payment-required overrides instead of implying those rules belong in the bundle editor. Verification: `npm.cmd tsc --noEmit`. |
 | 2026-04-08 | **BT-011 â€” COMPLETE (implementation + docs).** Converged admin authorization to a single DB-backed platform-admin allowlist. The runtime no longer uses the legacy `ADMIN_EMAIL` fallback for admin routes, dashboard shell affordances, admin login, or distribution OAuth. Verification: `npm.cmd tsc --noEmit`. |
 
+### Auth/signup byte-task stream (BT-001 ... BT-006)
+> Frozen implementation plan in `docs/20-auth-signup-implementation-plan.md` and `PLAYBOOK/auth-signup-v1.md`. This stream stays docs-first, narrow, and focused on one primary signup surface, bundle preservation, redirect continuity, and focused tests.
+
+| TASK ID | Description | Owner | Status | Evidence |
+|---|---|---|---|---|
+| BT-001 | Simplify the public auth entry into a single sign-up path with a secondary sign-in link beneath it | Frontend | DONE | `app/login/page.tsx`, `app/login/login-form.tsx`, `components/pricing-bundle-card.tsx` |
+| BT-002 | Replace magic-link signup with password signup plus password confirmation | Backend + Frontend | TODO | `docs/20-auth-signup-implementation-plan.md` |
+| BT-003 | Preserve the selected bundle through signup so checkout resumes on the correct tier | Backend + Frontend | DONE | `app/login/actions.ts`, `app/login/actions.test.ts`, `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/login/actions.test.ts` |
+| BT-004 | Align auth callback and onboarding redirects with the password-based signup flow | Backend | DONE | `app/login/actions.ts`, `app/login/login-form.tsx`, `app/auth/callback/route.ts`, `app/login/actions.test.ts`, `npx.cmd vitest run app/login/actions.test.ts` |
+| BT-005 | Add focused tests for signup UI, bundle preservation, and redirect behavior | QA | DONE | `app/login/actions.test.ts`, `app/login/page.test.tsx`, `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/login/actions.test.ts app/login/page.test.tsx` |
+| BT-006 | Update repo docs and current-state notes after each completed slice | Orchestrator | DONE | `PLAYBOOK/auth-signup-v1.md`, `docs/20-auth-signup-implementation-plan.md`, `docs/01-current-state.md`, `agents/memory/PROJECT_STATE.md` |
+
+| 2026-04-09 | **Auth/signup byte-task stream opened.** Added `PLAYBOOK/auth-signup-v1.md` and `docs/20-auth-signup-implementation-plan.md`; registered `BT-001` ... `BT-006` in `PROJECT_STATE.md`. Sequencing freeze: keep one primary sign-up surface, then password rollout, bundle preservation, redirect alignment, and focused tests. |
+| 2026-04-09 | **BT-001 - COMPLETE (implementation + documentation).** Simplified the public auth entry into a single signup panel for pricing-tier clicks with a secondary `Or sign in` link beneath it. The signup path no longer presents a side-by-side split on the tier-entry surface. Verification: `npx.cmd tsc --noEmit`. |
+| 2026-04-09 | **BT-002 - COMPLETE (implementation + verification).** Replaced the signup flow with password-based account creation plus confirmation on the sign-up panel. The action now creates the account, signs the user in, and resumes the selected pricing bundle toward checkout. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/login/actions.test.ts`. |
+| 2026-04-09 | **BT-003 - COMPLETE (implementation + verification).** Preserved the selected bundle through the new password-signup flow so the user returns to the correct pricing bundle before checkout. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/login/actions.test.ts`. |
+| 2026-04-09 | **BT-004 - COMPLETE (implementation + verification).** Password sign-in from the pricing-tier auth path now preserves the selected bundle and resumes the same checkout path via the shared onboarding redirect helper. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/login/actions.test.ts`. |
+| 2026-04-09 | **BT-005 - COMPLETE (implementation + verification).** Added focused regression coverage for the signup shell and the password signup/sign-in redirect behavior. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/login/actions.test.ts app/login/page.test.tsx`. |
+| 2026-04-09 | **BT-006 - COMPLETE (documentation).** Updated the auth/signup playbook, implementation plan, current-state doc, and project memory to reflect the shipped password-based signup flow. |
+
 ### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)
 > Restructure the startup dashboard into Overview / Audits / Delivery / Settings via `?tab=` (default `overview`). Plan: `.cursor/plans/startup_dashboard_tab_redesign_997f45c9.plan.md`. Shared types: `app/dashboard/startup/components/startup-tab-types.ts`.
 

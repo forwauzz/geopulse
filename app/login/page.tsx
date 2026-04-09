@@ -29,7 +29,7 @@ export default async function LoginPage({ searchParams }: Props) {
       </h1>
       <p className="mt-2 max-w-2xl font-body text-on-surface-variant">
         {isSignUp
-          ? 'Enter your email to get started — no password needed.'
+          ? 'Create your account for the plan you selected, then continue to checkout.'
           : 'Customer accounts can still use a magic link. Agency and pilot accounts can also sign in with an email and password.'}
       </p>
       {!isSignUp && (

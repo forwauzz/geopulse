@@ -1,6 +1,6 @@
 # Current State
 
-Last consolidated: 2026-04-08
+Last consolidated: 2026-04-09
 
 ## Product Status
 
@@ -34,6 +34,18 @@ Launch is not fully closed yet.
 A separate planning-only content-machine stream now exists on branch `planning/content-machine-v1`.
 
 A separate billing/onboarding byte-task stream is now frozen in `docs/19-billing-onboarding-implementation-plan.md` and `PLAYBOOK/billing-onboarding-v1.md`. It keeps the self-serve path narrow: lock product truth first, then runtime checkout-mode truth, then UI alignment, admin readiness checks, and end-to-end onboarding proof.
+
+A separate auth/signup byte-task stream is now frozen in `docs/20-auth-signup-implementation-plan.md` and `PLAYBOOK/auth-signup-v1.md`. It keeps the public auth path narrow: one primary sign-up surface for pricing-tier clicks, one secondary sign-in escape hatch, then password rollout, bundle preservation, redirect alignment, and focused tests.
+
+BT-001 from that stream is now complete: the `/login?mode=signup` path renders a single sign-up panel with an `Or sign in` link beneath it instead of a side-by-side split view.
+
+BT-002 from that stream is now complete: the sign-up panel collects name, email, password, and password confirmation, creates the account, signs the user in, and resumes the selected pricing bundle toward checkout.
+
+BT-004 from that stream is now complete: password sign-in from a pricing-tier signup link now preserves the selected bundle and resumes the same checkout path instead of dropping the user back on pricing without autosubscribe context.
+
+BT-005 from that stream is now complete: focused regression coverage now asserts both the signup shell and the password signup/sign-in redirect behavior for tier-based onboarding.
+
+BT-006 from that stream is now complete: the auth/signup playbook, plan, current-state doc, and project memory are aligned with the shipped password-based signup flow.
 
 The product truth for bundles is now explicit in the billing playbook: `startup_lite` stays free, `startup_dev` is paid but still uses the explicit startup workspace bypass for full-audit access, and `agency_core` / `agency_pro` include deep-audit entitlement while still honoring backend checkout modes and payment guardrails.
 

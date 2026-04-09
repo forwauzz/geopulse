@@ -2,11 +2,27 @@
 
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { resolvePostSignupRedirect } from '@/lib/server/billing-onboarding-flow';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const emailSchema = z.object({
   email: z.string().email(),
 });
+
+const signupSchema = z
+  .object({
+    fullName: z.string().trim().min(1, 'Enter your name.').max(120, 'Name is too long.'),
+    email: z.string().email('Enter a valid email address.'),
+    password: z.string().min(8, 'Password must be at least 8 characters.'),
+    confirmPassword: z.string().min(8, 'Confirm your password.'),
+    next: z.string().optional(),
+    bundle: z.string().optional(),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: 'Passwords do not match.',
+    path: ['confirmPassword'],
+  });
 
 const passwordLoginSchema = z.object({
   email: z.string().email(),
@@ -19,7 +35,7 @@ export type LoginActionState =
   | { ok: true; message: string }
   | { ok: false; message: string };
 
-function safeNextPath(raw: FormDataEntryValue | null): string {
+function safeNextPath(raw: FormDataEntryValue | string | null | undefined): string {
   if (typeof raw !== 'string' || raw.length === 0) {
     return '/dashboard';
   }
@@ -29,6 +45,14 @@ function safeNextPath(raw: FormDataEntryValue | null): string {
 function readTrimmedField(formData: FormData, name: string): string {
   const raw = formData.get(name);
   return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function getSignupRedirectTarget(nextPath: string, bundle: string | null): string | null {
+  return resolvePostSignupRedirect({
+    nextParam: nextPath,
+    bundleParam: bundle,
+    isNewUser: true,
+  });
 }
 
 export async function sendMagicLink(
@@ -87,6 +111,81 @@ export async function sendMagicLink(
   };
 }
 
+export async function signUpWithPassword(
+  _prev: LoginActionState | null,
+  formData: FormData
+): Promise<LoginActionState> {
+  const parsed = signupSchema.safeParse({
+    fullName: formData.get('full_name'),
+    email: formData.get('email'),
+    password: formData.get('password'),
+    confirmPassword: formData.get('confirm_password'),
+    next: formData.get('next') ?? undefined,
+    bundle: formData.get('bundle') ?? undefined,
+  });
+
+  if (!parsed.success) {
+    const first = parsed.error.flatten().fieldErrors;
+    const msg =
+      first['fullName']?.[0] ??
+      first['email']?.[0] ??
+      first['password']?.[0] ??
+      first['confirmPassword']?.[0] ??
+      'Check your sign-up details.';
+    return { ok: false, message: msg };
+  }
+
+  const appUrl = process.env['NEXT_PUBLIC_APP_URL']?.replace(/\/$/, '');
+  const supabaseUrl = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+  const serviceKey = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+  if (!appUrl || !supabaseUrl || !serviceKey) {
+    return { ok: false, message: 'Authentication is not configured.' };
+  }
+
+  let supabase;
+  try {
+    supabase = await createSupabaseServerClient();
+  } catch {
+    return { ok: false, message: 'Authentication is not configured.' };
+  }
+
+  const authAdmin = createServiceRoleClient(supabaseUrl, serviceKey);
+  const normalizedEmail = parsed.data.email.trim().toLowerCase();
+  const normalizedName = parsed.data.fullName.trim();
+
+  const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
+    email: normalizedEmail,
+    password: parsed.data.password,
+    email_confirm: true,
+    user_metadata: normalizedName ? { full_name: normalizedName } : undefined,
+  });
+
+  if (createError || !created.user) {
+    const message = createError?.message ?? 'Could not create your account.';
+    if (message.toLowerCase().includes('already registered')) {
+      return { ok: false, message: 'An account already exists for that email. Sign in instead.' };
+    }
+    return { ok: false, message };
+  }
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: normalizedEmail,
+    password: parsed.data.password,
+  });
+
+  if (signInError) {
+    return { ok: false, message: signInError.message };
+  }
+
+  if (normalizedName) {
+    await authAdmin.from('users').update({ full_name: normalizedName }).eq('id', created.user.id);
+  }
+
+  const nextPath = safeNextPath(parsed.data.next);
+  const redirectTarget = getSignupRedirectTarget(nextPath, parsed.data.bundle ?? null);
+  redirect(redirectTarget ?? nextPath);
+}
+
 export async function signInWithPassword(
   _prev: LoginActionState | null,
   formData: FormData
@@ -120,5 +219,12 @@ export async function signInWithPassword(
   }
 
   const nextPath = safeNextPath(formData.get('next'));
-  redirect(nextPath);
+  const bundleRaw = readTrimmedField(formData, 'bundle');
+  const bundle = bundleKeySchema.safeParse(bundleRaw);
+  const redirectTarget = resolvePostSignupRedirect({
+    nextParam: nextPath,
+    bundleParam: bundle.success ? bundle.data : null,
+    isNewUser: false,
+  });
+  redirect(redirectTarget ?? nextPath);
 }

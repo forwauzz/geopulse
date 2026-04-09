@@ -5,7 +5,7 @@ import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 const features = [
   {
     icon: 'smart_toy',
-    title: 'AI crawler access',
+    title: 'Crawl access',
     body: 'Review robots and server signals so public pages you intend to expose stay discoverable without weakening security controls.',
   },
   {
@@ -38,14 +38,14 @@ export default async function HomePage({
       <section className="relative mx-auto max-w-screen-2xl overflow-hidden px-6 pb-24 pt-16 text-center md:px-10 md:pb-32 md:pt-24">
         <div className="mb-6">
           <span className="inline-block rounded-full bg-surface-container-high px-3 py-1 font-label text-xs font-semibold uppercase tracking-widest text-primary">
-            AI search readiness audit
+            Website readiness audit
           </span>
         </div>
         <h1 className="mx-auto mb-8 max-w-4xl font-headline text-4xl font-bold leading-tight tracking-tight text-on-background md:text-6xl lg:text-7xl">
-          Check your AI search readiness in <span className="font-normal italic">under a minute</span>
+          Check your site readiness in <span className="font-normal italic">under a minute</span>
         </h1>
         <p className="mx-auto mb-12 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
-          Get one score, the key issues, and priority fixes. No account required.
+          Get one score, the key issues, and priority fixes. Run a free scan, or sign up to save reports and unlock the full workspace.
         </p>
         <div className="mx-auto mb-6 max-w-3xl">
           {siteKey ? (
@@ -87,12 +87,18 @@ export default async function HomePage({
             <span className="font-label text-xs uppercase tracking-wider">Fast results</span>
           </div>
         </div>
-        <div className="mt-6">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/login?mode=signup&next=/pricing"
+            className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
+          >
+            Sign up
+          </Link>
           <Link
             href="/pricing"
-            className="font-body text-sm font-medium text-primary underline underline-offset-2 hover:opacity-80"
+            className="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-6 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
           >
-            Want ongoing audits? See plans →
+            See plans
           </Link>
         </div>
       </section>
@@ -123,7 +129,7 @@ export default async function HomePage({
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
                 <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Metrics</h4>
-                <p className="font-headline text-lg font-bold text-on-background">AI Search Readiness Score</p>
+                <p className="font-headline text-lg font-bold text-on-background">Site Readiness Score</p>
               </div>
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
                 <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Analysis</h4>
@@ -156,7 +162,7 @@ export default async function HomePage({
                 <div>
                   <div className="mb-2 font-sans text-5xl font-bold text-primary">—</div>
                   <div className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
-                    AI Search Readiness Score
+                    Site Readiness Score
                   </div>
                 </div>
                 <div className="md:col-span-2">
@@ -192,7 +198,7 @@ export default async function HomePage({
               Built for teams &amp; agencies
             </h2>
             <p className="font-body text-on-surface-variant">
-              Use the same audit flow for client sites — free scan first, optional paid deep PDF when you need a
+              Use the same audit flow for client sites — free scan first, optional paid deep report when you need a
               shareable artifact.
             </p>
           </div>
@@ -211,14 +217,14 @@ export default async function HomePage({
 
       <section className="mx-auto max-w-screen-xl px-6 py-24 text-center md:py-40">
         <h2 className="mb-10 font-headline text-3xl font-bold text-on-background md:text-4xl lg:text-5xl">
-          See how clearly your site reads for AI search
+          See how clearly your site is set up for search and sharing
         </h2>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
-            href="/pricing"
+            href="/login?mode=signup&next=/pricing"
             className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-medium text-on-primary transition-opacity hover:opacity-90"
           >
-            Get started free
+            Sign up
           </Link>
           <p className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
             No credit card for the free scan
