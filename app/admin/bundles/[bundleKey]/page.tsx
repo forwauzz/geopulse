@@ -56,10 +56,13 @@ type EntitlementOverrideRow = {
 
 export default async function AdminBundlePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ bundleKey: string }>;
+  searchParams?: Promise<{ saved?: string; included?: string; excluded?: string }>;
 }) {
   const { bundleKey } = await params;
+  const sp = (await searchParams) ?? {};
   const ctx = await loadAdminPageContext('/admin/services');
   if (!ctx.ok) {
     return <p className="text-sm text-error">{ctx.message}</p>;
@@ -127,7 +130,6 @@ export default async function AdminBundlePage({
     overrides: overrides as BundleReadinessEntitlementOverrideRow[],
   });
 
-  const ACCESS_MODES = ['free', 'paid', 'trial', 'off'];
   const BILLING_MODES = ['free', 'monthly', 'annual'];
 
   return (
@@ -143,6 +145,20 @@ export default async function AdminBundlePage({
         <h1 className="font-headline text-3xl font-bold text-on-background">
           {bundle.name}
         </h1>
+        <p className="mt-1 text-sm text-on-surface-variant">
+          Included services:{' '}
+          <span className="font-medium text-on-background">{bundleServices.filter((row) => row.enabled).length}</span>
+        </p>
+        {sp.saved === 'services' ? (
+          <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800">
+            Bundle services saved.
+            {sp.included || sp.excluded ? (
+              <span className="ml-1">
+                Included: {sp.included ?? '0'}, excluded: {sp.excluded ?? '0'}.
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         <p className="mt-1 text-sm text-on-surface-variant">
           Bundle key: <code className="rounded bg-surface-container px-1 py-0.5 text-xs">{bundle.bundle_key}</code>
           {' · '}
@@ -356,8 +372,9 @@ export default async function AdminBundlePage({
             Included services ({services.length})
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Toggle which services are enabled for this bundle and set access rules.
-            Hit "Save all services" once to apply all changes in one go.
+            Toggle whether each service is included in this bundle.
+            Included services are saved as free rows; excluded services are saved as off rows.
+            Hit "Save included services" once to apply all changes in one go.
           </p>
         </div>
 
@@ -370,8 +387,7 @@ export default async function AdminBundlePage({
                 <tr className="border-b border-outline-variant/20 bg-surface-container-lowest">
                   <th className="px-4 py-3 text-left font-medium text-on-surface-variant">Service</th>
                   <th className="px-4 py-3 text-left font-medium text-on-surface-variant">Category</th>
-                  <th className="px-4 py-3 text-center font-medium text-on-surface-variant">Enabled</th>
-                  <th className="px-4 py-3 text-left font-medium text-on-surface-variant">Access mode</th>
+                  <th className="px-4 py-3 text-center font-medium text-on-surface-variant">Included</th>
                   <th className="px-4 py-3 text-left font-medium text-on-surface-variant">Usage limit</th>
                 </tr>
               </thead>
@@ -390,26 +406,14 @@ export default async function AdminBundlePage({
                         {svc.category ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {/* Select instead of checkbox — positional arrays must align with serviceId[] */}
+                        {/* Select keeps the positional arrays aligned across rows. */}
                         <select
-                          name="enabled"
+                          name="included"
                           defaultValue={(existing?.enabled ?? false) ? 'true' : 'false'}
                           className="rounded-lg border border-outline-variant/30 bg-surface-container-lowest px-2 py-1 text-xs text-on-background focus:border-primary focus:outline-none"
                         >
-                          <option value="true">✓ Yes</option>
-                          <option value="false">— No</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-3">
-                        <select
-                          name="accessMode"
-                          defaultValue={existing?.access_mode ?? ''}
-                          className="rounded-lg border border-outline-variant/30 bg-surface-container-lowest px-2 py-1 text-xs text-on-background focus:border-primary focus:outline-none"
-                        >
-                          <option value="">—</option>
-                          {ACCESS_MODES.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
                         </select>
                       </td>
                       <td className="px-4 py-3">
@@ -433,10 +437,12 @@ export default async function AdminBundlePage({
             type="submit"
             className="rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-on-primary transition hover:opacity-90"
           >
-            Save all services
+            Save included services
           </button>
         </form>
       </section>
     </div>
   );
 }
+
+

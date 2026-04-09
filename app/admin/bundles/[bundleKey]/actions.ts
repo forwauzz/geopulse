@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { structuredLog } from '@/lib/server/structured-log';
 
@@ -51,7 +52,7 @@ export async function updateBundleBilling(formData: FormData): Promise<void> {
 }
 
 // ── Bulk-upsert service assignments for a bundle ─────────────────────────────
-// Receives repeated fields: serviceId[], enabled[], accessMode[], usageLimit[]
+// Receives repeated fields: serviceId[], included[], usageLimit[]
 // The arrays are positional — index N in each array corresponds to the same service.
 export async function upsertBundleServices(formData: FormData): Promise<void> {
   const ctx = await loadAdminActionContext();
@@ -60,7 +61,6 @@ export async function upsertBundleServices(formData: FormData): Promise<void> {
   const bundleKey = (formData.get('bundleKey') as string | null)?.trim();
   if (!bundleKey) throw new Error('bundleKey is required.');
 
-  // Look up bundle UUID
   const { data: bundle } = await ctx.adminDb
     .from('service_bundles')
     .select('id')
@@ -70,21 +70,25 @@ export async function upsertBundleServices(formData: FormData): Promise<void> {
   if (!bundle) throw new Error(`Bundle not found: ${bundleKey}`);
 
   const serviceIds = formData.getAll('serviceId') as string[];
-  const enabledFlags = formData.getAll('enabled') as string[];
-  const accessModes = formData.getAll('accessMode') as string[];
+  const includedFlags = formData.getAll('included') as string[];
   const usageLimits = formData.getAll('usageLimit') as string[];
 
   if (serviceIds.length === 0) throw new Error('No services provided.');
 
-  const rows = serviceIds.map((serviceId, i) => ({
-    bundle_id: bundle.id,
-    service_id: serviceId,
-    enabled: enabledFlags[i] === 'true',
-    access_mode: accessModes[i] || null,
-    usage_limit: usageLimits[i] ? parseInt(usageLimits[i]!, 10) || null : null,
-    metadata: {},
-    updated_at: new Date().toISOString(),
-  }));
+  const rows = serviceIds.map((serviceId, i) => {
+    const included = includedFlags[i] === 'true';
+    return {
+      bundle_id: bundle.id,
+      service_id: serviceId,
+      enabled: included,
+      access_mode: included ? 'free' : 'off',
+      usage_limit: included && usageLimits[i] ? parseInt(usageLimits[i]!, 10) || null : null,
+      metadata: {},
+      updated_at: new Date().toISOString(),
+    };
+  });
+  const includedCount = rows.filter((row) => row.enabled).length;
+  const excludedCount = rows.length - includedCount;
 
   const { error } = await ctx.adminDb
     .from('service_bundle_services')
@@ -95,11 +99,16 @@ export async function upsertBundleServices(formData: FormData): Promise<void> {
 
   if (error) throw new Error(`Failed to update services: ${error.message}`);
 
-  structuredLog('admin_upsert_bundle_services', {
-    adminId: ctx.user.id,
-    bundleKey,
-    serviceCount: rows.length,
-  }, 'info');
+  structuredLog(
+    'admin_upsert_bundle_services',
+    {
+      adminId: ctx.user.id,
+      bundleKey,
+      serviceCount: rows.length,
+    },
+    'info'
+  );
 
   revalidatePath(`/admin/bundles/${bundleKey}`);
+  redirect(`/admin/bundles/${bundleKey}?saved=services&included=${includedCount}&excluded=${excludedCount}`);
 }

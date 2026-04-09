@@ -67,6 +67,7 @@ Execution tasks are tracked in `docs/19-billing-onboarding-implementation-plan.m
 - `service_bundles.stripe_price_id`
 - `service_bundles.trial_period_days`
 - `service_bundle_services`
+- Bundle service rows are edited as a binary included/not included toggle in the bundle editor; `free` and `off` are derived from that choice by default.
 - `service_entitlement_overrides`
 - `service_model_policies`
 - `agency` and `startup_workspace` membership context

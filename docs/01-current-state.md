@@ -63,7 +63,7 @@ The coarse `users.plan` field now syncs from the remaining live subscriptions in
 
 The Stripe webhook route now has explicit dispatch coverage for subscription lifecycle events, invoice lifecycle events, and the subscription-mode checkout skip path, so the router contract stays stable as the billing stream evolves.
 
-Admin bundle configuration is now annotated so operators can distinguish bundle-local billing/service settings from the cross-bundle service control center. The bundle page now points admins to `/admin/services` for deep-audit bypass rules and payment-required overrides instead of implying those rules belong in the bundle editor.
+Admin bundle configuration is now annotated so operators can distinguish bundle-local billing/service settings from the cross-bundle service control center. The bundle page now points admins to `/admin/services` for deep-audit bypass rules and payment-required overrides instead of implying those rules belong in the bundle editor. The bundle editor now uses a binary included/not included toggle for service rows and derives `free/off` from that choice instead of asking operators to manage access mode directly.
 
 Current truth:
 - planning docs still exist on `planning/content-machine-v1`
