@@ -21,12 +21,22 @@ import {
   readPrStatusMessage,
   readSlackStatusMessage,
 } from '@/lib/server/startup-dashboard-status-messages';
+import { resolveStartupAccess } from '@/lib/server/startup-access-resolver';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import type { StartupWorkspaceSummary } from '@/lib/server/startup-dashboard-data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type StartupDashboardPageLoadResult =
   | { readonly kind: 'no-workspaces' }
+  | {
+      readonly kind: 'needs-provisioning';
+      readonly bundleKey: string;
+    }
+  | {
+      readonly kind: 'workspace-missing-membership';
+      readonly bundleKey: string;
+      readonly workspaceName: string | null;
+    }
   | {
       readonly kind: 'rollout-blocked';
       readonly selectedWorkspace: StartupWorkspaceSummary | null;
@@ -50,11 +60,30 @@ export async function loadStartupDashboardContext(args: {
   readonly sp: SearchSlice;
 }): Promise<StartupDashboardPageLoadResult> {
   const { supabase, userId, sp } = args;
+  const access = await resolveStartupAccess({
+    supabase,
+    userId,
+  });
+
+  if (access.kind === 'needs_provisioning') {
+    return {
+      kind: 'needs-provisioning',
+      bundleKey: access.bundleKey ?? 'startup_dev',
+    };
+  }
+
+  if (access.kind === 'workspace_missing_membership') {
+    return {
+      kind: 'workspace-missing-membership',
+      bundleKey: access.bundleKey ?? 'startup_dev',
+      workspaceName: access.workspace?.name ?? null,
+    };
+  }
 
   const dashboard = await getStartupDashboardData({
     supabase,
     userId,
-    selectedWorkspaceId: sp.startupWorkspace ?? null,
+    selectedWorkspaceId: access.selectedWorkspaceId ?? sp.startupWorkspace ?? null,
   });
 
   if (dashboard.workspaces.length === 0) {

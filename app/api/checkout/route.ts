@@ -7,7 +7,7 @@ import {
 import { getClientIp, getPaymentApiEnv } from '@/lib/server/cf-env';
 import { checkCheckoutRateLimit } from '@/lib/server/rate-limit-kv';
 import { createStripeClient } from '@/lib/server/stripe-client';
-import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
+import { resolveStartupAccess } from '@/lib/server/startup-access-resolver';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
@@ -191,11 +191,12 @@ export async function POST(request: Request): Promise<Response> {
 
   // Startup workspace bypass — members never pay; enqueue report via synthetic session
   if (sessionUserId && sessionUserEmail && scan.startup_workspace_id) {
-    const isStartupMember = await validateStartupWorkspaceScanContext({
+    const access = await resolveStartupAccess({
       supabase,
       userId: sessionUserId,
-      startupWorkspaceId: scan.startup_workspace_id,
     });
+    const isStartupMember =
+      access.kind === 'ready' && access.selectedWorkspaceId === scan.startup_workspace_id;
     if (isStartupMember) {
       structuredLog('deep_audit_checkout_startup_bypass_started', {
         scanId,

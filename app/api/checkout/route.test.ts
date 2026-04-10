@@ -4,6 +4,8 @@ const authGetUser = vi.fn();
 const scanMaybeSingle = vi.fn();
 const stripeCheckoutCreate = vi.fn();
 const emitMarketingEvent = vi.fn();
+const resolveStartupAccess = vi.fn();
+const handleCheckoutSessionCompleted = vi.fn(async () => ({ ok: true }));
 
 vi.mock('@/lib/server/cf-env', () => ({
   getClientIp: vi.fn(() => '203.0.113.10'),
@@ -37,6 +39,14 @@ vi.mock('@/lib/server/rate-limit-kv', () => ({
 
 vi.mock('@/lib/server/turnstile', () => ({
   verifyTurnstileToken: vi.fn(async () => ({ ok: true })),
+}));
+
+vi.mock('@/lib/server/stripe/checkout-completed', () => ({
+  handleCheckoutSessionCompleted: handleCheckoutSessionCompleted,
+}));
+
+vi.mock('@/lib/server/startup-access-resolver', () => ({
+  resolveStartupAccess: resolveStartupAccess,
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -94,6 +104,17 @@ describe('deep audit checkout route', () => {
       url: 'https://stripe.test/checkout',
     });
     emitMarketingEvent.mockResolvedValue(undefined);
+    handleCheckoutSessionCompleted.mockResolvedValue({ ok: true });
+    resolveStartupAccess.mockResolvedValue({
+      kind: 'no_subscription',
+      bundleKey: null,
+      subscription: null,
+      workspace: null,
+      membership: null,
+      selectedWorkspaceId: null,
+      canLaunchStartupScan: false,
+      needsProvisioning: false,
+    });
   });
 
   it('redirects Stripe checkout to the canonical report route', async () => {
@@ -115,5 +136,58 @@ describe('deep audit checkout route', () => {
         cancel_url: 'https://getgeopulse.com/results/9fa517bd-cb3f-4072-9110-ec629ea1bd1f?checkout=cancel',
       })
     );
+  });
+
+  it('bypasses Stripe for a ready startup workspace scan', async () => {
+    scanMaybeSingle.mockResolvedValueOnce({
+      data: {
+        id: '9fa517bd-cb3f-4072-9110-ec629ea1bd1f',
+        user_id: 'user-1',
+        status: 'complete',
+        agency_account_id: null,
+        agency_client_id: null,
+        startup_workspace_id: 'ws_1',
+      },
+      error: null,
+    });
+    resolveStartupAccess.mockResolvedValueOnce({
+      kind: 'ready',
+      bundleKey: 'startup_dev',
+      subscription: {
+        id: 'sub_1',
+        bundle_key: 'startup_dev',
+        status: 'active',
+        startup_workspace_id: 'ws_1',
+        created_at: '2026-04-09T00:00:00.000Z',
+      },
+      workspace: {
+        id: 'ws_1',
+        workspace_key: 'acme',
+        name: 'Acme',
+        status: 'active',
+      },
+      membership: {
+        id: 'member_1',
+        role: 'founder',
+        status: 'active',
+      },
+      selectedWorkspaceId: 'ws_1',
+      canLaunchStartupScan: true,
+      needsProvisioning: false,
+    });
+
+    const { POST } = await import('./route');
+    const request = new Request('https://example.com/api/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scanId: '9fa517bd-cb3f-4072-9110-ec629ea1bd1f', turnstileToken: 'token-1' }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ url: 'https://getgeopulse.com/results/9fa517bd-cb3f-4072-9110-ec629ea1bd1f/report' });
+    expect(stripeCheckoutCreate).not.toHaveBeenCalled();
   });
 });

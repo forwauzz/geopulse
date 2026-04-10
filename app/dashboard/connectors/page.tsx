@@ -115,6 +115,39 @@ export default async function ConnectorsPage({ searchParams }: Props) {
     );
   }
 
+  if (loaded.kind === 'workspace-missing-membership') {
+    return (
+      <section className="space-y-6">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">Dashboard</p>
+          <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Connectors</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">
+            Integrate GitHub and Slack with your startup workspace.
+          </p>
+        </div>
+        <div className="rounded-2xl bg-surface-container-low px-6 py-8 text-center">
+          <span className="material-symbols-outlined text-[40px] text-on-surface-variant" aria-hidden>
+            person_off
+          </span>
+          <p className="mt-4 font-headline text-lg font-semibold text-on-background">
+            Workspace access needs repair
+          </p>
+          <p className="mt-2 text-sm text-on-surface-variant">
+            Your subscription is active, but your account is not linked as an active member of
+            {loaded.workspaceName ? ` ${loaded.workspaceName}` : ' this workspace'} yet. Ask an admin
+            to restore membership, or refresh after the workspace link is repaired.
+          </p>
+          <Link
+            href="/dashboard"
+            className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
+          >
+            Go to dashboard
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
   if (loaded.kind === 'no-workspaces') {
     return (
       <section className="space-y-6">

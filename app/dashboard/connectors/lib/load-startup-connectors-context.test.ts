@@ -16,6 +16,31 @@ const mocks = vi.hoisted(() => ({
   createServiceRoleClient: vi.fn(() => ({}) as any),
   resolveStartupWorkspaceRolloutFlags: vi.fn(async () => ({ startupDashboard: true })),
   resolveStartupWorkspaceBundleKey: vi.fn(async () => 'startup_dev'),
+  resolveStartupAccess: vi.fn(async () => ({
+    kind: 'ready',
+    bundleKey: 'startup_dev',
+    subscription: {
+      id: 'sub_1',
+      bundle_key: 'startup_dev',
+      status: 'active',
+      startup_workspace_id: 'ws_1',
+      created_at: '2026-04-09T00:00:00.000Z',
+    },
+    workspace: {
+      id: 'ws_1',
+      workspace_key: 'acme',
+      name: 'Acme',
+      status: 'active',
+    },
+    membership: {
+      id: 'member_1',
+      role: 'founder',
+      status: 'active',
+    },
+    selectedWorkspaceId: 'ws_1',
+    canLaunchStartupScan: true,
+    needsProvisioning: false,
+  })),
   resolveStartupServiceGate: vi.fn(async (args: any) => ({
     serviceKey: args.serviceKey,
     bundleKey: args.bundleKey,
@@ -58,6 +83,9 @@ vi.mock('@/lib/server/startup-github-integration', () => ({
   getStartupGithubIntegrationState: mocks.getStartupGithubIntegrationState,
   resolveStartupWorkspaceBundleKey: mocks.resolveStartupWorkspaceBundleKey,
 }));
+vi.mock('@/lib/server/startup-access-resolver', () => ({
+  resolveStartupAccess: mocks.resolveStartupAccess,
+}));
 vi.mock('@/lib/server/startup-slack-integration', () => ({
   getStartupSlackIntegrationState: mocks.getStartupSlackIntegrationState,
   listStartupSlackDestinations: mocks.listStartupSlackDestinations,
@@ -77,6 +105,7 @@ describe('loadStartupConnectorsContext', () => {
   beforeEach(() => {
     mocks.resolveStartupServiceGate.mockClear();
     mocks.resolveStartupWorkspaceBundleKey.mockClear();
+    mocks.resolveStartupAccess.mockClear();
   });
 
   it('resolves only github + slack integration gates', async () => {
@@ -100,27 +129,25 @@ describe('loadStartupConnectorsContext', () => {
   });
 
   it('shows workspace provisioning when the subscription exists but no workspace is linked yet', async () => {
-    mocks.getStartupDashboardData.mockResolvedValueOnce({
+    mocks.resolveStartupAccess.mockResolvedValueOnce({
+      kind: 'needs_provisioning',
+      bundleKey: 'startup_dev',
+      subscription: {
+        id: 'sub_1',
+        bundle_key: 'startup_dev',
+        status: 'active',
+        startup_workspace_id: null,
+        created_at: '2026-04-09T00:00:00.000Z',
+      },
+      workspace: null,
+      membership: null,
       selectedWorkspaceId: null,
-      workspaces: [],
-      scans: [],
-      recommendations: [],
-      reports: [],
+      canLaunchStartupScan: false,
+      needsProvisioning: true,
     } as any);
 
-    const supabase = {
-      from: vi.fn(() => createQueryResult([
-        {
-          bundle_key: 'startup_dev',
-          status: 'active',
-          startup_workspace_id: null,
-          agency_account_id: null,
-        },
-      ])),
-    } as any;
-
     const result = await loadStartupConnectorsContext({
-      supabase,
+      supabase: {} as any,
       userId: 'user_1',
       sp: {},
     });
@@ -128,6 +155,41 @@ describe('loadStartupConnectorsContext', () => {
     expect(result.kind).toBe('workspace-provisioning');
     if (result.kind !== 'workspace-provisioning') return;
     expect(result.bundleKey).toBe('startup_dev');
+  });
+
+  it('shows membership repair when the workspace exists but access is missing', async () => {
+    mocks.resolveStartupAccess.mockResolvedValueOnce({
+      kind: 'workspace_missing_membership',
+      bundleKey: 'startup_dev',
+      subscription: {
+        id: 'sub_1',
+        bundle_key: 'startup_dev',
+        status: 'active',
+        startup_workspace_id: 'ws_1',
+        created_at: '2026-04-09T00:00:00.000Z',
+      },
+      workspace: {
+        id: 'ws_1',
+        workspace_key: 'acme',
+        name: 'Acme',
+        status: 'active',
+      },
+      membership: null,
+      selectedWorkspaceId: 'ws_1',
+      canLaunchStartupScan: false,
+      needsProvisioning: false,
+    } as any);
+
+    const result = await loadStartupConnectorsContext({
+      supabase: {} as any,
+      userId: 'user_1',
+      sp: {},
+    });
+
+    expect(result.kind).toBe('workspace-missing-membership');
+    if (result.kind !== 'workspace-missing-membership') return;
+    expect(result.bundleKey).toBe('startup_dev');
+    expect(result.workspaceName).toBe('Acme');
   });
 });
 
