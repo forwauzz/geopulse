@@ -60,6 +60,7 @@ describe('login actions', () => {
     formData.set('mode', 'signup');
     formData.set('bundle', 'startup_dev');
     formData.set('full_name', 'Uzziel Tamon');
+    formData.set('organization_name', 'Acme Labs');
 
     const result = await sendMagicLink(null, formData);
 
@@ -71,7 +72,7 @@ describe('login actions', () => {
       email: 'uzzielt@techehealthservices.com',
       options: {
         emailRedirectTo:
-          'https://getgeopulse.com/auth/callback?next=%2Fpricing&mode=signup&bundle=startup_dev&name=Uzziel+Tamon',
+          'https://getgeopulse.com/auth/callback?next=%2Fpricing&mode=signup&bundle=startup_dev&name=Uzziel+Tamon&organization_name=Acme+Labs',
       },
     });
   });
@@ -94,9 +95,10 @@ describe('login actions', () => {
     formData.set('confirm_password', 'password123');
     formData.set('next', '/pricing');
     formData.set('bundle', 'startup_dev');
+    formData.set('organization_name', 'Acme Labs');
 
     await expect(signUpWithPassword(null, formData)).rejects.toThrow(
-      'redirect:/pricing?bundle=startup_dev&autosubscribe=1'
+      'redirect:/pricing?bundle=startup_dev&autosubscribe=1&organization_name=Acme+Labs'
     );
 
     expect(createUser).toHaveBeenCalledWith({
@@ -124,9 +126,10 @@ describe('login actions', () => {
     formData.set('password', 'password123');
     formData.set('next', '/pricing');
     formData.set('bundle', 'agency_core');
+    formData.set('organization_name', 'Acme Labs');
 
     await expect(signInAction(null, formData)).rejects.toThrow(
-      'redirect:/pricing?bundle=agency_core&autosubscribe=1'
+      'redirect:/pricing?bundle=agency_core&autosubscribe=1&organization_name=Acme+Labs'
     );
 
     expect(signInWithPassword).toHaveBeenCalledWith({

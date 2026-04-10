@@ -94,6 +94,7 @@ export function PricingBundleCard({
 
   const needsPaidCheckout = !isFree && !isCurrentPlan;
   const turnstileConfigured = bypassTurnstile || Boolean(turnstileSiteKey.trim());
+  const organizationName = sp.get('organization_name')?.trim() || null;
 
   useEffect(() => {
     setTurnstileToken((current) => {
@@ -131,7 +132,11 @@ export function PricingBundleCard({
     const res = await fetch('/api/billing/subscribe', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ bundleKey, turnstileToken: tokenStr }),
+      body: JSON.stringify({
+        bundleKey,
+        turnstileToken: tokenStr,
+        organizationName: organizationName ?? undefined,
+      }),
     });
 
     const data: unknown = await res.json().catch(() => null);
@@ -186,7 +191,15 @@ export function PricingBundleCard({
   function handleSubscribe() {
     setCheckoutError(null);
     if (!isAuthenticated) {
-      window.location.href = `/login?mode=signup&next=/pricing&bundle=${bundleKey}`;
+      const params = new URLSearchParams({
+        mode: 'signup',
+        next: '/pricing',
+        bundle: bundleKey,
+      });
+      if (organizationName) {
+        params.set('organization_name', organizationName);
+      }
+      window.location.href = `/login?${params.toString()}`;
       return;
     }
 

@@ -447,6 +447,16 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | 2026-04-10 | **BT-007 - COMPLETE (implementation + documentation).** Wired the checkout route to the shared startup-access resolver so startup scans bypass Stripe from the same source of truth, and updated the living docs to match. Verification: `npx.cmd tsc --noEmit`, `npx.cmd vitest run app/api/checkout/route.test.ts`. |
 
 ### Startup Dashboard Tab Redesign (four-tab IA on `/dashboard/startup`)
+### Signup-linked workspace provisioning + trial gating byte-task stream (BT-001 ... BT-005)
+> Keep this stream narrow: one slice for signup/org-name propagation, one slice for subscription metadata, one slice for provisioning name preference, one slice for trial-aware audit gating, one slice for regression coverage.
+
+| TASK ID | Description | Owner | Status | Evidence |
+|---|---|---|---|---|
+| BT-001 | Capture organization/workspace name through signup, callback, and pricing resume | Backend + Frontend | DONE | `app/login/actions.ts`, `app/login/login-form.tsx`, `app/login/page.tsx`, `components/pricing-bundle-card.tsx`, `app/auth/callback/route.ts` |
+| BT-002 | Carry `organization_name` into Stripe checkout session metadata and subscription metadata | Backend | DONE | `app/api/billing/subscribe/route.ts`, `lib/server/stripe/subscription-handlers.ts` |
+| BT-003 | Prefer captured organization name when provisioning startup/agency rows and self-serve fallback | Backend | DONE | `lib/server/billing/provision-workspace-for-subscription.ts`, `app/dashboard/actions.ts` |
+| BT-004 | Fix trial-aware full-audit gating so live trialing subscriptions use provisioning state instead of paywalling | Backend + Frontend | PENDING | â€” |
+| BT-005 | Add regression tests and docs for organization-name propagation and the remaining trial-gating slice | QA + Orchestrator | DONE | `app/login/actions.test.ts`, `lib/server/billing-onboarding-flow.test.ts`, `lib/server/billing/provision-workspace-for-subscription.test.ts`, `npm.cmd type-check`, `npx.cmd vitest run app/login/actions.test.ts lib/server/billing-onboarding-flow.test.ts lib/server/billing/provision-workspace-for-subscription.test.ts` |
 > Restructure the startup dashboard into Overview / Audits / Delivery / Settings via `?tab=` (default `overview`). Plan: `.cursor/plans/startup_dashboard_tab_redesign_997f45c9.plan.md`. Shared types: `app/dashboard/startup/components/startup-tab-types.ts`.
 
 | TASK ID | Description | Owner | Status | Evidence |

@@ -11542,3 +11542,21 @@ Files: `components/new-subscriber-welcome-banner.tsx`, `app/dashboard/page.tsx`
 - Mutations remain via **service role** (server actions / webhooks); no INSERT/UPDATE/DELETE policies for `authenticated`.
 
 **Files:** `supabase/migrations/037_service_entitlements_rls_policies.sql`
+
+---
+
+### 2026-04-10 — Signup-linked workspace provisioning slice
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-10
+**Evidence type:** Type-check + focused Vitest
+
+**What was done:**
+- Signup and auth callback now preserve `organization_name` alongside bundle resume so the chosen workspace or agency name survives the round trip through login and pricing.
+- Stripe checkout session creation now carries `organization_name` into both checkout metadata and subscription metadata.
+- Subscription provisioning now prefers the captured organization name when creating startup workspaces or agency accounts, and the self-serve dashboard fallback reuses that same stored name when available.
+- Focused regression tests now pin the new signup, onboarding, and provisioning behavior.
+
+**Verification:**
+- `npm.cmd type-check` â€” 0 errors
+- `npx.cmd vitest run app/login/actions.test.ts lib/server/billing-onboarding-flow.test.ts lib/server/billing/provision-workspace-for-subscription.test.ts` â€” 3 files passed, 9 tests passed

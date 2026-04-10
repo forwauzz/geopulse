@@ -40,6 +40,7 @@ export async function handleSubscriptionUpserted(
 ): Promise<void> {
   const userId = subscription.metadata?.['user_id'];
   const bundleKey = subscription.metadata?.['bundle_key'];
+  const organizationName = subscription.metadata?.['organization_name']?.trim() ?? '';
 
   if (!userId || !bundleKey) {
     structuredLog('subscription_upserted_missing_metadata', {
@@ -79,6 +80,9 @@ export async function handleSubscriptionUpserted(
         status,
         current_period_start: periodStart,
         current_period_end: periodEnd,
+        metadata: {
+          ...(organizationName ? { organization_name: organizationName } : {}),
+        },
       },
       { onConflict: 'stripe_subscription_id' }
     )
@@ -118,6 +122,7 @@ export async function handleSubscriptionUpserted(
       userEmail,
       bundleKey,
       subscriptionId: subscription.id,
+      organizationName: organizationName || null,
     });
 
     structuredLog('subscription_upserted', {

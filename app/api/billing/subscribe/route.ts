@@ -30,6 +30,7 @@ function checkoutFailure(
 const bodySchema = z.object({
   bundleKey: z.string().min(1).max(64),
   turnstileToken: z.string().min(1),
+  organizationName: z.string().trim().min(1).max(120).optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -60,7 +61,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const { bundleKey, turnstileToken } = parsed.data;
+    const { bundleKey, turnstileToken, organizationName } = parsed.data;
 
     if (!isPaidBundleKey(bundleKey)) {
       return Response.json(
@@ -275,6 +276,7 @@ export async function POST(request: Request): Promise<Response> {
         metadata: {
           user_id: user.id,
           bundle_key: bundleKey,
+          ...(organizationName ? { organization_name: organizationName } : {}),
         },
         subscription_data: {
           ...(trialDays > 0
@@ -290,6 +292,7 @@ export async function POST(request: Request): Promise<Response> {
           metadata: {
             user_id: user.id,
             bundle_key: bundleKey,
+            ...(organizationName ? { organization_name: organizationName } : {}),
           },
         },
       });

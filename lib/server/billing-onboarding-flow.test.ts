@@ -13,8 +13,9 @@ describe('billing onboarding flow', () => {
         nextParam: '/pricing',
         bundleParam: 'startup_dev',
         isNewUser: false,
+        organizationName: 'Acme Labs',
       }),
-    ).toBe('/pricing?bundle=startup_dev&autosubscribe=1');
+    ).toBe('/pricing?bundle=startup_dev&autosubscribe=1&organization_name=Acme+Labs');
 
     expect(
       resolvePostSignupRedirect({

@@ -36,7 +36,7 @@ export async function provisionMyWorkspaceForSubscription(formData: FormData): P
   const { data: subRow, error: fetchErr } = await adminDb
     .from('user_subscriptions')
     .select(
-      'id, user_id, bundle_key, stripe_subscription_id, startup_workspace_id, agency_account_id, status',
+      'id, user_id, bundle_key, stripe_subscription_id, startup_workspace_id, agency_account_id, status, metadata',
     )
     .eq('id', subRowId)
     .maybeSingle();
@@ -51,11 +51,19 @@ export async function provisionMyWorkspaceForSubscription(formData: FormData): P
   const { data: userRow } = await adminDb.from('users').select('email').eq('id', user.id).maybeSingle();
   if (!userRow?.email) throw new Error('User email not found.');
 
+  const organizationName =
+    typeof subRow.metadata === 'object' &&
+    subRow.metadata !== null &&
+    typeof (subRow.metadata as Record<string, unknown>)['organization_name'] === 'string'
+      ? ((subRow.metadata as Record<string, unknown>)['organization_name'] as string)
+      : null;
+
   const result = await provisionWorkspaceForSubscription(adminDb, {
     userId: subRow.user_id,
     userEmail: userRow.email,
     bundleKey: subRow.bundle_key,
     subscriptionId: subRow.stripe_subscription_id,
+    organizationName,
   });
 
   if (!result.startupWorkspaceId && !result.agencyAccountId) {

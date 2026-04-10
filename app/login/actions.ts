@@ -13,6 +13,7 @@ const emailSchema = z.object({
 const signupSchema = z
   .object({
     fullName: z.string().trim().min(1, 'Enter your name.').max(120, 'Name is too long.'),
+    organizationName: z.string().trim().max(120, 'Workspace name is too long.').optional(),
     email: z.string().email('Enter a valid email address.'),
     password: z.string().min(8, 'Password must be at least 8 characters.'),
     confirmPassword: z.string().min(8, 'Confirm your password.'),
@@ -47,14 +48,6 @@ function readTrimmedField(formData: FormData, name: string): string {
   return typeof raw === 'string' ? raw.trim() : '';
 }
 
-function getSignupRedirectTarget(nextPath: string, bundle: string | null): string | null {
-  return resolvePostSignupRedirect({
-    nextParam: nextPath,
-    bundleParam: bundle,
-    isNewUser: true,
-  });
-}
-
 export async function sendMagicLink(
   _prev: LoginActionState | null,
   formData: FormData
@@ -73,6 +66,7 @@ export async function sendMagicLink(
   const mode = readTrimmedField(formData, 'mode');
   const bundleRaw = readTrimmedField(formData, 'bundle');
   const fullName = readTrimmedField(formData, 'full_name');
+  const organizationName = readTrimmedField(formData, 'organization_name');
   let supabase;
   try {
     supabase = await createSupabaseServerClient();
@@ -91,6 +85,9 @@ export async function sendMagicLink(
   }
   if (fullName) {
     redirectParams.set('name', fullName);
+  }
+  if (organizationName) {
+    redirectParams.set('organization_name', organizationName);
   }
   const redirectTo = `${appUrl}/auth/callback?${redirectParams.toString()}`;
 
@@ -122,6 +119,7 @@ export async function signUpWithPassword(
     confirmPassword: formData.get('confirm_password'),
     next: formData.get('next') ?? undefined,
     bundle: formData.get('bundle') ?? undefined,
+    organizationName: formData.get('organization_name') ?? undefined,
   });
 
   if (!parsed.success) {
@@ -152,6 +150,7 @@ export async function signUpWithPassword(
   const authAdmin = createServiceRoleClient(supabaseUrl, serviceKey);
   const normalizedEmail = parsed.data.email.trim().toLowerCase();
   const normalizedName = parsed.data.fullName.trim();
+  const normalizedOrganizationName = parsed.data.organizationName?.trim() ?? '';
 
   const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
     email: normalizedEmail,
@@ -182,7 +181,12 @@ export async function signUpWithPassword(
   }
 
   const nextPath = safeNextPath(parsed.data.next);
-  const redirectTarget = getSignupRedirectTarget(nextPath, parsed.data.bundle ?? null);
+  const redirectTarget = resolvePostSignupRedirect({
+    nextParam: nextPath,
+    bundleParam: parsed.data.bundle ?? null,
+    isNewUser: true,
+    organizationName: normalizedOrganizationName || null,
+  });
   redirect(redirectTarget ?? nextPath);
 }
 
@@ -225,6 +229,7 @@ export async function signInWithPassword(
     nextParam: nextPath,
     bundleParam: bundle.success ? bundle.data : null,
     isNewUser: false,
+    organizationName: readTrimmedField(formData, 'organization_name') || null,
   });
   redirect(redirectTarget ?? nextPath);
 }

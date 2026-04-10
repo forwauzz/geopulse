@@ -18,7 +18,13 @@ function isSafeInternalPath(raw: string | null, fallback: string): string {
 
 function buildLoginRedirect(
   appUrl: string,
-  args: { next: string; error?: string | null; mode?: string | null; bundle?: string | null },
+  args: {
+    next: string;
+    error?: string | null;
+    mode?: string | null;
+    bundle?: string | null;
+    organizationName?: string | null;
+  },
 ): URL {
   const url = new URL('/login', appUrl);
   url.searchParams.set('next', args.next);
@@ -27,6 +33,9 @@ function buildLoginRedirect(
   }
   if (args.bundle) {
     url.searchParams.set('bundle', args.bundle);
+  }
+  if (args.organizationName) {
+    url.searchParams.set('organization_name', args.organizationName);
   }
   if (args.error) {
     url.searchParams.set('error', args.error);
@@ -67,10 +76,13 @@ export async function GET(request: NextRequest) {
   const next = isSafeInternalPath(searchParams.get('next'), '/dashboard');
   const bundle = searchParams.get('bundle');
   const mode = searchParams.get('mode') ?? (bundle ? 'signup' : null);
+  const organizationName = searchParams.get('organization_name')?.trim() ?? null;
   const err = searchParams.get('error_description') ?? searchParams.get('error');
 
   if (err) {
-    return NextResponse.redirect(buildLoginRedirect(appUrl, { next, error: err, mode, bundle }));
+    return NextResponse.redirect(
+      buildLoginRedirect(appUrl, { next, error: err, mode, bundle, organizationName }),
+    );
   }
 
   const supabase = await buildSupabaseServerClient(url, anon);
@@ -84,6 +96,7 @@ export async function GET(request: NextRequest) {
           error: error.message || 'session',
           mode,
           bundle,
+          organizationName,
         }),
       );
     }
@@ -99,11 +112,14 @@ export async function GET(request: NextRequest) {
           error: error.message || 'link-invalid-or-expired',
           mode,
           bundle,
+          organizationName,
         }),
       );
     }
   } else {
-    return NextResponse.redirect(buildLoginRedirect(appUrl, { next, mode, bundle }));
+    return NextResponse.redirect(
+      buildLoginRedirect(appUrl, { next, mode, bundle, organizationName }),
+    );
   }
 
   const {
@@ -133,6 +149,7 @@ export async function GET(request: NextRequest) {
       nextParam: searchParams.get('next'),
       bundleParam: bundle,
       isNewUser,
+      organizationName,
     });
     if (redirectPath) {
       return NextResponse.redirect(new URL(redirectPath, appUrl));

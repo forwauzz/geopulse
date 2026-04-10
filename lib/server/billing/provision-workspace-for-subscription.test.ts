@@ -104,6 +104,7 @@ describe('provision-workspace-for-subscription', () => {
       userEmail: 'alice@acme.co.uk',
       bundleKey: 'startup_dev',
       subscriptionId: 'sub_01ABC',
+      organizationName: 'Acme Labs',
     });
 
     expect(result).toEqual({ startupWorkspaceId: 'workspace-1', agencyAccountId: null });
@@ -112,9 +113,10 @@ describe('provision-workspace-for-subscription', () => {
       method: 'upsert',
       payload: expect.objectContaining({
         workspace_key: 'startup-sub-01abc',
-        name: 'Acme Co',
+        name: 'Acme Labs',
         metadata: expect.objectContaining({
           subscription_id: 'sub_01ABC',
+          organization_name: 'Acme Labs',
         }),
       }),
       options: { onConflict: 'workspace_key' },
@@ -139,6 +141,7 @@ describe('provision-workspace-for-subscription', () => {
       userEmail: 'sam@agency.example',
       bundleKey: 'agency_core',
       subscriptionId: 'sub_9XYZ',
+      organizationName: 'Northstar Agency',
     });
 
     expect(result).toEqual({ startupWorkspaceId: null, agencyAccountId: 'account-1' });
@@ -147,9 +150,10 @@ describe('provision-workspace-for-subscription', () => {
       method: 'upsert',
       payload: expect.objectContaining({
         account_key: 'agency-sub-9xyz',
-        name: 'Agency Sub 9xyz',
+        name: 'Northstar Agency',
         metadata: expect.objectContaining({
           subscription_id: 'sub_9XYZ',
+          organization_name: 'Northstar Agency',
         }),
       }),
       options: { onConflict: 'account_key' },

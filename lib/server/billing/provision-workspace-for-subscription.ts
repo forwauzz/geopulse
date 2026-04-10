@@ -6,6 +6,7 @@ export type ProvisionWorkspaceArgs = {
   readonly userEmail: string;
   readonly bundleKey: string;
   readonly subscriptionId: string;
+  readonly organizationName?: string | null;
 };
 
 export type ProvisionWorkspaceResult = {
@@ -33,6 +34,19 @@ function slugFromEmail(email: string): string {
   return raw.length > 0 ? raw.slice(0, 48) : 'workspace';
 }
 
+function displayNameFromSlug(slug: string): string {
+  return slug
+    .split('-')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function normalizeOrganizationName(value?: string | null): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed.slice(0, 120) : null;
+}
+
 /**
  * Builds a stable child-record key from the Stripe subscription id.
  * This keeps workspace/account provisioning idempotent under webhook retries.
@@ -53,12 +67,8 @@ async function provisionStartupWorkspace(
   args: ProvisionWorkspaceArgs
 ): Promise<string | null> {
   const workspaceKey = subscriptionProvisioningKey('startup', args.subscriptionId);
-
-  // Derive display name from slug
-  const name = slugFromEmail(args.userEmail)
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
+  const organizationName = normalizeOrganizationName(args.organizationName);
+  const name = organizationName ?? displayNameFromSlug(slugFromEmail(args.userEmail));
 
   const emailDomain = args.userEmail.split('@').at(1) ?? null;
 
@@ -78,11 +88,12 @@ async function provisionStartupWorkspace(
         status: 'active',
         billing_mode: 'paid',
         primary_domain: emailDomain,
-      default_bundle_id: bundle?.id ?? null,
+        default_bundle_id: bundle?.id ?? null,
         metadata: {
           source: 'self_serve',
           bundle_key: args.bundleKey,
           subscription_id: args.subscriptionId,
+          ...(organizationName ? { organization_name: organizationName } : {}),
         },
       },
       { onConflict: 'workspace_key' }
@@ -145,11 +156,8 @@ async function provisionAgencyAccount(
   args: ProvisionWorkspaceArgs
 ): Promise<string | null> {
   const accountKey = subscriptionProvisioningKey('agency', args.subscriptionId);
-
-  const name = accountKey
-    .split('-')
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
+  const organizationName = normalizeOrganizationName(args.organizationName);
+  const name = organizationName ?? displayNameFromSlug(slugFromEmail(args.userEmail));
 
   const { data: account, error: accErr } = await supabase
     .from('agency_accounts')
@@ -163,6 +171,7 @@ async function provisionAgencyAccount(
           source: 'self_serve',
           bundle_key: args.bundleKey,
           subscription_id: args.subscriptionId,
+          ...(organizationName ? { organization_name: organizationName } : {}),
         },
       },
       { onConflict: 'account_key' }
@@ -228,7 +237,8 @@ async function provisionAgencyAccount(
  * - agency_core   → agency_accounts + agency_users (role: owner)
  * - agency_pro    → agency_accounts + agency_users (role: owner)
  *
- * Workspace key is derived from the user's email domain, deduplicated if needed.
+ * Workspace/account key is derived from the subscription id, deduplicated by scope.
+ * Display name prefers user-entered organizationName and falls back to an email slug.
  * Idempotent: caller checks `startup_workspace_id IS NULL AND agency_account_id IS NULL`
  * before calling.
  */

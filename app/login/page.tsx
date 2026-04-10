@@ -2,7 +2,13 @@ import Link from 'next/link';
 import { LoginForm } from './login-form';
 
 type Props = {
-  searchParams: Promise<{ next?: string; error?: string; mode?: string; bundle?: string }>;
+  searchParams: Promise<{
+    next?: string;
+    error?: string;
+    mode?: string;
+    bundle?: string;
+    organization_name?: string;
+  }>;
 };
 
 function safeNextPath(raw: string | undefined): string {
@@ -18,6 +24,7 @@ export default async function LoginPage({ searchParams }: Props) {
   const err = sp.error;
   const isSignUp = sp.mode === 'signup';
   const bundleKey = sp.bundle?.trim() || undefined;
+  const organizationName = sp.organization_name?.trim() || undefined;
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col px-6 py-16">
@@ -46,7 +53,12 @@ export default async function LoginPage({ searchParams }: Props) {
           {decodeURIComponent(err)}
         </p>
       ) : null}
-      <LoginForm nextPath={nextPath} isSignUp={isSignUp} bundleKey={bundleKey} />
+      <LoginForm
+        nextPath={nextPath}
+        isSignUp={isSignUp}
+        bundleKey={bundleKey}
+        organizationName={organizationName}
+      />
     </main>
   );
 }
