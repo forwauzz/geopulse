@@ -47,6 +47,39 @@ function extractLeadParagraph(markdown: string): string | null {
   return paragraphs[0] ?? null;
 }
 
+type TocItem = {
+  readonly id: string;
+  readonly title: string;
+  readonly level: 2 | 3;
+};
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function extractToc(markdown: string): TocItem[] {
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .reduce<TocItem[]>((items, line) => {
+      const match = /^(#{1,2})\s+(.+?)\s*$/.exec(line);
+      if (!match) return items;
+      const marker = match[1] ?? '';
+      const rawTitle = match[2] ?? '';
+      const level = marker.length === 1 ? 2 : 3;
+      const title = rawTitle.replace(/\s+#+$/, '').trim();
+      if (!title) return items;
+      items.push({ id: slugify(title), title, level });
+      return items;
+    }, [])
+    .slice(0, 8);
+}
+
 function toAbsoluteUrl(appUrl: string, pathOrUrl: string | null, slug?: string): string {
   const fallback = slug ? `/blog/${slug}` : '/';
   const value = pathOrUrl?.trim() || fallback;
@@ -157,6 +190,7 @@ export default async function BlogArticlePage({ params }: Props) {
     .filter((item) => item.slug !== article.slug)
     .slice(0, 8);
   const publicSourceLinks = getPublicSourceLinks(article.source_links);
+  const tocItems = extractToc(article.draft_markdown);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-16 md:px-10">
@@ -216,31 +250,33 @@ export default async function BlogArticlePage({ params }: Props) {
             {article.primary_problem}
           </p>
         ) : null}
-        <p className="mt-4 max-w-3xl font-body text-sm text-zinc-300">
-          Authored by{' '}
-          <Link href={authorUrl} className="font-semibold text-sky-300 hover:text-sky-200 hover:underline">
-            {articleMetadata.authorName ?? 'GEO-Pulse'}
-          </Link>
-          {articleMetadata.authorRole ? `, ${articleMetadata.authorRole}` : ''}. See the{' '}
-          <Link href="/about" className="font-semibold text-sky-300 hover:underline">
-            About page
-          </Link>
-          {' '}for the site identity and editorial context.
-        </p>
-        {leadParagraph ? (
-          <div className="mt-6 rounded-2xl bg-zinc-900 p-6 shadow-float">
-            <p className="font-label text-xs uppercase tracking-widest text-sky-300">
-              Direct answer
-            </p>
-            <p className="mt-3 max-w-3xl font-body leading-relaxed text-zinc-300">
-              {leadParagraph}
-            </p>
-          </div>
-        ) : null}
       </div>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
         <article className="rounded-2xl bg-zinc-950 p-8 shadow-float">
+          <section className="mb-8 grid gap-4 md:grid-cols-2">
+            {leadParagraph ? (
+              <div className="rounded-2xl bg-zinc-900 p-6">
+                <p className="font-label text-xs uppercase tracking-widest text-sky-300">BLUF</p>
+                <p className="mt-3 max-w-3xl font-body leading-relaxed text-zinc-300">{leadParagraph}</p>
+              </div>
+            ) : null}
+            <div className="rounded-2xl bg-zinc-900 p-6">
+              <p className="font-label text-xs uppercase tracking-widest text-sky-300">Editorial context</p>
+              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-300">
+                Authored by{' '}
+                <Link href={authorUrl} className="font-semibold text-sky-300 hover:text-sky-200 hover:underline">
+                  {articleMetadata.authorName ?? 'GEO-Pulse'}
+                </Link>
+                {articleMetadata.authorRole ? `, ${articleMetadata.authorRole}` : ''}. See the{' '}
+                <Link href="/about" className="font-semibold text-sky-300 hover:underline">
+                  About page
+                </Link>
+                {' '}for site identity and editorial context.
+              </p>
+            </div>
+          </section>
+
           <section className="mb-8 rounded-2xl bg-zinc-900 p-6">
             <p className="font-label text-xs uppercase tracking-widest text-sky-300">
               On this topic
@@ -274,6 +310,23 @@ export default async function BlogArticlePage({ params }: Props) {
               ))}
             </div>
           </section>
+
+          {tocItems.length > 0 ? (
+            <section className="mb-8 rounded-2xl bg-zinc-900 p-6">
+              <p className="font-label text-xs uppercase tracking-widest text-sky-300">
+                Contents
+              </p>
+              <ol className="mt-4 space-y-2 text-sm">
+                {tocItems.map((item) => (
+                  <li key={item.id} className={item.level === 3 ? 'pl-4' : ''}>
+                    <a href={`#${item.id}`} className="text-white hover:text-sky-300">
+                      {item.title}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
 
           <BlogArticleBody markdown={article.draft_markdown} />
 

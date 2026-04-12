@@ -147,6 +147,11 @@ export default async function BlogTopicPage({ params }: Props) {
     { name: 'Blog', item: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/blog') },
     { name: group.topicLabel, item: topicUrl },
   ]);
+  const tocItems = [
+    { id: 'definition', title: 'Definition' },
+    { id: 'why-it-matters', title: 'Why it matters' },
+    { id: 'practical-takeaway', title: 'Practical takeaway' },
+  ] as const;
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-16 md:px-10">
@@ -189,20 +194,40 @@ export default async function BlogTopicPage({ params }: Props) {
         </p>
       </div>
 
+      <section className="mt-8 max-w-3xl rounded-2xl bg-zinc-900 p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-sky-300">BLUF</p>
+        <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+          {topicContent.definition}
+        </p>
+      </section>
+
+      <section className="mt-6 max-w-3xl rounded-2xl bg-zinc-900 p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-zinc-300">Contents</p>
+        <ol className="mt-4 space-y-2 text-sm">
+          {tocItems.map((item) => (
+            <li key={item.id}>
+              <a href={`#${item.id}`} className="text-white hover:text-sky-300">
+                {item.title}
+              </a>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       <section className="mt-8 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+        <div id="definition" className="rounded-2xl bg-zinc-900 p-6 shadow-float scroll-mt-28">
           <p className="font-label text-xs uppercase tracking-widest text-sky-300">Definition</p>
           <p className="mt-3 text-sm leading-relaxed text-zinc-300">
             {topicContent.definition}
           </p>
         </div>
-        <div className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+        <div id="why-it-matters" className="rounded-2xl bg-zinc-900 p-6 shadow-float scroll-mt-28">
           <p className="font-label text-xs uppercase tracking-widest text-sky-300">Why It Matters</p>
           <p className="mt-3 text-sm leading-relaxed text-zinc-300">
             {topicContent.whyItMatters}
           </p>
         </div>
-        <div className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+        <div id="practical-takeaway" className="rounded-2xl bg-zinc-900 p-6 shadow-float scroll-mt-28">
           <p className="font-label text-xs uppercase tracking-widest text-sky-300">
             Practical takeaway
           </p>

@@ -32,10 +32,10 @@ Plan reference:
 ## Engineering Work Still Open
 
 ### Privacy policy page
-Still open:
-- add a public privacy policy page linked from the site footer and onboarding surfaces
-- cover data collection, scan retention, cookies/analytics, auth, and contact/update paths
-- review the copy against the compliance and legal expectations for GEO-Pulse before launch
+Complete:
+- public privacy policy page is live and linked from the site footer plus onboarding surfaces
+- copy covers data collection, scan retention, cookies/analytics, auth, and contact/update paths
+- keep the page current if compliance or product behavior changes before launch
 
 ### MA-005
 Deferred:

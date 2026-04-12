@@ -83,6 +83,9 @@ export function StartupOverviewTab({
   approvedRecommendations,
   averageScore,
   githubState,
+  slackActiveInstallations,
+  slackActiveDestinations,
+  canManageSlackAutoPost,
   prStatusMessage,
 }: StartupOverviewTabProps) {
   const workspaceId = dashboard.selectedWorkspaceId;
@@ -166,7 +169,7 @@ export function StartupOverviewTab({
           <div>
             <p className="text-xs uppercase tracking-widest text-on-surface-variant">Progress</p>
             <h2 className="mt-1 text-lg font-semibold">Recent improvement at a glance</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">
+          <p className="mt-1 text-sm text-on-surface-variant">
               Small benchmark signal for the latest scans and validated recommendations.
             </p>
           </div>
@@ -189,6 +192,40 @@ export function StartupOverviewTab({
           <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Validated</p>
             <p className="mt-1 text-2xl font-bold">{metrics.funnel.validated}</p>
+          </div>
+        </div>
+      </article>
+
+      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-on-surface-variant">Slack</p>
+            <h2 className="mt-1 text-lg font-semibold">Use the existing delivery hub</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Keep Slack setup in one place, with destinations, auto-post, and delivery history already in the connectors dashboard.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/connectors"
+            className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+          >
+            Open connectors
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Connection</p>
+            <p className="mt-1 text-2xl font-bold">
+              {slackActiveInstallations.length > 0 ? 'Connected' : 'Off'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Destinations</p>
+            <p className="mt-1 text-2xl font-bold">{slackActiveDestinations.length}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Auto-post</p>
+            <p className="mt-1 text-2xl font-bold">{canManageSlackAutoPost ? 'Available' : 'Locked'}</p>
           </div>
         </div>
       </article>

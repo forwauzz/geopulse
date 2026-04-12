@@ -64,6 +64,24 @@ const referenceLinks = [
   },
 ] as const;
 
+const howItWorks = [
+  {
+    step: '1',
+    title: 'Audit',
+    body: 'Scan your public site for crawl access, structured data, trust cues, and content extractability.',
+  },
+  {
+    step: '2',
+    title: 'Automate',
+    body: 'Turn the findings into reusable reports and machine-readable guidance for your team.',
+  },
+  {
+    step: '3',
+    title: 'Integrate',
+    body: 'Push the audit outputs into Slack so marketing and engineering can act on the same plan.',
+  },
+] as const;
+
 async function loadBaseUrl(): Promise<string> {
   const env = await getPaymentApiEnv();
   return env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/';
@@ -105,6 +123,20 @@ export default async function HomePage({
     siteUrl,
     dateModified: pageModifiedAt,
   });
+  const softwareAppSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'GEO-Pulse',
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web',
+    url: siteUrl,
+    description: SITE_DESCRIPTION,
+    featureList: [
+      'Free AI search readiness audit',
+      'Structured data and crawlability checks',
+      'Saved reports and dashboard history',
+    ],
+  };
   const faqSchema = {
     '@context': 'https://schema.org',
     '@type': 'FAQPage',
@@ -131,6 +163,10 @@ export default async function HomePage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(homePageSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppSchema) }}
       />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
       <section className="relative mx-auto max-w-screen-2xl overflow-hidden px-6 pb-24 pt-16 text-center md:px-10 md:pb-32 md:pt-24">
@@ -212,6 +248,37 @@ export default async function HomePage({
               <p className="font-body text-sm leading-relaxed text-on-surface-variant">{f.body}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-start">
+          <div className="lg:col-span-4">
+            <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">How it works</span>
+            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+              Three steps from scan to action
+            </h2>
+            <p className="mt-4 max-w-sm font-body text-on-surface-variant">
+              The workflow stays simple: inspect the site, turn findings into a repeatable report, and route the output into Slack.
+            </p>
+          </div>
+          <div className="lg:col-span-8">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {howItWorks.map((item) => (
+                <div key={item.title} className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 font-label text-xs font-bold text-primary">
+                      {item.step}
+                    </span>
+                    <h3 className="font-headline text-lg font-bold text-on-background">{item.title}</h3>
+                  </div>
+                  <p className="mt-4 font-body text-sm leading-relaxed text-on-surface-variant">
+                    {item.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
