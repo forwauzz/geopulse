@@ -24,8 +24,8 @@ const DEFAULT_FLAGS: StartupRolloutFlags = {
   startupDashboard: true,
   githubAgent: true,
   autoPr: false,
-  slackAgent: false,
-  slackAutoPost: false,
+  slackAgent: true,
+  slackAutoPost: true,
 };
 
 function parseBoolean(value: unknown): boolean | null {
