@@ -26,6 +26,93 @@ function buildNewScanHref(workspaceId: string | null): string {
   return query.length > 0 ? `/dashboard/new-scan?${query}` : '/dashboard/new-scan';
 }
 
+function buildSectionHref(workspaceId: string | null, tab: StartupDashboardTabId): string {
+  const params = new URLSearchParams();
+  if (workspaceId) params.set('startupWorkspace', workspaceId);
+  if (tab !== 'overview') params.set('tab', tab);
+  const query = params.toString();
+  return query.length > 0 ? `/dashboard/startup?${query}` : '/dashboard/startup';
+}
+
+const STARTUP_FLOW_ITEMS: Array<{
+  readonly tab: StartupDashboardTabId;
+  readonly title: string;
+  readonly body: string;
+}> = [
+  {
+    tab: 'overview',
+    title: 'Overview',
+    body: 'See the current score, active work, and the next implementation move.',
+  },
+  {
+    tab: 'audits',
+    title: 'Audits',
+    body: 'Review recent runs and focus on the blockers that are still failing.',
+  },
+  {
+    tab: 'delivery',
+    title: 'Delivery',
+    body: 'Track rollout status and the work that is ready to ship next.',
+  },
+  {
+    tab: 'settings',
+    title: 'Settings',
+    body: 'Check workspace, integration, and notification configuration.',
+  },
+];
+
+const STARTUP_SECTION_SUMMARY: Record<StartupDashboardTabId, { title: string; body: string }> = {
+  overview: {
+    title: 'Overview first',
+    body: 'Start with score, trend, and the next few actions. Everything else is secondary.',
+  },
+  audits: {
+    title: 'Audit history',
+    body: 'Review past runs and compare what changed without scanning the whole dashboard.',
+  },
+  delivery: {
+    title: 'Delivery status',
+    body: 'Check Slack delivery health, then send a report or fix the destination setup.',
+  },
+  settings: {
+    title: 'Workspace settings',
+    body: 'Connect integrations and adjust the minimum configuration needed for execution.',
+  },
+};
+
+function StartupFlowStrip({ workspaceId, activeTab }: { workspaceId: string | null; activeTab: StartupDashboardTabId }) {
+  return (
+    <section className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-low p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Start here</p>
+          <h2 className="mt-1 text-base font-semibold text-on-surface">A shorter path through the startup dashboard</h2>
+        </div>
+        <p className="text-sm text-on-surface-variant">Use the overview first. The other sections stay available below.</p>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {STARTUP_FLOW_ITEMS.map((item) => {
+          const active = item.tab === activeTab;
+          return (
+            <Link
+              key={item.tab}
+              href={buildSectionHref(workspaceId, item.tab)}
+              className={`rounded-xl border px-4 py-3 text-left transition ${
+                active
+                  ? 'border-primary bg-primary/10 text-on-surface'
+                  : 'border-outline-variant bg-surface-container-low text-on-surface hover:bg-surface-container-high'
+              }`}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">{item.title}</p>
+              <p className="mt-1 text-sm text-on-surface-variant">{item.body}</p>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export type StartupDashboardPageShellProps = {
   readonly tabContext: StartupDashboardTabContext;
   readonly activeTab: StartupDashboardTabId;
@@ -95,6 +182,16 @@ export function StartupDashboardPageShell({
             {workspace.name}
           </Link>
         ))}
+      </div>
+
+      <StartupFlowStrip workspaceId={dashboard.selectedWorkspaceId} activeTab={activeTab} />
+
+      <div className="mt-4 rounded-2xl border border-outline-variant bg-surface-container-low px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Current section</p>
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="text-base font-semibold text-on-surface">{STARTUP_SECTION_SUMMARY[activeTab].title}</h2>
+          <span className="text-sm text-on-surface-variant">{STARTUP_SECTION_SUMMARY[activeTab].body}</span>
+        </div>
       </div>
 
       <StartupTabBar activeTab={activeTab} startupWorkspaceId={dashboard.selectedWorkspaceId} />

@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useCallback, useMemo, useState } from 'react';
 import type { StartupAuditRowModel } from './startup-tab-types';
 
-function normTitle(t: string): string {
-  return t.trim().toLowerCase();
+function normTitle(title: string): string {
+  return title.trim().toLowerCase();
 }
 
 function scoreDeltaClass(delta: number | null): string {
@@ -15,11 +15,17 @@ function scoreDeltaClass(delta: number | null): string {
   return 'text-on-surface-variant';
 }
 
-/** Fewer open recommendations in B than A is improvement. */
 function recCountDeltaClass(delta: number | null): string {
   if (delta == null || Number.isNaN(delta)) return 'text-on-surface-variant';
   if (delta < 0) return 'text-emerald-600 dark:text-emerald-400';
   if (delta > 0) return 'text-rose-600 dark:text-rose-400';
+  return 'text-on-surface-variant';
+}
+
+function implCountDeltaClass(delta: number | null): string {
+  if (delta == null || Number.isNaN(delta)) return 'text-on-surface-variant';
+  if (delta > 0) return 'text-emerald-600 dark:text-emerald-400';
+  if (delta < 0) return 'text-rose-600 dark:text-rose-400';
   return 'text-on-surface-variant';
 }
 
@@ -29,12 +35,12 @@ export function StartupAuditsTableClient({ rows }: Props) {
   const [picked, setPicked] = useState<string[]>([]);
   const [showDelta, setShowDelta] = useState(false);
 
-  const rowById = useMemo(() => new Map(rows.map((r) => [r.scanId, r])), [rows]);
+  const rowById = useMemo(() => new Map(rows.map((row) => [row.scanId, row])), [rows]);
 
   const toggle = useCallback((id: string) => {
     setShowDelta(false);
     setPicked((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.includes(id)) return prev.filter((pickedId) => pickedId !== id);
       if (prev.length >= 2) return prev;
       return [...prev, id];
     });
@@ -54,6 +60,7 @@ export function StartupAuditsTableClient({ rows }: Props) {
 
   let scoreDelta: number | null = null;
   let recDelta: number | null = null;
+  let implDelta: number | null = null;
   let newInB: string[] = [];
   let onlyInA: string[] = [];
 
@@ -62,10 +69,12 @@ export function StartupAuditsTableClient({ rows }: Props) {
       scoreDelta = auditB.score - auditA.score;
     }
     recDelta = auditB.recCount - auditA.recCount;
+    implDelta = auditB.implementedCount - auditA.implementedCount;
+
     const setA = new Set(auditA.recTitles.map(normTitle));
     const setB = new Set(auditB.recTitles.map(normTitle));
-    newInB = auditB.recTitles.filter((t) => !setA.has(normTitle(t))).slice(0, 3);
-    onlyInA = auditA.recTitles.filter((t) => !setB.has(normTitle(t))).slice(0, 3);
+    newInB = auditB.recTitles.filter((title) => !setA.has(normTitle(title))).slice(0, 3);
+    onlyInA = auditA.recTitles.filter((title) => !setB.has(normTitle(title))).slice(0, 3);
   }
 
   return (
@@ -106,6 +115,7 @@ export function StartupAuditsTableClient({ rows }: Props) {
                 <span className="font-semibold">{auditA.letterGrade ?? '—'}</span>
               </p>
               <p className="mt-1 text-xs text-on-surface-variant">Recommendations: {auditA.recCount}</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Implemented: {auditA.implementedCount}</p>
             </div>
             <div className="rounded-lg border border-outline-variant bg-surface-container p-3 text-sm">
               <p className="text-xs uppercase tracking-wider text-on-surface-variant">Audit B</p>
@@ -116,37 +126,48 @@ export function StartupAuditsTableClient({ rows }: Props) {
                 <span className="font-semibold">{auditB.letterGrade ?? '—'}</span>
               </p>
               <p className="mt-1 text-xs text-on-surface-variant">Recommendations: {auditB.recCount}</p>
+              <p className="mt-1 text-xs text-on-surface-variant">Implemented: {auditB.implementedCount}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2 border-t border-outline-variant pt-4 text-sm">
             <p>
-              Score delta (B − A):{' '}
+              Score delta (B - A):{' '}
               <span className={`font-semibold ${scoreDeltaClass(scoreDelta)}`}>
                 {scoreDelta == null ? '—' : scoreDelta > 0 ? `+${scoreDelta}` : String(scoreDelta)}
               </span>
             </p>
             <p>
-              Recommendations delta (B − A):{' '}
+              Recommendations delta (B - A):{' '}
               <span className={`font-semibold ${recCountDeltaClass(recDelta)}`}>
                 {recDelta == null ? '—' : recDelta > 0 ? `+${recDelta}` : String(recDelta)}
               </span>
             </p>
+            <p>
+              Implemented delta (B - A):{' '}
+              <span className={`font-semibold ${implCountDeltaClass(implDelta)}`}>
+                {implDelta == null ? '—' : implDelta > 0 ? `+${implDelta}` : String(implDelta)}
+              </span>
+            </p>
             {newInB.length > 0 ? (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Titles in B not in A (sample)</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  Titles in B not in A (sample)
+                </p>
                 <ul className="mt-1 list-inside list-disc text-xs text-on-surface">
-                  {newInB.map((t, i) => (
-                    <li key={`b-${i}-${normTitle(t).slice(0, 48)}`}>{t}</li>
+                  {newInB.map((title, index) => (
+                    <li key={`b-${index}-${normTitle(title).slice(0, 48)}`}>{title}</li>
                   ))}
                 </ul>
               </div>
             ) : null}
             {onlyInA.length > 0 ? (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Titles in A not in B (sample)</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
+                  Titles in A not in B (sample)
+                </p>
                 <ul className="mt-1 list-inside list-disc text-xs text-on-surface">
-                  {onlyInA.map((t, i) => (
-                    <li key={`a-${i}-${normTitle(t).slice(0, 48)}`}>{t}</li>
+                  {onlyInA.map((title, index) => (
+                    <li key={`a-${index}-${normTitle(title).slice(0, 48)}`}>{title}</li>
                   ))}
                 </ul>
               </div>
@@ -156,7 +177,7 @@ export function StartupAuditsTableClient({ rows }: Props) {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-outline-variant">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-outline-variant bg-surface-container-low">
               <th className="w-10 px-2 py-2 text-center text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
@@ -168,6 +189,7 @@ export function StartupAuditsTableClient({ rows }: Props) {
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Grade</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Report</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Source</th>
+              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Impl.</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Open</th>
             </tr>
           </thead>
@@ -193,18 +215,21 @@ export function StartupAuditsTableClient({ rows }: Props) {
                   {scan.reportStatus}
                 </td>
                 <td className="px-3 py-2 text-xs text-on-surface-variant">{scan.runSource}</td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-2">
-                    <Link href={`/results/${scan.scanId}`} className="text-xs font-semibold text-primary underline">
-                      Results
-                    </Link>
-                    {scan.pdfUrl ? (
-                      <a href={scan.pdfUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-primary underline">
-                        PDF
-                      </a>
-                    ) : null}
-                  </div>
+                <td className="px-3 py-2 text-xs text-on-surface-variant">
+                  {scan.implementedCount > 0 ? (
+                    <div className="space-y-1">
+                      <p className="font-medium text-on-surface">Validated {scan.implementedCount}</p>
+                      {scan.implementedTitles.length > 0 ? (
+                        <p className="max-w-[160px] truncate" title={scan.implementedTitles.join(' · ')}>
+                          {scan.implementedTitles[0]}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span>None yet</span>
+                  )}
                 </td>
+                <td className="px-3 py-2 text-xs text-on-surface-variant">{scan.openCount}</td>
               </tr>
             ))}
           </tbody>

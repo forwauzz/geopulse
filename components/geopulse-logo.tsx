@@ -26,7 +26,7 @@ export function GeoPulseLogo({ className, size = 'md' }: GeoPulseLogoProps) {
     >
       <Image
         src={LOGO_SRC}
-        alt=""
+        alt="GEO-Pulse wordmark"
         width={220}
         height={48}
         className="h-full w-auto max-w-[min(100%,220px)] object-contain object-center px-1.5 py-0.5"

@@ -46,11 +46,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function LoginPage({ searchParams }: Props) {
   const sp = await searchParams;
   const baseUrl = await loadBaseUrl();
+  const pageModifiedAt = new Date().toISOString();
   const pageSchema = buildWebPageStructuredData({
     url: toAbsoluteUrl(baseUrl, '/login'),
     title: 'Sign in | GEO-Pulse',
     description: 'Sign in to GEO-Pulse to access dashboards, saved audits, and paid reports.',
     siteUrl: toAbsoluteUrl(baseUrl, '/'),
+    dateModified: pageModifiedAt,
   });
   const nextPath = safeNextPath(sp.next);
   const err = sp.error;

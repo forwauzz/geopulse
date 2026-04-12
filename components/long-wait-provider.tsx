@@ -51,9 +51,9 @@ function LongWaitPanel({
         </div>
         <div>
           <p className="font-label text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-            Longer Than Usual
+            Loading
           </p>
-          <h2 className="font-headline text-2xl font-bold text-on-surface">{config.title}</h2>
+          <h2 className="font-headline text-2xl font-bold text-on-surface">LOADINGC</h2>
         </div>
       </div>
 

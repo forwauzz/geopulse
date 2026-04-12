@@ -8,17 +8,18 @@ import {
 import type { StartupOverviewStatStripProps, StartupOverviewTabProps } from './startup-tab-types';
 
 function newScanHref(workspaceId: string | null): string {
-  const p = new URLSearchParams();
-  if (workspaceId) p.set('startupWorkspace', workspaceId);
-  const q = p.toString();
-  return q ? `/dashboard/new-scan?${q}` : '/dashboard/new-scan';
+  const params = new URLSearchParams();
+  if (workspaceId) params.set('startupWorkspace', workspaceId);
+  const query = params.toString();
+  return query ? `/dashboard/new-scan?${query}` : '/dashboard/new-scan';
 }
 
 function auditsTabHref(workspaceId: string | null): string {
-  const p = new URLSearchParams();
-  if (workspaceId) p.set('startupWorkspace', workspaceId);
-  p.set('tab', 'audits');
-  return `/dashboard/startup?${p}`;
+  const params = new URLSearchParams();
+  if (workspaceId) params.set('startupWorkspace', workspaceId);
+  params.set('tab', 'audits');
+  const query = params.toString();
+  return `/dashboard/startup?${query}`;
 }
 
 function trendPath(values: number[], width: number, height: number): string {
@@ -36,6 +37,12 @@ function trendPath(values: number[], width: number, height: number): string {
     .join(' ');
 }
 
+function formatDelta(current: number | null | undefined, previous: number | null | undefined): string | null {
+  if (current == null || previous == null) return null;
+  const delta = current - previous;
+  return `${delta > 0 ? '+' : ''}${delta}`;
+}
+
 export function StartupOverviewStatStrip({
   dashboard,
   averageScore,
@@ -49,9 +56,7 @@ export function StartupOverviewStatStrip({
       </div>
       <div className="rounded-2xl border border-outline-variant bg-surface-container p-4">
         <p className="text-xs uppercase tracking-widest text-on-surface-variant">Average score</p>
-        <p className="mt-1 text-2xl font-bold">
-          {averageScore != null ? `${Math.round(averageScore)}/100` : '-'}
-        </p>
+        <p className="mt-1 text-2xl font-bold">{averageScore != null ? `${Math.round(averageScore)}/100` : '-'}</p>
       </div>
       <div className="rounded-2xl border border-outline-variant bg-surface-container p-4">
         <p className="text-xs uppercase tracking-widest text-on-surface-variant">Recommendations</p>
@@ -76,10 +81,16 @@ export function StartupOverviewTab({
   laneCards,
   prRuns,
   approvedRecommendations,
+  averageScore,
   githubState,
   prStatusMessage,
 }: StartupOverviewTabProps) {
-  const wid = dashboard.selectedWorkspaceId;
+  const workspaceId = dashboard.selectedWorkspaceId;
+  const latestScan = dashboard.scans[0] ?? null;
+  const latestTrendPoint = trend[trend.length - 1] ?? null;
+  const previousTrendPoint = trend[trend.length - 2] ?? null;
+  const scoreDelta = formatDelta(latestTrendPoint?.score, previousTrendPoint?.score);
+
   return (
     <>
       {dashboard.scans.length === 0 ? (
@@ -89,14 +100,14 @@ export function StartupOverviewTab({
         >
           <h2 className="text-lg font-semibold">No startup scans yet</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Run a scan to populate score trend, backlog, and audit history. Open the{' '}
-            <Link href={auditsTabHref(wid)} className="font-semibold text-primary underline">
+            Run a scan to establish a baseline for score trend, backlog, and audit history. Open the{' '}
+            <Link href={auditsTabHref(workspaceId)} className="font-semibold text-primary underline">
               Audits
             </Link>{' '}
-            tab anytime to filter past runs.
+            tab anytime to review past runs.
           </p>
           <Link
-            href={newScanHref(wid)}
+            href={newScanHref(workspaceId)}
             className="mt-4 inline-flex rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
           >
             Run a new scan
@@ -104,37 +115,117 @@ export function StartupOverviewTab({
         </article>
       ) : null}
 
+      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs uppercase tracking-widest text-on-surface-variant">Current state</p>
+            <h2 className="mt-1 text-lg font-semibold">One view for what matters now</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              {latestScan
+                ? `Latest score is ${latestScan.score ?? '-'} on ${new Date(latestScan.createdAt).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}.`
+                : 'No scored scans yet. Run a scan to establish the baseline.'}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href={newScanHref(workspaceId)}
+              className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Run a new scan
+            </Link>
+            <Link
+              href={auditsTabHref(workspaceId)}
+              className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+            >
+              Review audits
+            </Link>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Scans</p>
+            <p className="mt-1 text-2xl font-bold">{dashboard.scans.length}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Average score</p>
+            <p className="mt-1 text-2xl font-bold">{averageScore != null ? `${Math.round(averageScore)}/100` : '-'}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Open recommendations</p>
+            <p className="mt-1 text-2xl font-bold">{dashboard.recommendations.length}</p>
+          </div>
+        </div>
+      </article>
+
+      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-on-surface-variant">Progress</p>
+            <h2 className="mt-1 text-lg font-semibold">Recent improvement at a glance</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Small benchmark signal for the latest scans and validated recommendations.
+            </p>
+          </div>
+          <Link
+            href={auditsTabHref(workspaceId)}
+            className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+          >
+            Open audit history
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Latest score</p>
+            <p className="mt-1 text-2xl font-bold">{latestTrendPoint ? `${latestTrendPoint.score}/100` : '-'}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Delta</p>
+            <p className="mt-1 text-2xl font-bold">{scoreDelta ?? '-'}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Validated</p>
+            <p className="mt-1 text-2xl font-bold">{metrics.funnel.validated}</p>
+          </div>
+        </div>
+      </article>
+
       <article className="rounded-2xl border border-outline-variant bg-surface-container p-5">
         <h2 className="text-lg font-semibold">Score trend</h2>
-        <p className="mt-1 text-sm text-on-surface-variant">Track score direction before and after implementation pushes.</p>
+        <p className="mt-1 text-sm text-on-surface-variant">The line should read in one glance, not in a paragraph.</p>
         <div className="mt-4 rounded-xl border border-outline-variant bg-surface-container-low p-3">
           {trend.length === 0 ? (
             <p className="text-sm text-on-surface-variant">No scored scans yet.</p>
           ) : (
             <svg viewBox="0 0 240 80" className="h-24 w-full text-primary">
-              <path d={trendPath(trend.map((point) => point.score), 240, 80)} fill="none" stroke="currentColor" strokeWidth="3" />
+              <path
+                d={trendPath(
+                  trend.map((point) => point.score),
+                  240,
+                  80
+                )}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+              />
             </svg>
           )}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-on-surface-variant">
-          {trend.map((point) => (
-            <span key={`${point.label}-${point.score}`} className="rounded-md bg-surface-container-high px-2 py-1">
-              {point.label}: {point.score}
-            </span>
-          ))}
         </div>
       </article>
 
       <article className="rounded-2xl border border-outline-variant bg-surface-container p-5">
         <h2 className="text-lg font-semibold">Action backlog</h2>
-        <p className="mt-1 text-sm text-on-surface-variant">No fluff. Items here are implementation-ready.</p>
+        <p className="mt-1 text-sm text-on-surface-variant">Only the next useful work, capped at a few items.</p>
         <ul className="mt-4 space-y-3" data-testid="startup-overview-backlog">
           {backlog.length === 0 ? (
             <li className="rounded-xl border border-outline-variant bg-surface-container-low px-3 py-4 text-sm text-on-surface-variant">
               No backlog items yet. When recommendations and scans exist, actionable items appear here.
             </li>
           ) : (
-            backlog.map((item) => (
+            backlog.slice(0, 4).map((item) => (
               <li key={item.key} className="rounded-xl border border-outline-variant bg-surface-container-low p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold">{item.title}</p>
@@ -153,29 +244,31 @@ export function StartupOverviewTab({
         </ul>
       </article>
 
-      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-        <h2 className="text-lg font-semibold">Implementation lane</h2>
-        <p className="mt-1 text-sm text-on-surface-variant">Team-lane plan generated from markdown audits.</p>
-        <div className="mt-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
+      <details className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <summary className="cursor-pointer list-none text-lg font-semibold text-on-surface">
+          Implementation lane
+          <span className="ml-3 text-sm font-normal text-on-surface-variant">Progress and ownership details</span>
+        </summary>
+        <div className="mt-4">
           {!latestPlan ? (
             <p className="text-sm text-on-surface-variant">No generated implementation plan yet.</p>
           ) : (
             <>
               <p className="text-xs text-on-surface-variant">
-                Plan source: {latestPlan.sourceRef ?? 'manual'} • {latestPlan.status}
+                Plan source: {latestPlan.sourceRef ?? 'manual'} â€¢ {latestPlan.status}
               </p>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {laneCards.map((card) => (
                   <div key={card.lane} className="rounded-lg bg-surface-container-low px-3 py-2 text-sm">
                     <p className="font-semibold capitalize">{card.lane.replace('_', ' ')}</p>
                     <p className="text-xs text-on-surface-variant">
-                      Open {card.open} • Done {card.done} • Total {card.total}
+                      Open {card.open} â€¢ Done {card.done} â€¢ Total {card.total}
                     </p>
                   </div>
                 ))}
               </div>
               <ul className="mt-3 space-y-2 text-sm">
-                {latestPlan.tasks.slice(0, 6).map((task) => (
+                {latestPlan.tasks.slice(0, 4).map((task) => (
                   <li key={task.id} className="rounded-lg bg-surface-container-low px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-medium">{task.title}</p>
@@ -185,29 +278,31 @@ export function StartupOverviewTab({
                   </li>
                 ))}
               </ul>
+              <div className="mt-3 rounded-xl border border-outline-variant bg-surface-container-low p-3">
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Open load over time</p>
+                {metrics.burnDown.length === 0 ? (
+                  <p className="mt-2 text-sm text-on-surface-variant">No implementation events recorded yet.</p>
+                ) : (
+                  <ul className="mt-2 space-y-2 text-sm">
+                    {metrics.burnDown.map((point) => (
+                      <li key={point.label} className="flex items-center justify-between rounded-lg bg-surface-container-low px-3 py-2">
+                        <span className="text-on-surface">{point.label}</span>
+                        <span className="font-semibold">{point.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </>
           )}
         </div>
-        <div className="mt-3 rounded-xl border border-outline-variant bg-surface-container-low p-3">
-          <p className="text-xs uppercase tracking-widest text-on-surface-variant">Open load over time</p>
-          {metrics.burnDown.length === 0 ? (
-            <p className="mt-2 text-sm text-on-surface-variant">No implementation events recorded yet.</p>
-          ) : (
-            <ul className="mt-2 space-y-2 text-sm">
-              {metrics.burnDown.map((point) => (
-                <li key={point.label} className="flex items-center justify-between rounded-lg bg-surface-container-low px-3 py-2">
-                  <span className="text-on-surface">{point.label}</span>
-                  <span className="font-semibold">{point.value}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </article>
+      </details>
 
-      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5">
-        <h2 className="text-lg font-semibold">PR activity</h2>
-        <p className="mt-1 text-sm text-on-surface-variant">Recommendation lifecycle funnel and score windows for execution tracking.</p>
+      <details className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <summary className="cursor-pointer list-none text-lg font-semibold text-on-surface">
+          PR activity
+          <span className="ml-3 text-sm font-normal text-on-surface-variant">Automation state and execution controls</span>
+        </summary>
         <div className="mt-4 grid gap-3">
           <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4">
             <p className="text-xs uppercase tracking-widest text-on-surface-variant">Funnel</p>
@@ -216,8 +311,6 @@ export function StartupOverviewTab({
               <div className="rounded-md bg-surface-container-low px-3 py-2">Approved: {metrics.funnel.approved}</div>
               <div className="rounded-md bg-surface-container-low px-3 py-2">In progress: {metrics.funnel.inProgress}</div>
               <div className="rounded-md bg-surface-container-low px-3 py-2">Shipped: {metrics.funnel.shipped}</div>
-              <div className="rounded-md bg-surface-container-low px-3 py-2">Validated: {metrics.funnel.validated}</div>
-              <div className="rounded-md bg-surface-container-low px-3 py-2">Failed: {metrics.funnel.failed}</div>
             </div>
           </div>
           <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4">
@@ -233,13 +326,13 @@ export function StartupOverviewTab({
             {prStatusMessage ? (
               <p className="mt-2 rounded-md bg-surface-container-low px-3 py-2 text-xs text-on-surface">{prStatusMessage}</p>
             ) : null}
-            {dashboard.selectedWorkspaceId &&
+            {workspaceId &&
             startupRolloutFlags?.autoPr &&
             startupServiceGates?.githubIntegration.enabled &&
             startupServiceGates?.agentPrExecution.enabled &&
             githubState.repositories.length > 0 ? (
               <form action={queueStartupRecommendationPrRunAction} className="mt-2 grid gap-2">
-                <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId} />
+                <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
                 <select
                   name="recommendationId"
                   className="rounded-md border border-outline-variant bg-surface-container-low px-3 py-2 text-xs text-on-surface"
@@ -289,7 +382,7 @@ export function StartupOverviewTab({
               {prRuns.length === 0 ? (
                 <li className="rounded-md bg-surface-container-low px-3 py-2 text-on-surface-variant">No PR runs yet.</li>
               ) : (
-                prRuns.map((run) => (
+                prRuns.slice(0, 4).map((run) => (
                   <li key={run.id} className="rounded-md bg-surface-container-low px-3 py-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-on-surface">
@@ -306,12 +399,12 @@ export function StartupOverviewTab({
                         'No PR URL yet'
                       )}
                     </div>
-                    {dashboard.selectedWorkspaceId &&
+                    {workspaceId &&
                     (run.status === 'running' || run.status === 'queued' || run.status === 'pr_opened') ? (
                       <div className="mt-2 flex flex-wrap gap-2">
                         {(run.status === 'running' || run.status === 'queued') && (
                           <form action={markStartupPrRunOpenedAction} className="flex flex-wrap gap-2">
-                            <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId} />
+                            <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
                             <input type="hidden" name="runId" value={run.id} />
                             <input
                               name="pullRequestNumber"
@@ -333,7 +426,7 @@ export function StartupOverviewTab({
                         )}
                         {run.status === 'pr_opened' && (
                           <form action={markStartupPrRunMergedAction}>
-                            <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId} />
+                            <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
                             <input type="hidden" name="runId" value={run.id} />
                             <button
                               type="submit"
@@ -344,7 +437,7 @@ export function StartupOverviewTab({
                           </form>
                         )}
                         <form action={markStartupPrRunFailedAction} className="flex flex-wrap gap-2">
-                          <input type="hidden" name="startupWorkspaceId" value={dashboard.selectedWorkspaceId} />
+                          <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
                           <input type="hidden" name="runId" value={run.id} />
                           <input
                             name="errorMessage"
@@ -366,7 +459,7 @@ export function StartupOverviewTab({
             </ul>
           </div>
         </div>
-      </article>
+      </details>
     </>
   );
 }

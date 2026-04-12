@@ -167,6 +167,7 @@ export function buildStartupDashboardUrl(sp: {
   readonly range?: string;
   readonly from?: string;
   readonly to?: string;
+  readonly status?: string;
   readonly github?: string;
   readonly pr?: string;
   readonly slack?: string;
@@ -178,6 +179,7 @@ export function buildStartupDashboardUrl(sp: {
   if (sp.range?.trim()) p.set('range', sp.range.trim());
   if (sp.from?.trim()) p.set('from', sp.from.trim());
   if (sp.to?.trim()) p.set('to', sp.to.trim());
+  if (sp.status?.trim()) p.set('status', sp.status.trim());
   if (sp.github?.trim()) p.set('github', sp.github.trim());
   if (sp.pr?.trim()) p.set('pr', sp.pr.trim());
   if (sp.slack?.trim()) p.set('slack', sp.slack.trim());

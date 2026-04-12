@@ -12,6 +12,10 @@ Implemented today:
 - auth + dashboard
 - admin eval analytics
 - retrieval eval writers and drilldown
+- startup dashboard with condensed overview, audits, delivery, and settings flow
+- audit history with range filters, status filters, and validation tracking
+- freshness and crawlability signals for public pages
+- shared SEO helpers for canonical, Open Graph, and JSON-LD metadata
 
 ## Current status
 
@@ -21,6 +25,7 @@ Remaining Phase 4 operator/security work:
 - SPF / DKIM / DMARC (`P4-003`)
 - WAF policy / closure (`P4-004`)
 - final launch security sign-off (`P4-006`)
+- live deploy verification for robots.txt, llms.txt, and response headers
 
 See:
 - `docs/01-current-state.md`
@@ -36,6 +41,7 @@ See:
 3. Stripe checkout collects the delivery email for the paid report.
 4. Webhook + queue generate the full audit.
 5. Report is delivered by email and unlocked in the app.
+6. Startup audit recommendations can be marked validated and reused as an implementation signal for later benchmarking.
 
 ## Tech
 

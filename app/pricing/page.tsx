@@ -151,12 +151,14 @@ export default async function PricingPage() {
   const { bundles, activeSubs } = await loadPricingData(user?.id ?? null);
   const turnstileSiteKey = getTurnstileSiteKey();
   const baseUrl = await loadBaseUrl();
+  const pageModifiedAt = new Date().toISOString();
   const pageSchema = buildWebPageStructuredData({
     url: toAbsoluteUrl(baseUrl, '/pricing'),
     title: 'Pricing | GEO-Pulse',
     description:
       'Simple, transparent pricing for GEO-Pulse AI search readiness. Start free and subscribe when your team needs the full platform.',
     siteUrl: toAbsoluteUrl(baseUrl, '/'),
+    dateModified: pageModifiedAt,
   });
   const activeSubKeys = new Set(activeSubs.map((s) => s.bundle_key));
 

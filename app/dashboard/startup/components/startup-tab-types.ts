@@ -32,11 +32,13 @@ export function parseStartupDashboardTab(raw: string | undefined | null): Startu
 
 /** Parsed audit filter state (TR-006 URL: `range`, `from`, `to`) */
 export type StartupAuditRangePreset = '7d' | '30d' | '90d' | 'all';
+export type StartupAuditStatusFilter = 'all' | 'implemented' | 'open';
 
 export type StartupAuditFilterState = {
   readonly preset: StartupAuditRangePreset | null;
   readonly from: string | null;
   readonly to: string | null;
+  readonly status: StartupAuditStatusFilter;
 };
 
 /** Reads `range` / `from` / `to` from startup dashboard search params. Custom dates win over preset. */
@@ -44,20 +46,23 @@ export function parseStartupAuditFilterFromSearchParams(sp: {
   readonly range?: string;
   readonly from?: string;
   readonly to?: string;
+  readonly status?: string;
 }): StartupAuditFilterState {
   const from = sp.from?.trim() || null;
   const to = sp.to?.trim() || null;
+  const status =
+    sp.status === 'implemented' || sp.status === 'open' ? sp.status : 'all';
   if (from || to) {
-    return { preset: null, from, to };
+    return { preset: null, from, to, status };
   }
   const r = sp.range?.trim();
   if (r === '7d' || r === '30d' || r === '90d') {
-    return { preset: r, from: null, to: null };
+    return { preset: r, from: null, to: null, status };
   }
   if (r === 'all') {
-    return { preset: 'all', from: null, to: null };
+    return { preset: 'all', from: null, to: null, status };
   }
-  return { preset: 'all', from: null, to: null };
+  return { preset: 'all', from: null, to: null, status };
 }
 
 /** Service entitlement gates resolved for the startup dashboard UI */
@@ -79,6 +84,7 @@ export type StartupDashboardPageSearchParams = {
   readonly range?: string;
   readonly from?: string;
   readonly to?: string;
+  readonly status?: string;
 };
 
 /**
@@ -141,7 +147,10 @@ export type StartupAuditRowModel = {
   readonly reportStatus: string;
   readonly pdfUrl: string | null;
   readonly recCount: number;
+  readonly implementedCount: number;
+  readonly openCount: number;
   readonly recTitles: readonly string[];
+  readonly implementedTitles: readonly string[];
 };
 
 export type StartupDeliveryTabProps = StartupDashboardTabContext;

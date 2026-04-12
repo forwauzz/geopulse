@@ -154,6 +154,7 @@ describe('getStartupDashboardData', () => {
     expect(data.reports[0]?.createdAt).toBe('2026-04-04T00:20:00.000Z');
     expect(data.recommendations[0]?.status).toBe('suggested');
     expect(data.recommendations[0]?.sourceKind).toBe('markdown_audit');
+    expect(data.recommendations[0]?.statusUpdatedByUserId).toBe(null);
   });
 
   it('falls back to first workspace when selected id is invalid', async () => {

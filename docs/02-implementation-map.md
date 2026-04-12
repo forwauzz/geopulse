@@ -128,6 +128,28 @@ Responsibilities:
 - prompt regression suites
 - golden report assertions
 
+### 6c. Startup audit history and implementation tracking
+Key files:
+- `app/dashboard/startup/page.tsx`
+- `app/dashboard/startup/components/startup-dashboard-page-shell.tsx`
+- `app/dashboard/startup/components/startup-overview-tab.tsx`
+- `app/dashboard/startup/components/startup-audits-tab.tsx`
+- `app/dashboard/startup/components/startup-audits-table-client.tsx`
+- `app/dashboard/startup/components/startup-settings-tab.tsx`
+- `app/dashboard/startup/components/startup-delivery-tab.tsx`
+- `app/dashboard/startup/components/startup-tab-types.ts`
+- `lib/server/startup-dashboard-data.ts`
+- `lib/server/startup-dashboard-status-messages.ts`
+- `lib/server/startup-tracking-metrics.ts`
+
+Responsibilities:
+- keep the startup dashboard flow obvious with a reduced tab hierarchy
+- show audit history with date-range and status filters
+- surface a compact score trend and latest-vs-previous delta
+- record validated recommendations as the implementation signal
+- preserve a lightweight data model for later benchmark attribution
+- keep the UI quiet enough for rapid scanning while still exposing progress
+
 ### 6b. Benchmark execution boundary
 Key files:
 - `lib/server/benchmark-execution.ts`

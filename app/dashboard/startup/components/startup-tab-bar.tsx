@@ -18,28 +18,51 @@ function startupTabHref(tab: StartupDashboardTabId, workspaceId: string | null):
 }
 
 export function StartupTabBar({ activeTab, startupWorkspaceId }: StartupTabBarProps) {
+  const primaryTab: StartupDashboardTabId = 'overview';
+  const secondaryTabs = STARTUP_DASHBOARD_TABS.filter((tab) => tab !== primaryTab);
+
   return (
     <nav
       data-testid="startup-dashboard-tab-bar"
-      className="mt-6 flex flex-wrap gap-1 border-b border-outline-variant"
+      className="mt-6 rounded-2xl border border-outline-variant bg-surface-container-low p-3"
       aria-label="Startup dashboard sections"
     >
-      {STARTUP_DASHBOARD_TABS.map((tab) => {
-        const active = tab === activeTab;
-        return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Primary</p>
           <Link
-            key={tab}
-            href={startupTabHref(tab, startupWorkspaceId)}
-            className={`mb-[-1px] rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
-              active
-                ? 'border-primary text-on-surface'
-                : 'border-transparent text-on-surface-variant hover:border-outline-variant hover:text-on-surface'
+            href={startupTabHref(primaryTab, startupWorkspaceId)}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+              activeTab === primaryTab
+                ? 'bg-primary text-on-primary'
+                : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
             }`}
           >
-            {LABELS[tab]}
+            {LABELS[primaryTab]}
           </Link>
-        );
-      })}
+        </div>
+        <div className="border-t border-outline-variant pt-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Secondary sections</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {secondaryTabs.map((tab) => {
+              const active = tab === activeTab;
+              return (
+                <Link
+                  key={tab}
+                  href={startupTabHref(tab, startupWorkspaceId)}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition ${
+                    active
+                      ? 'bg-primary/10 text-on-surface border border-primary/30'
+                      : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+                  }`}
+                >
+                  {LABELS[tab]}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </nav>
   );
 }

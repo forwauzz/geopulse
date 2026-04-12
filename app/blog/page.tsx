@@ -54,6 +54,18 @@ function formatLabel(value: string | null): string {
     .join(' ');
 }
 
+function getLatestTimestamp(values: ReadonlyArray<string | null | undefined>): string | null {
+  const latest = values
+    .map((value) => (value ? new Date(value).getTime() : null))
+    .filter((value): value is number => value !== null)
+    .reduce<number | null>((currentMax, value) => {
+      if (currentMax === null) return value;
+      return value > currentMax ? value : currentMax;
+    }, null);
+
+  return latest === null ? null : new Date(latest).toISOString();
+}
+
 export default async function BlogIndexPage() {
   const supabase = await createPublicContentClient();
   const [articles, env] = await Promise.all([
@@ -69,6 +81,7 @@ export default async function BlogIndexPage() {
     blogUrl,
     description: BLOG_DESCRIPTION,
     topicUrls,
+    dateModified: getLatestTimestamp(articles.map((article) => article.updated_at)) ?? undefined,
   });
   const breadcrumbStructuredData = buildBreadcrumbStructuredData([{ name: 'Blog', item: blogUrl }]);
 

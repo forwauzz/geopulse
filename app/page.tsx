@@ -5,6 +5,7 @@ import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   buildOrganizationStructuredData,
   buildPublicPageMetadata,
+  buildWebPageStructuredData,
   buildWebSiteStructuredData,
   SITE_DESCRIPTION,
   toAbsoluteUrl,
@@ -59,6 +60,7 @@ export default async function HomePage({
   const baseUrl = await loadBaseUrl();
   const siteKey = getTurnstileSiteKey();
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
+  const pageModifiedAt = new Date().toISOString();
   const organizationSchema = buildOrganizationStructuredData({
     url: siteUrl,
     description: SITE_DESCRIPTION,
@@ -66,6 +68,13 @@ export default async function HomePage({
   const websiteSchema = buildWebSiteStructuredData({
     url: siteUrl,
     description: SITE_DESCRIPTION,
+  });
+  const homePageSchema = buildWebPageStructuredData({
+    url: siteUrl,
+    title: 'GEO-Pulse | AI Search Readiness',
+    description: SITE_DESCRIPTION,
+    siteUrl,
+    dateModified: pageModifiedAt,
   });
 
   return (
@@ -77,6 +86,10 @@ export default async function HomePage({
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homePageSchema) }}
       />
       <section className="relative mx-auto max-w-screen-2xl overflow-hidden px-6 pb-24 pt-16 text-center md:px-10 md:pb-32 md:pt-24">
         <div className="mb-6">

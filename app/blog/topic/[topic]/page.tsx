@@ -38,6 +38,18 @@ function toAbsoluteUrl(appUrl: string, pathOrUrl: string): string {
   return `${base}${path}`;
 }
 
+function getLatestTimestamp(values: ReadonlyArray<string | null | undefined>): string | null {
+  const latest = values
+    .map((value) => (value ? new Date(value).getTime() : null))
+    .filter((value): value is number => value !== null)
+    .reduce<number | null>((currentMax, value) => {
+      if (currentMax === null) return value;
+      return value > currentMax ? value : currentMax;
+    }, null);
+
+  return latest === null ? null : new Date(latest).toISOString();
+}
+
 async function loadArticles() {
   const supabase = await createPublicContentClient();
   return createPublicContentData(supabase).getPublishedArticles();
@@ -129,6 +141,7 @@ export default async function BlogTopicPage({ params }: Props) {
     articleUrls: topicArticles.map((article) =>
       toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, `/blog/${article.slug}`)
     ),
+    dateModified: getLatestTimestamp(topicArticles.map((article) => article.updated_at)) ?? undefined,
   });
   const breadcrumbStructuredData = buildBreadcrumbStructuredData([
     { name: 'Blog', item: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/blog') },

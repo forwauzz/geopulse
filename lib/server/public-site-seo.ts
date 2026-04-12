@@ -102,6 +102,7 @@ export function buildWebPageStructuredData(input: {
   readonly title: string;
   readonly description: string;
   readonly siteUrl?: string;
+  readonly dateModified?: string;
 }) {
   return {
     '@context': 'https://schema.org',
@@ -109,6 +110,7 @@ export function buildWebPageStructuredData(input: {
     name: input.title,
     url: input.url,
     description: input.description,
+    ...(input.dateModified ? { dateModified: input.dateModified } : {}),
     isPartOf: {
       '@type': 'WebSite',
       name: SITE_NAME,

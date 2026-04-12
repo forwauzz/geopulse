@@ -17,6 +17,7 @@ describe('buildTopicPageStructuredData', () => {
           'https://getgeopulse.com/blog/audit-your-site',
           'https://getgeopulse.com/blog/crawlable-not-extractable',
         ],
+        dateModified: '2026-04-12T00:00:00.000Z',
       })
     ).toMatchObject({
       '@type': 'CollectionPage',
@@ -24,6 +25,7 @@ describe('buildTopicPageStructuredData', () => {
         '@type': 'Thing',
         name: 'Ai Search Readiness',
       },
+      dateModified: '2026-04-12T00:00:00.000Z',
       hasPart: [{ '@type': 'Article' }, { '@type': 'Article' }],
     });
   });
@@ -56,9 +58,11 @@ describe('buildBlogIndexStructuredData', () => {
           'https://getgeopulse.com/blog/topic/ai_search_readiness',
           'https://getgeopulse.com/blog/topic/citation_readiness',
         ],
+        dateModified: '2026-04-12T00:00:00.000Z',
       })
     ).toMatchObject({
       '@type': 'CollectionPage',
+      dateModified: '2026-04-12T00:00:00.000Z',
       hasPart: [{ '@type': 'CollectionPage' }, { '@type': 'CollectionPage' }],
       publisher: {
         '@type': 'Organization',

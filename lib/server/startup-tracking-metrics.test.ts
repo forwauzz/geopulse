@@ -114,6 +114,7 @@ describe('buildStartupTrackingMetrics', () => {
           status: 'suggested',
           statusChangedAt: '2026-04-01T00:00:00.000Z',
           statusReason: null,
+          statusUpdatedByUserId: null,
           createdAt: '2026-04-01T00:00:00.000Z',
         },
         {
@@ -130,6 +131,7 @@ describe('buildStartupTrackingMetrics', () => {
           status: 'approved',
           statusChangedAt: '2026-04-02T00:00:00.000Z',
           statusReason: null,
+          statusUpdatedByUserId: null,
           createdAt: '2026-04-01T00:00:00.000Z',
         },
         {
@@ -146,6 +148,7 @@ describe('buildStartupTrackingMetrics', () => {
           status: 'shipped',
           statusChangedAt: '2026-04-03T00:00:00.000Z',
           statusReason: null,
+          statusUpdatedByUserId: null,
           createdAt: '2026-04-01T00:00:00.000Z',
         },
       ],

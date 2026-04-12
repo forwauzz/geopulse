@@ -47,6 +47,7 @@ export type StartupWorkspaceRecommendation = {
   readonly status: 'suggested' | 'approved' | 'in_progress' | 'shipped' | 'validated' | 'failed';
   readonly statusChangedAt: string;
   readonly statusReason: string | null;
+  readonly statusUpdatedByUserId: string | null;
   readonly createdAt: string;
 };
 
@@ -155,6 +156,7 @@ export async function getStartupDashboardData(args: {
           'status',
           'status_changed_at',
           'status_reason',
+          'status_updated_by_user_id',
           'created_at',
         ].join(',')
       )
@@ -228,6 +230,7 @@ export async function getStartupDashboardData(args: {
       status: 'suggested' | 'approved' | 'in_progress' | 'shipped' | 'validated' | 'failed';
       status_changed_at: string;
       status_reason: string | null;
+      status_updated_by_user_id: string | null;
       created_at: string;
     }>).map((row) => ({
       id: row.id,
@@ -243,6 +246,7 @@ export async function getStartupDashboardData(args: {
       status: row.status,
       statusChangedAt: row.status_changed_at,
       statusReason: row.status_reason,
+      statusUpdatedByUserId: row.status_updated_by_user_id,
       createdAt: row.created_at,
     })),
   };

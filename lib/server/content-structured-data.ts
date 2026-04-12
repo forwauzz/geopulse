@@ -20,6 +20,7 @@ export function buildBlogIndexStructuredData(input: {
   readonly blogUrl: string;
   readonly description: string;
   readonly topicUrls: readonly string[];
+  readonly dateModified?: string;
 }) {
   return {
     '@context': 'https://schema.org',
@@ -27,6 +28,7 @@ export function buildBlogIndexStructuredData(input: {
     name: 'GEO-Pulse Blog',
     description: input.description,
     url: input.blogUrl,
+    ...(input.dateModified ? { dateModified: input.dateModified } : {}),
     hasPart: input.topicUrls.map((url) => ({
       '@type': 'CollectionPage',
       url,
@@ -45,6 +47,7 @@ export function buildTopicPageStructuredData(input: {
   readonly definition: string;
   readonly whyItMatters: string;
   readonly articleUrls: readonly string[];
+  readonly dateModified?: string;
 }) {
   return {
     '@context': 'https://schema.org',
@@ -52,6 +55,7 @@ export function buildTopicPageStructuredData(input: {
     name: `${input.topicLabel} | GEO-Pulse`,
     description: `${input.definition} ${input.whyItMatters}`.trim(),
     url: input.topicUrl,
+    ...(input.dateModified ? { dateModified: input.dateModified } : {}),
     about: {
       '@type': 'Thing',
       name: input.topicLabel,

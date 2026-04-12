@@ -22,9 +22,11 @@ describe('public-site-seo', () => {
       title: 'About | GEO-Pulse',
       description: 'About page',
       siteUrl: 'https://getgeopulse.com/',
+      dateModified: '2026-04-12T00:00:00.000Z',
     });
 
     expect(schema['@type']).toBe('WebPage');
     expect(schema.isPartOf.url).toBe('https://getgeopulse.com/');
+    expect(schema.dateModified).toBe('2026-04-12T00:00:00.000Z');
   });
 });

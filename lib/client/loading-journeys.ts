@@ -1,21 +1,21 @@
 import type { LongWaitConfig } from '@/components/long-wait-provider';
 
 const sharedAuditAssemblySteps = [
-  'Checking the website request',
-  'Reviewing the site content',
-  'Assembling the audit view',
+  'Checking the request',
+  'Reviewing the page',
+  'Compiling audit status',
 ] as const;
 
 export const scanLoadingJourney: LongWaitConfig = {
-  title: 'Building your first audit view',
-  description: 'We are checking the request, reviewing the page safely, and drafting the preview you will see first.',
+  title: 'Audit status',
+  description: 'We are checking the request, reviewing the page, and compiling the first audit status.',
   steps: sharedAuditAssemblySteps,
 };
 
 export const resultsLoadingJourney: LongWaitConfig = {
-  title: 'Loading your audit progress',
+  title: 'Audit status',
   description: 'We are pulling the saved scan, score, and current audit stage for this results page.',
-  steps: ['Loading saved scan data', 'Checking current audit status', 'Preparing the results view'],
+  steps: ['Loading saved scan data', 'Checking current audit stage', 'Preparing the results view'],
 };
 
 export const saveResultsLoadingJourney: LongWaitConfig = {
@@ -49,7 +49,7 @@ export const adminLoginLoadingJourney: LongWaitConfig = {
 };
 
 export const reportLoadingJourney: LongWaitConfig = {
-  title: 'Building your full audit',
+  title: 'Audit status',
   description: 'We are using the same audit pipeline as the preview, then finishing the full report and delivery steps.',
-  steps: ['Checking payment and report status', 'Assembling the complete audit', 'Preparing email and report access'],
+  steps: ['Checking payment status', 'Assembling the full audit', 'Preparing report delivery'],
 };

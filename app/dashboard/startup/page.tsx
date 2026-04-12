@@ -22,6 +22,7 @@ type Props = {
     range?: string;
     from?: string;
     to?: string;
+    status?: string;
     github?: string;
     pr?: string;
     slack?: string;
@@ -50,6 +51,7 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
         range: sp.range,
         from: sp.from,
         to: sp.to,
+        status: sp.status,
         github: sp.github,
         pr: sp.pr,
         slack: sp.slack,
@@ -62,6 +64,7 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
     range: sp.range,
     from: sp.from,
     to: sp.to,
+    status: sp.status,
   });
 
   const loaded = await loadStartupDashboardContext({

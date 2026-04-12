@@ -33,6 +33,7 @@ export default async function AboutPage() {
   const baseUrl = await loadBaseUrl();
   const pageUrl = toAbsoluteUrl(baseUrl, '/about');
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
+  const pageModifiedAt = new Date().toISOString();
   const organizationSchema = buildOrganizationStructuredData({
     url: siteUrl,
     description: SITE_DESCRIPTION,
@@ -43,6 +44,7 @@ export default async function AboutPage() {
     description:
       'Who built GEO-Pulse, why it exists, and how the site keeps its public content machine-readable.',
     siteUrl: baseUrl,
+    dateModified: pageModifiedAt,
   });
 
   return (
@@ -104,6 +106,40 @@ export default async function AboutPage() {
           <li>LLM-facing pages should include clear structure, strong headings, and bounded claims.</li>
           <li>The canonical site should explain the product before it asks for sign-up or checkout.</li>
         </ul>
+      </section>
+
+      <section className="mt-12 rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-primary">References</p>
+        <p className="mt-3 max-w-3xl font-body text-sm leading-relaxed text-on-surface-variant">
+          GEO-Pulse uses the following public references as a baseline for crawlability, structured
+          data, and machine-readable content:
+        </p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <a
+            href="https://developers.google.com/search/docs/crawling-indexing/robots/intro"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+          >
+            Google Search Central robots.txt guide
+          </a>
+          <a
+            href="https://schema.org"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+          >
+            Schema.org vocabulary
+          </a>
+          <a
+            href="https://llmstxt.org"
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+          >
+            llms.txt specification
+          </a>
+        </div>
       </section>
 
       <div className="mt-10 flex flex-wrap gap-4">
