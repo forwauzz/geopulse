@@ -5,6 +5,7 @@ import { AttributionInit } from '@/components/attribution-init';
 import { LongWaitProvider } from '@/components/long-wait-provider';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
+import { SITE_DESCRIPTION, SITE_NAME } from '@/lib/server/public-site-seo';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -18,8 +19,20 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: 'GEO-Pulse — AI Search Readiness',
-  description: 'Free AI Search Readiness audit for your site.',
+  metadataBase: new URL('https://getgeopulse.com'),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: 'https://getgeopulse.com',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
   icons: {
     icon: '/branding/geopulse-logo.png',
     apple: '/branding/geopulse-logo.png',

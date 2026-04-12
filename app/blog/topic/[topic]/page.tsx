@@ -15,6 +15,7 @@ import {
 } from '@/lib/server/content-structured-data';
 import { getTopicPageContent } from '@/lib/server/content-topic-pages';
 import { createPublicContentData } from '@/lib/server/public-content-data';
+import { buildPublicPageMetadata } from '@/lib/server/public-site-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -80,17 +81,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  return {
+  return buildPublicPageMetadata({
+    baseUrl: env.NEXT_PUBLIC_APP_URL,
     title: `${group.topicLabel} | GEO-Pulse Blog`,
     description: `Published GEO-Pulse articles about ${group.topicLabel}.`,
-    alternates: {
-      canonical: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, buildTopicHref(group.topicKey)),
-    },
-    robots: {
-      index: true,
-      follow: true,
-    },
-  };
+    canonicalPath: buildTopicHref(group.topicKey),
+    openGraphType: 'website',
+  });
 }
 
 export default async function BlogTopicPage({ params }: Props) {
@@ -168,6 +165,14 @@ export default async function BlogTopicPage({ params }: Props) {
         </h1>
         <p className="mt-4 font-body text-lg leading-relaxed text-zinc-300">
           {topicContent.definition}
+        </p>
+        <p className="mt-3 font-body text-sm text-zinc-300">
+          Topic pages are maintained as part of the canonical public site, with clear authorship and
+          an{' '}
+          <Link href="/about" className="font-semibold text-sky-300 hover:underline">
+            About page
+          </Link>
+          .
         </p>
       </div>
 

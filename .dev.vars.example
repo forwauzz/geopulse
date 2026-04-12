@@ -30,6 +30,14 @@ STRIPE_PRICE_ID_DEEP_AUDIT=price_your_price_id
 # for paid Checkout sessions that never created a `payments` row (e.g. webhook URL wrong or offline).
 RECONCILE_SECRET=
 
+# Slack â€” required for OAuth install callbacks and bot/event handling.
+# Get the signing secret from Slack App â†’ Basic Information.
+STARTUP_SLACK_SIGNING_SECRET=your-slack-signing-secret
+# Install URL / client id / client secret are used by the connect flow and callback.
+STARTUP_SLACK_APP_INSTALL_URL=https://slack.com/oauth/v2/authorize
+STARTUP_SLACK_CLIENT_ID=your-slack-client-id
+STARTUP_SLACK_CLIENT_SECRET=your-slack-client-secret
+
 # Google Gemini API
 # Free tier: 1,000 req/day (Gemini 2.5 Flash-Lite)
 # Get key: https://ai.google.dev/

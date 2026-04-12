@@ -47,8 +47,8 @@ function extractLeadParagraph(markdown: string): string | null {
   return paragraphs[0] ?? null;
 }
 
-function toAbsoluteUrl(appUrl: string, pathOrUrl: string | null, slug: string): string {
-  const fallback = `/blog/${slug}`;
+function toAbsoluteUrl(appUrl: string, pathOrUrl: string | null, slug?: string): string {
+  const fallback = slug ? `/blog/${slug}` : '/';
   const value = pathOrUrl?.trim() || fallback;
   if (/^https?:\/\//i.test(value)) return value;
   const base = appUrl.endsWith('/') ? appUrl.slice(0, -1) : appUrl;
@@ -123,6 +123,7 @@ export default async function BlogArticlePage({ params }: Props) {
   const articleMetadata = parseArticleMetadata(article.metadata);
   const leadParagraph = extractLeadParagraph(article.draft_markdown);
   const canonicalUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, article.canonical_url, article.slug);
+  const authorUrl = articleMetadata.authorUrl ?? toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/about');
   const description =
     leadParagraph ?? article.primary_problem ?? 'Operator-grade guidance about AI search readiness.';
   const structuredData = buildArticleStructuredData({
@@ -133,7 +134,7 @@ export default async function BlogArticlePage({ params }: Props) {
     updatedAt: article.updated_at,
     authorName: articleMetadata.authorName,
     authorRole: articleMetadata.authorRole,
-    authorUrl: articleMetadata.authorUrl,
+    authorUrl,
     heroImageUrl: articleMetadata.heroImageUrl,
   });
   const breadcrumbStructuredData = buildBreadcrumbStructuredData([
@@ -188,7 +189,9 @@ export default async function BlogArticlePage({ params }: Props) {
         <div className="mt-6 flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-zinc-300">
           <span>{formatDate(article.published_at)}</span>
           <span>&bull;</span>
-          <span>{articleMetadata.authorName ?? 'GEO-Pulse'}</span>
+          <Link href={authorUrl} className="hover:text-sky-300">
+            {articleMetadata.authorName ?? 'GEO-Pulse'}
+          </Link>
           <span>&bull;</span>
           <span>{formatLabel(article.target_persona)}</span>
           <span>&bull;</span>
@@ -213,6 +216,17 @@ export default async function BlogArticlePage({ params }: Props) {
             {article.primary_problem}
           </p>
         ) : null}
+        <p className="mt-4 max-w-3xl font-body text-sm text-zinc-300">
+          Authored by{' '}
+          <Link href={authorUrl} className="font-semibold text-sky-300 hover:text-sky-200 hover:underline">
+            {articleMetadata.authorName ?? 'GEO-Pulse'}
+          </Link>
+          {articleMetadata.authorRole ? `, ${articleMetadata.authorRole}` : ''}. See the{' '}
+          <Link href="/about" className="font-semibold text-sky-300 hover:underline">
+            About page
+          </Link>
+          {' '}for the site identity and editorial context.
+        </p>
         {leadParagraph ? (
           <div className="mt-6 rounded-2xl bg-zinc-900 p-6 shadow-float">
             <p className="font-label text-xs uppercase tracking-widest text-sky-300">
@@ -390,7 +404,9 @@ export default async function BlogArticlePage({ params }: Props) {
               <div>
                 <p className="text-xs uppercase tracking-widest text-zinc-300">Author</p>
                 <p className="mt-1 text-white">
-                  {articleMetadata.authorName ?? 'GEO-Pulse'}
+                  <Link href={authorUrl} className="hover:text-sky-300">
+                    {articleMetadata.authorName ?? 'GEO-Pulse'}
+                  </Link>
                   {articleMetadata.authorRole ? ` / ${articleMetadata.authorRole}` : ''}
                 </p>
               </div>

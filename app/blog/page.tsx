@@ -13,6 +13,7 @@ import {
 } from '@/lib/server/content-structured-data';
 import { createPublicContentClient } from '@/lib/server/public-content-client';
 import { createPublicContentData } from '@/lib/server/public-content-data';
+import { buildPublicPageMetadata, SITE_DESCRIPTION } from '@/lib/server/public-site-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,17 +28,13 @@ function toAbsoluteUrl(appUrl: string, pathOrUrl: string): string {
 
 export async function generateMetadata(): Promise<Metadata> {
   const env = await getPaymentApiEnv();
-  return {
+  return buildPublicPageMetadata({
+    baseUrl: env.NEXT_PUBLIC_APP_URL,
     title: 'Blog | GEO-Pulse',
-    description: BLOG_DESCRIPTION,
-    alternates: {
-      canonical: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/blog'),
-    },
-    robots: {
-      index: true,
-      follow: true,
-    },
-  };
+    description: BLOG_DESCRIPTION || SITE_DESCRIPTION,
+    canonicalPath: '/blog',
+    openGraphType: 'website',
+  });
 }
 
 function formatDate(value: string | null): string {
@@ -100,6 +97,13 @@ export default async function BlogIndexPage() {
         <p className="mt-4 font-body text-lg leading-relaxed text-zinc-300">
           Site-first articles designed to be useful for operators and easy for language models to
           segment, summarize, and cite accurately.
+        </p>
+        <p className="mt-3 font-body text-sm text-zinc-300">
+          Founder-led by{' '}
+          <Link href="/about" className="font-semibold text-sky-300 hover:underline">
+            Carine Tamon
+          </Link>
+          .
         </p>
       </section>
 

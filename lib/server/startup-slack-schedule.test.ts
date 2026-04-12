@@ -236,4 +236,59 @@ describe('runScheduledStartupSlackAutoPost', () => {
     expect(insertedScans[0]?.['run_source']).toBe('startup_dashboard');
     expect(ensureSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('skips a workspace until the configured schedule date and time are reached', async () => {
+    const now = new Date('2026-04-05T00:00:00.000Z');
+    const { supabase, insertedScans } = createSupabaseStub({
+      workspaces: [
+        {
+          id: 'ws-1',
+          primary_domain: 'acme.com',
+          canonical_domain: 'acme.com',
+          metadata: {
+            rollout_flags: {
+              startup_dashboard: true,
+              slack_agent: true,
+              slack_auto_post: true,
+            },
+            audit_schedule_date: '2026-04-06',
+            audit_schedule_time: '09:00',
+            audit_schedule_timezone: 'UTC',
+          },
+          status: 'active',
+        },
+      ],
+      latestReportByWorkspace: {
+        'ws-1': { id: 'report-1', created_at: '2026-03-01T00:00:00.000Z' },
+      },
+      latestAutoScanByWorkspace: {},
+      workspaceMembersByWorkspace: {
+        'ws-1': [{ user_id: 'user-1', role: 'founder' }],
+      },
+      usersById: {
+        'user-1': { id: 'user-1', email: 'founder@acme.com' },
+      },
+    });
+
+    const ensureSpy = vi.fn().mockResolvedValue({ ok: true, duplicate: false });
+
+    const summary = await runScheduledStartupSlackAutoPost({
+      supabase: supabase as any,
+      env: baseEnv as any,
+      deps: {
+        now: () => now,
+        ensureDeepAuditJobQueued: ensureSpy as any,
+      },
+    });
+
+    expect(summary).toEqual({
+      status: 'completed',
+      examinedWorkspaces: 1,
+      queued: 0,
+      skipped: 1,
+      failed: 0,
+    });
+    expect(insertedScans).toHaveLength(0);
+    expect(ensureSpy).not.toHaveBeenCalled();
+  });
 });

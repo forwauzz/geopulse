@@ -38,6 +38,67 @@ function parsePositiveInt(value: unknown, fallbackValue: number, maxValue: numbe
   return Math.max(1, Math.min(maxValue, parsed));
 }
 
+function isValidScheduleDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isValidScheduleTime(value: string): boolean {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
+function isValidTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getDatePartsInTimeZone(now: Date, timeZone: string): { readonly date: string; readonly time: string } {
+  const dateFormatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const timeFormatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const dateParts = dateFormatter.formatToParts(now);
+  const timeParts = timeFormatter.formatToParts(now);
+  const year = dateParts.find((part) => part.type === 'year')?.value ?? '0000';
+  const month = dateParts.find((part) => part.type === 'month')?.value ?? '00';
+  const day = dateParts.find((part) => part.type === 'day')?.value ?? '00';
+  const hour = timeParts.find((part) => part.type === 'hour')?.value ?? '00';
+  const minute = timeParts.find((part) => part.type === 'minute')?.value ?? '00';
+  return {
+    date: `${year}-${month}-${day}`,
+    time: `${hour}:${minute}`,
+  };
+}
+
+function isScheduleWindowReached(args: {
+  readonly now: Date;
+  readonly scheduleDate: string | null;
+  readonly scheduleTime: string | null;
+  readonly scheduleTimezone: string | null;
+}): boolean {
+  if (!args.scheduleDate && !args.scheduleTime && !args.scheduleTimezone) return true;
+
+  const timeZone = args.scheduleTimezone && isValidTimeZone(args.scheduleTimezone) ? args.scheduleTimezone : 'UTC';
+  const current = getDatePartsInTimeZone(args.now, timeZone);
+  const anchorDate = args.scheduleDate && isValidScheduleDate(args.scheduleDate) ? args.scheduleDate : current.date;
+  const anchorTime = args.scheduleTime && isValidScheduleTime(args.scheduleTime) ? args.scheduleTime : null;
+
+  if (current.date < anchorDate) return false;
+  if (current.date === anchorDate && anchorTime && current.time < anchorTime) return false;
+  return true;
+}
+
 function resolveStartupSlackScheduleConfig(env: PaymentApiEnv): StartupSlackScheduleConfig {
   const raw = env as unknown as Record<string, unknown>;
   return {
@@ -185,6 +246,29 @@ export async function runScheduledStartupSlackAutoPost(args: {
         config.intervalDays,
         180
       );
+      const scheduleDate =
+        typeof workspace.metadata?.['audit_schedule_date'] === 'string'
+          ? String(workspace.metadata['audit_schedule_date']).trim()
+          : null;
+      const scheduleTime =
+        typeof workspace.metadata?.['audit_schedule_time'] === 'string'
+          ? String(workspace.metadata['audit_schedule_time']).trim()
+          : null;
+      const scheduleTimezone =
+        typeof workspace.metadata?.['audit_schedule_timezone'] === 'string'
+          ? String(workspace.metadata['audit_schedule_timezone']).trim()
+          : null;
+      if (
+        !isScheduleWindowReached({
+          now,
+          scheduleDate,
+          scheduleTime,
+          scheduleTimezone,
+        })
+      ) {
+        skipped += 1;
+        continue;
+      }
 
       const siteUrl = toSiteUrl(workspace.primary_domain, workspace.canonical_domain);
       if (!siteUrl) {
@@ -253,6 +337,9 @@ export async function runScheduledStartupSlackAutoPost(args: {
               source: 'startup_slack_auto_post',
               queued_at: now.toISOString(),
               cadence_days: workspaceCadenceDays,
+              schedule_date: scheduleDate,
+              schedule_time: scheduleTime,
+              schedule_timezone: scheduleTimezone,
             },
           },
         })
@@ -299,6 +386,9 @@ export async function runScheduledStartupSlackAutoPost(args: {
           scan_id: insertedScan.id,
           recipient_email: recipientEmail,
           cadence_days: workspaceCadenceDays,
+          schedule_date: scheduleDate,
+          schedule_time: scheduleTime,
+          schedule_timezone: scheduleTimezone,
         },
         'info'
       );

@@ -6,11 +6,16 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   const baseUrl = (env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/').replace(/\/+$/, '');
 
   return {
-    rules: {
-      userAgent: '*',
-      allow: '/',
-      disallow: ['/dashboard/', '/api/', '/results/'],
-    },
+    rules: [
+      { userAgent: 'ClaudeBot', allow: '/' },
+      { userAgent: 'Google-Extended', allow: '/' },
+      { userAgent: 'GPTBot', allow: '/' },
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: ['/dashboard/', '/api/', '/results/'],
+      },
+    ],
     sitemap: [
       `${baseUrl}/sitemap.xml`,
       `${baseUrl}/blog/sitemap.xml`,

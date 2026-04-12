@@ -848,10 +848,36 @@ export async function markStartupPrRunFailedAction(formData: FormData): Promise<
 export async function updateStartupAuditCadence(formData: FormData): Promise<void> {
   const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
   const cadenceDaysRaw = Number(formData.get('cadenceDays') ?? '30');
+  const scheduleDateRaw = String(formData.get('scheduleDate') ?? '').trim();
+  const scheduleTimeRaw = String(formData.get('scheduleTime') ?? '').trim();
+  const scheduleTimezoneRaw = String(formData.get('scheduleTimezone') ?? '').trim();
   const returnTo = String(formData.get('returnTo') ?? '').trim() || null;
 
   const VALID_CADENCES = [7, 14, 30, 60, 90];
   const cadenceDays = VALID_CADENCES.includes(cadenceDaysRaw) ? cadenceDaysRaw : 30;
+  const hasScheduleDate = /^\d{4}-\d{2}-\d{2}$/.test(scheduleDateRaw);
+  const hasScheduleTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(scheduleTimeRaw);
+  const scheduleTimezone =
+    scheduleTimezoneRaw.length > 0
+      ? (() => {
+          try {
+            new Intl.DateTimeFormat('en-US', { timeZone: scheduleTimezoneRaw });
+            return scheduleTimezoneRaw;
+          } catch {
+            return null;
+          }
+        })()
+      : null;
+
+  if (scheduleDateRaw && !hasScheduleDate) {
+    redirect(returnTo ?? `/dashboard/connectors?startupWorkspace=${workspaceId}&status=invalid_schedule_date`);
+  }
+  if (scheduleTimeRaw && !hasScheduleTime) {
+    redirect(returnTo ?? `/dashboard/connectors?startupWorkspace=${workspaceId}&status=invalid_schedule_time`);
+  }
+  if (scheduleTimezoneRaw && !scheduleTimezone) {
+    redirect(returnTo ?? `/dashboard/connectors?startupWorkspace=${workspaceId}&status=invalid_schedule_timezone`);
+  }
 
   if (!workspaceId) redirect('/dashboard/connectors');
 
@@ -886,7 +912,13 @@ export async function updateStartupAuditCadence(formData: FormData): Promise<voi
   if (existingError) throw existingError;
 
   const currentMeta = (existing?.metadata as Record<string, unknown> | null) ?? {};
-  const nextMeta = { ...currentMeta, audit_cadence_days: cadenceDays };
+  const nextMeta = {
+    ...currentMeta,
+    audit_cadence_days: cadenceDays,
+    audit_schedule_date: hasScheduleDate ? scheduleDateRaw : null,
+    audit_schedule_time: hasScheduleTime ? scheduleTimeRaw : null,
+    audit_schedule_timezone: scheduleTimezone ?? null,
+  };
 
   const { error: updateError } = await serviceSupabase
     .from('startup_workspaces')
@@ -899,6 +931,9 @@ export async function updateStartupAuditCadence(formData: FormData): Promise<voi
     {
       startup_workspace_id: workspaceId,
       cadence_days: cadenceDays,
+      schedule_date: hasScheduleDate ? scheduleDateRaw : null,
+      schedule_time: hasScheduleTime ? scheduleTimeRaw : null,
+      schedule_timezone: scheduleTimezone,
       updated_by_user_id: user.id,
     },
     'info'

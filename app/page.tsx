@@ -1,5 +1,14 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ScanForm } from '@/components/scan-form';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import {
+  buildOrganizationStructuredData,
+  buildPublicPageMetadata,
+  buildWebSiteStructuredData,
+  SITE_DESCRIPTION,
+  toAbsoluteUrl,
+} from '@/lib/server/public-site-seo';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 const features = [
@@ -25,16 +34,50 @@ const features = [
   },
 ] as const;
 
+async function loadBaseUrl(): Promise<string> {
+  const env = await getPaymentApiEnv();
+  return env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/';
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const baseUrl = await loadBaseUrl();
+  return buildPublicPageMetadata({
+    baseUrl,
+    title: 'GEO-Pulse | AI Search Readiness',
+    description: SITE_DESCRIPTION,
+    canonicalPath: '/',
+    openGraphType: 'website',
+  });
+}
+
 export default async function HomePage({
   searchParams,
 }: {
   searchParams: Promise<{ url?: string; agencyAccount?: string; agencyClient?: string }>;
 }) {
   const { url: prefillUrl, agencyAccount, agencyClient } = await searchParams;
+  const baseUrl = await loadBaseUrl();
   const siteKey = getTurnstileSiteKey();
+  const siteUrl = toAbsoluteUrl(baseUrl, '/');
+  const organizationSchema = buildOrganizationStructuredData({
+    url: siteUrl,
+    description: SITE_DESCRIPTION,
+  });
+  const websiteSchema = buildWebSiteStructuredData({
+    url: siteUrl,
+    description: SITE_DESCRIPTION,
+  });
 
   return (
     <main>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteSchema) }}
+      />
       <section className="relative mx-auto max-w-screen-2xl overflow-hidden px-6 pb-24 pt-16 text-center md:px-10 md:pb-32 md:pt-24">
         <div className="mb-6">
           <span className="inline-block rounded-full bg-surface-container-high px-3 py-1 font-label text-xs font-semibold uppercase tracking-widest text-primary">
@@ -46,6 +89,13 @@ export default async function HomePage({
         </h1>
         <p className="mx-auto mb-12 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
           Get one score, the key issues, and priority fixes. Run a free scan, or sign up to save reports and unlock the full workspace.
+        </p>
+        <p className="mx-auto mb-8 max-w-2xl font-body text-sm text-on-surface-variant">
+          Founder-led by{' '}
+          <Link href="/about" className="font-semibold text-primary hover:underline">
+            Carine Tamon
+          </Link>
+          , with public authorship and an About page for trust signals.
         </p>
         <div className="mx-auto mb-6 max-w-3xl">
           {siteKey ? (

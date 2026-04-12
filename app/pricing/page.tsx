@@ -1,20 +1,20 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
 import { Suspense } from 'react';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { PricingBundleCard, type PricingBundleCardProps } from '@/components/pricing-bundle-card';
 import { SubscriptionStatusBanner } from '@/components/subscription-status-banner';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import {
+  buildPublicPageMetadata,
+  buildWebPageStructuredData,
+  SITE_DESCRIPTION,
+  toAbsoluteUrl,
+} from '@/lib/server/public-site-seo';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 export const dynamic = 'force-dynamic';
-
-export const metadata = {
-  title: 'Pricing | GEO-Pulse',
-  description: 'Simple, transparent pricing for GEO-Pulse AI search readiness — start free, subscribe when you need the full platform.',
-};
-
-// ── Static feature lists per bundle ─────────────────────────────────────────
-// Source of truth for what each tier provides in the UI.
-// Mirrors the service_bundle_services seeded rows.
 
 const BUNDLE_META: Record<
   string,
@@ -67,8 +67,6 @@ const BUNDLE_META: Record<
   },
 };
 
-// ── Price formatting ─────────────────────────────────────────────────────────
-
 function formatPriceLabel(cents: number | null, billingMode: string): string {
   if (billingMode === 'free') return 'Free';
   if (!cents) return 'Price TBD';
@@ -77,8 +75,6 @@ function formatPriceLabel(cents: number | null, billingMode: string): string {
   const formatted = remainder === 0 ? `$${dollars}` : `$${dollars}.${String(remainder).padStart(2, '0')}`;
   return billingMode === 'monthly' ? `${formatted}/mo` : `${formatted}/yr`;
 }
-
-// ── Server data fetching ─────────────────────────────────────────────────────
 
 type BundleRow = {
   bundle_key: string;
@@ -92,6 +88,11 @@ type SubRow = {
   bundle_key: string;
   status: string;
 };
+
+async function loadBaseUrl(): Promise<string> {
+  const env = await getPaymentApiEnv();
+  return env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/';
+}
 
 async function loadPricingData(userId: string | null): Promise<{
   bundles: BundleRow[];
@@ -126,12 +127,21 @@ async function loadPricingData(userId: string | null): Promise<{
   };
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
-
 const DISPLAY_ORDER = ['startup_lite', 'startup_dev', 'agency_core', 'agency_pro'];
 
+export async function generateMetadata(): Promise<Metadata> {
+  const baseUrl = await loadBaseUrl();
+  return buildPublicPageMetadata({
+    baseUrl,
+    title: 'Pricing | GEO-Pulse',
+    description:
+      'Simple, transparent pricing for GEO-Pulse AI search readiness. Start free and subscribe when your team needs the full platform.',
+    canonicalPath: '/pricing',
+    openGraphType: 'website',
+  });
+}
+
 export default async function PricingPage() {
-  // Auth check (anon key — never service role)
   const userSupabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -140,10 +150,16 @@ export default async function PricingPage() {
   const isAuthenticated = Boolean(user);
   const { bundles, activeSubs } = await loadPricingData(user?.id ?? null);
   const turnstileSiteKey = getTurnstileSiteKey();
-
+  const baseUrl = await loadBaseUrl();
+  const pageSchema = buildWebPageStructuredData({
+    url: toAbsoluteUrl(baseUrl, '/pricing'),
+    title: 'Pricing | GEO-Pulse',
+    description:
+      'Simple, transparent pricing for GEO-Pulse AI search readiness. Start free and subscribe when your team needs the full platform.',
+    siteUrl: toAbsoluteUrl(baseUrl, '/'),
+  });
   const activeSubKeys = new Set(activeSubs.map((s) => s.bundle_key));
 
-  // Build card props for each bundle in display order
   const cards: PricingBundleCardProps[] = DISPLAY_ORDER.flatMap((key) => {
     const row = bundles.find((b) => b.bundle_key === key);
     const meta = BUNDLE_META[key];
@@ -171,7 +187,11 @@ export default async function PricingPage() {
 
   return (
     <main className="mx-auto max-w-screen-2xl px-6 py-16 md:px-10 md:py-24">
-      {/* Header */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
+      />
+
       <section className="mx-auto max-w-3xl text-center">
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
           Pricing
@@ -180,19 +200,24 @@ export default async function PricingPage() {
           Start free. Subscribe when you need the full platform.
         </h1>
         <p className="mt-6 font-body text-lg leading-relaxed text-on-surface-variant">
-          Run your first AI search readiness scan for free. Upgrade to a bundle when your
-          team needs ongoing audits, dashboards, or client management.
+          Run your first AI search readiness scan for free. Upgrade to a bundle when your team
+          needs ongoing audits, dashboards, or client management.
+        </p>
+        <p className="mt-4 font-body text-sm text-on-surface-variant">
+          Need a trust anchor first? Visit the{' '}
+          <Link href="/about" className="font-semibold text-primary hover:underline">
+            About page
+          </Link>
+          .
         </p>
       </section>
 
-      {/* Subscription status banner (success / cancel) */}
       <div className="mx-auto mt-10 max-w-3xl">
         <Suspense fallback={null}>
           <SubscriptionStatusBanner />
         </Suspense>
       </div>
 
-      {/* Bundle cards */}
       <section className="mt-12 grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <Suspense key={card.bundleKey} fallback={null}>
@@ -201,7 +226,6 @@ export default async function PricingPage() {
         ))}
       </section>
 
-      {/* Footer note */}
       <p className="mt-12 text-center font-body text-sm text-on-surface-variant">
         All paid plans include a free trial. Credit card required. Cancel anytime.
       </p>

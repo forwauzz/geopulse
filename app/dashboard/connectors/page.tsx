@@ -25,6 +25,7 @@ type Props = {
     github?: string;
     slack?: string;
     slack_detail?: string;
+    status?: string;
   }>;
 };
 
@@ -35,6 +36,12 @@ function statusMessage(key: string | null | undefined): string | null {
   if (key === 'error') return 'Connection failed. Please try again.';
   if (key === 'cancelled') return 'Connection cancelled.';
   if (key === 'already_connected') return 'This integration is already connected.';
+  if (key === 'cadence_updated') return 'Recurring audit schedule saved.';
+  if (key === 'invalid_schedule_date') return 'Enter a valid schedule start date.';
+  if (key === 'invalid_schedule_time') return 'Enter a valid schedule time.';
+  if (key === 'invalid_schedule_timezone') return 'Enter a valid time zone.';
+  if (key === 'slack_markdown_ok') return 'Markdown report uploaded to Slack.';
+  if (key === 'slack_markdown_failed') return 'Markdown upload to Slack failed.';
   return null;
 }
 
@@ -71,6 +78,7 @@ export default async function ConnectorsPage({ searchParams }: Props) {
 
   const githubMsg = statusMessage(sp.github);
   const slackMsg = statusMessage(sp.slack);
+  const statusMsg = statusMessage(sp.status);
 
   const loaded = await loadStartupConnectorsContext({
     supabase,
@@ -228,6 +236,14 @@ export default async function ConnectorsPage({ searchParams }: Props) {
   const auditCadenceDays = typeof workspaceMetadata.audit_cadence_days === 'number'
     ? workspaceMetadata.audit_cadence_days
     : 30;
+  const auditScheduleDate =
+    typeof workspaceMetadata.audit_schedule_date === 'string' ? workspaceMetadata.audit_schedule_date : '';
+  const auditScheduleTime =
+    typeof workspaceMetadata.audit_schedule_time === 'string' ? workspaceMetadata.audit_schedule_time : '09:00';
+  const auditScheduleTimezone =
+    typeof workspaceMetadata.audit_schedule_timezone === 'string'
+      ? workspaceMetadata.audit_schedule_timezone
+      : 'UTC';
 
   const returnToConnectors = workspaceId
     ? `/dashboard/connectors?startupWorkspace=${workspaceId}`
@@ -274,6 +290,12 @@ export default async function ConnectorsPage({ searchParams }: Props) {
             {sp.github === 'success' ? 'check_circle' : 'error'}
           </span>
           GitHub — {githubMsg}
+        </div>
+      ) : null}
+
+      {statusMsg ? (
+        <div className="rounded-xl border border-outline-variant/10 bg-primary/5 px-4 py-3 text-sm text-on-surface">
+          {statusMsg}
         </div>
       ) : null}
 
@@ -596,7 +618,7 @@ export default async function ConnectorsPage({ searchParams }: Props) {
                       </button>
                     </form>
                     {/* Cadence selector */}
-                    <form action={updateStartupAuditCadence} className="flex flex-wrap items-end gap-3">
+                    <form action={updateStartupAuditCadence} className="grid gap-3 lg:grid-cols-4">
                       <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
                       <input type="hidden" name="returnTo" value={returnToConnectors} />
                       <div>
@@ -613,13 +635,46 @@ export default async function ConnectorsPage({ searchParams }: Props) {
                           <option value="90">Quarterly (every 90 days)</option>
                         </select>
                       </div>
-                      <button
-                        type="submit"
-                        className="rounded-xl border border-outline-variant/20 bg-surface-container-high px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface"
-                      >
-                        Save cadence
-                      </button>
+                      <div>
+                        <label className="mb-1 block text-xs text-on-surface-variant">Start date</label>
+                        <input
+                          type="date"
+                          name="scheduleDate"
+                          defaultValue={auditScheduleDate}
+                          className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-on-surface-variant">Start time</label>
+                        <input
+                          type="time"
+                          name="scheduleTime"
+                          defaultValue={auditScheduleTime}
+                          className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-on-surface-variant">Time zone</label>
+                        <input
+                          type="text"
+                          name="scheduleTimezone"
+                          defaultValue={auditScheduleTimezone}
+                          className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs text-on-surface outline-none transition focus:ring-1 focus:ring-primary/40"
+                          placeholder="UTC or America/Toronto"
+                        />
+                      </div>
+                      <div className="flex items-end">
+                        <button
+                          type="submit"
+                          className="w-full rounded-xl border border-outline-variant/20 bg-surface-container-high px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface"
+                        >
+                          Save cadence
+                        </button>
+                      </div>
                     </form>
+                    <p className="text-xs text-on-surface-variant">
+                      Optional start date/time lets you anchor the first recurring audit run to a specific schedule.
+                    </p>
                     {slackAutoPostEnabled ? (
                       <p className="rounded-xl bg-primary/5 px-4 py-3 text-xs text-on-surface-variant">
                         <span className="material-symbols-outlined mr-1.5 align-middle text-[14px] text-primary" aria-hidden>
@@ -627,8 +682,7 @@ export default async function ConnectorsPage({ searchParams }: Props) {
                         </span>
                         Auto-scan is active. Audits run every{' '}
                         <strong className="text-on-background">{auditCadenceDays} days</strong> and are
-                        delivered to your default Slack channel. The next audit will be triggered
-                        automatically by the platform.
+                        delivered to your default Slack channel.
                       </p>
                     ) : (
                       <p className="rounded-xl bg-surface-container-low px-4 py-3 text-xs text-on-surface-variant">

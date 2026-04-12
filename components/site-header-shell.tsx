@@ -70,6 +70,12 @@ export function SiteHeaderShell({
                 Pricing
               </Link>
               <Link
+                href="/about"
+                className={primaryNavLinkClassName}
+              >
+                About
+              </Link>
+              <Link
                 href="/dashboard"
                 className={dashboardLinkClassName}
               >
@@ -106,6 +112,12 @@ export function SiteHeaderShell({
                 className={primaryNavLinkClassName}
               >
                 Pricing
+              </Link>
+              <Link
+                href="/about"
+                className={primaryNavLinkClassName}
+              >
+                About
               </Link>
               <Link
                 href="/login"

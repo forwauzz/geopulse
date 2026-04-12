@@ -21,6 +21,17 @@ function extractText(children: React.ReactNode): string {
   return '';
 }
 
+function renderHeading(level: 1 | 2 | 3 | 4 | 5 | 6, children: React.ReactNode) {
+  const text = extractText(children);
+  const id = slugify(text);
+
+  if (level === 1) return <h2 id={id}>{children}</h2>;
+  if (level === 2) return <h3 id={id}>{children}</h3>;
+  if (level === 3) return <h4 id={id}>{children}</h4>;
+  if (level === 4) return <h5 id={id}>{children}</h5>;
+  return <h6 id={id}>{children}</h6>;
+}
+
 export function BlogArticleBody({ markdown }: { markdown: string }) {
   const components: Components = {
     a: ({ href, children }) => (
@@ -28,18 +39,12 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
         {children}
       </a>
     ),
-    h1: ({ children }) => {
-      const text = extractText(children);
-      return <h1 id={slugify(text)}>{children}</h1>;
-    },
-    h2: ({ children }) => {
-      const text = extractText(children);
-      return <h2 id={slugify(text)}>{children}</h2>;
-    },
-    h3: ({ children }) => {
-      const text = extractText(children);
-      return <h3 id={slugify(text)}>{children}</h3>;
-    },
+    h1: ({ children }) => renderHeading(1, children),
+    h2: ({ children }) => renderHeading(2, children),
+    h3: ({ children }) => renderHeading(3, children),
+    h4: ({ children }) => renderHeading(4, children),
+    h5: ({ children }) => renderHeading(5, children),
+    h6: ({ children }) => renderHeading(6, children),
     img: ({ src, alt, title }) => {
       if (!src) return null;
       return (
@@ -114,5 +119,3 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
     </div>
   );
 }
-
-

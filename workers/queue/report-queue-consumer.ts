@@ -29,6 +29,7 @@ import {
   createStartupSlackDeliveryEvent,
   getStartupSlackDestination,
   listStartupSlackDestinations,
+  uploadStartupSlackFile,
   sendStartupSlackMessage,
   updateStartupSlackDeliveryEventStatus,
 } from '../../lib/server/startup-slack-integration';
@@ -346,6 +347,8 @@ async function maybeAutoPostStartupSlack(args: {
   };
   const text = formatStartupSlackMessage(payload);
   const pdfLine = args.pdfUrl ? `\nPDF: ${args.pdfUrl}` : '';
+  const summaryText = `${text}${pdfLine}`;
+  const fileTitle = `GEO-Pulse Audit: ${args.domain}${args.score != null ? ` — Score ${Math.round(args.score)}/100` : ''}`;
 
   const destinationLabel = destination.channelName
     ? `${destination.channelName} (${destination.channelId})`
@@ -356,28 +359,41 @@ async function maybeAutoPostStartupSlack(args: {
     installationId: destination.installation.id,
     destinationId: destination.id,
     eventType: 'new_audit_ready',
-    sentByUserId: null,
-    payload: {
-      ...payload,
-      destination_label: destinationLabel,
-      source: 'auto_post',
-    },
-  });
+      sentByUserId: null,
+      payload: {
+        ...payload,
+        destination_label: destinationLabel,
+        source: 'auto_post',
+        send_type: args.markdownUrl ? 'markdown_file' : 'summary_message',
+      },
+    });
 
   try {
-    const sendResult = await sendStartupSlackMessage({
-      destination,
-      text: `${text}${pdfLine}`,
-    });
+    if (args.markdownUrl) {
+      const markdownResponse = await fetch(args.markdownUrl);
+      if (!markdownResponse.ok) {
+        throw new Error(`Markdown fetch failed with HTTP ${markdownResponse.status}.`);
+      }
+      const markdownContent = await markdownResponse.text();
+      await uploadStartupSlackFile({
+        destination,
+        filename: `geo-pulse-audit-${args.domain}-${args.reportId}.md`,
+        title: fileTitle,
+        content: markdownContent,
+        initialComment: summaryText,
+      });
+    } else {
+      await sendStartupSlackMessage({
+        destination,
+        text: summaryText,
+      });
+    }
     await updateStartupSlackDeliveryEventStatus({
       supabase: args.supabase as any,
       startupWorkspaceId: args.startupWorkspaceId,
       deliveryEventId,
       status: 'sent',
-      response: {
-        slack_ts: sendResult.timestamp,
-        destination_label: destinationLabel,
-      },
+      response: { destination_label: destinationLabel, send_type: args.markdownUrl ? 'markdown_file' : 'summary_message' },
     });
     structuredLog(
       'startup_slack_auto_post_succeeded',

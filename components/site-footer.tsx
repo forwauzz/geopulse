@@ -35,6 +35,14 @@ export function SiteFooter() {
         >
           <span className="opacity-80">&copy; {new Date().getFullYear()} GEO-Pulse</span>
           <Link
+            href="/about"
+            className={
+              isBlogRoute ? 'hover:text-white hover:underline' : 'hover:text-on-background hover:underline'
+            }
+          >
+            About
+          </Link>
+          <Link
             href="/login"
             className={
               isBlogRoute ? 'hover:text-white hover:underline' : 'hover:text-on-background hover:underline'

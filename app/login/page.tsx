@@ -1,5 +1,12 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LoginForm } from './login-form';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import {
+  buildPublicPageMetadata,
+  buildWebPageStructuredData,
+  toAbsoluteUrl,
+} from '@/lib/server/public-site-seo';
 
 type Props = {
   searchParams: Promise<{
@@ -19,8 +26,32 @@ function safeNextPath(raw: string | undefined): string {
   return raw;
 }
 
+async function loadBaseUrl(): Promise<string> {
+  const env = await getPaymentApiEnv();
+  return env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/';
+}
+
+export async function generateMetadata(): Promise<Metadata> {
+  const baseUrl = await loadBaseUrl();
+  return buildPublicPageMetadata({
+    baseUrl,
+    title: 'Sign in | GEO-Pulse',
+    description: 'Sign in to GEO-Pulse to access dashboards, saved audits, and paid reports.',
+    canonicalPath: '/login',
+    openGraphType: 'website',
+    noIndex: true,
+  });
+}
+
 export default async function LoginPage({ searchParams }: Props) {
   const sp = await searchParams;
+  const baseUrl = await loadBaseUrl();
+  const pageSchema = buildWebPageStructuredData({
+    url: toAbsoluteUrl(baseUrl, '/login'),
+    title: 'Sign in | GEO-Pulse',
+    description: 'Sign in to GEO-Pulse to access dashboards, saved audits, and paid reports.',
+    siteUrl: toAbsoluteUrl(baseUrl, '/'),
+  });
   const nextPath = safeNextPath(sp.next);
   const err = sp.error;
   const isSignUp = sp.mode === 'signup';
@@ -30,6 +61,10 @@ export default async function LoginPage({ searchParams }: Props) {
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col px-6 py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
+      />
       <Link href="/" className="font-body text-sm font-semibold text-tertiary hover:underline">
         {'<-'} Back to GEO-Pulse
       </Link>
@@ -41,12 +76,19 @@ export default async function LoginPage({ searchParams }: Props) {
           ? 'Create your account for the plan you selected, then continue to checkout.'
           : 'Customer accounts can still use a magic link. Agency and pilot accounts can also sign in with an email and password.'}
       </p>
+      <p className="mt-3 max-w-2xl font-body text-sm text-on-surface-variant">
+        Public context lives on the{' '}
+        <Link href="/about" className="font-semibold text-primary hover:underline">
+          About page
+        </Link>
+        , while private account access stays here.
+      </p>
       {!isSignUp && (
         <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
           <p className="font-body text-sm font-semibold text-on-background">Report recovery tip</p>
           <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">
-            If you already paid for a deep audit, sign in with the Stripe checkout email first. That
-            is how past paid reports are linked into your dashboard.
+            If you already paid for a deep audit, sign in with the Stripe checkout email first.
+            That is how past paid reports are linked into your dashboard.
           </p>
         </div>
       )}

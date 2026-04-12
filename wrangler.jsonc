@@ -60,6 +60,7 @@
 
     // Slack OAuth install entrypoint (non-secret).
     "STARTUP_SLACK_APP_INSTALL_URL": "https://slack.com/oauth/v2/authorize",
+    "STARTUP_SLACK_CLIENT_ID": "10736716341730.10845478441990",
 
     // Recurring benchmark lane config.
     // Keep disabled here until production values are finalized.
@@ -106,6 +107,7 @@
   //   TURNSTILE_SECRET_KEY
   //   STARTUP_SLACK_CLIENT_ID
   //   STARTUP_SLACK_CLIENT_SECRET
+  //   STARTUP_SLACK_SIGNING_SECRET
   //
   // Subscription billing (BILL stream — self-serve bundle subscriptions):
   //   No new secrets required. The existing STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET cover
