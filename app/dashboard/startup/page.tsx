@@ -11,6 +11,7 @@ import {
   inferStartupDashboardTabFromStatusParams,
 } from '@/lib/server/startup-dashboard-status-messages';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { StartupWorkspaceEnsureTrigger } from '@/components/startup-workspace-ensure-trigger';
 
 export const dynamic = 'force-dynamic';
 
@@ -79,10 +80,13 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
     return (
       <section className="rounded-3xl border border-outline-variant bg-surface-container-low p-6 text-on-surface shadow-float md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Startup dashboard</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">No startup workspace found</h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Setting up your workspace</h1>
         <p className="mt-2 text-sm text-on-surface-variant">
-          Ask an admin to create your startup workspace in <code>/dashboard/startups</code>.
+          Your subscription was received. Finalizing your workspace setup now.
         </p>
+        <div className="mt-4">
+          <StartupWorkspaceEnsureTrigger />
+        </div>
       </section>
     );
   }
@@ -93,14 +97,11 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Startup dashboard</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">Your startup workspace is being prepared</h1>
         <p className="mt-2 text-sm text-on-surface-variant">
-          Your {loaded.bundleKey} subscription is active, but the workspace link is still being provisioned.
+          Your subscription is active. Finalizing workspace setup now.
         </p>
-        <Link
-          href="/dashboard"
-          className="mt-4 inline-flex items-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary"
-        >
-          Go to dashboard
-        </Link>
+        <div className="mt-4">
+          <StartupWorkspaceEnsureTrigger />
+        </div>
       </section>
     );
   }

@@ -15,6 +15,7 @@ import {
 import { loadStartupConnectorsContext } from '@/app/dashboard/connectors/lib/load-startup-connectors-context';
 import { buildProvisioningPendingCopy } from '@/app/dashboard/connectors/lib/provisioning-pending-copy';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { StartupWorkspaceEnsureTrigger } from '@/components/startup-workspace-ensure-trigger';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,7 +85,6 @@ export default async function ConnectorsPage({ searchParams }: Props) {
 
   // ── No startup workspace ─────────────────────────────────────
   if (loaded.kind === 'workspace-provisioning') {
-    const provisioningCopy = buildProvisioningPendingCopy(loaded.bundleKey);
     return (
       <section className="space-y-6">
         <div>
@@ -99,17 +99,14 @@ export default async function ConnectorsPage({ searchParams }: Props) {
             hourglass_top
           </span>
           <p className="mt-4 font-headline text-lg font-semibold text-on-background">
-            {provisioningCopy.title}
+            Setting up your workspace
           </p>
           <p className="mt-2 text-sm text-on-surface-variant">
-            {provisioningCopy.body}
+            Your subscription is active. Finalizing workspace setup now.
           </p>
-          <Link
-            href={provisioningCopy.ctaHref}
-            className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
-          >
-            {provisioningCopy.ctaLabel}
-          </Link>
+          <div className="mt-4">
+            <StartupWorkspaceEnsureTrigger />
+          </div>
         </div>
       </section>
     );
@@ -163,12 +160,14 @@ export default async function ConnectorsPage({ searchParams }: Props) {
             cable
           </span>
           <p className="mt-4 font-headline text-lg font-semibold text-on-background">
-            No startup workspace
+            Setting up your workspace
           </p>
           <p className="mt-2 text-sm text-on-surface-variant">
-            Connectors are only available to startup workspace members. Contact your GEO-Pulse admin to
-            get access.
+            Your subscription was received. Finalizing your workspace setup now.
           </p>
+          <div className="mt-4">
+            <StartupWorkspaceEnsureTrigger />
+          </div>
         </div>
       </section>
     );
