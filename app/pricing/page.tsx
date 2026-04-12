@@ -210,7 +210,11 @@ export default async function PricingPage() {
           <Link href="/about" className="font-semibold text-primary hover:underline">
             About page
           </Link>
-          .
+          . Read the{' '}
+          <Link href="/privacy" className="font-semibold text-primary hover:underline">
+            Privacy Policy
+          </Link>{' '}
+          before checkout if you want the data handling details.
         </p>
       </section>
 

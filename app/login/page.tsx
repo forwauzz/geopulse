@@ -83,7 +83,11 @@ export default async function LoginPage({ searchParams }: Props) {
         <Link href="/about" className="font-semibold text-primary hover:underline">
           About page
         </Link>
-        , while private account access stays here.
+        , while private account access stays here. See the{' '}
+        <Link href="/privacy" className="font-semibold text-primary hover:underline">
+          Privacy Policy
+        </Link>{' '}
+        for data handling details.
       </p>
       {!isSignUp && (
         <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">

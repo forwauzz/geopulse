@@ -43,6 +43,14 @@ export function SiteFooter() {
             About
           </Link>
           <Link
+            href="/privacy"
+            className={
+              isBlogRoute ? 'hover:text-white hover:underline' : 'hover:text-on-background hover:underline'
+            }
+          >
+            Privacy
+          </Link>
+          <Link
             href="/login"
             className={
               isBlogRoute ? 'hover:text-white hover:underline' : 'hover:text-on-background hover:underline'
