@@ -13,7 +13,7 @@ import {
 } from '@/lib/server/content-structured-data';
 import { createPublicContentClient } from '@/lib/server/public-content-client';
 import { createPublicContentData } from '@/lib/server/public-content-data';
-import { buildPublicPageMetadata, SITE_DESCRIPTION } from '@/lib/server/public-site-seo';
+import { buildPublicPageMetadata, SITE_AUTHOR_NAME, SITE_DESCRIPTION } from '@/lib/server/public-site-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,7 +114,7 @@ export default async function BlogIndexPage() {
         <p className="mt-3 font-body text-sm text-zinc-300">
           Founder-led by{' '}
           <Link href="/about" className="font-semibold text-sky-300 hover:underline">
-            Carine Tamon
+            {SITE_AUTHOR_NAME}
           </Link>
           .
         </p>

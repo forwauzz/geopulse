@@ -7,6 +7,7 @@ import {
   buildPublicPageMetadata,
   buildWebPageStructuredData,
   buildWebSiteStructuredData,
+  SITE_AUTHOR_NAME,
   SITE_DESCRIPTION,
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
@@ -106,7 +107,7 @@ export default async function HomePage({
         <p className="mx-auto mb-8 max-w-2xl font-body text-sm text-on-surface-variant">
           Founder-led by{' '}
           <Link href="/about" className="font-semibold text-primary hover:underline">
-            Carine Tamon
+            {SITE_AUTHOR_NAME}
           </Link>
           , with public authorship and an About page for trust signals.
         </p>

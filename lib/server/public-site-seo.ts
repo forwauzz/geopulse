@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const SITE_NAME = 'GEO-Pulse';
 export const SITE_DESCRIPTION =
   'AI search readiness audits for public websites, with practical fixes for crawlability, structure, trust, and extractability.';
-export const SITE_AUTHOR_NAME = 'Carine Tamon';
+export const SITE_AUTHOR_NAME = 'Uzziel T.';
 export const SITE_AUTHOR_ROLE = 'Founder, GEO-Pulse';
 export const SITE_AUTHOR_URL_PATH = '/about';
 
