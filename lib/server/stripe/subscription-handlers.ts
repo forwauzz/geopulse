@@ -41,6 +41,7 @@ export async function handleSubscriptionUpserted(
   const userId = subscription.metadata?.['user_id'];
   const bundleKey = subscription.metadata?.['bundle_key'];
   const organizationName = subscription.metadata?.['organization_name']?.trim() ?? '';
+  const websiteUrl = subscription.metadata?.['website_url']?.trim() ?? '';
 
   if (!userId || !bundleKey) {
     structuredLog('subscription_upserted_missing_metadata', {
@@ -123,6 +124,7 @@ export async function handleSubscriptionUpserted(
       bundleKey,
       subscriptionId: subscription.id,
       organizationName: organizationName || null,
+      websiteUrl: websiteUrl || null,
     });
 
     structuredLog('subscription_upserted', {

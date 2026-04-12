@@ -11,9 +11,10 @@ type Props = {
   readonly isSignUp?: boolean;
   readonly bundleKey?: string;
   readonly organizationName?: string;
+  readonly websiteUrl?: string;
 };
 
-export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationName }: Props) {
+export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationName, websiteUrl }: Props) {
   const [passwordState, passwordAction, passwordPending] = useActionState(
     signInWithPassword,
     null
@@ -75,6 +76,21 @@ export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationN
                   bundleKey === 'agency_core' || bundleKey === 'agency_pro' ? 'Your agency' : 'Your workspace'
                 }
               />
+            </label>
+          ) : null}
+          {bundleKey && bundleKey !== 'agency_core' && bundleKey !== 'agency_pro' ? (
+            <label className="flex flex-col gap-2 font-body text-sm font-medium text-on-background">
+              Website URL
+              <input
+                name="website_url"
+                type="text"
+                required
+                defaultValue={websiteUrl ?? ''}
+                autoComplete="url"
+                className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 font-body text-base text-on-background outline-none ring-0 focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40"
+                placeholder="https://yoursite.com"
+              />
+              <span className="text-xs text-on-surface-variant">The site you want to audit for AI search visibility</span>
             </label>
           ) : null}
           <label className="flex flex-col gap-2 font-body text-sm font-medium text-on-background">

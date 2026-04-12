@@ -3,6 +3,7 @@ export function resolvePostSignupRedirect(args: {
   readonly bundleParam: string | null;
   readonly isNewUser: boolean;
   readonly organizationName?: string | null;
+  readonly websiteUrl?: string | null;
 }): string | null {
   if (args.bundleParam && args.nextParam === '/pricing') {
     const params = new URLSearchParams();
@@ -10,6 +11,9 @@ export function resolvePostSignupRedirect(args: {
     params.set('autosubscribe', '1');
     if (args.organizationName?.trim()) {
       params.set('organization_name', args.organizationName.trim());
+    }
+    if (args.websiteUrl?.trim()) {
+      params.set('website_url', args.websiteUrl.trim());
     }
     return `/pricing?${params.toString()}`;
   }

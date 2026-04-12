@@ -95,6 +95,7 @@ export function PricingBundleCard({
   const needsPaidCheckout = !isFree && !isCurrentPlan;
   const turnstileConfigured = bypassTurnstile || Boolean(turnstileSiteKey.trim());
   const organizationName = sp.get('organization_name')?.trim() || null;
+  const websiteUrl = sp.get('website_url')?.trim() || null;
 
   useEffect(() => {
     setTurnstileToken((current) => {
@@ -136,6 +137,7 @@ export function PricingBundleCard({
         bundleKey,
         turnstileToken: tokenStr,
         organizationName: organizationName ?? undefined,
+        websiteUrl: websiteUrl ?? undefined,
       }),
     });
 

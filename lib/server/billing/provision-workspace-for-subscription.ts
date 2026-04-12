@@ -7,6 +7,7 @@ export type ProvisionWorkspaceArgs = {
   readonly bundleKey: string;
   readonly subscriptionId: string;
   readonly organizationName?: string | null;
+  readonly websiteUrl?: string | null;
 };
 
 export type ProvisionWorkspaceResult = {
@@ -71,6 +72,18 @@ async function provisionStartupWorkspace(
   const name = organizationName ?? displayNameFromSlug(slugFromEmail(args.userEmail));
 
   const emailDomain = args.userEmail.split('@').at(1) ?? null;
+  const websiteUrl = args.websiteUrl?.trim() || null;
+
+  // Extract hostname from websiteUrl for canonical_domain (e.g. "https://acme.com" → "acme.com")
+  let canonicalDomain: string | null = null;
+  if (websiteUrl) {
+    try {
+      const parsed = new URL(websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`);
+      canonicalDomain = parsed.hostname.replace(/^www\./, '') || null;
+    } catch {
+      canonicalDomain = null;
+    }
+  }
 
   // Look up bundle ID for default_bundle_id FK
   const { data: bundle } = await supabase
@@ -87,13 +100,15 @@ async function provisionStartupWorkspace(
         name,
         status: 'active',
         billing_mode: 'paid',
-        primary_domain: emailDomain,
+        primary_domain: canonicalDomain ?? emailDomain,
+        canonical_domain: canonicalDomain,
         default_bundle_id: bundle?.id ?? null,
         metadata: {
           source: 'self_serve',
           bundle_key: args.bundleKey,
           subscription_id: args.subscriptionId,
           ...(organizationName ? { organization_name: organizationName } : {}),
+          ...(websiteUrl ? { website_url: websiteUrl } : {}),
         },
       },
       { onConflict: 'workspace_key' }

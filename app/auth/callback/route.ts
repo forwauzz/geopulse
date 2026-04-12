@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
   const bundle = searchParams.get('bundle');
   const mode = searchParams.get('mode') ?? (bundle ? 'signup' : null);
   const organizationName = searchParams.get('organization_name')?.trim() ?? null;
+  const websiteUrl = searchParams.get('website_url')?.trim() ?? null;
   const err = searchParams.get('error_description') ?? searchParams.get('error');
 
   if (err) {
@@ -150,6 +151,7 @@ export async function GET(request: NextRequest) {
       bundleParam: bundle,
       isNewUser,
       organizationName,
+      websiteUrl,
     });
     if (redirectPath) {
       return NextResponse.redirect(new URL(redirectPath, appUrl));

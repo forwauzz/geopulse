@@ -14,6 +14,7 @@ const signupSchema = z
   .object({
     fullName: z.string().trim().min(1, 'Enter your name.').max(120, 'Name is too long.'),
     organizationName: z.string().trim().max(120, 'Workspace name is too long.').optional(),
+    websiteUrl: z.string().trim().max(512, 'Website URL is too long.').optional(),
     email: z.string().email('Enter a valid email address.'),
     password: z.string().min(8, 'Password must be at least 8 characters.'),
     confirmPassword: z.string().min(8, 'Confirm your password.'),
@@ -67,6 +68,7 @@ export async function sendMagicLink(
   const bundleRaw = readTrimmedField(formData, 'bundle');
   const fullName = readTrimmedField(formData, 'full_name');
   const organizationName = readTrimmedField(formData, 'organization_name');
+  const websiteUrl = readTrimmedField(formData, 'website_url');
   let supabase;
   try {
     supabase = await createSupabaseServerClient();
@@ -88,6 +90,9 @@ export async function sendMagicLink(
   }
   if (organizationName) {
     redirectParams.set('organization_name', organizationName);
+  }
+  if (websiteUrl) {
+    redirectParams.set('website_url', websiteUrl);
   }
   const redirectTo = `${appUrl}/auth/callback?${redirectParams.toString()}`;
 
@@ -120,6 +125,7 @@ export async function signUpWithPassword(
     next: formData.get('next') ?? undefined,
     bundle: formData.get('bundle') ?? undefined,
     organizationName: formData.get('organization_name') ?? undefined,
+    websiteUrl: formData.get('website_url') ?? undefined,
   });
 
   if (!parsed.success) {
@@ -151,6 +157,7 @@ export async function signUpWithPassword(
   const normalizedEmail = parsed.data.email.trim().toLowerCase();
   const normalizedName = parsed.data.fullName.trim();
   const normalizedOrganizationName = parsed.data.organizationName?.trim() ?? '';
+  const normalizedWebsiteUrl = parsed.data.websiteUrl?.trim() ?? '';
 
   const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
     email: normalizedEmail,
@@ -186,6 +193,7 @@ export async function signUpWithPassword(
     bundleParam: parsed.data.bundle ?? null,
     isNewUser: true,
     organizationName: normalizedOrganizationName || null,
+    websiteUrl: normalizedWebsiteUrl || null,
   });
   redirect(redirectTarget ?? nextPath);
 }

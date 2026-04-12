@@ -31,6 +31,7 @@ const bodySchema = z.object({
   bundleKey: z.string().min(1).max(64),
   turnstileToken: z.string().min(1),
   organizationName: z.string().trim().min(1).max(120).optional(),
+  websiteUrl: z.string().trim().max(512).optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -61,7 +62,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const { bundleKey, turnstileToken, organizationName } = parsed.data;
+    const { bundleKey, turnstileToken, organizationName, websiteUrl } = parsed.data;
 
     if (!isPaidBundleKey(bundleKey)) {
       return Response.json(
@@ -277,6 +278,7 @@ export async function POST(request: Request): Promise<Response> {
           user_id: user.id,
           bundle_key: bundleKey,
           ...(organizationName ? { organization_name: organizationName } : {}),
+          ...(websiteUrl ? { website_url: websiteUrl } : {}),
         },
         subscription_data: {
           ...(trialDays > 0
@@ -293,6 +295,7 @@ export async function POST(request: Request): Promise<Response> {
             user_id: user.id,
             bundle_key: bundleKey,
             ...(organizationName ? { organization_name: organizationName } : {}),
+            ...(websiteUrl ? { website_url: websiteUrl } : {}),
           },
         },
       });

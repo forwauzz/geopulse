@@ -8,6 +8,7 @@ type Props = {
     mode?: string;
     bundle?: string;
     organization_name?: string;
+    website_url?: string;
   }>;
 };
 
@@ -25,6 +26,7 @@ export default async function LoginPage({ searchParams }: Props) {
   const isSignUp = sp.mode === 'signup';
   const bundleKey = sp.bundle?.trim() || undefined;
   const organizationName = sp.organization_name?.trim() || undefined;
+  const websiteUrl = sp.website_url?.trim() || undefined;
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col px-6 py-16">
@@ -58,6 +60,7 @@ export default async function LoginPage({ searchParams }: Props) {
         isSignUp={isSignUp}
         bundleKey={bundleKey}
         organizationName={organizationName}
+        websiteUrl={websiteUrl}
       />
     </main>
   );
