@@ -66,6 +66,7 @@ npm run build
 More operator and eval commands:
 - `docs/07-deploy-and-ops-runbook.md`
 - `docs/06-environment-and-secrets.md`
+- `npm run verify:audit-signals`
 
 ## Source of truth
 
