@@ -7,7 +7,6 @@ import {
   buildPublicPageMetadata,
   buildWebPageStructuredData,
   buildWebSiteStructuredData,
-  SITE_AUTHOR_NAME,
   SITE_DESCRIPTION,
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
@@ -33,6 +32,35 @@ const features = [
     icon: 'podcasts',
     title: 'Authority signals',
     body: 'Surface patterns that affect how clearly your pages present facts and entities — not rankings or predictions.',
+  },
+] as const;
+
+const faqItems = [
+  {
+    question: 'What does GEO-Pulse check?',
+    answer:
+      'It checks the signals that affect how clearly machines can crawl, interpret, and reuse your public pages, including robots rules, structured data, heading structure, trust cues, and content extractability.',
+  },
+  {
+    question: 'Do I need an account to run a scan?',
+    answer:
+      'No. You can run a free scan first. An account is only needed if you want to save reports, compare runs over time, or use the full workspace.',
+  },
+  {
+    question: 'Is this a ranking or traffic prediction tool?',
+    answer:
+      'No. GEO-Pulse is an audit tool. It surfaces readiness gaps and practical fixes, but it does not predict rankings, traffic, or citations.',
+  },
+] as const;
+
+const referenceLinks = [
+  {
+    label: 'Google Search Central: robots meta tags',
+    href: 'https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag',
+  },
+  {
+    label: 'Schema.org: FAQPage',
+    href: 'https://schema.org/FAQPage',
   },
 ] as const;
 
@@ -77,6 +105,18 @@ export default async function HomePage({
     siteUrl,
     dateModified: pageModifiedAt,
   });
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqItems.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
+  };
 
   return (
     <main>
@@ -92,6 +132,7 @@ export default async function HomePage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(homePageSchema) }}
       />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
       <section className="relative mx-auto max-w-screen-2xl overflow-hidden px-6 pb-24 pt-16 text-center md:px-10 md:pb-32 md:pt-24">
         <div className="mb-6">
           <span className="inline-block rounded-full bg-surface-container-high px-3 py-1 font-label text-xs font-semibold uppercase tracking-widest text-primary">
@@ -99,17 +140,10 @@ export default async function HomePage({
           </span>
         </div>
         <h1 className="mx-auto mb-8 max-w-4xl font-headline text-4xl font-bold leading-tight tracking-tight text-on-background md:text-6xl lg:text-7xl">
-          Check your site readiness in <span className="font-normal italic">under a minute</span>
+          Make Your Website Discoverable by ChatGPT, Perplexity, and Gemini.
         </h1>
         <p className="mx-auto mb-12 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
           Get one score, the key issues, and priority fixes. Run a free scan, or sign up to save reports and unlock the full workspace.
-        </p>
-        <p className="mx-auto mb-8 max-w-2xl font-body text-sm text-on-surface-variant">
-          Founder-led by{' '}
-          <Link href="/about" className="font-semibold text-primary hover:underline">
-            {SITE_AUTHOR_NAME}
-          </Link>
-          , with public authorship and an About page for trust signals.
         </p>
         <div className="mx-auto mb-6 max-w-3xl">
           {siteKey ? (
@@ -275,6 +309,61 @@ export default async function HomePage({
               <span className="material-symbols-outlined text-primary">account_circle</span>
               Account history
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">Questions</span>
+            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+              Common questions, answered directly
+            </h2>
+            <p className="mt-4 max-w-sm font-body text-on-surface-variant">
+              Short answers help people and machines understand the tool without reading the whole report.
+            </p>
+          </div>
+          <div className="lg:col-span-8">
+            <div className="grid grid-cols-1 gap-4">
+              {faqItems.map((item) => (
+                <div key={item.question} className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float">
+                  <h3 className="font-headline text-lg font-bold text-on-background">{item.question}</h3>
+                  <p className="mt-3 max-w-3xl font-body text-sm leading-relaxed text-on-surface-variant">
+                    {item.answer}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-surface-container-low px-6 py-16 md:px-10 md:py-24">
+        <div className="mx-auto flex max-w-screen-2xl flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="max-w-2xl">
+            <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
+              References
+            </span>
+            <h2 className="mt-3 font-headline text-2xl font-bold text-on-background md:text-3xl">
+              We align the audit to public standards and search guidance
+            </h2>
+            <p className="mt-3 font-body text-sm leading-relaxed text-on-surface-variant">
+              The checks in GEO-Pulse map to documented crawl, metadata, and structured-data guidance instead of opaque scoring rules.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            {referenceLinks.map((reference) => (
+              <a
+                key={reference.href}
+                href={reference.href}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-3 font-body text-sm font-medium text-on-background transition hover:bg-surface-container"
+              >
+                {reference.label}
+              </a>
+            ))}
           </div>
         </div>
       </section>
