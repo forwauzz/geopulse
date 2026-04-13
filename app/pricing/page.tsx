@@ -235,6 +235,42 @@ export default async function PricingPage() {
       <p className="mt-12 text-center font-body text-sm text-on-surface-variant">
         All paid plans include a free trial. Credit card required. Cancel anytime.
       </p>
+
+      <section className="mx-auto mt-12 max-w-3xl rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-primary">References</p>
+        <ul className="mt-4 grid gap-3 md:grid-cols-3">
+          <li>
+            <a
+              href="https://stripe.com/docs/payments/checkout"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+            >
+              Stripe Checkout docs
+            </a>
+          </li>
+          <li>
+            <a
+              href="https://developers.cloudflare.com/turnstile/"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+            >
+              Cloudflare Turnstile docs
+            </a>
+          </li>
+          <li>
+            <a
+              href="https://developers.google.com/search/docs/crawling-indexing/robots/intro"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+            >
+              Crawlability guidance
+            </a>
+          </li>
+        </ul>
+      </section>
     </main>
   );
 }

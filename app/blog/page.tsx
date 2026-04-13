@@ -189,6 +189,44 @@ export default async function BlogIndexPage() {
                 ))}
               </ul>
             </section>
+
+            <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
+                References
+              </p>
+              <ul className="mt-4 space-y-3 text-sm text-zinc-300">
+                <li>
+                  <a
+                    href="https://developers.google.com/search/docs/crawling-indexing/robots/intro"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sky-300 hover:text-sky-200 hover:underline"
+                  >
+                    Google Search Central robots.txt guide
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://schema.org"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sky-300 hover:text-sky-200 hover:underline"
+                  >
+                    Schema.org vocabulary
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://llmstxt.org"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sky-300 hover:text-sky-200 hover:underline"
+                  >
+                    llms.txt specification
+                  </a>
+                </li>
+              </ul>
+            </section>
           </aside>
 
           <section className="space-y-10">
