@@ -9,6 +9,7 @@ function createData(overrides: Partial<StartupDashboardData> = {}): StartupDashb
     scans: [],
     reports: [],
     recommendations: [],
+    executions: [],
     ...overrides,
   };
 }

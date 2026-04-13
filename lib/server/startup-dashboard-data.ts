@@ -51,13 +51,74 @@ export type StartupWorkspaceRecommendation = {
   readonly createdAt: string;
 };
 
+export type StartupWorkspaceAuditExecution = {
+  readonly id: string;
+  readonly startupWorkspaceId: string;
+  readonly scanId: string | null;
+  readonly reportId: string | null;
+  readonly sourceKind: 'markdown_audit' | 'manual' | 'agent';
+  readonly sourceRef: string | null;
+  readonly status:
+    | 'received'
+    | 'planning'
+    | 'plan_ready'
+    | 'executing'
+    | 'waiting_manual'
+    | 'completed'
+    | 'failed'
+    | 'cancelled';
+  readonly summary: string | null;
+  readonly errorMessage: string | null;
+  readonly approvalStatus:
+    | 'draft'
+    | 'ready_for_review'
+    | 'approved_for_execution'
+    | 'rejected';
+  readonly approvalRequestedAt: string | null;
+  readonly approvalApprovedAt: string | null;
+  readonly approvalRejectedAt: string | null;
+  readonly approvalRejectionReason: string | null;
+  readonly completedAt: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+};
+
 export type StartupDashboardData = {
   readonly workspaces: StartupWorkspaceSummary[];
   readonly selectedWorkspaceId: string | null;
   readonly scans: StartupWorkspaceScan[];
   readonly reports: StartupWorkspaceReport[];
   readonly recommendations: StartupWorkspaceRecommendation[];
+  readonly executions: StartupWorkspaceAuditExecution[];
 };
+
+function parseStringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function parseStartupExecutionApprovalStatus(args: {
+  readonly executionStatus: StartupWorkspaceAuditExecution['status'];
+  readonly metadata: Record<string, unknown> | null;
+}): StartupWorkspaceAuditExecution['approvalStatus'] {
+  const raw = args.metadata?.['approval_status'];
+  if (
+    raw === 'draft' ||
+    raw === 'ready_for_review' ||
+    raw === 'approved_for_execution' ||
+    raw === 'rejected'
+  ) {
+    return raw;
+  }
+  if (args.executionStatus === 'plan_ready') return 'ready_for_review';
+  if (
+    args.executionStatus === 'executing' ||
+    args.executionStatus === 'waiting_manual' ||
+    args.executionStatus === 'completed'
+  ) {
+    return 'approved_for_execution';
+  }
+  return 'draft';
+}
 
 export async function getStartupDashboardData(args: {
   readonly supabase: SupabaseLike;
@@ -88,6 +149,7 @@ export async function getStartupDashboardData(args: {
       scans: [],
       reports: [],
       recommendations: [],
+      executions: [],
     };
   }
 
@@ -121,6 +183,7 @@ export async function getStartupDashboardData(args: {
       scans: [],
       reports: [],
       recommendations: [],
+      executions: [],
     };
   }
 
@@ -128,6 +191,7 @@ export async function getStartupDashboardData(args: {
     { data: scans, error: scansError },
     { data: reports, error: reportsError },
     { data: recommendations, error: recommendationsError },
+    { data: executions, error: executionsError },
   ] = await Promise.all([
     supabase
       .from('scans')
@@ -162,10 +226,31 @@ export async function getStartupDashboardData(args: {
       )
       .eq('startup_workspace_id', selectedWorkspaceId)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('startup_audit_executions')
+      .select(
+        [
+          'id',
+          'startup_workspace_id',
+          'scan_id',
+          'report_id',
+          'source_kind',
+          'source_ref',
+          'status',
+          'summary',
+          'error_message',
+          'metadata',
+          'completed_at',
+          'created_at',
+          'updated_at',
+        ].join(',')
+      )
+      .eq('startup_workspace_id', selectedWorkspaceId)
+      .order('created_at', { ascending: false }),
   ]);
 
-  if (scansError || reportsError || recommendationsError) {
-    throw scansError ?? reportsError ?? recommendationsError;
+  if (scansError || reportsError || recommendationsError || executionsError) {
+    throw scansError ?? reportsError ?? recommendationsError ?? executionsError;
   }
 
   return {
@@ -248,6 +333,50 @@ export async function getStartupDashboardData(args: {
       statusReason: row.status_reason,
       statusUpdatedByUserId: row.status_updated_by_user_id,
       createdAt: row.created_at,
+    })),
+    executions: ((executions ?? []) as Array<{
+      id: string;
+      startup_workspace_id: string;
+      scan_id: string | null;
+      report_id: string | null;
+      source_kind: 'markdown_audit' | 'manual' | 'agent';
+      source_ref: string | null;
+      status:
+        | 'received'
+        | 'planning'
+        | 'plan_ready'
+        | 'executing'
+        | 'waiting_manual'
+        | 'completed'
+        | 'failed'
+        | 'cancelled';
+      summary: string | null;
+      error_message: string | null;
+      metadata: Record<string, unknown> | null;
+      completed_at: string | null;
+      created_at: string;
+      updated_at: string;
+    }>).map((row) => ({
+      id: row.id,
+      startupWorkspaceId: row.startup_workspace_id,
+      scanId: row.scan_id,
+      reportId: row.report_id,
+      sourceKind: row.source_kind,
+      sourceRef: row.source_ref,
+      status: row.status,
+      summary: row.summary,
+      errorMessage: row.error_message,
+      approvalStatus: parseStartupExecutionApprovalStatus({
+        executionStatus: row.status,
+        metadata: row.metadata,
+      }),
+      approvalRequestedAt: parseStringOrNull(row.metadata?.['approval_requested_at']),
+      approvalApprovedAt: parseStringOrNull(row.metadata?.['approval_approved_at']),
+      approvalRejectedAt: parseStringOrNull(row.metadata?.['approval_rejected_at']),
+      approvalRejectionReason: parseStringOrNull(row.metadata?.['approval_rejection_reason']),
+      completedAt: row.completed_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
     })),
   };
 }

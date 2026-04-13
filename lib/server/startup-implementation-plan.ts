@@ -1,4 +1,9 @@
 import { resolveStartupServiceModelPolicy } from './startup-model-policy';
+import {
+  parseStartupOrchestratorPlannerOutput,
+  STARTUP_ORCHESTRATOR_PLAN_CONTRACT_VERSION,
+  type StartupOrchestratorPlannerOutput,
+} from './startup-orchestrator-plan-contract';
 import { structuredLog } from './structured-log';
 
 type SupabaseLike = {
@@ -7,6 +12,22 @@ type SupabaseLike = {
 
 export type StartupImplementationTeamLane = 'founder' | 'dev' | 'content' | 'ops' | 'cross_functional';
 export type StartupImplementationTaskPriority = 'low' | 'medium' | 'high' | 'critical';
+export type StartupImplementationTaskKind =
+  | 'implementation'
+  | 'review'
+  | 'manual_action'
+  | 'approval'
+  | 'verification';
+export type StartupImplementationTaskExecutionMode = 'auto' | 'manual' | 'approval_required';
+export type StartupImplementationTaskAgentRole =
+  | 'orchestrator'
+  | 'repo_review'
+  | 'db_review'
+  | 'risk_review'
+  | 'execution_worker'
+  | 'manual_operator'
+  | 'founder_approval'
+  | 'qa_verification';
 
 export type ParsedImplementationTask = {
   readonly teamLane: StartupImplementationTeamLane;
@@ -15,6 +36,15 @@ export type ParsedImplementationTask = {
   readonly priority: StartupImplementationTaskPriority;
   readonly confidence: number | null;
   readonly evidence: Record<string, unknown>;
+  readonly taskKind: StartupImplementationTaskKind;
+  readonly executionMode: StartupImplementationTaskExecutionMode;
+  readonly dependsOnTaskIds: string[];
+  readonly acceptanceCriteria: string[];
+  readonly evidenceRequired: string[];
+  readonly artifactRefs: string[];
+  readonly blockedReason: string | null;
+  readonly agentRole: StartupImplementationTaskAgentRole | null;
+  readonly manualInstructions: string | null;
 };
 
 export type StartupImplementationPlanTask = ParsedImplementationTask & {
@@ -35,6 +65,22 @@ export type StartupImplementationPlanRecord = {
   readonly status: 'draft' | 'ready' | 'archived';
   readonly summary: string | null;
   readonly createdAt: string;
+  readonly plannerArtifact: {
+    readonly contractVersion: string;
+    readonly touchedAreas: string[];
+    readonly risks: Array<{
+      readonly title: string;
+      readonly severity: 'low' | 'medium' | 'high' | 'critical';
+      readonly detail: string;
+    }>;
+    readonly manualActions: Array<{
+      readonly title: string;
+      readonly instructions: string;
+      readonly teamLane: StartupImplementationTeamLane;
+      readonly evidenceRequired: string[];
+      readonly artifactRefs: string[];
+    }>;
+  } | null;
   readonly tasks: StartupImplementationPlanTask[];
 };
 
@@ -68,6 +114,10 @@ function parsePriority(raw: string): StartupImplementationTaskPriority {
   return 'medium';
 }
 
+function uniqueStrings(values: readonly string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
 function parseInlineConfidence(raw: string): number | null {
   const decimal = raw.match(/confidence\s*[:=]\s*(0(?:\.\d+)?|1(?:\.0+)?)/i);
   if (decimal?.[1]) return clampConfidence(Number(decimal[1]));
@@ -76,10 +126,45 @@ function parseInlineConfidence(raw: string): number | null {
   return null;
 }
 
+function parseExecutionMode(raw: string): StartupImplementationTaskExecutionMode {
+  const value = raw.trim().toLowerCase();
+  if (value === 'auto') return 'auto';
+  if (value === 'manual') return 'manual';
+  return 'approval_required';
+}
+
+function parseTaskKind(raw: string): StartupImplementationTaskKind {
+  const value = raw.trim().toLowerCase();
+  if (value === 'review') return 'review';
+  if (value === 'manual_action' || value === 'manual-action' || value === 'manual') return 'manual_action';
+  if (value === 'approval') return 'approval';
+  if (value === 'verification' || value === 'verify') return 'verification';
+  return 'implementation';
+}
+
+function parseAgentRole(raw: string): StartupImplementationTaskAgentRole | null {
+  const value = raw.trim().toLowerCase();
+  if (value === 'orchestrator') return 'orchestrator';
+  if (value === 'repo_review' || value === 'repo-review') return 'repo_review';
+  if (value === 'db_review' || value === 'db-review') return 'db_review';
+  if (value === 'risk_review' || value === 'risk-review') return 'risk_review';
+  if (value === 'execution_worker' || value === 'execution-worker') return 'execution_worker';
+  if (value === 'manual_operator' || value === 'manual-operator') return 'manual_operator';
+  if (value === 'founder_approval' || value === 'founder-approval') return 'founder_approval';
+  if (value === 'qa_verification' || value === 'qa-verification') return 'qa_verification';
+  return null;
+}
+
+function parseBracketToken(content: string, key: string): string | null {
+  const match = content.match(new RegExp(`\\[${key}:([^\\]]+)\\]`, 'i'));
+  return match?.[1]?.trim() ?? null;
+}
+
 function stripInlineTokens(raw: string): string {
   return raw
     .replace(/\[(founder|dev|content|ops|cross[_ -]?functional)\]/gi, '')
     .replace(/\[(critical|high|medium|low|p0|p1|p2|p3)\]/gi, '')
+    .replace(/\[(mode|task|role|accept|evidence|required|artifacts|manual|blocked):[^\]]+\]/gi, '')
     .replace(/\bconfidence\s*[:=]\s*(0(?:\.\d+)?|1(?:\.0+)?|\d{1,3}%)/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -117,6 +202,14 @@ export function parseMarkdownAuditImplementationTasks(markdown: string): ParsedI
     const laneToken = content.match(/\[(founder|dev|content|ops|cross[_ -]?functional)\]/i)?.[1] ?? null;
     const priorityToken = content.match(/\[(critical|high|medium|low|p0|p1|p2|p3)\]/i)?.[1] ?? null;
     const confidence = parseInlineConfidence(content);
+    const executionMode = parseExecutionMode(parseBracketToken(content, 'mode') ?? 'approval_required');
+    const taskKind = parseTaskKind(parseBracketToken(content, 'task') ?? 'implementation');
+    const agentRole = parseAgentRole(parseBracketToken(content, 'role') ?? '');
+    const acceptanceCriteria = uniqueStrings((parseBracketToken(content, 'accept') ?? '').split('|'));
+    const evidenceRequired = uniqueStrings((parseBracketToken(content, 'evidence') ?? '').split('|'));
+    const artifactRefs = uniqueStrings((parseBracketToken(content, 'artifacts') ?? '').split('|'));
+    const manualInstructions = parseBracketToken(content, 'manual');
+    const blockedReason = parseBracketToken(content, 'blocked');
     const cleaned = stripInlineTokens(content);
     const [titlePart, detailPart] = cleaned.split(/\s[-:]\s/, 2);
     const title = (titlePart ?? '').trim();
@@ -129,6 +222,15 @@ export function parseMarkdownAuditImplementationTasks(markdown: string): ParsedI
       title,
       detail: detailPart?.trim() || null,
       evidence: { source: 'markdown_audit' },
+      taskKind,
+      executionMode,
+      dependsOnTaskIds: [],
+      acceptanceCriteria,
+      evidenceRequired,
+      artifactRefs,
+      blockedReason,
+      agentRole,
+      manualInstructions,
     });
   }
 
@@ -222,13 +324,22 @@ export async function createStartupImplementationPlanFromMarkdownAudit(args: {
     plan_id: planId,
     recommendation_id: null,
     team_lane: task.teamLane,
+    task_kind: task.taskKind,
     title: task.title,
     detail: task.detail,
     priority: task.priority,
     confidence: task.confidence,
     evidence: task.evidence,
+    execution_mode: task.executionMode,
+    depends_on_task_ids: task.dependsOnTaskIds,
+    acceptance_criteria: task.acceptanceCriteria,
+    evidence_required: task.evidenceRequired,
+    artifact_refs: task.artifactRefs,
     status: 'todo',
     sort_order: index,
+    blocked_reason: task.blockedReason,
+    agent_role: task.agentRole,
+    manual_instructions: task.manualInstructions,
     metadata: { source_ref: args.markdownAuditRef },
   }));
 
@@ -257,13 +368,115 @@ export async function createStartupImplementationPlanFromMarkdownAudit(args: {
   return { planId, taskCount: taskRows.length };
 }
 
+export async function createStartupImplementationPlanFromPlannerOutput(args: {
+  readonly supabase: SupabaseLike;
+  readonly startupWorkspaceId: string;
+  readonly plannerOutput: unknown;
+  readonly sourceRef: string;
+  readonly scanId?: string | null;
+  readonly reportId?: string | null;
+  readonly createdByUserId?: string | null;
+  readonly executionId?: string | null;
+  readonly plannerModelPolicy?: Record<string, unknown> | null;
+}): Promise<{
+  readonly planId: string;
+  readonly taskCount: number;
+  readonly plannerOutput: StartupOrchestratorPlannerOutput;
+}> {
+  const plannerOutput = parseStartupOrchestratorPlannerOutput(args.plannerOutput);
+  const plannerArtifact = {
+    contract_version: plannerOutput.contractVersion,
+    touched_areas: plannerOutput.touchedAreas,
+    risks: plannerOutput.risks,
+    manual_actions: plannerOutput.manualActions,
+  };
+
+  const { data: planRows, error: planError } = await args.supabase
+    .from('startup_implementation_plans')
+    .insert({
+      startup_workspace_id: args.startupWorkspaceId,
+      scan_id: args.scanId ?? null,
+      report_id: args.reportId ?? null,
+      source_kind: 'agent',
+      source_ref: args.sourceRef,
+      status: 'ready',
+      summary: plannerOutput.summary,
+      created_by_user_id: args.createdByUserId ?? null,
+      metadata: {
+        generated_by: 'sao006_orchestrator_planner_v1',
+        planner_artifact: plannerArtifact,
+        execution_id: args.executionId ?? null,
+        model_policy: args.plannerModelPolicy ?? null,
+      },
+    })
+    .select('id')
+    .limit(1);
+
+  if (planError) throw planError;
+  const planId = (planRows?.[0] as { id: string } | undefined)?.id;
+  if (!planId) throw new Error('Could not create startup implementation plan from planner output.');
+
+  const taskRows = plannerOutput.tasks.map((task, index) => ({
+    startup_workspace_id: args.startupWorkspaceId,
+    plan_id: planId,
+    recommendation_id: null,
+    team_lane: task.teamLane,
+    task_kind: task.taskKind,
+    title: task.title,
+    detail: task.detail,
+    priority: task.priority,
+    confidence: task.confidence,
+    evidence: task.evidence,
+    execution_mode: task.executionMode,
+    depends_on_task_ids: task.dependsOnTaskIds,
+    acceptance_criteria: task.acceptanceCriteria,
+    evidence_required: task.evidenceRequired,
+    artifact_refs: task.artifactRefs,
+    status: 'todo',
+    sort_order: index,
+    blocked_reason: task.blockedReason,
+    agent_role: task.agentRole,
+    manual_instructions: task.manualInstructions,
+    metadata: {
+      source_ref: args.sourceRef,
+      planner_contract_version: STARTUP_ORCHESTRATOR_PLAN_CONTRACT_VERSION,
+    },
+  }));
+
+  const { error: taskError } = await args.supabase.from('startup_implementation_plan_tasks').insert(taskRows);
+  if (taskError) throw taskError;
+
+  structuredLog(
+    'startup_orchestrator_plan_created',
+    {
+      startup_workspace_id: args.startupWorkspaceId,
+      plan_id: planId,
+      execution_id: args.executionId ?? null,
+      created_by_user_id: args.createdByUserId ?? null,
+      task_count: taskRows.length,
+      source_ref: args.sourceRef,
+      planner_contract_version: STARTUP_ORCHESTRATOR_PLAN_CONTRACT_VERSION,
+      planner_touched_area_count: plannerOutput.touchedAreas.length,
+      planner_risk_count: plannerOutput.risks.length,
+      planner_manual_action_count: plannerOutput.manualActions.length,
+      planner_model_policy_effective_provider:
+        (args.plannerModelPolicy?.['effective_provider'] as string | null) ?? null,
+      planner_model_policy_effective_model:
+        (args.plannerModelPolicy?.['effective_model'] as string | null) ?? null,
+    },
+    'info'
+  );
+
+  return { planId, taskCount: taskRows.length, plannerOutput };
+}
+
 export async function getLatestStartupImplementationPlan(args: {
   readonly supabase: SupabaseLike;
   readonly startupWorkspaceId: string;
 }): Promise<StartupImplementationPlanRecord | null> {
   const { data: planRow, error: planError } = await args.supabase
     .from('startup_implementation_plans')
-    .select('id,startup_workspace_id,scan_id,report_id,source_kind,source_ref,status,summary,created_at')
+    .select('id,startup_workspace_id,scan_id,report_id,source_kind,source_ref,status,summary,metadata,created_at')
     .eq('startup_workspace_id', args.startupWorkspaceId)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -273,7 +486,30 @@ export async function getLatestStartupImplementationPlan(args: {
 
   const { data: taskRows, error: taskError } = await args.supabase
     .from('startup_implementation_plan_tasks')
-    .select('id,recommendation_id,team_lane,title,detail,priority,confidence,evidence,status,sort_order,created_at')
+    .select(
+      [
+        'id',
+        'recommendation_id',
+        'team_lane',
+        'task_kind',
+        'title',
+        'detail',
+        'priority',
+        'confidence',
+        'evidence',
+        'execution_mode',
+        'depends_on_task_ids',
+        'acceptance_criteria',
+        'evidence_required',
+        'artifact_refs',
+        'status',
+        'sort_order',
+        'blocked_reason',
+        'agent_role',
+        'manual_instructions',
+        'created_at',
+      ].join(',')
+    )
     .eq('plan_id', planRow.id)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -289,27 +525,101 @@ export async function getLatestStartupImplementationPlan(args: {
     status: planRow.status,
     summary: planRow.summary,
     createdAt: planRow.created_at,
+    plannerArtifact: (() => {
+      const artifact = (planRow.metadata as Record<string, unknown> | null)?.['planner_artifact'] as
+        | Record<string, unknown>
+        | undefined;
+      if (!artifact) return null;
+      return {
+        contractVersion:
+          typeof artifact['contract_version'] === 'string'
+            ? artifact['contract_version']
+            : STARTUP_ORCHESTRATOR_PLAN_CONTRACT_VERSION,
+        touchedAreas: Array.isArray(artifact['touched_areas'])
+          ? artifact['touched_areas'].filter((value): value is string => typeof value === 'string')
+          : [],
+        risks: Array.isArray(artifact['risks'])
+          ? artifact['risks']
+              .filter((value): value is Record<string, unknown> => !!value && typeof value === 'object')
+              .map((value) => ({
+                title: typeof value['title'] === 'string' ? value['title'] : '',
+                severity: (
+                  value['severity'] === 'low' ||
+                  value['severity'] === 'medium' ||
+                  value['severity'] === 'high' ||
+                  value['severity'] === 'critical'
+                    ? value['severity']
+                    : 'medium'
+                ) as 'low' | 'medium' | 'high' | 'critical',
+                detail: typeof value['detail'] === 'string' ? value['detail'] : '',
+              }))
+              .filter((value) => value.title.length > 0 && value.detail.length > 0)
+          : [],
+        manualActions: Array.isArray(artifact['manual_actions'])
+          ? artifact['manual_actions']
+              .filter((value): value is Record<string, unknown> => !!value && typeof value === 'object')
+              .map((value) => ({
+                title: typeof value['title'] === 'string' ? value['title'] : '',
+                instructions: typeof value['instructions'] === 'string' ? value['instructions'] : '',
+                teamLane: (
+                  value['teamLane'] === 'founder' ||
+                  value['teamLane'] === 'dev' ||
+                  value['teamLane'] === 'content' ||
+                  value['teamLane'] === 'ops' ||
+                  value['teamLane'] === 'cross_functional'
+                    ? value['teamLane']
+                    : 'ops'
+                ) as StartupImplementationTeamLane,
+                evidenceRequired: Array.isArray(value['evidenceRequired'])
+                  ? value['evidenceRequired'].filter((item): item is string => typeof item === 'string')
+                  : [],
+                artifactRefs: Array.isArray(value['artifactRefs'])
+                  ? value['artifactRefs'].filter((item): item is string => typeof item === 'string')
+                  : [],
+              }))
+              .filter((value) => value.title.length > 0 && value.instructions.length > 0)
+          : [],
+      };
+    })(),
     tasks: ((taskRows ?? []) as Array<{
       id: string;
       recommendation_id: string | null;
       team_lane: StartupImplementationTeamLane;
+      task_kind: StartupImplementationTaskKind | null;
       title: string;
       detail: string | null;
       priority: StartupImplementationTaskPriority;
       confidence: number | null;
       evidence: Record<string, unknown> | null;
+      execution_mode: StartupImplementationTaskExecutionMode | null;
+      depends_on_task_ids: string[] | null;
+      acceptance_criteria: string[] | null;
+      evidence_required: string[] | null;
+      artifact_refs: string[] | null;
       status: 'todo' | 'in_progress' | 'blocked' | 'done' | 'failed';
       sort_order: number;
+      blocked_reason: string | null;
+      agent_role: StartupImplementationTaskAgentRole | null;
+      manual_instructions: string | null;
       created_at: string;
     }>).map((task) => ({
       id: task.id,
       recommendationId: task.recommendation_id,
       teamLane: task.team_lane,
+      taskKind: task.task_kind ?? 'implementation',
       title: task.title,
       detail: task.detail,
       priority: task.priority,
       confidence: task.confidence,
       evidence: task.evidence ?? {},
+      executionMode: task.execution_mode ?? 'approval_required',
+      dependsOnTaskIds: task.depends_on_task_ids ?? [],
+      acceptanceCriteria: task.acceptance_criteria ?? [],
+      evidenceRequired: task.evidence_required ?? [],
+      artifactRefs: task.artifact_refs ?? [],
+      blockedReason: task.blocked_reason,
+      agentRole: task.agent_role,
+      manualInstructions: task.manual_instructions,
       status: task.status,
       sortOrder: task.sort_order,
       createdAt: task.created_at,

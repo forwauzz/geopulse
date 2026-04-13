@@ -1,5 +1,10 @@
 import Link from 'next/link';
+import {
+  approveStartupAuditExecutionAction,
+  rejectStartupAuditExecutionAction,
+} from '@/app/dashboard/startup/actions';
 import type {
+  StartupWorkspaceAuditExecution,
   StartupWorkspaceRecommendation,
   StartupWorkspaceReport,
   StartupWorkspaceScan,
@@ -72,11 +77,15 @@ function reportStatus(report: StartupWorkspaceReport | undefined): string {
 function buildAuditRows(
   filtered: readonly StartupWorkspaceScan[],
   reports: readonly StartupWorkspaceReport[],
-  recommendations: readonly StartupWorkspaceRecommendation[]
+  recommendations: readonly StartupWorkspaceRecommendation[],
+  executions: readonly StartupWorkspaceAuditExecution[]
 ): StartupAuditRowModel[] {
   return filtered.map((scan) => {
     const report = reportForScan(reports, scan.id);
     const scanRecommendations = recommendations.filter((rec) => rec.scanId === scan.id);
+    const execution =
+      executions.find((item) => item.scanId === scan.id) ??
+      (report ? executions.find((item) => item.reportId === report.id) : undefined);
     const recTitles = scanRecommendations.map((rec) => rec.title);
     const implementedTitles = scanRecommendations
       .filter((rec) => rec.status === 'validated')
@@ -97,8 +106,75 @@ function buildAuditRows(
       openCount: recTitles.length - implementedTitles.length,
       recTitles,
       implementedTitles,
+      executionId: execution?.id ?? null,
+      executionStatus: execution?.status ?? null,
+      executionSummary: execution?.summary ?? execution?.errorMessage ?? null,
+      executionUpdatedAt: execution?.updatedAt ?? null,
+      executionSourceKind: execution?.sourceKind ?? null,
     };
   });
+}
+
+function executionStatusLabel(status: StartupAuditRowModel['executionStatus']): string {
+  switch (status) {
+    case 'received':
+      return 'Received';
+    case 'planning':
+      return 'Planning';
+    case 'plan_ready':
+      return 'Plan ready';
+    case 'executing':
+      return 'Executing';
+    case 'waiting_manual':
+      return 'Waiting manual';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return 'No execution yet';
+  }
+}
+
+function approvalStatusLabel(
+  status: StartupWorkspaceAuditExecution['approvalStatus']
+): string {
+  switch (status) {
+    case 'ready_for_review':
+      return 'Ready for review';
+    case 'approved_for_execution':
+      return 'Approved for execution';
+    case 'rejected':
+      return 'Rejected';
+    default:
+      return 'Draft';
+  }
+}
+
+function approvalBadgeClass(
+  status: StartupWorkspaceAuditExecution['approvalStatus']
+): string {
+  switch (status) {
+    case 'approved_for_execution':
+      return 'bg-emerald-500/15 text-emerald-700';
+    case 'rejected':
+      return 'bg-rose-500/15 text-rose-700';
+    case 'ready_for_review':
+      return 'bg-amber-500/15 text-amber-700';
+    default:
+      return 'bg-surface-container-high text-on-surface-variant';
+  }
+}
+
+function countActiveExecutions(rows: readonly StartupAuditRowModel[]): number {
+  return rows.filter((row) =>
+    row.executionStatus != null &&
+    row.executionStatus !== 'completed' &&
+    row.executionStatus !== 'failed' &&
+    row.executionStatus !== 'cancelled'
+  ).length;
 }
 
 function scoreDelta(current: number | null | undefined, previous: number | null | undefined): number | null {
@@ -138,17 +214,25 @@ const STATUS_FILTERS: { key: StartupAuditStatusFilter; label: string }[] = [
 
 export function StartupAuditsTab({ dashboard, auditFilter }: StartupAuditsTabProps) {
   const workspaceId = dashboard.selectedWorkspaceId;
+  const selectedWorkspace = dashboard.workspaces.find((workspace) => workspace.id === workspaceId) ?? null;
+  const canManageExecutionApproval =
+    selectedWorkspace?.role === 'founder' || selectedWorkspace?.role === 'admin';
   const scanned = filterScans(dashboard.scans, auditFilter);
   const rows = filterRowsByStatus(
-    buildAuditRows(scanned, dashboard.reports, dashboard.recommendations),
+    buildAuditRows(scanned, dashboard.reports, dashboard.recommendations, dashboard.executions),
     auditFilter.status
   );
   const trendRows = [...rows]
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     .slice(-8);
   const latestRow = rows[0] ?? null;
+  const latestExecution =
+    (latestRow?.executionId
+      ? dashboard.executions.find((execution) => execution.id === latestRow.executionId)
+      : null) ?? null;
   const previousRow = rows[1] ?? null;
   const latestDelta = scoreDelta(latestRow?.score ?? null, previousRow?.score ?? null);
+  const activeExecutions = countActiveExecutions(rows);
   const presetActive = (key: StartupAuditRangePreset) =>
     auditFilter.preset === key && !auditFilter.from && !auditFilter.to;
   const customActive = Boolean(auditFilter.from || auditFilter.to);
@@ -164,7 +248,7 @@ export function StartupAuditsTab({ dashboard, auditFilter }: StartupAuditsTabPro
         Startup scans for this workspace, newest first. Implemented recommendations are surfaced here as validated items.
       </p>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
         <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4">
           <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Latest score</p>
           <p className="mt-2 text-3xl font-bold text-on-surface">
@@ -207,7 +291,87 @@ export function StartupAuditsTab({ dashboard, auditFilter }: StartupAuditsTabPro
             <p className="mt-2 text-xs text-on-surface-variant">No score history in this range yet.</p>
           )}
         </div>
+        <div className="rounded-xl border border-outline-variant bg-surface-container-low p-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Latest execution</p>
+          <p className="mt-2 text-xl font-bold text-on-surface">
+            {executionStatusLabel(latestRow?.executionStatus ?? null)}
+          </p>
+          <p className="mt-1 text-xs text-on-surface-variant">
+            {latestRow?.executionSummary
+              ? latestRow.executionSummary
+              : `${activeExecutions} active execution${activeExecutions === 1 ? '' : 's'} in this range.`}
+          </p>
+        </div>
       </div>
+
+      {latestExecution ? (
+        <section className="mt-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
+                Execution approval
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${approvalBadgeClass(latestExecution.approvalStatus)}`}
+                >
+                  {approvalStatusLabel(latestExecution.approvalStatus)}
+                </span>
+                {latestExecution.approvalRequestedAt ? (
+                  <span className="text-xs text-on-surface-variant">
+                    Requested {new Date(latestExecution.approvalRequestedAt).toLocaleString()}
+                  </span>
+                ) : null}
+                {latestExecution.approvalApprovedAt ? (
+                  <span className="text-xs text-on-surface-variant">
+                    Approved {new Date(latestExecution.approvalApprovedAt).toLocaleString()}
+                  </span>
+                ) : null}
+                {latestExecution.approvalRejectedAt ? (
+                  <span className="text-xs text-on-surface-variant">
+                    Rejected {new Date(latestExecution.approvalRejectedAt).toLocaleString()}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                Planning can finish automatically. Execution code stays blocked until a founder or admin approves this run.
+              </p>
+              {latestExecution.approvalRejectionReason ? (
+                <p className="mt-2 text-xs text-rose-700">
+                  Rejection reason: {latestExecution.approvalRejectionReason}
+                </p>
+              ) : null}
+            </div>
+            {canManageExecutionApproval &&
+            latestExecution.status === 'plan_ready' &&
+            latestExecution.approvalStatus !== 'approved_for_execution' ? (
+              <div className="flex flex-wrap items-center gap-2" data-testid="startup-execution-approval-actions">
+                <form action={approveStartupAuditExecutionAction}>
+                  <input type="hidden" name="startupWorkspaceId" value={latestExecution.startupWorkspaceId} />
+                  <input type="hidden" name="executionId" value={latestExecution.id} />
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary transition hover:opacity-90"
+                  >
+                    Approve execution
+                  </button>
+                </form>
+                <form action={rejectStartupAuditExecutionAction}>
+                  <input type="hidden" name="startupWorkspaceId" value={latestExecution.startupWorkspaceId} />
+                  <input type="hidden" name="executionId" value={latestExecution.id} />
+                  <input type="hidden" name="rejectionReason" value="Rejected from startup dashboard" />
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-outline-variant bg-surface-container px-3 py-2 text-xs font-semibold text-on-surface transition hover:bg-surface-container-high"
+                  >
+                    Reject for now
+                  </button>
+                </form>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">Range</span>

@@ -7,6 +7,7 @@ import {
   queueStartupRecommendationPrRun,
   updateStartupAgentPrRunStatus,
 } from '@/lib/server/startup-agent-pr-workflow';
+import { updateStartupAuditExecutionApproval } from '@/lib/server/startup-audit-execution';
 import {
   createStartupGithubInstallSession,
   disconnectStartupGithubInstallation,
@@ -46,6 +47,14 @@ function buildStartupUrl(
   if (githubStatus) params.set('github', githubStatus);
   if (prStatus) params.set('pr', prStatus);
   if (slackStatus) params.set('slack', slackStatus);
+  return `/dashboard/startup?${params.toString()}`;
+}
+
+function buildStartupAuditsUrl(workspaceId: string): string {
+  const params = new URLSearchParams({
+    startupWorkspace: workspaceId,
+    tab: 'audits',
+  });
   return `/dashboard/startup?${params.toString()}`;
 }
 
@@ -759,6 +768,72 @@ export async function queueStartupRecommendationPrRunAction(formData: FormData):
 
   revalidatePath('/dashboard/startup');
   redirect(buildStartupUrl(workspaceId, undefined, 'pr_queued'));
+}
+
+export async function approveStartupAuditExecutionAction(formData: FormData): Promise<void> {
+  const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
+  const executionId = String(formData.get('executionId') ?? '').trim();
+  if (!workspaceId || !executionId) throw new Error('Missing audit execution approval inputs.');
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/startup');
+
+  await requireWorkspaceMember({ supabase, userId: user.id, workspaceId });
+  await requireWorkspaceRole({
+    supabase,
+    userId: user.id,
+    workspaceId,
+    roles: ['founder', 'admin'],
+  });
+
+  await updateStartupAuditExecutionApproval({
+    supabase,
+    executionId,
+    expectedWorkspaceId: workspaceId,
+    toStatus: 'approved_for_execution',
+    changedByUserId: user.id,
+    note: 'Execution approved from startup dashboard',
+  });
+
+  revalidatePath('/dashboard/startup');
+  redirect(buildStartupAuditsUrl(workspaceId));
+}
+
+export async function rejectStartupAuditExecutionAction(formData: FormData): Promise<void> {
+  const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
+  const executionId = String(formData.get('executionId') ?? '').trim();
+  const rejectionReason = String(formData.get('rejectionReason') ?? '').trim();
+  if (!workspaceId || !executionId) throw new Error('Missing audit execution rejection inputs.');
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/startup');
+
+  await requireWorkspaceMember({ supabase, userId: user.id, workspaceId });
+  await requireWorkspaceRole({
+    supabase,
+    userId: user.id,
+    workspaceId,
+    roles: ['founder', 'admin'],
+  });
+
+  await updateStartupAuditExecutionApproval({
+    supabase,
+    executionId,
+    expectedWorkspaceId: workspaceId,
+    toStatus: 'rejected',
+    changedByUserId: user.id,
+    note: 'Execution rejected from startup dashboard',
+    rejectionReason: rejectionReason || 'Rejected from startup dashboard',
+  });
+
+  revalidatePath('/dashboard/startup');
+  redirect(buildStartupAuditsUrl(workspaceId));
 }
 
 export async function markStartupPrRunOpenedAction(formData: FormData): Promise<void> {

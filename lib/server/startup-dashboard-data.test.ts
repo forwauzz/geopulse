@@ -127,7 +127,44 @@ describe('getStartupDashboardData', () => {
                     status: 'suggested',
                     status_changed_at: '2026-04-04T00:25:00.000Z',
                     status_reason: null,
+                    status_updated_by_user_id: null,
                     created_at: '2026-04-04T00:25:00.000Z',
+                  },
+                ],
+                error: null,
+              });
+            },
+          };
+        }
+
+        if (table === 'startup_audit_executions') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'exec-1',
+                    startup_workspace_id: 'ws-1',
+                    scan_id: 'scan-1',
+                    report_id: 'report-1',
+                    source_kind: 'markdown_audit',
+                    source_ref: 'audit://scan-1',
+                    status: 'plan_ready',
+                    summary: 'Planner produced a task graph.',
+                    error_message: null,
+                    metadata: {
+                      approval_status: 'ready_for_review',
+                      approval_requested_at: '2026-04-04T00:46:00.000Z',
+                    },
+                    completed_at: null,
+                    created_at: '2026-04-04T00:40:00.000Z',
+                    updated_at: '2026-04-04T00:45:00.000Z',
                   },
                 ],
                 error: null,
@@ -155,6 +192,10 @@ describe('getStartupDashboardData', () => {
     expect(data.recommendations[0]?.status).toBe('suggested');
     expect(data.recommendations[0]?.sourceKind).toBe('markdown_audit');
     expect(data.recommendations[0]?.statusUpdatedByUserId).toBe(null);
+    expect(data.executions[0]?.status).toBe('plan_ready');
+    expect(data.executions[0]?.summary).toBe('Planner produced a task graph.');
+    expect(data.executions[0]?.approvalStatus).toBe('ready_for_review');
+    expect(data.executions[0]?.approvalRequestedAt).toBe('2026-04-04T00:46:00.000Z');
   });
 
   it('falls back to first workspace when selected id is invalid', async () => {
@@ -243,6 +284,20 @@ describe('getStartupDashboardData', () => {
           };
         }
 
+        if (table === 'startup_audit_executions') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({ data: [], error: null });
+            },
+          };
+        }
+
         throw new Error(`Unexpected table ${table}`);
       },
     } as any;
@@ -255,5 +310,6 @@ describe('getStartupDashboardData', () => {
 
     expect(data.selectedWorkspaceId).toBe('ws-1');
     expect(data.workspaces[0]?.workspaceKey).toBe('acme');
+    expect(data.executions).toEqual([]);
   });
 });

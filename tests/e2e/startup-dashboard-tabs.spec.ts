@@ -27,19 +27,31 @@ test.describe('startup dashboard tabs (e2e auth)', () => {
     await page.waitForURL(/[?&]tab=audits/);
     await expect(page.getByTestId('startup-tab-panel-audits')).toBeVisible();
     await expect(page.getByTestId('startup-audits-tab')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /^audit history$/i })).toBeVisible();
+    await expect(
+      page.getByTestId('startup-audits-tab').getByRole('heading', { name: /^audit history$/i })
+    ).toBeVisible();
+    await expect(page.getByText(/latest execution/i)).toBeVisible();
+    await expect(page.getByTestId('startup-audits-tab').getByText(/^plan ready$/i).first()).toBeVisible();
+    await expect(
+      page.getByTestId('startup-audits-tab').getByText(/planner created repo-aware execution tasks/i).first()
+    ).toBeVisible();
+    await expect(page.getByTestId('startup-audits-tab').getByText(/execution approval/i)).toBeVisible();
+    await expect(page.getByTestId('startup-audits-tab').getByText(/ready for review/i).first()).toBeVisible();
+    await expect(page.getByTestId('startup-execution-approval-actions')).toBeVisible();
+    await expect(page.getByRole('button', { name: /approve execution/i })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^execution$/i })).toBeVisible();
 
     await page.getByRole('navigation', { name: 'Startup dashboard sections' }).getByRole('link', { name: /^delivery$/i }).click();
     await page.waitForURL(/[?&]tab=delivery/);
     await expect(page.getByTestId('startup-tab-panel-delivery')).toBeVisible();
     await expect(page.getByTestId('startup-delivery-tab')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /^slack delivery$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^slack delivery at a glance$/i })).toBeVisible();
 
     await page.getByRole('navigation', { name: 'Startup dashboard sections' }).getByRole('link', { name: /^settings$/i }).click();
     await page.waitForURL(/[?&]tab=settings/);
     await expect(page.getByTestId('startup-tab-panel-settings')).toBeVisible();
     await expect(page.getByTestId('startup-settings-tab')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /^workspace$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /only the controls that need attention now/i })).toBeVisible();
 
     await page.getByRole('navigation', { name: 'Startup dashboard sections' }).getByRole('link', { name: /^overview$/i }).click();
     await expect(page).toHaveURL(/\/dashboard\/startup(\?[^#]*)?$/);
@@ -60,5 +72,16 @@ test.describe('startup dashboard tabs (e2e auth)', () => {
     await page.waitForURL(/[?&]tab=delivery/);
     await expect(page.getByTestId('startup-tab-panel-delivery')).toBeVisible();
     await expect(page.getByText(/report sent to slack/i)).toBeVisible();
+  });
+
+  test('audits table shows execution badge and orchestration summary', async ({ page }) => {
+    await gotoStartupDashboardWithE2EAuth(page);
+    await page.goto('/dashboard/startup?tab=audits', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByTestId('startup-audits-tab')).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^execution$/i })).toBeVisible();
+    await expect(page.locator('tbody').getByText(/^plan ready$/i)).toBeVisible();
+    await expect(page.locator('tbody').getByText(/planner created repo-aware execution tasks/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /reject for now/i })).toBeVisible();
   });
 });

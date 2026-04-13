@@ -5,6 +5,7 @@ const E2E_STARTUP_MEMBER_ID = '00000000-0000-4000-8000-000000000102';
 const E2E_STARTUP_SCAN_ID = '00000000-0000-4000-8000-000000000103';
 const E2E_STARTUP_REPORT_ID = '00000000-0000-4000-8000-000000000104';
 const E2E_STARTUP_RECOMMENDATION_ID = '00000000-0000-4000-8000-000000000105';
+const E2E_STARTUP_EXECUTION_ID = '00000000-0000-4000-8000-000000000106';
 // Agency fixture identifiers
 const E2E_AGENCY_USER_ID = '00000000-0000-4000-8000-000000000200';
 const E2E_AGENCY_ACCOUNT_ID = '00000000-0000-4000-8000-000000000201';
@@ -375,6 +376,27 @@ function createE2EQueryBuilder(table: string) {
         status_changed_at: now,
         status_reason: null,
         created_at: now,
+      },
+    ],
+    startup_audit_executions: [
+      {
+        id: E2E_STARTUP_EXECUTION_ID,
+        startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
+        scan_id: E2E_STARTUP_SCAN_ID,
+        report_id: E2E_STARTUP_REPORT_ID,
+        source_kind: 'markdown_audit',
+        source_ref: 'audit://e2e-startup',
+        status: 'plan_ready',
+        summary: 'Planner created repo-aware execution tasks.',
+        error_message: null,
+        metadata: {
+          approval_status: 'ready_for_review',
+          approval_requested_at: now,
+          approval_requested_by_user_id: E2E_ADMIN_USER_ID,
+        },
+        completed_at: null,
+        created_at: now,
+        updated_at: now,
       },
     ],
     startup_github_installations: [],

@@ -31,6 +31,48 @@ function implCountDeltaClass(delta: number | null): string {
 
 type Props = { readonly rows: readonly StartupAuditRowModel[] };
 
+function executionBadgeClass(status: StartupAuditRowModel['executionStatus']): string {
+  switch (status) {
+    case 'completed':
+      return 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
+    case 'failed':
+      return 'bg-rose-500/15 text-rose-700 dark:text-rose-300';
+    case 'executing':
+    case 'planning':
+    case 'plan_ready':
+    case 'waiting_manual':
+    case 'received':
+      return 'bg-sky-500/15 text-sky-700 dark:text-sky-300';
+    case 'cancelled':
+      return 'bg-surface-container-high text-on-surface-variant';
+    default:
+      return 'bg-surface-container-high text-on-surface-variant';
+  }
+}
+
+function executionLabel(status: StartupAuditRowModel['executionStatus']): string {
+  switch (status) {
+    case 'received':
+      return 'Received';
+    case 'planning':
+      return 'Planning';
+    case 'plan_ready':
+      return 'Plan ready';
+    case 'executing':
+      return 'Executing';
+    case 'waiting_manual':
+      return 'Waiting manual';
+    case 'completed':
+      return 'Completed';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+      return 'Cancelled';
+    default:
+      return 'Not started';
+  }
+}
+
 export function StartupAuditsTableClient({ rows }: Props) {
   const [picked, setPicked] = useState<string[]>([]);
   const [showDelta, setShowDelta] = useState(false);
@@ -177,7 +219,7 @@ export function StartupAuditsTableClient({ rows }: Props) {
       ) : null}
 
       <div className="overflow-x-auto rounded-xl border border-outline-variant">
-        <table className="w-full min-w-[760px] border-collapse text-left text-sm">
+        <table className="w-full min-w-[920px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-outline-variant bg-surface-container-low">
               <th className="w-10 px-2 py-2 text-center text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
@@ -188,6 +230,7 @@ export function StartupAuditsTableClient({ rows }: Props) {
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Score</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Grade</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Report</th>
+              <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Execution</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Source</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Impl.</th>
               <th className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Open</th>
@@ -213,6 +256,20 @@ export function StartupAuditsTableClient({ rows }: Props) {
                 <td className="px-3 py-2 text-on-surface">{scan.letterGrade ?? '—'}</td>
                 <td className="max-w-[160px] truncate px-3 py-2 text-xs text-on-surface-variant" title={scan.reportStatus}>
                   {scan.reportStatus}
+                </td>
+                <td className="px-3 py-2 text-xs text-on-surface-variant">
+                  <div className="space-y-1">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${executionBadgeClass(scan.executionStatus)}`}
+                    >
+                      {executionLabel(scan.executionStatus)}
+                    </span>
+                    {scan.executionSummary ? (
+                      <p className="max-w-[180px] truncate" title={scan.executionSummary}>
+                        {scan.executionSummary}
+                      </p>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="px-3 py-2 text-xs text-on-surface-variant">{scan.runSource}</td>
                 <td className="px-3 py-2 text-xs text-on-surface-variant">

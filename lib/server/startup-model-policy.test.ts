@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveStartupServiceModelPolicy } from './startup-model-policy';
+import {
+  resolveStartupAuditOrchestrationModelPolicies,
+  resolveStartupServiceModelPolicy,
+} from './startup-model-policy';
 
 type PolicyRow = {
   service_id: string;
@@ -195,5 +198,142 @@ describe('startup model policy resolver', () => {
     expect(policy.fallbackReason).toBe('unsupported_provider');
     expect(policy.effectiveProvider).toBe('gemini');
     expect(policy.effectiveModel).toBe('gemini-2.0-flash-lite');
+  });
+
+  it('resolves distinct orchestration role policies from service-level keys', async () => {
+    const serviceIdsByKey: Record<string, string> = {
+      startup_audit_orchestrator: 'svc-planner',
+      startup_audit_repo_review: 'svc-repo',
+      startup_audit_db_review: 'svc-db',
+      startup_audit_risk_review: 'svc-risk',
+      startup_audit_execution: 'svc-exec',
+      startup_audit_pr_summary: 'svc-summary',
+    };
+
+    const supabase = {
+      from(table: string) {
+        const filters: Record<string, unknown> = {};
+        return {
+          select() {
+            return this;
+          },
+          eq(field: string, value: unknown) {
+            filters[field] = value;
+            return this;
+          },
+          maybeSingle() {
+            if (table === 'startup_workspaces') {
+              return Promise.resolve({
+                data: { default_bundle_id: 'bundle-dev', billing_mode: 'paid' },
+                error: null,
+              });
+            }
+            if (table === 'service_bundles') {
+              if (filters['id'] === 'bundle-dev' || filters['bundle_key'] === 'startup_dev') {
+                return Promise.resolve({
+                  data: { id: 'bundle-dev', bundle_key: 'startup_dev' },
+                  error: null,
+                });
+              }
+              return Promise.resolve({ data: null, error: null });
+            }
+            if (table === 'service_catalog') {
+              const serviceKey = String(filters['service_key'] ?? '');
+              return Promise.resolve({
+                data: serviceIdsByKey[serviceKey] ? { id: serviceIdsByKey[serviceKey] } : null,
+                error: null,
+              });
+            }
+            if (table === 'service_model_policies') {
+              const rowByServiceId: Record<string, PolicyRow> = {
+                'svc-planner': {
+                  service_id: 'svc-planner',
+                  scope_type: 'service_default',
+                  provider_name: 'anthropic',
+                  model_id: 'claude-opus',
+                  max_cost_usd: 0.2,
+                  fallback_provider_name: 'openai',
+                  fallback_model_id: 'gpt-5.4',
+                  is_active: true,
+                },
+                'svc-repo': {
+                  service_id: 'svc-repo',
+                  scope_type: 'service_default',
+                  provider_name: 'openai',
+                  model_id: 'gpt-5.4',
+                  max_cost_usd: 0.08,
+                  fallback_provider_name: 'openai',
+                  fallback_model_id: 'gpt-5.4-mini',
+                  is_active: true,
+                },
+                'svc-db': {
+                  service_id: 'svc-db',
+                  scope_type: 'service_default',
+                  provider_name: 'openai',
+                  model_id: 'gpt-5.4-mini',
+                  max_cost_usd: 0.04,
+                  fallback_provider_name: 'gemini',
+                  fallback_model_id: 'gemini-2.0-flash-lite',
+                  is_active: true,
+                },
+                'svc-risk': {
+                  service_id: 'svc-risk',
+                  scope_type: 'service_default',
+                  provider_name: 'anthropic',
+                  model_id: 'claude-sonnet',
+                  max_cost_usd: 0.05,
+                  fallback_provider_name: 'openai',
+                  fallback_model_id: 'gpt-5.4-mini',
+                  is_active: true,
+                },
+                'svc-exec': {
+                  service_id: 'svc-exec',
+                  scope_type: 'service_default',
+                  provider_name: 'openai',
+                  model_id: 'gpt-5.3-codex',
+                  max_cost_usd: 0.1,
+                  fallback_provider_name: 'openai',
+                  fallback_model_id: 'gpt-5.4-mini',
+                  is_active: true,
+                },
+                'svc-summary': {
+                  service_id: 'svc-summary',
+                  scope_type: 'service_default',
+                  provider_name: 'openai',
+                  model_id: 'gpt-5.4-mini',
+                  max_cost_usd: 0.02,
+                  fallback_provider_name: 'gemini',
+                  fallback_model_id: 'gemini-2.0-flash-lite',
+                  is_active: true,
+                },
+              };
+
+              return Promise.resolve({
+                data: rowByServiceId[String(filters['service_id'] ?? '')] ?? null,
+                error: null,
+              });
+            }
+            return Promise.resolve({ data: null, error: null });
+          },
+        };
+      },
+    } as any;
+
+    const policies = await resolveStartupAuditOrchestrationModelPolicies({
+      supabase,
+      startupWorkspaceId: 'ws-1',
+      fallbackProvider: 'gemini',
+      fallbackModel: 'gemini-2.0-flash',
+      estimatedCostsUsd: {
+        execution: 0.12,
+      },
+    });
+
+    expect(policies.planner.requestedModel).toBe('claude-opus');
+    expect(policies.repoReview.effectiveModel).toBe('gpt-5.4');
+    expect(policies.dbReview.effectiveModel).toBe('gpt-5.4-mini');
+    expect(policies.execution.fallbackReason).toBe('budget_guardrail');
+    expect(policies.execution.effectiveModel).toBe('gpt-5.4-mini');
+    expect(policies.prSummary.effectiveModel).toBe('gpt-5.4-mini');
   });
 });

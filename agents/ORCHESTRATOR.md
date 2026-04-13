@@ -123,6 +123,13 @@ If Phase 4 is blocked by an **external operator dependency**, the team may also 
 - documented in `docs/15-startup-dashboard-entitlements-plan.md`
 - explicitly separated from launch-closure claims
 
+If Phase 4 is blocked by an **external operator dependency**, the team may also continue the **startup audit orchestration stream** (`SAO-001` ... in `PROJECT_STATE.md`) so long as it remains:
+- an extension of the existing startup workspace / recommendation / implementation-plan / PR workflow model
+- centrally gated by startup rollout flags, service entitlements, billing guards, and model-policy resolution
+- documented in `PLAYBOOK/startup-audit-orchestration-v1.md`
+- explicit that planning may proceed before approval, but implementation code must not be written before approval
+- explicit that Slack is additive (trigger/notification) and not the system of record
+
 ### Phase 4 first — defer remaining Deep Audit until Launch gate (Orchestrator)
 
 **Effective:** 2026-03-25  

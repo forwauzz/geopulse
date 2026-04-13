@@ -240,6 +240,59 @@ Current truth:
   - startup rollout flags are centralized (`startup_dashboard`, `github_agent`, `auto_pr`) with suggest-only (`auto_pr=false`) safe default
   - startup admin control now supports per-workspace rollout toggle controls
   - startup dashboard/actions now enforce rollout flags consistently, including rollout-disabled and suggest-only outcomes
+- `SAO-002` and `SAO-003` are now in repo:
+  - startup audit execution foundation schema via `supabase/migrations/039_startup_audit_execution_foundation.sql`
+  - durable execution records + append-only execution status events with startup-member RLS
+  - typed execution contracts + transition validation in `lib/server/startup-audit-execution.ts`
+  - focused helper coverage in `lib/server/startup-audit-execution.test.ts`
+  - current truth: GEO-Pulse now has a first-class parent record for audit-to-action orchestration runs
+- `SAO-004` is now in repo:
+  - startup dashboard read model now includes `startup_audit_executions` alongside scans, reports, and recommendations
+  - `/dashboard/startup` audit history now surfaces the latest execution status and summary for each scan
+  - focused dashboard data coverage now asserts execution hydration in `lib/server/startup-dashboard-data.test.ts`
+  - current truth: execution history is visible in the startup dashboard, but planning workflow automation and approval gating are still not wired
+- `SAO-005` is now in repo:
+  - startup implementation-plan tasks now support execution-aware fields for task kind, execution mode, dependencies, acceptance criteria, evidence requirements, artifact refs, agent role, blocker reason, and manual instructions
+  - markdown-plan parsing and latest-plan hydration now preserve those fields in `lib/server/startup-implementation-plan.ts`
+  - startup dashboard tab coverage now includes a focused Playwright assertion that audits history surfaces execution status and summary in the seeded E2E workspace
+  - current truth: GEO-Pulse can now persist richer byte-sized execution tasks, but orchestrator planner-output validation and review-step persistence are still pending
+- `SAO-006` is now in repo:
+  - strict orchestrator planner-output schema is frozen in `lib/server/startup-orchestrator-plan-contract.ts`
+  - planner-output persistence now validates the contract, stores planner artifacts in `startup_implementation_plans.metadata`, and fans validated tasks into `startup_implementation_plan_tasks`
+  - focused helper coverage now asserts both planner-output validation and planner-plan persistence in `lib/server/startup-implementation-plan.test.ts`
+  - current truth: repo-aware planner artifacts can now be validated and persisted deterministically, but review-step execution and approval gating are still pending
+- `SAO-007` is now in repo:
+  - role-level orchestration service keys are seeded via `supabase/migrations/041_startup_audit_orchestration_service_keys.sql`
+  - centralized service-key contract now recognizes planner, repo-review, db-review, risk-review, execution, and PR-summary roles
+  - startup model-policy resolver now supports resolving all orchestration role policies in one call via `resolveStartupAuditOrchestrationModelPolicies(...)`
+  - current truth: admin service/model controls can now steer different models per orchestration role, but the review/execution workflow steps that consume those policies are still pending
+- `SAO-008` is now in repo:
+  - strict repo-review artifact schema is frozen in `lib/server/startup-orchestrator-repo-review-contract.ts`
+  - startup audit executions can now persist validated repo-review artifacts into execution metadata and append same-status execution events for traceability
+  - focused helper coverage now asserts both repo-review validation and artifact persistence in `lib/server/startup-audit-execution.test.ts`
+  - current truth: repo-review findings can now be stored durably on the execution spine, but DB-review/risk-review artifacts and the planning workflow runner are still pending
+- `SAO-009` is now in repo:
+  - strict DB-review and risk-review artifact schemas are frozen in `lib/server/startup-orchestrator-db-review-contract.ts` and `lib/server/startup-orchestrator-risk-review-contract.ts`
+  - startup audit executions can now persist validated DB-review and risk-review artifacts into execution metadata and append same-status execution events for traceability
+  - focused helper coverage now asserts validation and persistence for both review types in `lib/server/startup-audit-execution.test.ts`
+  - current truth: repo/DB/risk review findings can now all be stored durably on the execution spine, but the planning workflow runner that chains those steps into `plan_ready` is still pending
+- `SAO-010` is now in repo:
+  - startup audit planning workflow now chains repo review, DB review, risk review, and planner output into one deterministic `plan_ready` execution helper in `lib/server/startup-audit-planning-workflow.ts`
+  - the workflow stamps role-level model-policy metadata into execution history and persists the generated implementation plan in one place
+  - focused helper coverage now asserts the full review-to-plan path in `lib/server/startup-audit-planning-workflow.test.ts`
+  - current truth: one execution can now move through review artifacts into a persisted plan, but approval gating was still the next missing slice
+- `SAO-011` is now in repo:
+  - startup audit executions now carry typed approval state derived from execution metadata, with explicit helper support for `ready_for_review`, `approved_for_execution`, and `rejected`
+  - the planning workflow now marks completed plans `ready_for_review`
+  - `/dashboard/startup?tab=audits` now surfaces founder/admin approval controls for the latest `plan_ready` execution
+  - focused browser coverage now asserts the approval UI in `tests/e2e/startup-dashboard-tabs.spec.ts`
+  - current truth: startup audit planning now has a first in-app approval gate, but execution-worker automation and manual wait/resume behavior were still pending
+- `SAO-012` is now in repo:
+  - startup PR workflow records now support nullable recommendation linkage plus explicit `execution_id` and bounded `plan_task_ids` through `supabase/migrations/042_startup_agent_pr_execution_context.sql`
+  - PR workflow helpers now support execution-aware queueing via `queueStartupExecutionPrRun(...)` while keeping recommendation-driven queueing backward-compatible
+  - PR status sync now updates linked execution state (`executing`, `completed`, `failed`) in addition to recommendation lifecycle when a recommendation is attached
+  - focused helper coverage now asserts both legacy recommendation queueing and execution-aware PR linkage in `lib/server/startup-agent-pr-workflow.test.ts`
+  - current truth: PR runs can now be tied back to startup audit executions and task groups, but the execution-worker entrypoint and richer orchestration UI are still pending
 - next startup stream step is pilot rollout execution using SD-015 controls
 - startup Slack MVP planning stream is now opened:
   - contract and byte-sized execution plan in `docs/17-startup-slack-integration-mvp-plan.md`

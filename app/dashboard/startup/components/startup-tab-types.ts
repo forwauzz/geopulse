@@ -151,6 +151,11 @@ export type StartupAuditRowModel = {
   readonly openCount: number;
   readonly recTitles: readonly string[];
   readonly implementedTitles: readonly string[];
+  readonly executionId: string | null;
+  readonly executionStatus: StartupDashboardData['executions'][number]['status'] | null;
+  readonly executionSummary: string | null;
+  readonly executionUpdatedAt: string | null;
+  readonly executionSourceKind: StartupDashboardData['executions'][number]['sourceKind'] | null;
 };
 
 export type StartupDeliveryTabProps = StartupDashboardTabContext;

@@ -436,6 +436,14 @@ export function StartupOverviewTab({
                         'No PR URL yet'
                       )}
                     </div>
+                    {run.executionId ? (
+                      <p className="mt-1 text-on-surface-variant">
+                        Linked execution: {run.executionId}
+                        {run.planTaskIds.length > 0 ? ` • ${run.planTaskIds.length} task${run.planTaskIds.length === 1 ? '' : 's'}` : ''}
+                      </p>
+                    ) : run.recommendationId ? (
+                      <p className="mt-1 text-on-surface-variant">Linked recommendation: {run.recommendationId}</p>
+                    ) : null}
                     {workspaceId &&
                     (run.status === 'running' || run.status === 'queued' || run.status === 'pr_opened') ? (
                       <div className="mt-2 flex flex-wrap gap-2">

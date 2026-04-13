@@ -27,6 +27,17 @@ export type StartupResolvedModelPolicy = {
   readonly fallbackReason: 'unsupported_provider' | 'budget_guardrail' | null;
 };
 
+export const STARTUP_AUDIT_ORCHESTRATION_SERVICE_KEYS = {
+  planner: 'startup_audit_orchestrator',
+  repoReview: 'startup_audit_repo_review',
+  dbReview: 'startup_audit_db_review',
+  riskReview: 'startup_audit_risk_review',
+  execution: 'startup_audit_execution',
+  prSummary: 'startup_audit_pr_summary',
+} as const satisfies Record<string, ServiceKey>;
+
+export type StartupAuditOrchestrationRole = keyof typeof STARTUP_AUDIT_ORCHESTRATION_SERVICE_KEYS;
+
 async function resolveStartupBundleKey(args: {
   readonly supabase: SupabaseLike;
   readonly startupWorkspaceId: string;
@@ -218,4 +229,38 @@ export async function resolveStartupServiceModelPolicy(args: {
   );
 
   return resolved;
+}
+
+export async function resolveStartupAuditOrchestrationModelPolicies(args: {
+  readonly supabase: SupabaseLike;
+  readonly startupWorkspaceId: string;
+  readonly fallbackProvider: string;
+  readonly fallbackModel: string;
+  readonly supportedProviders?: readonly string[];
+  readonly estimatedCostsUsd?: Partial<Record<StartupAuditOrchestrationRole, number | null>>;
+}): Promise<Record<StartupAuditOrchestrationRole, StartupResolvedModelPolicy>> {
+  const roles = Object.entries(STARTUP_AUDIT_ORCHESTRATION_SERVICE_KEYS) as Array<
+    [StartupAuditOrchestrationRole, ServiceKey]
+  >;
+
+  const resolvedEntries = await Promise.all(
+    roles.map(async ([role, serviceKey]) => {
+      const policy = await resolveStartupServiceModelPolicy({
+        supabase: args.supabase,
+        startupWorkspaceId: args.startupWorkspaceId,
+        serviceKey,
+        fallbackProvider: args.fallbackProvider,
+        fallbackModel: args.fallbackModel,
+        supportedProviders: args.supportedProviders,
+        estimatedCostUsd: args.estimatedCostsUsd?.[role] ?? null,
+      });
+
+      return [role, policy] as const;
+    })
+  );
+
+  return Object.fromEntries(resolvedEntries) as Record<
+    StartupAuditOrchestrationRole,
+    StartupResolvedModelPolicy
+  >;
 }

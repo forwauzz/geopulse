@@ -1,4 +1,9 @@
 import { canTransitionRecommendationStatus, transitionStartupRecommendationStatus } from './startup-recommendation-lifecycle';
+import {
+  getStartupAuditExecution,
+  isStartupAuditExecutionApprovedForExecution,
+  updateStartupAuditExecutionStatus,
+} from './startup-audit-execution';
 import { structuredLog } from './structured-log';
 
 type SupabaseLike = {
@@ -17,7 +22,9 @@ export type StartupAgentPrRunStatus =
 export type StartupAgentPrRun = {
   readonly id: string;
   readonly startupWorkspaceId: string;
-  readonly recommendationId: string;
+  readonly recommendationId: string | null;
+  readonly executionId: string | null;
+  readonly planTaskIds: string[];
   readonly repositoryOwner: string;
   readonly repositoryName: string;
   readonly branchName: string | null;
@@ -58,7 +65,9 @@ function canTransitionRunStatus(from: StartupAgentPrRunStatus, to: StartupAgentP
 function toRun(row: {
   id: string;
   startup_workspace_id: string;
-  recommendation_id: string;
+  recommendation_id: string | null;
+  execution_id: string | null;
+  plan_task_ids: string[] | null;
   repository_owner: string;
   repository_name: string;
   branch_name: string | null;
@@ -73,6 +82,8 @@ function toRun(row: {
     id: row.id,
     startupWorkspaceId: row.startup_workspace_id,
     recommendationId: row.recommendation_id,
+    executionId: row.execution_id,
+    planTaskIds: row.plan_task_ids ?? [],
     repositoryOwner: row.repository_owner,
     repositoryName: row.repository_name,
     branchName: row.branch_name,
@@ -93,7 +104,7 @@ export async function listStartupAgentPrRuns(args: {
   const { data, error } = await args.supabase
     .from('startup_agent_pr_runs')
     .select(
-      'id,startup_workspace_id,recommendation_id,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
+      'id,startup_workspace_id,recommendation_id,execution_id,plan_task_ids,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
     )
     .eq('startup_workspace_id', args.startupWorkspaceId)
     .order('created_at', { ascending: false })
@@ -175,6 +186,8 @@ export async function queueStartupRecommendationPrRun(args: {
     .insert({
       startup_workspace_id: args.startupWorkspaceId,
       recommendation_id: args.recommendationId,
+      execution_id: null,
+      plan_task_ids: [],
       github_installation_row_id: installation.id,
       github_repository_row_id: repoRow.id,
       repository_owner: owner,
@@ -187,7 +200,7 @@ export async function queueStartupRecommendationPrRun(args: {
       },
     })
     .select(
-      'id,startup_workspace_id,recommendation_id,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
+      'id,startup_workspace_id,recommendation_id,execution_id,plan_task_ids,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
     )
     .limit(1);
   if (insertError) throw insertError;
@@ -198,6 +211,8 @@ export async function queueStartupRecommendationPrRun(args: {
     startup_workspace_id: args.startupWorkspaceId,
     run_id: runRow.id,
     recommendation_id: args.recommendationId,
+    execution_id: null,
+    plan_task_ids: [],
     from_status: null,
     to_status: 'queued',
     changed_by_user_id: args.queuedByUserId,
@@ -211,6 +226,112 @@ export async function queueStartupRecommendationPrRun(args: {
       startup_workspace_id: args.startupWorkspaceId,
       run_id: runRow.id,
       recommendation_id: args.recommendationId,
+      queued_by_user_id: args.queuedByUserId,
+      repository_owner: owner,
+      repository_name: name,
+    },
+    'info'
+  );
+
+  return toRun(runRow);
+}
+
+export async function queueStartupExecutionPrRun(args: {
+  readonly supabase: SupabaseLike;
+  readonly startupWorkspaceId: string;
+  readonly executionId: string;
+  readonly repoFullName: string;
+  readonly queuedByUserId: string;
+  readonly recommendationId?: string | null;
+  readonly planTaskIds?: readonly string[];
+  readonly executionModelPolicy?: Record<string, unknown> | null;
+}): Promise<StartupAgentPrRun> {
+  const { owner, name } = parseRepoFullName(args.repoFullName);
+
+  const { data: installation, error: installationError } = await args.supabase
+    .from('startup_github_installations')
+    .select('id,status')
+    .eq('startup_workspace_id', args.startupWorkspaceId)
+    .eq('provider', 'github')
+    .maybeSingle();
+  if (installationError) throw installationError;
+  if (!installation?.id || installation.status !== 'connected') {
+    throw new Error('GitHub installation is not connected for this workspace.');
+  }
+
+  const { data: repoRow, error: repoError } = await args.supabase
+    .from('startup_github_installation_repositories')
+    .select('id,is_enabled')
+    .eq('installation_row_id', installation.id)
+    .eq('repo_owner', owner)
+    .eq('repo_name', name)
+    .maybeSingle();
+  if (repoError) throw repoError;
+  if (!repoRow?.id || !repoRow.is_enabled) {
+    throw new Error('Repository is not allowlisted for this startup workspace.');
+  }
+
+  const execution = await getStartupAuditExecution({
+    supabase: args.supabase,
+    executionId: args.executionId,
+    expectedWorkspaceId: args.startupWorkspaceId,
+  });
+  if (execution.status !== 'plan_ready') {
+    throw new Error('Execution must be plan_ready before a PR run can be queued.');
+  }
+  if (!isStartupAuditExecutionApprovedForExecution(execution)) {
+    throw new Error('Execution must be approved before a PR run can be queued.');
+  }
+
+  const boundedTaskIds = Array.from(new Set((args.planTaskIds ?? []).map((value) => value.trim()).filter(Boolean)));
+
+  const { data: rows, error: insertError } = await args.supabase
+    .from('startup_agent_pr_runs')
+    .insert({
+      startup_workspace_id: args.startupWorkspaceId,
+      recommendation_id: args.recommendationId ?? null,
+      execution_id: args.executionId,
+      plan_task_ids: boundedTaskIds,
+      github_installation_row_id: installation.id,
+      github_repository_row_id: repoRow.id,
+      repository_owner: owner,
+      repository_name: name,
+      status: 'queued',
+      queued_by_user_id: args.queuedByUserId,
+      metadata: {
+        source: 'execution_queue',
+        model_policy: args.executionModelPolicy ?? null,
+      },
+    })
+    .select(
+      'id,startup_workspace_id,recommendation_id,execution_id,plan_task_ids,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
+    )
+    .limit(1);
+  if (insertError) throw insertError;
+  const runRow = (rows?.[0] ?? null) as Parameters<typeof toRun>[0] | null;
+  if (!runRow) throw new Error('Could not queue execution PR run.');
+
+  await args.supabase.from('startup_agent_pr_run_events').insert({
+    startup_workspace_id: args.startupWorkspaceId,
+    run_id: runRow.id,
+    recommendation_id: args.recommendationId ?? null,
+    execution_id: args.executionId,
+    plan_task_ids: boundedTaskIds,
+    from_status: null,
+    to_status: 'queued',
+    changed_by_user_id: args.queuedByUserId,
+    note: 'Queued execution task group for PR execution',
+    metadata: {},
+  });
+
+  structuredLog(
+    'startup_pr_run_queued',
+    {
+      startup_workspace_id: args.startupWorkspaceId,
+      run_id: runRow.id,
+      recommendation_id: args.recommendationId ?? null,
+      execution_id: args.executionId,
+      plan_task_count: boundedTaskIds.length,
       queued_by_user_id: args.queuedByUserId,
       repository_owner: owner,
       repository_name: name,
@@ -237,7 +358,7 @@ export async function updateStartupAgentPrRunStatus(args: {
   const { data: runRow, error: runError } = await args.supabase
     .from('startup_agent_pr_runs')
     .select(
-      'id,startup_workspace_id,recommendation_id,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
+      'id,startup_workspace_id,recommendation_id,execution_id,plan_task_ids,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
     )
     .eq('id', args.runId)
     .eq('startup_workspace_id', args.startupWorkspaceId)
@@ -273,7 +394,7 @@ export async function updateStartupAgentPrRunStatus(args: {
     })
     .eq('id', args.runId)
     .select(
-      'id,startup_workspace_id,recommendation_id,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
+      'id,startup_workspace_id,recommendation_id,execution_id,plan_task_ids,repository_owner,repository_name,branch_name,pull_request_number,pull_request_url,status,error_message,created_at,completed_at'
     )
     .limit(1);
   if (updateError) throw updateError;
@@ -284,6 +405,8 @@ export async function updateStartupAgentPrRunStatus(args: {
     startup_workspace_id: args.startupWorkspaceId,
     run_id: args.runId,
     recommendation_id: runRow.recommendation_id,
+    execution_id: runRow.execution_id,
+    plan_task_ids: runRow.plan_task_ids ?? [],
     from_status: fromStatus,
     to_status: args.toStatus,
     changed_by_user_id: args.changedByUserId,
@@ -300,6 +423,8 @@ export async function updateStartupAgentPrRunStatus(args: {
       startup_workspace_id: args.startupWorkspaceId,
       run_id: args.runId,
       recommendation_id: runRow.recommendation_id,
+      execution_id: runRow.execution_id,
+      plan_task_count: Array.isArray(runRow.plan_task_ids) ? runRow.plan_task_ids.length : 0,
       from_status: fromStatus,
       to_status: args.toStatus,
       changed_by_user_id: args.changedByUserId,
@@ -310,7 +435,52 @@ export async function updateStartupAgentPrRunStatus(args: {
     'info'
   );
 
-  if (args.toStatus === 'pr_opened') {
+  if (runRow.execution_id && (args.toStatus === 'running' || args.toStatus === 'pr_opened')) {
+    await updateStartupAuditExecutionStatus({
+      supabase: args.supabase,
+      executionId: runRow.execution_id,
+      expectedWorkspaceId: args.startupWorkspaceId,
+      toStatus: 'executing',
+      changedByUserId: args.changedByUserId,
+      note:
+        args.toStatus === 'running'
+          ? 'PR execution started for startup audit execution'
+          : 'PR opened for startup audit execution',
+      metadata: {
+        pr_run_id: args.runId,
+        pr_status: args.toStatus,
+      },
+    });
+  } else if (runRow.execution_id && args.toStatus === 'merged') {
+    await updateStartupAuditExecutionStatus({
+      supabase: args.supabase,
+      executionId: runRow.execution_id,
+      expectedWorkspaceId: args.startupWorkspaceId,
+      toStatus: 'completed',
+      changedByUserId: args.changedByUserId,
+      note: 'PR merged for startup audit execution',
+      metadata: {
+        pr_run_id: args.runId,
+        pr_status: args.toStatus,
+      },
+    });
+  } else if (runRow.execution_id && args.toStatus === 'failed') {
+    await updateStartupAuditExecutionStatus({
+      supabase: args.supabase,
+      executionId: runRow.execution_id,
+      expectedWorkspaceId: args.startupWorkspaceId,
+      toStatus: 'failed',
+      changedByUserId: args.changedByUserId,
+      note: args.errorMessage ?? 'PR execution failed for startup audit execution',
+      errorMessage: args.errorMessage ?? 'PR execution failed',
+      metadata: {
+        pr_run_id: args.runId,
+        pr_status: args.toStatus,
+      },
+    });
+  }
+
+  if (runRow.recommendation_id && args.toStatus === 'pr_opened') {
     await transitionStartupRecommendationStatus({
       supabase: args.supabase,
       recommendationId: runRow.recommendation_id,
@@ -320,7 +490,7 @@ export async function updateStartupAgentPrRunStatus(args: {
       reason: 'PR opened for recommendation',
       metadata: { run_id: args.runId },
     });
-  } else if (args.toStatus === 'merged') {
+  } else if (runRow.recommendation_id && args.toStatus === 'merged') {
     await transitionStartupRecommendationStatus({
       supabase: args.supabase,
       recommendationId: runRow.recommendation_id,
@@ -330,7 +500,7 @@ export async function updateStartupAgentPrRunStatus(args: {
       reason: 'PR merged for recommendation',
       metadata: { run_id: args.runId },
     });
-  } else if (args.toStatus === 'failed') {
+  } else if (runRow.recommendation_id && args.toStatus === 'failed') {
     await transitionStartupRecommendationStatus({
       supabase: args.supabase,
       recommendationId: runRow.recommendation_id,

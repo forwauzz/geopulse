@@ -9,6 +9,7 @@ function createDashboardData(overrides: Partial<StartupDashboardData> = {}): Sta
     scans: [],
     reports: [],
     recommendations: [],
+    executions: [],
     ...overrides,
   };
 }

@@ -4,7 +4,377 @@
 > A task is not done until it has an entry here AND Orchestrator has marked it ACCEPTED.
 
 ---
+### 2026-04-13 - SAO-012 - Execution-aware PR linkage
 
+**Agent:** Backend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Schema extension + PR workflow helper updates + focused regression coverage
+
+Extended the startup PR workflow so a run can be linked to a startup audit execution and a bounded plan-task group, instead of only hanging off recommendation rows.
+
+**Changes:**
+
+1. **`supabase/migrations/042_startup_agent_pr_execution_context.sql`**
+   - Made `recommendation_id` nullable on PR runs/events for backward-compatible mixed linkage.
+   - Added `execution_id` and `plan_task_ids` to both `startup_agent_pr_runs` and `startup_agent_pr_run_events`.
+
+2. **`lib/server/startup-agent-pr-workflow.ts`**
+   - Extended `StartupAgentPrRun` with `executionId` and `planTaskIds`.
+   - Added `queueStartupExecutionPrRun(...)`.
+   - Kept `queueStartupRecommendationPrRun(...)` compatible.
+   - PR status transitions now sync linked execution state (`executing`, `completed`, `failed`) while still syncing recommendation lifecycle when present.
+
+3. **`lib/server/startup-audit-execution.ts`**
+   - Added `getStartupAuditExecution(...)` so execution-aware PR queueing can validate approval and workspace ownership through the typed execution contract.
+
+4. **`app/dashboard/startup/components/startup-overview-tab.tsx`**
+   - PR activity now shows whether a run is linked to an execution or to a recommendation, plus bounded task count when available.
+
+5. **Focused tests**
+   - `lib/server/startup-agent-pr-workflow.test.ts`
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-agent-pr-workflow.test.ts`
+- `npx.cmd playwright test tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-011 - Approval-gated execution state and founder/admin controls
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Execution helper extension + startup audits UI + focused backend/browser tests
+
+Added the first approval gate to the startup audit orchestration flow so planning can finish automatically, but execution stays blocked until a founder or admin approves the `plan_ready` run.
+
+**Changes:**
+
+1. **`lib/server/startup-audit-execution.ts`**
+   - Added typed approval state to `StartupAuditExecutionRecord`.
+   - Added approval transition validation and `updateStartupAuditExecutionApproval(...)`.
+   - Added `isStartupAuditExecutionApprovedForExecution(...)` for future execution-worker enforcement.
+
+2. **`lib/server/startup-audit-planning-workflow.ts`**
+   - The planning workflow now marks completed plans `ready_for_review` immediately after the execution reaches `plan_ready`.
+
+3. **`lib/server/startup-dashboard-data.ts`**
+   - Startup dashboard execution read model now hydrates approval status and approval timestamps from execution metadata.
+
+4. **`app/dashboard/startup/actions.ts`**
+   - Added founder/admin server actions to approve or reject startup audit executions from the dashboard.
+
+5. **`app/dashboard/startup/components/startup-audits-tab.tsx`**
+   - Added an execution-approval section to the audits tab.
+   - Founder/admin users now see `Approve execution` and `Reject for now` controls for the latest `plan_ready` execution.
+
+6. **Focused tests**
+   - `lib/server/startup-audit-execution.test.ts`
+   - `lib/server/startup-dashboard-data.test.ts`
+   - `lib/server/startup-audit-planning-workflow.test.ts`
+   - `tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-audit-execution.test.ts lib/server/startup-dashboard-data.test.ts lib/server/startup-audit-planning-workflow.test.ts`
+- `npx.cmd playwright test tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-009 - DB-review and risk-review contracts on the execution spine
+
+**Agent:** Backend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Typed contracts + execution helpers + focused validation tests
+
+Extended the startup audit execution spine so DB-review and risk-review artifacts are validated, stored, and traceable in the same way as repo review.
+
+**Changes:**
+
+1. **`lib/server/startup-orchestrator-db-review-contract.ts`**
+   - Added the canonical `startup_audit_db_review_v1` contract.
+   - Defined strict DB-review validation for migration need, backfill need, affected tables, schema changes, manual actions, and DB risks.
+
+2. **`lib/server/startup-orchestrator-risk-review-contract.ts`**
+   - Added the canonical `startup_audit_risk_review_v1` contract.
+   - Defined strict risk-review validation for release risk, regression areas, external dependencies, manual checks, rollout notes, and blockers.
+
+3. **`lib/server/startup-audit-execution.ts`**
+   - Added `dbReviewArtifact` and `riskReviewArtifact` hydration on `StartupAuditExecutionRecord`.
+   - Added `persistStartupAuditExecutionDbReview(...)`.
+   - Added `persistStartupAuditExecutionRiskReview(...)`.
+   - Both artifacts are validated before persistence, stored in `startup_audit_executions.metadata`, and logged via append-only execution events plus structured logs.
+
+4. **`lib/server/startup-audit-execution.test.ts`**
+   - Added focused coverage for DB-review validation and persistence.
+   - Added focused coverage for risk-review validation and persistence.
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-audit-execution.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-008 - Repo-review contract and execution artifact persistence
+
+**Agent:** Backend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Typed contract + execution helper + focused validation tests
+
+Added the first specialist review artifact contract for startup audit orchestration and anchored it to the existing audit-execution metadata/event history.
+
+**Changes:**
+
+1. **`lib/server/startup-orchestrator-repo-review-contract.ts`**
+   - Added the canonical `startup_audit_repo_review_v1` contract.
+   - Defined strict repo-review validation for:
+     - summary
+     - touched areas
+     - likely files
+     - existing systems
+     - implementation surface
+     - recommended lanes
+     - risks
+
+2. **`lib/server/startup-audit-execution.ts`**
+   - Added `repoReviewArtifact` hydration on `StartupAuditExecutionRecord`.
+   - Added `persistStartupAuditExecutionRepoReview(...)`.
+   - Repo-review artifacts are now validated before persistence, stored in `startup_audit_executions.metadata`, and logged via append-only execution events plus structured logs.
+
+3. **`lib/server/startup-audit-execution.test.ts`**
+   - Added focused coverage for repo-review validation and artifact persistence onto the execution spine.
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-audit-execution.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-007 - Role-level orchestration service keys and model routing
+
+**Agent:** Backend + Admin
+**Claimed complete:** 2026-04-13
+**Evidence type:** Service catalog seed + model-policy helper + focused policy tests
+
+Added startup audit orchestration service keys so planner/reviewer/executor roles can be routed to different models through the existing admin service/model control plane.
+
+**Changes:**
+
+1. **`supabase/migrations/041_startup_audit_orchestration_service_keys.sql`**
+   - Seeded new orchestration service keys:
+     - `startup_audit_orchestrator`
+     - `startup_audit_repo_review`
+     - `startup_audit_db_review`
+     - `startup_audit_risk_review`
+     - `startup_audit_execution`
+     - `startup_audit_pr_summary`
+   - Added default bundle mappings for paid startup/agency bundles.
+
+2. **`lib/server/service-entitlements-contract.ts`**
+   - Extended the canonical `ServiceKey` union with the orchestration role keys.
+
+3. **`lib/server/startup-model-policy.ts`**
+   - Added `STARTUP_AUDIT_ORCHESTRATION_SERVICE_KEYS`.
+   - Added `resolveStartupAuditOrchestrationModelPolicies(...)` to resolve planner/reviewer/executor/pr-summary policies by role through the existing startup model-policy precedence chain.
+
+4. **`lib/server/startup-model-policy.test.ts` and `lib/server/service-entitlements-contract.test.ts`**
+   - Added focused coverage for the new service keys and distinct role-policy resolution behavior.
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-model-policy.test.ts lib/server/service-entitlements-contract.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-006 - Orchestrator planner output contract freeze
+
+**Agent:** Architect + Backend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Typed contract + persistence helper + focused validation tests
+
+Froze the orchestrator planner output as a strict typed server contract and anchored its persistence shape to the existing startup implementation-plan tables.
+
+**Changes:**
+
+1. **`lib/server/startup-orchestrator-plan-contract.ts`**
+   - Added the canonical `startup_audit_planner_v1` contract.
+   - Defined strict planner-output validation for:
+     - summary
+     - touched areas
+     - risks
+     - manual actions
+     - execution-ready tasks
+
+2. **`lib/server/startup-implementation-plan.ts`**
+   - Added planner-artifact support on `StartupImplementationPlanRecord`.
+   - Added `createStartupImplementationPlanFromPlannerOutput(...)`.
+   - Planner output is now validated before persistence, stored in `startup_implementation_plans.metadata.planner_artifact`, and expanded into `startup_implementation_plan_tasks`.
+   - Added a dedicated structured log event for orchestrator plan creation.
+
+3. **`lib/server/startup-implementation-plan.test.ts`**
+   - Added validation coverage for accepted vs invalid planner outputs.
+   - Added persistence coverage for plan creation from orchestrator output.
+   - Added hydration coverage for planner artifacts stored in plan metadata.
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-implementation-plan.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-005 - Execution-aware implementation task model
+
+**Agent:** Backend + Database
+**Claimed complete:** 2026-04-13
+**Evidence type:** Schema + helper extension + focused unit and Playwright verification
+
+Extended the startup implementation-plan task model so orchestration can store byte-sized tasks with execution semantics instead of using the older lane/title/detail-only contract.
+
+**Changes:**
+
+1. **`supabase/migrations/040_startup_implementation_task_execution_fields.sql`**
+   - Added task execution fields to `startup_implementation_plan_tasks`:
+     - `task_kind`
+     - `execution_mode`
+     - `depends_on_task_ids`
+     - `acceptance_criteria`
+     - `evidence_required`
+     - `artifact_refs`
+     - `blocked_reason`
+     - `agent_role`
+     - `manual_instructions`
+   - Added execution-related checks, index, and column comments.
+
+2. **`lib/server/startup-implementation-plan.ts`**
+   - Extended parsed task and hydrated task types to include the new execution-aware fields.
+   - Added parsing support for inline markdown tokens such as execution mode, task kind, agent role, acceptance criteria, evidence requirements, artifacts, and manual instructions.
+   - Updated plan creation and latest-plan hydration to persist and return the richer task model.
+
+3. **`lib/server/startup-implementation-plan.test.ts`**
+   - Added coverage for execution-mode parsing and the new plan-task fields in create/load flows.
+
+4. **`lib/supabase/e2e-auth.ts` and `tests/e2e/startup-dashboard-tabs.spec.ts`**
+   - Seeded a startup audit execution into the E2E workspace fixture.
+   - Added focused Playwright coverage that the startup audits tab surfaces execution status and orchestration summary, while also aligning the older tab-navigation assertions to the current delivery/settings headings.
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-implementation-plan.test.ts`
+- `npx.cmd playwright test tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-004 - Startup dashboard execution visibility
+
+**Agent:** Frontend + Backend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Read-model wiring + UI surface + focused verification
+
+Threaded startup audit execution records into the startup dashboard so audit history can show orchestration state without requiring database inspection.
+
+**Changes:**
+
+1. **`lib/server/startup-dashboard-data.ts`**
+   - Added `StartupWorkspaceAuditExecution` to the dashboard read model.
+   - Hydrated `startup_audit_executions` alongside scans, reports, and recommendations.
+
+2. **`app/dashboard/startup/components/startup-tab-types.ts`**
+   - Extended audit row contracts with execution status, summary, and update timestamp fields.
+
+3. **`app/dashboard/startup/components/startup-audits-tab.tsx`**
+   - Linked the latest execution to each scan/report row.
+   - Added a compact latest-execution summary card in the audit-history surface.
+
+4. **`app/dashboard/startup/components/startup-audits-table-client.tsx`**
+   - Added execution status badges and summary snippets to the audits table.
+
+5. **`lib/server/startup-dashboard-data.test.ts`**
+   - Added focused coverage for execution hydration in the startup dashboard read model.
+
+6. **`lib/server/startup-dashboard-shell.test.ts` and `lib/server/startup-tracking-metrics.test.ts`**
+   - Updated fixture builders to include the new `executions` field required by the dashboard data contract.
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-dashboard-data.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-001 - Startup Audit Orchestration v1 planning freeze
+
+**Agent:** Orchestrator
+**Claimed complete:** 2026-04-13
+**Evidence type:** Documentation + project-memory sync
+
+Opened and froze the startup audit orchestration planning stream so the next implementation slices can extend the existing startup workspace system without creating a parallel architecture.
+
+**Changes:**
+
+1. **`PLAYBOOK/startup-audit-orchestration-v1.md`**
+   - Added the v1 intent, product defaults, architecture rules, multimodel posture, milestones, and byte-sized `SAO-001` ... `SAO-015` task registry.
+   - Locked the posture that Slack is additive, the startup workspace remains the system of record, and planning may proceed before approval while code execution may not.
+
+2. **`agents/memory/PROJECT_STATE.md`**
+   - Added current-truth narrative for the startup audit orchestration planning stream.
+   - Registered `SAO-001` ... `SAO-015` in the task registry with consistent task IDs and sequencing.
+   - Added a state-history entry opening the stream and freezing the execution order.
+
+3. **`agents/ORCHESTRATOR.md`**
+   - Added explicit Orchestrator governance for the `SAO-*` stream.
+   - Locked the rule that the orchestrator/planner may read markdown, workspace history, and repo context, but must not write implementation code.
+   - Locked the rule that execution remains behind approval + rollout gates and Slack stays additive rather than the system of record.
+
+**Current truth frozen by this slice:**
+- Build on the existing startup lineage spine: workspace -> scan/report -> recommendation -> implementation plan -> PR run.
+- Add a parent audit-execution layer rather than a separate orchestration backend.
+- Make the flow multimodel by role via centralized admin-controlled model policy.
+- Keep `auto_pr` suggest-only by default until explicit approval and rollout changes.
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-002 / SAO-003 - Startup audit execution foundation
+
+**Agent:** Backend + Database
+**Claimed complete:** 2026-04-13
+**Evidence type:** Schema + helper code + focused verification
+
+Added the first durable startup audit execution foundation so audit-to-action orchestration can attach to a first-class parent record instead of inferring execution state from recommendations or PR runs alone.
+
+**Changes:**
+
+1. **`supabase/migrations/039_startup_audit_execution_foundation.sql`**
+   - Added `startup_audit_executions` with startup workspace, scan/report lineage, source metadata, summary, error state, completion timestamp, and constrained execution statuses.
+   - Added `startup_audit_execution_events` as append-only status history.
+   - Added startup-member RLS, supporting indexes, and `updated_at` trigger for execution rows.
+
+2. **`lib/server/startup-audit-execution.ts`**
+   - Added typed execution record contract and status union.
+   - Added transition validation helper.
+   - Added list/create/update helpers.
+   - Added initial event creation and structured logs for creation and status transitions.
+
+3. **`lib/server/startup-audit-execution.test.ts`**
+   - Added focused tests for transition rules, execution creation, execution listing, and status updates plus event persistence.
+
+4. **`lib/server/user-deletion.ts`**
+   - Added startup audit execution ownership columns to the hard-delete cleanup spec.
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-audit-execution.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
 ### 2026-04-05 — SLACK-001 — Full Slack + Recurring Audit Feature
 
 **Agent:** Frontend + Backend
@@ -11560,3 +11930,8 @@ Files: `components/new-subscriber-welcome-banner.tsx`, `app/dashboard/page.tsx`
 **Verification:**
 - `npm.cmd type-check` â€” 0 errors
 - `npx.cmd vitest run app/login/actions.test.ts lib/server/billing-onboarding-flow.test.ts lib/server/billing/provision-workspace-for-subscription.test.ts` â€” 3 files passed, 9 tests passed
+
+
+
+
+

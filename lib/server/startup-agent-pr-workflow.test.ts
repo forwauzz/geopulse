@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  queueStartupExecutionPrRun,
   queueStartupRecommendationPrRun,
   updateStartupAgentPrRunStatus,
 } from './startup-agent-pr-workflow';
@@ -11,7 +12,9 @@ function createWorkflowMock(options?: {
   const state = {
     recommendationStatus: options?.recommendationStatus ?? ('approved' as 'approved' | 'in_progress' | 'shipped'),
     runStatus: options?.runStatus ?? ('running' as 'queued' | 'running' | 'pr_opened'),
+    executionStatus: 'plan_ready' as 'plan_ready' | 'executing' | 'completed' | 'failed',
     recommendationUpdates: [] as Array<Record<string, unknown>>,
+    executionUpdates: [] as Array<Record<string, unknown>>,
     runUpdates: [] as Array<Record<string, unknown>>,
     runEvents: [] as Array<Record<string, unknown>>,
     recommendationEvents: [] as Array<Record<string, unknown>>,
@@ -81,6 +84,8 @@ function createWorkflowMock(options?: {
                 id: 'run-1',
                 startup_workspace_id: 'ws-1',
                 recommendation_id: 'rec-1',
+                execution_id: 'exec-1',
+                plan_task_ids: ['task-1'],
                 repository_owner: 'acme',
                 repository_name: 'geo-pulse',
                 branch_name: 'agent/fix-schema',
@@ -90,6 +95,32 @@ function createWorkflowMock(options?: {
                 error_message: null,
                 created_at: '2026-04-04T00:00:00.000Z',
                 completed_at: null,
+              },
+              error: null,
+            });
+          }
+          if (table === 'startup_audit_executions') {
+            return Promise.resolve({
+              data: {
+                id: 'exec-1',
+                startup_workspace_id: 'ws-1',
+                scan_id: 'scan-1',
+                report_id: 'report-1',
+                source_kind: 'markdown_audit',
+                source_ref: 'audit://1',
+                status: state.executionStatus,
+                summary: 'Execution plan ready.',
+                error_message: null,
+                created_by_user_id: 'user-1',
+                completed_at: null,
+                metadata: {
+                  approval_status: 'approved_for_execution',
+                  approval_requested_at: '2026-04-04T00:00:00.000Z',
+                  approval_approved_at: '2026-04-04T00:10:00.000Z',
+                  approval_approved_by_user_id: 'founder-1',
+                },
+                created_at: '2026-04-04T00:00:00.000Z',
+                updated_at: '2026-04-04T00:10:00.000Z',
               },
               error: null,
             });
@@ -108,6 +139,12 @@ function createWorkflowMock(options?: {
             state.runUpdates.push(payload);
             if (typeof payload.status === 'string') {
               state.runStatus = payload.status as typeof state.runStatus;
+            }
+          }
+          if (table === 'startup_audit_executions') {
+            state.executionUpdates.push(payload);
+            if (typeof payload.status === 'string') {
+              state.executionStatus = payload.status as typeof state.executionStatus;
             }
           }
           return this;
@@ -130,12 +167,24 @@ function createWorkflowMock(options?: {
         },
         limit() {
           if (table === 'startup_agent_pr_runs') {
+            const insertedRun = state.insertedRun ?? {};
             return Promise.resolve({
               data: [
                 {
                   id: 'run-1',
                   startup_workspace_id: 'ws-1',
-                  recommendation_id: 'rec-1',
+                  recommendation_id:
+                    Object.prototype.hasOwnProperty.call(insertedRun, 'recommendation_id')
+                      ? ((insertedRun.recommendation_id as string | null | undefined) ?? null)
+                      : 'rec-1',
+                  execution_id:
+                    Object.prototype.hasOwnProperty.call(insertedRun, 'execution_id')
+                      ? ((insertedRun.execution_id as string | null | undefined) ?? null)
+                      : 'exec-1',
+                  plan_task_ids:
+                    Object.prototype.hasOwnProperty.call(insertedRun, 'plan_task_ids')
+                      ? ((insertedRun.plan_task_ids as string[] | undefined) ?? [])
+                      : ['task-1'],
                   repository_owner: 'acme',
                   repository_name: 'geo-pulse',
                   branch_name:
@@ -150,6 +199,34 @@ function createWorkflowMock(options?: {
                   error_message: (updatePayload?.error_message as string | null | undefined) ?? null,
                   created_at: '2026-04-04T00:00:00.000Z',
                   completed_at: (updatePayload?.completed_at as string | null | undefined) ?? null,
+                },
+              ],
+              error: null,
+            });
+          }
+          if (table === 'startup_audit_executions') {
+            return Promise.resolve({
+              data: [
+                {
+                  id: 'exec-1',
+                  startup_workspace_id: 'ws-1',
+                  scan_id: 'scan-1',
+                  report_id: 'report-1',
+                  source_kind: 'markdown_audit',
+                  source_ref: 'audit://1',
+                  status: state.executionStatus,
+                  summary: 'Execution plan ready.',
+                  error_message: updatePayload?.error_message ?? null,
+                  created_by_user_id: 'user-1',
+                  completed_at: updatePayload?.completed_at ?? null,
+                  metadata: updatePayload?.metadata ?? {
+                    approval_status: 'approved_for_execution',
+                    approval_requested_at: '2026-04-04T00:00:00.000Z',
+                    approval_approved_at: '2026-04-04T00:10:00.000Z',
+                    approval_approved_by_user_id: 'founder-1',
+                  },
+                  created_at: '2026-04-04T00:00:00.000Z',
+                  updated_at: '2026-04-04T00:20:00.000Z',
                 },
               ],
               error: null,
@@ -208,8 +285,28 @@ describe('startup agent pr workflow', () => {
     });
 
     expect(run.status).toBe('queued');
+    expect(run.executionId).toBe(null);
+    expect(run.planTaskIds).toEqual([]);
     expect(state.recommendationUpdates.some((payload) => payload.status === 'in_progress')).toBe(true);
     expect(state.runEvents.some((event) => event.to_status === 'queued')).toBe(true);
+  });
+
+  it('queues a PR run from approved execution context without requiring recommendation linkage', async () => {
+    const { supabase, state } = createWorkflowMock({ recommendationStatus: 'approved', runStatus: 'queued' });
+
+    const run = await queueStartupExecutionPrRun({
+      supabase,
+      startupWorkspaceId: 'ws-1',
+      executionId: 'exec-1',
+      repoFullName: 'acme/geo-pulse',
+      queuedByUserId: 'user-1',
+      planTaskIds: ['task-1', 'task-2'],
+    });
+
+    expect(run.executionId).toBe('exec-1');
+    expect(run.planTaskIds).toEqual(['task-1', 'task-2']);
+    expect(state.insertedRun?.['execution_id']).toBe('exec-1');
+    expect(state.runEvents.some((event) => event.execution_id === 'exec-1')).toBe(true);
   });
 
   it('syncs recommendation to shipped when PR is opened', async () => {
@@ -227,12 +324,14 @@ describe('startup agent pr workflow', () => {
     });
 
     expect(run.status).toBe('pr_opened');
+    expect(state.executionUpdates.some((payload) => payload.status === 'executing')).toBe(true);
     expect(state.recommendationUpdates.some((payload) => payload.status === 'shipped')).toBe(true);
     expect(state.runEvents.some((event) => event.to_status === 'pr_opened')).toBe(true);
   });
 
   it('syncs recommendation to validated when PR is merged', async () => {
     const { supabase, state } = createWorkflowMock({ recommendationStatus: 'shipped', runStatus: 'pr_opened' });
+    state.executionStatus = 'executing';
 
     const run = await updateStartupAgentPrRunStatus({
       supabase,
@@ -245,6 +344,7 @@ describe('startup agent pr workflow', () => {
     });
 
     expect(run.status).toBe('merged');
+    expect(state.executionUpdates.some((payload) => payload.status === 'completed')).toBe(true);
     expect(state.recommendationUpdates.some((payload) => payload.status === 'validated')).toBe(true);
   });
 });

@@ -24,6 +24,8 @@ const USER_OWNED_ARTIFACT_DELETE_SPECS: readonly DeleteSpec[] = [
   { table: 'distribution_assets', columns: ['created_by_user_id', 'approved_by_user_id'] },
   { table: 'distribution_jobs', columns: ['created_by_user_id'] },
   { table: 'startup_recommendations', columns: ['created_by_user_id', 'status_updated_by_user_id'] },
+  { table: 'startup_audit_executions', columns: ['created_by_user_id'] },
+  { table: 'startup_audit_execution_events', columns: ['changed_by_user_id'] },
   { table: 'startup_implementation_plans', columns: ['created_by_user_id'] },
   { table: 'startup_github_installations', columns: ['connected_by_user_id'] },
   { table: 'startup_github_install_sessions', columns: ['requested_by_user_id'] },
