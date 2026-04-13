@@ -118,12 +118,6 @@ export function SiteHeaderShell({
               </Link>
               <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
                 <Link
-                  href="/login?mode=signup&next=/pricing"
-                  className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-on-background transition hover:bg-surface-container-low sm:px-5"
-                >
-                  Sign up
-                </Link>
-                <Link
                   href="/pricing"
                   className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-on-background transition hover:bg-surface-container-low sm:px-5"
                 >

@@ -174,7 +174,7 @@ export default async function HomePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppSchema) }}
       />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
-      <section className="relative overflow-hidden px-6 pb-20 pt-12 text-center md:px-10 md:pb-28 md:pt-20">
+      <section className="relative overflow-hidden px-6 pb-12 pt-8 text-center md:px-10 md:pb-18 md:pt-12">
         <div
           className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] opacity-80"
           style={{
@@ -184,11 +184,6 @@ export default async function HomePage({
           aria-hidden
         />
         <div className="relative mx-auto max-w-6xl">
-          <div className="mb-6">
-            <span className="inline-block rounded-full border border-outline-variant/20 bg-surface-container-high/70 px-4 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.22em] text-primary backdrop-blur">
-              Website readiness audit
-            </span>
-          </div>
           <h1 className="mx-auto max-w-5xl font-headline text-4xl font-bold leading-[1.05] tracking-tight text-on-background md:text-6xl lg:text-7xl">
             Make your website discoverable by ChatGPT, Perplexity, Claude, and Gemini.
           </h1>
@@ -235,26 +230,12 @@ export default async function HomePage({
               </div>
             )}
           </div>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-on-surface-variant">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-sm">check_circle</span>
-              <span className="font-label text-xs uppercase tracking-wider">Free audit</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-sm">no_accounts</span>
-              <span className="font-label text-xs uppercase tracking-wider">No account required</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-sm">bolt</span>
-              <span className="font-label text-xs uppercase tracking-wider">Fast results</span>
-            </div>
-          </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
             <Link
-              href="/login?mode=signup&next=/pricing"
+              href="/pricing"
               className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
             >
-              Sign up
+              Start free trial
             </Link>
             <Link
               href="/pricing"
@@ -470,10 +451,10 @@ export default async function HomePage({
         </h2>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
-            href="/login?mode=signup&next=/pricing"
+            href="/pricing"
             className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-medium text-on-primary transition-opacity hover:opacity-90"
           >
-            Sign up
+            Start free trial
           </Link>
           <p className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
             No credit card for the free scan

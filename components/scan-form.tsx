@@ -188,9 +188,17 @@ export function ScanForm({
         </button>
       </div>
       {isHero ? (
-        <p className="text-center font-body text-sm text-on-surface-variant">
-          Enter any public homepage, category page, or product page to see how clearly machines can crawl and reuse it.
-        </p>
+        <div className="flex flex-col gap-1.5 text-center">
+          <p className="font-body text-xs text-on-surface-variant">
+            Use a full URL starting with <span className="font-medium text-on-background">https://</span> — example{' '}
+            <code className="rounded bg-surface-container-low px-1.5 py-0.5 font-mono text-[0.9em] text-on-background">
+              https://example.com
+            </code>
+          </p>
+          <p className="font-body text-sm text-on-surface-variant">
+            Enter any public homepage, category page, or product page to see how clearly machines can crawl and reuse it.
+          </p>
+        </div>
       ) : null}
       {bypassTurnstile ? null : (
         <div className={`flex justify-center ${isHero ? 'min-h-[60px]' : 'min-h-[65px]'}`}>
@@ -214,11 +222,6 @@ export function ScanForm({
           role="alert"
         >
           {error}
-        </p>
-      ) : null}
-      {isHero ? (
-        <p className="text-center font-body text-xs uppercase tracking-[0.2em] text-on-surface-variant/90">
-          If verification fails here, the current Turnstile widget usually does not allow this hostname yet.
         </p>
       ) : null}
     </form>

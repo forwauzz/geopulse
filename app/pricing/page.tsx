@@ -22,21 +22,11 @@ const BUNDLE_META: Record<
   string,
   { name: string; tagline: string; features: string[] }
 > = {
-  startup_lite: {
-    name: 'Startup Lite',
-    tagline: 'Run an AI search readiness scan in under a minute. No account required.',
-    features: [
-      'AI search readiness score',
-      'Top issues to fix',
-      'Priority recommendations',
-      'Save preview by email',
-    ],
-  },
   startup_dev: {
     name: 'Startup Dev',
     tagline: 'Full audit platform for early-stage teams tracking AI search visibility.',
     features: [
-      'Everything in Lite',
+      'Same scan signals as the homepage audit, plus the full platform',
       'Unlimited deep audit reports',
       'Startup workspace dashboard',
       'Audit history & comparison',
@@ -113,7 +103,7 @@ async function loadPricingData(userId: string | null): Promise<{
     adminDb
       .from('service_bundles')
       .select('bundle_key, billing_mode, stripe_price_id, monthly_price_cents, trial_period_days')
-      .in('bundle_key', ['startup_lite', 'startup_dev', 'agency_core', 'agency_pro']),
+      .in('bundle_key', ['startup_dev', 'agency_core', 'agency_pro']),
     userId
       ? adminDb
           .from('user_subscriptions')
@@ -129,7 +119,7 @@ async function loadPricingData(userId: string | null): Promise<{
   };
 }
 
-const DISPLAY_ORDER = ['startup_lite', 'startup_dev', 'agency_core', 'agency_pro'];
+const DISPLAY_ORDER = ['startup_dev', 'agency_core', 'agency_pro'];
 
 export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = await loadBaseUrl();
@@ -171,7 +161,7 @@ export default async function PricingPage() {
     const meta = BUNDLE_META[key];
     if (!meta) return [];
 
-    const billingMode = row?.billing_mode ?? (key === 'startup_lite' ? 'free' : 'monthly');
+    const billingMode = row?.billing_mode ?? 'monthly';
     const priceLabel = formatPriceLabel(row?.monthly_price_cents ?? null, billingMode);
     const trialDays = row?.trial_period_days ?? 0;
 
@@ -235,7 +225,7 @@ export default async function PricingPage() {
         </Suspense>
       </div>
 
-      <section className="mt-12 grid gap-8 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-12 grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
           <Suspense key={card.bundleKey} fallback={null}>
             <PricingBundleCard {...card} />
