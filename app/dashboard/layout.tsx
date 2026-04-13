@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { DashboardSidebar } from '@/components/dashboard-sidebar';
+import { DashboardShell } from '@/components/dashboard-shell';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveDashboardShellIsAdmin } from '@/lib/server/dashboard-shell-admin';
 import { isUserPlatformAdmin } from '@/lib/server/require-admin';
@@ -26,14 +26,9 @@ export default async function DashboardLayout({
 
   return (
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-8 sm:px-6 md:px-10">
-      <div className="grid gap-6 lg:grid-cols-[288px_minmax(0,1fr)] lg:gap-8">
-        <DashboardSidebar
-          userEmail={user.email ?? null}
-          isAdmin={isAdmin}
-          signOutAction={signOut}
-        />
-        <div className="min-w-0">{children}</div>
-      </div>
+      <DashboardShell userEmail={user.email ?? null} isAdmin={isAdmin} signOutAction={signOut}>
+        {children}
+      </DashboardShell>
     </main>
   );
 }

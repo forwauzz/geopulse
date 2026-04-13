@@ -4,8 +4,9 @@ type WhatNextBannerProps = {
   readonly eyebrow: string;
   readonly title: string;
   readonly body: string;
-  readonly ctaLabel: string;
-  readonly ctaHref: string;
+  /** Omit both when the page provides another primary action (e.g. dashboard scan hero). */
+  readonly ctaLabel?: string;
+  readonly ctaHref?: string;
 };
 
 /**
@@ -13,6 +14,7 @@ type WhatNextBannerProps = {
  * Used at the top of every dashboard home persona section.
  */
 export function WhatNextBanner({ eyebrow, title, body, ctaLabel, ctaHref }: WhatNextBannerProps) {
+  const showCta = Boolean(ctaLabel && ctaHref);
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/10 px-5 py-4 sm:flex-row sm:items-center sm:gap-4">
       {/* Icon */}
@@ -32,13 +34,14 @@ export function WhatNextBanner({ eyebrow, title, body, ctaLabel, ctaHref }: What
         <p className="mt-0.5 text-sm text-on-surface-variant">{body}</p>
       </div>
 
-      {/* CTA */}
-      <Link
-        href={ctaHref}
-        className="shrink-0 self-start rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90 sm:self-auto"
-      >
-        {ctaLabel}
-      </Link>
+      {showCta ? (
+        <Link
+          href={ctaHref!}
+          className="shrink-0 self-start rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90 sm:self-auto"
+        >
+          {ctaLabel}
+        </Link>
+      ) : null}
     </div>
   );
 }

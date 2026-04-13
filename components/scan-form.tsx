@@ -14,6 +14,13 @@ type ScanFormProps = {
   agencyClientId?: string | null;
   /** When set and user is a workspace member, scan is stored with `startup_workspace_id` for the startup dashboard. */
   startupWorkspaceId?: string | null;
+  /**
+   * `hero` — single compact row (wide input + primary action), for dashboard / landing hero use.
+   * `default` — existing stacked / padded layout on `new-scan` and marketing.
+   */
+  variant?: 'default' | 'hero';
+  /** Overrides the URL field placeholder (per-variant defaults apply when omitted). */
+  placeholder?: string;
 };
 
 const E2E_BYPASS_TURNSTILE =
@@ -63,7 +70,12 @@ export function ScanForm({
   agencyAccountId,
   agencyClientId,
   startupWorkspaceId,
+  variant = 'default',
+  placeholder,
 }: ScanFormProps) {
+  const isHero = variant === 'hero';
+  const resolvedPlaceholder =
+    placeholder ?? (isHero ? 'Enter a website' : 'Enter your website URL');
   const router = useRouter();
   const [url, setUrl] = useState(defaultUrl ?? '');
   const bypassTurnstile = isTurnstileBypassEnabled();
@@ -127,23 +139,40 @@ export function ScanForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-      <div className="flex flex-col gap-2 rounded-xl bg-surface-container-low p-2 shadow-float md:flex-row md:items-stretch">
+    <form
+      onSubmit={onSubmit}
+      className={`mx-auto flex w-full flex-col ${isHero ? 'max-w-4xl gap-3' : 'max-w-3xl gap-4'}`}
+    >
+      <div
+        className={
+          isHero
+            ? 'flex flex-col gap-2 overflow-hidden rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-1.5 shadow-float sm:flex-row sm:items-stretch'
+            : 'flex flex-col gap-2 rounded-xl bg-surface-container-low p-2 shadow-float md:flex-row md:items-stretch'
+        }
+      >
         <input
           id="url"
           name="url"
           type="url"
           required
-          placeholder="Enter your website URL"
+          placeholder={resolvedPlaceholder}
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           aria-label="Website URL"
-          className="min-h-[52px] flex-grow rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-6 py-4 font-body text-base text-on-surface outline-none ring-0 transition focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40"
+          className={
+            isHero
+              ? 'min-h-[48px] flex-grow rounded-xl border border-transparent bg-surface-container-lowest px-4 py-3 font-body text-base text-on-surface outline-none ring-0 transition placeholder:text-on-surface-variant/70 focus:border-tertiary/30 focus:ring-2 focus:ring-tertiary/25 sm:min-h-0 sm:flex-1 sm:py-3.5'
+              : 'min-h-[52px] flex-grow rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-6 py-4 font-body text-base text-on-surface outline-none ring-0 transition focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40'
+          }
         />
         <button
           type="submit"
           disabled={loading}
-          className="shrink-0 rounded-xl bg-primary px-8 py-4 text-sm font-medium text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 md:min-w-[160px]"
+          className={
+            isHero
+              ? 'flex shrink-0 items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 sm:min-w-[140px] sm:self-stretch sm:py-0'
+              : 'shrink-0 rounded-xl bg-primary px-8 py-4 text-sm font-medium text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 md:min-w-[160px]'
+          }
         >
           {loading ? (
             <span className="flex items-center justify-center gap-2">
@@ -151,13 +180,15 @@ export function ScanForm({
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                 <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
               </svg>
-              Running diagnostic…
+              {isHero ? 'Running…' : 'Running diagnostic…'}
             </span>
-          ) : 'Run diagnostic'}
+          ) : (
+            'Run diagnostic'
+          )}
         </button>
       </div>
       {bypassTurnstile ? null : (
-        <div className="min-h-[65px] flex justify-center">
+        <div className={`flex justify-center ${isHero ? 'min-h-[60px]' : 'min-h-[65px]'}`}>
           <Turnstile
             siteKey={siteKey}
             onSuccess={(nextToken) => {
@@ -172,7 +203,14 @@ export function ScanForm({
           />
         </div>
       )}
-      {error ? <p className="text-center text-sm text-error">{error}</p> : null}
+      {error ? (
+        <p
+          className={`text-sm text-error ${isHero ? 'text-left sm:text-center' : 'text-center'}`}
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
     </form>
   );
 }

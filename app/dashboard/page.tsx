@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AgencyClientManagementView } from '@/components/agency-client-management-view';
+import { DashboardScanHero } from '@/components/dashboard-scan-hero';
 import { WhatNextBanner } from '@/components/what-next-banner';
 import { NewSubscriberWelcomeBanner } from '@/components/new-subscriber-welcome-banner';
 import { SubscriptionWorkspacePendingBanner } from '@/components/subscription-workspace-pending-banner';
@@ -9,6 +10,8 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getAgencyDashboardData } from '@/lib/server/agency-dashboard-data';
 import { buildAgencyDashboardUiGates } from '@/lib/server/agency-access';
 import { getStartupDashboardData } from '@/lib/server/startup-dashboard-data';
+import { resolveStartupAccess } from '@/lib/server/startup-access-resolver';
+import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 import {
   buildStartupTrendSeries,
   buildStartupActionBacklog,
@@ -22,6 +25,8 @@ type Props = {
     agencyAccount?: string;
     agencyClient?: string;
     startupWorkspace?: string;
+    /** Prefill scan hero URL field (e.g. from Rescan links). */
+    url?: string;
     onboarding?: string;
     onboarded?: string;
     bundle?: string;
@@ -200,7 +205,7 @@ function ScanRow({
           </a>
         ) : null}
         <Link
-          href={`/dashboard/new-scan?url=${encodeURIComponent(url)}`}
+          href={`/dashboard?url=${encodeURIComponent(url)}`}
           className="inline-flex items-center gap-1 font-medium text-on-surface-variant hover:text-primary"
         >
           <span className="material-symbols-outlined text-sm" aria-hidden>refresh</span>
@@ -224,6 +229,12 @@ export default async function DashboardPage({ searchParams }: Props) {
   if (!user) {
     redirect('/login?next=/dashboard');
   }
+
+  const access = await resolveStartupAccess({
+    supabase,
+    userId: user.id,
+  });
+  const siteKey = getTurnstileSiteKey();
 
   const [
     { data: scans, error: scansErr },
@@ -258,7 +269,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     getStartupDashboardData({
       supabase,
       userId: user.id,
-      selectedWorkspaceId: sp.startupWorkspace ?? null,
+      selectedWorkspaceId: access.selectedWorkspaceId ?? sp.startupWorkspace ?? null,
     }),
   ]);
 
@@ -312,6 +323,34 @@ export default async function DashboardPage({ searchParams }: Props) {
   const selectedStartupWorkspace =
     startupDashboard.workspaces.find((w) => w.id === startupDashboard.selectedWorkspaceId) ?? null;
 
+  const scanDisabled =
+    !!agencyDashboard.selectedAccountId && !agencyDashboard.entitlements.scanLaunchEnabled;
+
+  const scanHeroContextLine = selectedAgencyClient
+    ? `Scans run in context of ${selectedAgencyClient.name}. Results stay scoped to this client.`
+    : selectedAgencyAccount
+      ? `Scans run under ${selectedAgencyAccount.name}. Select a client to narrow scope.`
+      : selectedStartupWorkspace
+        ? `Scans link to ${selectedStartupWorkspace.name}.`
+        : null;
+
+  const startupAccessBlocked =
+    access.kind === 'needs_provisioning' || access.kind === 'workspace_missing_membership';
+
+  const startupAccessTitle =
+    access.kind === 'needs_provisioning'
+      ? 'Your startup workspace is being prepared'
+      : access.kind === 'workspace_missing_membership'
+        ? 'Workspace access needs repair'
+        : undefined;
+
+  const startupAccessBody =
+    access.kind === 'needs_provisioning'
+      ? 'Your startup subscription is active, but the workspace link is still being provisioned.'
+      : access.kind === 'workspace_missing_membership'
+        ? `Your startup subscription is active, but ${access.workspace?.name ?? 'the workspace'} is not linked as an active member yet.`
+        : undefined;
+
   const newScanHref = buildNewScanHref({
     agencyAccountId: agencyDashboard.selectedAccountId,
     agencyClientId: agencyDashboard.selectedClientId,
@@ -323,8 +362,8 @@ export default async function DashboardPage({ searchParams }: Props) {
     eyebrow: string;
     title: string;
     body: string;
-    ctaLabel: string;
-    ctaHref: string;
+    ctaLabel?: string;
+    ctaHref?: string;
   };
 
   function getPersonalBanner(): BannerConfig {
@@ -332,9 +371,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       return {
         eyebrow: 'Start here',
         title: 'Run your first audit',
-        body: 'Enter any URL to get an instant AI search readiness score. Free, under 30 seconds.',
-        ctaLabel: 'Run a Scan',
-        ctaHref: '/dashboard/new-scan',
+        body: 'Use the scan form at the top of this page — enter any URL for an instant score. Free, under 30 seconds.',
       };
     }
     if (deliveredReport?.scan_id) {
@@ -372,9 +409,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       return {
         eyebrow: 'Agency workspace',
         title: 'Select an account to get started',
-        body: 'Use the account switcher above to choose a workspace, then select a client.',
-        ctaLabel: 'Run a Scan',
-        ctaHref: '/dashboard/new-scan',
+        body: 'Use the account switcher above to choose a workspace, then select a client. Run scans from the form at the top of this page.',
       };
     }
     if (!selectedAgencyClient) {
@@ -382,20 +417,13 @@ export default async function DashboardPage({ searchParams }: Props) {
         eyebrow: 'What\'s next',
         title: `Select a client to start scanning`,
         body: `Choose a client from the row below to scope scans, stats, and recommendations to that account.`,
-        ctaLabel: 'Run a Scan',
-        ctaHref: buildNewScanHref({ agencyAccountId: selectedAgencyAccount.id }),
       };
     }
     if (agencyDashboard.scans.length === 0) {
       return {
         eyebrow: 'Start here',
         title: `Run your first scan for ${selectedAgencyClient.name}`,
-        body: 'Kick off an audit to see their AI search readiness score and issue breakdown.',
-        ctaLabel: 'Run a Scan',
-        ctaHref: buildNewScanHref({
-          agencyAccountId: selectedAgencyAccount.id,
-          agencyClientId: selectedAgencyClient.id,
-        }),
+        body: 'Use the audit form at the top of this page to run a scan in the selected client context.',
       };
     }
     return {
@@ -432,9 +460,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       return {
         eyebrow: 'Step 1 of 3',
         title: 'Run your first startup scan',
-        body: 'Kick off an AI search readiness audit to populate your score trend and action backlog.',
-        ctaLabel: 'Run a Scan',
-        ctaHref: buildNewScanHref({ startupWorkspaceId: startupDashboard.selectedWorkspaceId }),
+        body: 'Use the audit form at the top of this page to run an AI search readiness scan and populate your score trend and action backlog.',
       };
     }
     if (startupDashboard.recommendations.length === 0) {
@@ -481,6 +507,19 @@ export default async function DashboardPage({ searchParams }: Props) {
         <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Dashboard</h1>
         <p className="mt-1 font-body text-sm text-on-surface-variant">{user.email}</p>
       </div>
+
+      <DashboardScanHero
+        siteKey={siteKey}
+        defaultUrl={sp.url}
+        agencyAccountId={agencyDashboard.selectedAccountId}
+        agencyClientId={agencyDashboard.selectedClientId}
+        startupWorkspaceId={startupDashboard.selectedWorkspaceId}
+        scanDisabled={scanDisabled}
+        startupAccessBlocked={startupAccessBlocked}
+        startupAccessTitle={startupAccessTitle}
+        startupAccessBody={startupAccessBody}
+        contextLine={scanHeroContextLine}
+      />
 
       {/* ── Startup workspace section ────────────────────────── */}
       {startupDashboard.workspaces.length > 0 ? (
@@ -569,7 +608,7 @@ export default async function DashboardPage({ searchParams }: Props) {
               </p>
               {startupTrend.length === 0 ? (
                 <p className="mt-3 text-sm text-on-surface-variant">
-                  No scored scans yet — run a scan to populate the trend.
+                  No scored scans yet — run a scan from the form at the top of this page to populate the trend.
                 </p>
               ) : (
                 <>
@@ -657,7 +696,7 @@ export default async function DashboardPage({ searchParams }: Props) {
             <ul className="space-y-3">
               {startupDashboard.scans.length === 0 ? (
                 <li className="rounded-xl bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">
-                  No startup scans yet — run your first scan using the button above.
+                  No startup scans yet — run your first scan using the form at the top of this page.
                 </li>
               ) : (
                 startupDashboard.scans.slice(0, 3).map((scan) => {
@@ -726,21 +765,11 @@ export default async function DashboardPage({ searchParams }: Props) {
 
           {/* Client chips */}
           <div className="mt-4 flex flex-wrap gap-2">
-            {agencyUiGates.scanLaunch ? (
-              <Link
-                href={buildNewScanHref({
-                  agencyAccountId: agencyDashboard.selectedAccountId,
-                  agencyClientId: agencyDashboard.selectedClientId,
-                })}
-                className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:opacity-90"
-              >
-                New client scan
-              </Link>
-            ) : (
+            {!agencyUiGates.scanLaunch ? (
               <span className="rounded-xl bg-surface-container-high px-4 py-2 text-sm font-medium text-on-surface-variant">
                 Scan launch disabled
               </span>
-            )}
+            ) : null}
             <Link
               href={buildDashboardHref({ agencyAccountId: agencyDashboard.selectedAccountId })}
               className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
@@ -919,14 +948,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         <ul className="mt-5 space-y-3">
           {totalScans === 0 ? (
             <li className="rounded-xl bg-surface-container-lowest p-8 text-center text-sm text-on-surface-variant">
-              No scans yet — run your first audit using the{' '}
-              <Link
-                href="/dashboard/new-scan"
-                className="font-medium text-primary hover:underline"
-              >
-                Run a Scan
-              </Link>{' '}
-              button in the sidebar.
+              No scans yet — enter a site URL in the scan form at the top of this page.
             </li>
           ) : (
             scanList.map((s) => {

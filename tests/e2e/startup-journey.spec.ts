@@ -2,7 +2,7 @@
  * E2E: Startup team journey
  *
  * Tests the startup workspace experience end to end:
- *   - Dashboard home: workspace context bar, stats, WhatNextBanner (step 3)
+ *   - Dashboard home: scan hero (#dashboard-scan), workspace context bar, stats, WhatNextBanner (step 3)
  *   - Score trend and action backlog widgets
  *   - New Scan page with startup workspace context
  *   - Connectors page: heading, GitHub card, Slack card
@@ -45,6 +45,20 @@ test.describe('startup dashboard home', () => {
     await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
     // Scope to main content to avoid the sidebar's truncated/hidden copy
     await expect(page.getByRole('main').getByText(/admin@example\.com/i)).toBeVisible();
+  });
+
+  test('renders dashboard scan hero — #dashboard-scan, headline, URL field, submit', async ({
+    page,
+  }) => {
+    await signInAsStartup(page);
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.locator('#dashboard-scan')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /start with any website/i })
+    ).toBeVisible();
+    await expect(page.getByRole('textbox', { name: /website url/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /run diagnostic/i })).toBeVisible();
   });
 
   test('renders startup workspace section with workspace name', async ({ page }) => {

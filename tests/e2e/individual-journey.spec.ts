@@ -4,8 +4,8 @@
  * Tests the full individual (non-agency, non-startup) user experience:
  *   - Unauthenticated redirects
  *   - Login page
- *   - Dashboard home while authenticated
- *   - Run a Scan in-dashboard
+ *   - Dashboard home while authenticated (including scan hero #dashboard-scan)
+ *   - Run a Scan in-dashboard (/dashboard/new-scan)
  *   - Scan result flow
  *
  * Cookie used: none (public) or gp_e2e_auth=admin (personal user session)
@@ -56,6 +56,17 @@ test.describe('authenticated dashboard home', () => {
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
+  });
+
+  test('dashboard home includes scan hero section and URL field', async ({ page }) => {
+    await signInAsIndividual(page);
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.locator('#dashboard-scan')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /start with any website/i })
+    ).toBeVisible();
+    await expect(page.getByRole('textbox', { name: /website url/i })).toBeVisible();
   });
 
   test('renders user email on page', async ({ page }) => {
