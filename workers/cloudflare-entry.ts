@@ -18,6 +18,27 @@ const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
 };
 
+function applyDefaultSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  const defaults = {
+    'strict-transport-security': 'max-age=31536000; includeSubDomains; preload',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+  } as const;
+
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!headers.has(key)) {
+      headers.set(key, value);
+    }
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 async function pingSupabaseKeepAlive(env: CloudflareEnv): Promise<void> {
   const base = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '') ?? '';
   const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -36,7 +57,10 @@ async function pingSupabaseKeepAlive(env: CloudflareEnv): Promise<void> {
 }
 
 export default {
-  fetch: next.fetch.bind(next),
+  async fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext): Promise<Response> {
+    const response = await next.fetch(request, env, ctx);
+    return applyDefaultSecurityHeaders(response);
+  },
 
   async queue(batch: ReportQueueBatch, env: CloudflareEnv, _ctx: ExecutionContext): Promise<void> {
     if (

@@ -5,7 +5,12 @@ import { AttributionInit } from '@/components/attribution-init';
 import { LongWaitProvider } from '@/components/long-wait-provider';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
-import { SITE_DESCRIPTION, SITE_NAME } from '@/lib/server/public-site-seo';
+import {
+  SITE_AUTHOR_NAME,
+  SITE_AUTHOR_URL_PATH,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+} from '@/lib/server/public-site-seo';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -22,6 +27,14 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://getgeopulse.com'),
   title: SITE_NAME,
   description: SITE_DESCRIPTION,
+  authors: [
+    {
+      name: SITE_AUTHOR_NAME,
+      url: SITE_AUTHOR_URL_PATH,
+    },
+  ],
+  creator: SITE_AUTHOR_NAME,
+  publisher: SITE_NAME,
   openGraph: {
     title: SITE_NAME,
     description: SITE_DESCRIPTION,

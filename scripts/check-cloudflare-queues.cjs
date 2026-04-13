@@ -120,16 +120,28 @@ function listCloudflareQueuesWithWrangler() {
     paths: [projectRoot],
   });
   const runner = process.execPath;
-  const args = [wranglerCli, "queues", "list", "--json"];
-  const result = spawnSync(runner, args, {
-    cwd: projectRoot,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const baseArgs = [wranglerCli, "queues", "list"];
+
+  const runWrangler = (extraArgs) =>
+    spawnSync(runner, [...baseArgs, ...extraArgs], {
+      cwd: projectRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+  let result = runWrangler(["--json"]);
+  const combinedErrorText = `${result.stderr || ""}\n${result.stdout || ""}`.toLowerCase();
+  if (
+    result.status !== 0 &&
+    (combinedErrorText.includes("unknown argument: json") ||
+      combinedErrorText.includes("unknown arguments: json"))
+  ) {
+    result = runWrangler([]);
+  }
 
   if (result.error) {
     throw new Error(
-      `Failed to execute '${path.basename(runner)} ${args.slice(1).join(" ")}': ${result.error.message}`
+      `Failed to execute '${path.basename(runner)} ${baseArgs.slice(1).join(" ")}': ${result.error.message}`
     );
   }
 
@@ -148,27 +160,58 @@ function listCloudflareQueuesWithWrangler() {
   }
 
   const stdout = (result.stdout || "").trim();
-  let parsed;
+
   try {
-    parsed = JSON.parse(stdout);
-  } catch (error) {
-    throw new Error(`Could not parse 'wrangler queues list --json' output: ${error.message}`);
-  }
+    const parsed = JSON.parse(stdout);
+    const rows = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.queues)
+        ? parsed.queues
+        : [];
 
-  const rows = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray(parsed?.queues)
-      ? parsed.queues
-      : [];
-
-  const names = new Set();
-  for (const row of rows) {
-    const name = row?.queue_name ?? row?.name;
-    if (typeof name === "string" && name.length > 0) {
-      names.add(name);
+    const names = new Set();
+    for (const row of rows) {
+      const name = row?.queue_name ?? row?.name;
+      if (typeof name === "string" && name.length > 0) {
+        names.add(name);
+      }
     }
+    return names;
+  } catch {
+    const names = new Set();
+    for (const line of stdout.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (
+        !trimmed ||
+        /^name(\s|$)/i.test(trimmed) ||
+        /^[\-\|\+]+$/.test(trimmed) ||
+        /^[┌┬┐├┼┤└┴┘─]+$/u.test(trimmed)
+      ) {
+        continue;
+      }
+      if (trimmed.startsWith("│")) {
+        const cells = trimmed
+          .split("│")
+          .map((cell) => cell.trim())
+          .filter(Boolean);
+        const name = cells[1];
+        if (name && !/^name$/i.test(name)) {
+          names.add(name);
+        }
+        continue;
+      }
+      const match = /^\|?\s*([a-z0-9][a-z0-9-_]*)\s*(\||\s{2,}|$)/i.exec(trimmed);
+      if (match?.[1]) {
+        names.add(match[1]);
+      }
+    }
+
+    if (names.size === 0) {
+      throw new Error("Could not parse 'wrangler queues list' output.");
+    }
+
+    return names;
   }
-  return names;
 }
 
 async function listCloudflareQueuesWithApi() {

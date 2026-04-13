@@ -4,18 +4,27 @@ import { createPublicContentData } from '@/lib/server/public-content-data';
 import { normalizeBaseUrl, toAbsoluteUrl } from '@/lib/server/public-site-seo';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 
 function formatArticleEntry(title: string, url: string, excerpt: string | null): string {
   return `- [${title}](${url})${excerpt ? `: ${excerpt}` : ''}`;
 }
 
+async function loadFeaturedArticles() {
+  try {
+    const supabase = await createPublicContentClient();
+    const publicContent = createPublicContentData(supabase);
+    const articles = await publicContent.getPublishedArticles();
+    return articles.slice(0, 6);
+  } catch {
+    return [];
+  }
+}
+
 export async function GET() {
   const env = await getPaymentApiEnv();
   const baseUrl = normalizeBaseUrl(env.NEXT_PUBLIC_APP_URL);
-  const supabase = await createPublicContentClient();
-  const publicContent = createPublicContentData(supabase);
-  const articles = await publicContent.getPublishedArticles().catch(() => []);
-  const featuredArticles = articles.slice(0, 6);
+  const featuredArticles = await loadFeaturedArticles();
 
   const lines = [
     '# GEO-Pulse',
@@ -55,4 +64,3 @@ export async function GET() {
     },
   });
 }
-

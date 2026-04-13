@@ -146,7 +146,7 @@ export function ScanForm({
       <div
         className={
           isHero
-            ? 'flex flex-col gap-2 overflow-hidden rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-1.5 shadow-float sm:flex-row sm:items-stretch'
+            ? 'flex flex-col gap-3 overflow-hidden rounded-[1.75rem] border border-outline-variant/15 bg-surface-container-lowest p-3 shadow-float sm:flex-row sm:items-stretch'
             : 'flex flex-col gap-2 rounded-xl bg-surface-container-low p-2 shadow-float md:flex-row md:items-stretch'
         }
       >
@@ -161,7 +161,7 @@ export function ScanForm({
           aria-label="Website URL"
           className={
             isHero
-              ? 'min-h-[48px] flex-grow rounded-xl border border-transparent bg-surface-container-lowest px-4 py-3 font-body text-base text-on-surface outline-none ring-0 transition placeholder:text-on-surface-variant/70 focus:border-tertiary/30 focus:ring-2 focus:ring-tertiary/25 sm:min-h-0 sm:flex-1 sm:py-3.5'
+              ? 'min-h-[72px] flex-grow rounded-2xl border border-transparent bg-surface-container-low px-6 py-5 font-body text-lg text-on-surface outline-none ring-0 transition placeholder:text-on-surface-variant/70 focus:border-tertiary/30 focus:ring-2 focus:ring-tertiary/25 sm:min-h-0 sm:flex-1'
               : 'min-h-[52px] flex-grow rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-6 py-4 font-body text-base text-on-surface outline-none ring-0 transition focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40'
           }
         />
@@ -170,7 +170,7 @@ export function ScanForm({
           disabled={loading}
           className={
             isHero
-              ? 'flex shrink-0 items-center justify-center rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 sm:min-w-[140px] sm:self-stretch sm:py-0'
+              ? 'flex shrink-0 items-center justify-center rounded-2xl bg-primary px-8 py-5 text-base font-semibold text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 sm:min-w-[196px] sm:self-stretch sm:py-0'
               : 'shrink-0 rounded-xl bg-primary px-8 py-4 text-sm font-medium text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 md:min-w-[160px]'
           }
         >
@@ -183,10 +183,15 @@ export function ScanForm({
               {isHero ? 'Running…' : 'Running diagnostic…'}
             </span>
           ) : (
-            'Run diagnostic'
+            isHero ? 'Audit website' : 'Run diagnostic'
           )}
         </button>
       </div>
+      {isHero ? (
+        <p className="text-center font-body text-sm text-on-surface-variant">
+          Enter any public homepage, category page, or product page to see how clearly machines can crawl and reuse it.
+        </p>
+      ) : null}
       {bypassTurnstile ? null : (
         <div className={`flex justify-center ${isHero ? 'min-h-[60px]' : 'min-h-[65px]'}`}>
           <Turnstile
@@ -209,6 +214,11 @@ export function ScanForm({
           role="alert"
         >
           {error}
+        </p>
+      ) : null}
+      {isHero ? (
+        <p className="text-center font-body text-xs uppercase tracking-[0.2em] text-on-surface-variant/90">
+          If verification fails here, the current Turnstile widget usually does not allow this hostname yet.
         </p>
       ) : null}
     </form>

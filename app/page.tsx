@@ -65,6 +65,8 @@ const referenceLinks = [
   },
 ] as const;
 
+const modelLabels = ['ChatGPT', 'Perplexity', 'Claude', 'Gemini'] as const;
+
 const howItWorks = [
   {
     step: '1',
@@ -172,74 +174,95 @@ export default async function HomePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppSchema) }}
       />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
-      <section className="relative mx-auto max-w-screen-2xl overflow-hidden px-6 pb-24 pt-16 text-center md:px-10 md:pb-32 md:pt-24">
-        <div className="mb-6">
-          <span className="inline-block rounded-full bg-surface-container-high px-3 py-1 font-label text-xs font-semibold uppercase tracking-widest text-primary">
-            Website readiness audit
-          </span>
-        </div>
-        <h1 className="mx-auto mb-8 max-w-4xl font-headline text-4xl font-bold leading-tight tracking-tight text-on-background md:text-6xl lg:text-7xl">
-          Make Your Website Discoverable by ChatGPT, Perplexity, and Gemini.
-        </h1>
-        <p className="mx-auto mb-12 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
-          Get one score, the key issues, and priority fixes. Run a free scan, or sign up to save reports and unlock the full workspace.
-        </p>
-        <p className="mx-auto mb-6 max-w-2xl font-body text-sm text-on-surface-variant">
-          Editorially maintained by {SITE_EDITORIAL_NAME}.
-        </p>
-        <div className="mx-auto mb-6 max-w-3xl">
-          {siteKey ? (
-            <ScanForm
-              siteKey={siteKey}
-              defaultUrl={prefillUrl}
-              agencyAccountId={agencyAccount ?? null}
-              agencyClientId={agencyClient ?? null}
-            />
-          ) : (
-            <div className="space-y-3 rounded-xl bg-surface-container-low p-6 text-left text-error">
-              <p className="font-medium">Turnstile is not configured for this deployment.</p>
-              <p className="text-sm text-on-surface-variant">
-                In{' '}
-                <strong className="text-on-background">Cloudflare → Workers &amp; Pages → your Worker → Settings → Variables</strong>, set{' '}
-                <code className="rounded bg-surface-container-lowest px-1">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> to your widget’s{' '}
-                <em>site key</em> (public), and add <code className="rounded bg-surface-container-lowest px-1">TURNSTILE_SECRET_KEY</code> as a{' '}
-                <em>secret</em>. Add this app’s hostname to the widget’s hostnames. Redeploy after changing vars; for client bundles, set{' '}
-                <code className="rounded bg-surface-container-lowest px-1">NEXT_PUBLIC_*</code> under Workers Builds → Build variables.
-              </p>
-              <p className="text-sm text-on-surface-variant">
-                Local: use <code className="rounded bg-surface-container-lowest px-1">.env.local</code> — see{' '}
-                <code className="rounded bg-surface-container-lowest px-1">.env.local.example</code>.
-              </p>
+      <section className="relative overflow-hidden px-6 pb-20 pt-12 text-center md:px-10 md:pb-28 md:pt-20">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] opacity-80"
+          style={{
+            background:
+              'radial-gradient(circle at 50% 0%, rgb(var(--color-tertiary) / 0.12), transparent 42%), radial-gradient(circle at 20% 24%, rgb(var(--color-gold) / 0.12), transparent 26%)',
+          }}
+          aria-hidden
+        />
+        <div className="relative mx-auto max-w-6xl">
+          <div className="mb-6">
+            <span className="inline-block rounded-full border border-outline-variant/20 bg-surface-container-high/70 px-4 py-1.5 font-label text-xs font-semibold uppercase tracking-[0.22em] text-primary backdrop-blur">
+              Website readiness audit
+            </span>
+          </div>
+          <h1 className="mx-auto max-w-5xl font-headline text-4xl font-bold leading-[1.05] tracking-tight text-on-background md:text-6xl lg:text-7xl">
+            Make your website discoverable by ChatGPT, Perplexity, Claude, and Gemini.
+          </h1>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            {modelLabels.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-tertiary/20 bg-surface-container-lowest px-4 py-2 font-label text-xs font-semibold uppercase tracking-[0.18em] text-tertiary shadow-float"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+          <p className="mx-auto mt-8 max-w-3xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
+            Run a free AI search readiness audit and get one score, the key blockers, and the first fixes to make.
+          </p>
+          <p className="mx-auto mt-4 max-w-2xl font-body text-sm text-on-surface-variant">
+            Editorially maintained by {SITE_EDITORIAL_NAME}.
+          </p>
+          <div className="mx-auto mt-10 max-w-5xl">
+            {siteKey ? (
+              <ScanForm
+                variant="hero"
+                siteKey={siteKey}
+                defaultUrl={prefillUrl}
+                agencyAccountId={agencyAccount ?? null}
+                agencyClientId={agencyClient ?? null}
+              />
+            ) : (
+              <div className="space-y-3 rounded-3xl border border-error/20 bg-surface-container-low p-6 text-left text-error shadow-float">
+                <p className="font-medium">Turnstile is not configured for this deployment.</p>
+                <p className="text-sm text-on-surface-variant">
+                  In{' '}
+                  <strong className="text-on-background">Cloudflare → Workers &amp; Pages → your Worker → Settings → Variables</strong>, set{' '}
+                  <code className="rounded bg-surface-container-lowest px-1">NEXT_PUBLIC_TURNSTILE_SITE_KEY</code> to your widget’s{' '}
+                  <em>site key</em> (public), and add <code className="rounded bg-surface-container-lowest px-1">TURNSTILE_SECRET_KEY</code> as a{' '}
+                  <em>secret</em>. Add this app’s hostname to the widget’s hostnames. Redeploy after changing vars; for client bundles, set{' '}
+                  <code className="rounded bg-surface-container-lowest px-1">NEXT_PUBLIC_*</code> under Workers Builds → Build variables.
+                </p>
+                <p className="text-sm text-on-surface-variant">
+                  Local: use <code className="rounded bg-surface-container-lowest px-1">.env.local</code> — see{' '}
+                  <code className="rounded bg-surface-container-lowest px-1">.env.local.example</code>.
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-on-surface-variant">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">check_circle</span>
+              <span className="font-label text-xs uppercase tracking-wider">Free audit</span>
             </div>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-8 text-on-surface-variant opacity-80">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm">check_circle</span>
-            <span className="font-label text-xs uppercase tracking-wider">Free audit</span>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">no_accounts</span>
+              <span className="font-label text-xs uppercase tracking-wider">No account required</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-sm">bolt</span>
+              <span className="font-label text-xs uppercase tracking-wider">Fast results</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm">no_accounts</span>
-            <span className="font-label text-xs uppercase tracking-wider">No account required</span>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+            <Link
+              href="/login?mode=signup&next=/pricing"
+              className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
+            >
+              Sign up
+            </Link>
+            <Link
+              href="/pricing"
+              className="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-6 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
+            >
+              See plans
+            </Link>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm">bolt</span>
-            <span className="font-label text-xs uppercase tracking-wider">Fast results</span>
-          </div>
-        </div>
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          <Link
-            href="/login?mode=signup&next=/pricing"
-            className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
-          >
-            Sign up
-          </Link>
-          <Link
-            href="/pricing"
-            className="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-6 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
-          >
-            See plans
-          </Link>
         </div>
       </section>
 

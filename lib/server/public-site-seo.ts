@@ -35,6 +35,14 @@ export function buildPublicPageMetadata(input: {
   return {
     title: input.title,
     description: input.description,
+    authors: [
+      {
+        name: SITE_AUTHOR_NAME,
+        url: toAbsoluteUrl(input.baseUrl, SITE_AUTHOR_URL_PATH),
+      },
+    ],
+    creator: SITE_AUTHOR_NAME,
+    publisher: SITE_NAME,
     alternates: {
       canonical: canonicalUrl,
     },

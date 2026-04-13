@@ -7,6 +7,8 @@ import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   buildPublicPageMetadata,
   buildWebPageStructuredData,
+  SITE_AUTHOR_NAME,
+  SITE_AUTHOR_URL_PATH,
   SITE_DESCRIPTION,
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
@@ -159,6 +161,8 @@ export default async function PricingPage() {
       'Simple, transparent pricing for GEO-Pulse AI search readiness. Start free and subscribe when your team needs the full platform.',
     siteUrl: toAbsoluteUrl(baseUrl, '/'),
     dateModified: pageModifiedAt,
+    authorName: SITE_AUTHOR_NAME,
+    authorUrl: toAbsoluteUrl(baseUrl, SITE_AUTHOR_URL_PATH),
   });
   const activeSubKeys = new Set(activeSubs.map((s) => s.bundle_key));
 
@@ -204,6 +208,13 @@ export default async function PricingPage() {
         <p className="mt-6 font-body text-lg leading-relaxed text-on-surface-variant">
           Run your first AI search readiness scan for free. Upgrade to a bundle when your team
           needs ongoing audits, dashboards, or client management.
+        </p>
+        <p className="mt-3 font-body text-sm text-on-surface-variant">
+          Reviewed by{' '}
+          <Link href="/about" className="font-semibold text-primary hover:underline">
+            {SITE_AUTHOR_NAME}
+          </Link>
+          .
         </p>
         <p className="mt-4 font-body text-sm text-on-surface-variant">
           Need a trust anchor first? Visit the{' '}

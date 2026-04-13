@@ -137,6 +137,45 @@ export default async function PrivacyPolicyPage() {
         </ul>
       </section>
 
+      <section className="mt-12 rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <h2 className="font-headline text-2xl font-bold text-on-background">External references</h2>
+        <ul className="mt-4 space-y-3 font-body text-on-surface-variant">
+          <li>
+            <a
+              href="https://stripe.com/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-primary hover:underline"
+            >
+              Stripe Privacy Center
+            </a>{' '}
+            for payment-provider data handling details.
+          </li>
+          <li>
+            <a
+              href="https://supabase.com/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-primary hover:underline"
+            >
+              Supabase Privacy Policy
+            </a>{' '}
+            for managed database and authentication infrastructure.
+          </li>
+          <li>
+            <a
+              href="https://developers.cloudflare.com/fundamentals/reference/policies-compliances/cloudflare-cookies"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-primary hover:underline"
+            >
+              Cloudflare cookies reference
+            </a>{' '}
+            for infrastructure-level cookies and edge security behavior.
+          </li>
+        </ul>
+      </section>
+
       <div className="mt-10 flex flex-wrap gap-4">
         <Link
           href="/"
