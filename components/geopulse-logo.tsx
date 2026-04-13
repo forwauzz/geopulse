@@ -6,9 +6,9 @@ type GeoPulseLogoProps = {
 };
 
 const sizeClass: Record<NonNullable<GeoPulseLogoProps['size']>, string> = {
-  sm: 'text-[0.8rem] sm:text-[0.85rem]',
-  md: 'text-[0.95rem] sm:text-[1.05rem]',
-  lg: 'text-[1.05rem] sm:text-[1.2rem]',
+  sm: 'text-[0.78rem] sm:text-[0.84rem]',
+  md: 'text-[0.92rem] sm:text-[1.02rem]',
+  lg: 'text-[1.02rem] sm:text-[1.14rem]',
 };
 
 /**
@@ -17,7 +17,7 @@ const sizeClass: Record<NonNullable<GeoPulseLogoProps['size']>, string> = {
 export function GeoPulseLogo({ className, size = 'md' }: GeoPulseLogoProps) {
   return (
     <span
-      className={`inline-flex items-center font-headline font-semibold uppercase tracking-[0.18em] text-[#9A7A3A] ${sizeClass[size]} ${className ?? ''}`}
+      className={`inline-flex items-center font-headline font-medium uppercase tracking-[0.22em] text-[#8F7338] ${sizeClass[size]} ${className ?? ''}`}
       aria-label="GEO-Pulse"
     >
       GEO-Pulse
