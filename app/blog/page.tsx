@@ -13,7 +13,12 @@ import {
 } from '@/lib/server/content-structured-data';
 import { createPublicContentClient } from '@/lib/server/public-content-client';
 import { createPublicContentData } from '@/lib/server/public-content-data';
-import { buildPublicPageMetadata, SITE_AUTHOR_NAME, SITE_DESCRIPTION } from '@/lib/server/public-site-seo';
+import {
+  buildPublicPageMetadata,
+  SITE_AUTHOR_NAME,
+  SITE_DESCRIPTION,
+  SITE_EDITORIAL_NAME,
+} from '@/lib/server/public-site-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +87,8 @@ export default async function BlogIndexPage() {
     description: BLOG_DESCRIPTION,
     topicUrls,
     dateModified: getLatestTimestamp(articles.map((article) => article.updated_at)) ?? undefined,
+    authorName: SITE_EDITORIAL_NAME,
+    authorUrl: blogUrl,
   });
   const breadcrumbStructuredData = buildBreadcrumbStructuredData([{ name: 'Blog', item: blogUrl }]);
 
@@ -117,6 +124,9 @@ export default async function BlogIndexPage() {
             {SITE_AUTHOR_NAME}
           </Link>
           .
+        </p>
+        <p className="mt-2 font-body text-xs text-zinc-400">
+          Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
       </section>
 

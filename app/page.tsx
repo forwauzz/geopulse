@@ -7,6 +7,7 @@ import {
   buildPublicPageMetadata,
   buildWebPageStructuredData,
   buildWebSiteStructuredData,
+  SITE_EDITORIAL_NAME,
   SITE_DESCRIPTION,
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
@@ -122,6 +123,8 @@ export default async function HomePage({
     description: SITE_DESCRIPTION,
     siteUrl,
     dateModified: pageModifiedAt,
+    authorName: SITE_EDITORIAL_NAME,
+    authorUrl: siteUrl,
   });
   const softwareAppSchema = {
     '@context': 'https://schema.org',
@@ -180,6 +183,9 @@ export default async function HomePage({
         </h1>
         <p className="mx-auto mb-12 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
           Get one score, the key issues, and priority fixes. Run a free scan, or sign up to save reports and unlock the full workspace.
+        </p>
+        <p className="mx-auto mb-6 max-w-2xl font-body text-sm text-on-surface-variant">
+          Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
         <div className="mx-auto mb-6 max-w-3xl">
           {siteKey ? (

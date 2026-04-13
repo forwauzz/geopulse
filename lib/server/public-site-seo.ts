@@ -6,6 +6,7 @@ export const SITE_DESCRIPTION =
 export const SITE_AUTHOR_NAME = 'Uzziel T.';
 export const SITE_AUTHOR_ROLE = 'Founder, GEO-Pulse';
 export const SITE_AUTHOR_URL_PATH = '/about';
+export const SITE_EDITORIAL_NAME = 'GEO-Pulse Editorial';
 
 export function normalizeBaseUrl(value: string | null | undefined): string {
   return (value || 'https://getgeopulse.com/').replace(/\/+$/, '');
@@ -103,6 +104,8 @@ export function buildWebPageStructuredData(input: {
   readonly description: string;
   readonly siteUrl?: string;
   readonly dateModified?: string;
+  readonly authorName?: string;
+  readonly authorUrl?: string;
 }) {
   return {
     '@context': 'https://schema.org',
@@ -111,6 +114,15 @@ export function buildWebPageStructuredData(input: {
     url: input.url,
     description: input.description,
     ...(input.dateModified ? { dateModified: input.dateModified } : {}),
+    ...(input.authorName
+      ? {
+          author: {
+            '@type': 'Person',
+            name: input.authorName,
+            ...(input.authorUrl ? { url: input.authorUrl } : {}),
+          },
+        }
+      : {}),
     isPartOf: {
       '@type': 'WebSite',
       name: SITE_NAME,

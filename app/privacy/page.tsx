@@ -6,6 +6,7 @@ import {
   buildPublicPageMetadata,
   buildWebPageStructuredData,
   SITE_DESCRIPTION,
+  SITE_EDITORIAL_NAME,
   SITE_NAME,
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
@@ -41,6 +42,8 @@ export default async function PrivacyPolicyPage() {
     description: 'How GEO-Pulse collects, uses, stores, and protects data across scans, accounts, and billing.',
     siteUrl,
     dateModified: pageModifiedAt,
+    authorName: SITE_EDITORIAL_NAME,
+    authorUrl: pageUrl,
   });
 
   return (
@@ -57,6 +60,9 @@ export default async function PrivacyPolicyPage() {
       <div className="max-w-3xl">
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
           Privacy Policy
+        </p>
+        <p className="mt-3 font-body text-sm text-on-surface-variant">
+          Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
         <h1 className="mt-4 font-headline text-4xl font-bold text-on-background md:text-5xl">
           Privacy and data handling at GEO-Pulse

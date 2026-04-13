@@ -47,6 +47,12 @@ function extractLeadParagraph(markdown: string): string | null {
   return paragraphs[0] ?? null;
 }
 
+function clampDescription(value: string, maxLength = 155): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
 type TocItem = {
   readonly id: string;
   readonly title: string;
@@ -110,9 +116,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const description =
-    extractLeadParagraph(article.draft_markdown) ??
-    article.primary_problem ??
-    'Operator-grade guidance about AI search readiness.';
+    clampDescription(
+      extractLeadParagraph(article.draft_markdown) ??
+        article.primary_problem ??
+        'Operator-grade guidance about AI search readiness.'
+    );
   const articleMetadata = parseArticleMetadata(article.metadata);
   const canonicalUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, article.canonical_url, article.slug);
 

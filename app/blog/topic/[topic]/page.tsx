@@ -15,7 +15,10 @@ import {
 } from '@/lib/server/content-structured-data';
 import { getTopicPageContent } from '@/lib/server/content-topic-pages';
 import { createPublicContentData } from '@/lib/server/public-content-data';
-import { buildPublicPageMetadata } from '@/lib/server/public-site-seo';
+import {
+  buildPublicPageMetadata,
+  SITE_EDITORIAL_NAME,
+} from '@/lib/server/public-site-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -142,6 +145,8 @@ export default async function BlogTopicPage({ params }: Props) {
       toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, `/blog/${article.slug}`)
     ),
     dateModified: getLatestTimestamp(topicArticles.map((article) => article.updated_at)) ?? undefined,
+    authorName: SITE_EDITORIAL_NAME,
+    authorUrl: topicUrl,
   });
   const breadcrumbStructuredData = buildBreadcrumbStructuredData([
     { name: 'Blog', item: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/blog') },
@@ -191,6 +196,9 @@ export default async function BlogTopicPage({ params }: Props) {
             About page
           </Link>
           .
+        </p>
+        <p className="mt-2 font-body text-xs text-zinc-400">
+          Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
       </div>
 

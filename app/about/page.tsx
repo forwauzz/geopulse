@@ -9,6 +9,7 @@ import {
   SITE_AUTHOR_ROLE,
   SITE_DESCRIPTION,
   SITE_NAME,
+  SITE_EDITORIAL_NAME,
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
 
@@ -45,6 +46,8 @@ export default async function AboutPage() {
       'Who built GEO-Pulse, why it exists, and how the site keeps its public content machine-readable.',
     siteUrl: baseUrl,
     dateModified: pageModifiedAt,
+    authorName: SITE_AUTHOR_NAME,
+    authorUrl: pageUrl,
   });
 
   return (
@@ -61,6 +64,9 @@ export default async function AboutPage() {
       <div className="max-w-3xl">
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
           About
+        </p>
+        <p className="mt-3 font-body text-sm text-on-surface-variant">
+          Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
         <h1 className="mt-4 font-headline text-4xl font-bold text-on-background md:text-5xl">
           GEO-Pulse is a founder-led product for AI search readiness

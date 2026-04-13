@@ -21,6 +21,8 @@ export function buildBlogIndexStructuredData(input: {
   readonly description: string;
   readonly topicUrls: readonly string[];
   readonly dateModified?: string;
+  readonly authorName?: string;
+  readonly authorUrl?: string;
 }) {
   return {
     '@context': 'https://schema.org',
@@ -29,6 +31,15 @@ export function buildBlogIndexStructuredData(input: {
     description: input.description,
     url: input.blogUrl,
     ...(input.dateModified ? { dateModified: input.dateModified } : {}),
+    ...(input.authorName
+      ? {
+          author: {
+            '@type': 'Person',
+            name: input.authorName,
+            ...(input.authorUrl ? { url: input.authorUrl } : {}),
+          },
+        }
+      : {}),
     hasPart: input.topicUrls.map((url) => ({
       '@type': 'CollectionPage',
       url,
@@ -48,6 +59,8 @@ export function buildTopicPageStructuredData(input: {
   readonly whyItMatters: string;
   readonly articleUrls: readonly string[];
   readonly dateModified?: string;
+  readonly authorName?: string;
+  readonly authorUrl?: string;
 }) {
   return {
     '@context': 'https://schema.org',
@@ -56,6 +69,15 @@ export function buildTopicPageStructuredData(input: {
     description: `${input.definition} ${input.whyItMatters}`.trim(),
     url: input.topicUrl,
     ...(input.dateModified ? { dateModified: input.dateModified } : {}),
+    ...(input.authorName
+      ? {
+          author: {
+            '@type': 'Person',
+            name: input.authorName,
+            ...(input.authorUrl ? { url: input.authorUrl } : {}),
+          },
+        }
+      : {}),
     about: {
       '@type': 'Thing',
       name: input.topicLabel,
