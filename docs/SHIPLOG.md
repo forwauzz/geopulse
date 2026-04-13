@@ -2,6 +2,7 @@
 
 Append one line per merged PR (feat|fix|refactor|perf):
 
+2026-04-12 20:56 — [feat/dashboard-scan-hero-sidebar-connectors] feat(dashboard): collapsible sidebar, scan hero, connectors two-pane UI — commit:c1768dd
 2026-04-07 â€” [main] feat(admin): DB-backed dashboard shell admin + `(admin)` content layout + OAuth admin gate â€” commit:pending
 2026-04-08 â€” [pending] fix(dashboard): BILL-008 `(admin)` layout redirect on failed context â€” commit:pending
 2026-04-08 â€” [pending] perf(security): BILL-009 middleware DB-backed allowlist for `/admin/*` â€” commit:pending
