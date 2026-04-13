@@ -1,38 +1,26 @@
 'use client';
 
-import Image from 'next/image';
-
-const LOGO_SRC = '/branding/geopulse-logo.png';
-
 type GeoPulseLogoProps = {
   readonly className?: string;
-  /** Tailwind height class; width follows aspect ratio */
   readonly size?: 'sm' | 'md' | 'lg';
 };
 
 const sizeClass: Record<NonNullable<GeoPulseLogoProps['size']>, string> = {
-  sm: 'h-7 sm:h-8',
-  md: 'h-8 sm:h-9',
-  lg: 'h-9 sm:h-10',
+  sm: 'text-[0.8rem] sm:text-[0.85rem]',
+  md: 'text-[0.95rem] sm:text-[1.05rem]',
+  lg: 'text-[1.05rem] sm:text-[1.2rem]',
 };
 
 /**
- * Gold GeoPulse wordmark on black — use on light surfaces or inside nav with sufficient padding.
+ * Text-only GeoPulse wordmark in dark gold.
  */
 export function GeoPulseLogo({ className, size = 'md' }: GeoPulseLogoProps) {
   return (
     <span
-      className={`relative inline-flex items-center overflow-hidden rounded-md bg-black ${sizeClass[size]} ${className ?? ''}`}
+      className={`inline-flex items-center font-headline font-semibold uppercase tracking-[0.18em] text-[#9A7A3A] ${sizeClass[size]} ${className ?? ''}`}
+      aria-label="GEO-Pulse"
     >
-      <Image
-        src={LOGO_SRC}
-        alt="GEO-Pulse wordmark"
-        width={220}
-        height={48}
-        className="h-full w-auto max-w-[min(100%,220px)] object-contain object-center px-1.5 py-0.5"
-        priority
-        sizes="220px"
-      />
+      GEO-Pulse
     </span>
   );
 }
