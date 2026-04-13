@@ -54,10 +54,10 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
             alt={alt ?? ''}
             title={title ?? undefined}
             loading="lazy"
-            className="w-full rounded-2xl border border-white/15"
+            className="w-full rounded-2xl border border-outline-variant/40"
           />
           {title ? (
-            <figcaption className="mt-3 text-sm leading-relaxed text-zinc-300">
+            <figcaption className="mt-3 text-sm leading-relaxed text-on-surface-variant">
               {title}
             </figcaption>
           ) : null}
@@ -84,7 +84,7 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
             >
               <source src={embeddedVideo.embedUrl} />
             </video>
-            <figcaption className="mt-3 text-sm leading-relaxed text-zinc-300">
+            <figcaption className="mt-3 text-sm leading-relaxed text-on-surface-variant">
               {label}
             </figcaption>
           </figure>
@@ -103,7 +103,7 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
               className="absolute inset-0 h-full w-full"
             />
           </div>
-          <figcaption className="mt-3 text-sm leading-relaxed text-zinc-300">
+          <figcaption className="mt-3 text-sm leading-relaxed text-on-surface-variant">
             {label}
           </figcaption>
         </figure>
@@ -112,7 +112,7 @@ export function BlogArticleBody({ markdown }: { markdown: string }) {
   };
 
   return (
-    <div className="prose prose-invert max-w-none prose-headings:font-headline prose-headings:text-white prose-p:text-zinc-200 prose-li:text-zinc-200 prose-strong:text-white prose-a:text-sky-300 prose-code:text-white prose-pre:bg-zinc-900 prose-pre:text-white prose-figcaption:text-zinc-300">
+    <div className="prose max-w-none prose-headings:font-headline prose-headings:text-on-background prose-p:text-on-surface prose-li:text-on-surface prose-strong:text-on-background prose-a:text-primary prose-code:bg-surface-container prose-code:text-on-background prose-pre:bg-surface-container-high prose-pre:text-on-background prose-figcaption:text-on-surface-variant">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {markdown}
       </ReactMarkdown>

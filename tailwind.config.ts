@@ -42,6 +42,10 @@ export default {
         'outline-variant': 'rgb(var(--color-outline-variant) / <alpha-value>)',
         error: 'rgb(var(--color-error) / <alpha-value>)',
         gold: 'rgb(var(--color-gold) / <alpha-value>)',
+        'blog-hero-tint': 'rgb(var(--blog-hero-tint) / <alpha-value>)',
+        'blog-card-a': 'rgb(var(--blog-card-a) / <alpha-value>)',
+        'blog-card-b': 'rgb(var(--blog-card-b) / <alpha-value>)',
+        'blog-card-c': 'rgb(var(--blog-card-c) / <alpha-value>)',
       },
       boxShadow: {
         float: '0 12px 48px rgba(17, 17, 17, 0.04)',

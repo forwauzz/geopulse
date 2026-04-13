@@ -5,5 +5,7 @@ export default function BlogLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return <div className="blog-theme min-h-screen bg-black text-white">{children}</div>;
+  return (
+    <div className="blog-theme min-h-screen bg-background text-on-background">{children}</div>
+  );
 }

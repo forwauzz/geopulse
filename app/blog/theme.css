@@ -1,13 +1,13 @@
 .blog-theme a:focus-visible,
 .blog-theme button:focus-visible {
-  outline: 2px solid #7dd3fc;
+  outline: 2px solid rgb(183 156 96 / 0.85);
   outline-offset: 2px;
   border-radius: 0.5rem;
 }
 
 .blog-theme ::selection {
-  background: rgba(125, 211, 252, 0.35);
-  color: #ffffff;
+  background: rgb(183 156 96 / 0.28);
+  color: rgb(44 52 53);
 }
 
 .blog-theme {

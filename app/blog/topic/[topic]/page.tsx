@@ -170,51 +170,51 @@ export default async function BlogTopicPage({ params }: Props) {
       />
       <div className="max-w-3xl">
         <nav aria-label="Breadcrumb" className="font-label text-xs uppercase tracking-widest">
-          <ol className="flex flex-wrap items-center gap-2 text-zinc-300">
+          <ol className="flex flex-wrap items-center gap-2 text-on-surface-variant">
             <li>
-              <Link href="/blog" className="text-sky-300 hover:text-sky-200 hover:underline">
+              <Link href="/blog" className="text-primary hover:text-primary-dim hover:underline">
                 Blog
               </Link>
             </li>
             <li aria-hidden="true">/</li>
-            <li className="text-white">{group.topicLabel}</li>
+            <li className="text-on-background">{group.topicLabel}</li>
           </ol>
         </nav>
-        <p className="mt-6 font-label text-sm font-semibold uppercase tracking-widest text-sky-300">
+        <p className="mt-6 font-label text-sm font-semibold uppercase tracking-widest text-gold">
           Topic cluster
         </p>
-        <h1 className="mt-3 font-headline text-4xl font-bold text-white md:text-5xl">
+        <h1 className="mt-3 font-headline text-4xl font-bold text-on-background md:text-5xl">
           {group.topicLabel}
         </h1>
-        <p className="mt-4 font-body text-lg leading-relaxed text-zinc-300">
+        <p className="mt-4 font-body text-lg leading-relaxed text-on-surface-variant">
           {topicContent.definition}
         </p>
-        <p className="mt-3 font-body text-sm text-zinc-300">
+        <p className="mt-3 font-body text-sm text-on-surface-variant">
           Topic pages are maintained as part of the canonical public site, with clear authorship and
           an{' '}
-          <Link href="/about" className="font-semibold text-sky-300 hover:underline">
+          <Link href="/about" className="font-semibold text-primary hover:underline">
             About page
           </Link>
           .
         </p>
-        <p className="mt-2 font-body text-xs text-zinc-400">
+        <p className="mt-2 font-body text-xs text-on-surface-variant/80">
           Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
       </div>
 
-      <section className="mt-8 max-w-3xl rounded-2xl bg-zinc-900 p-6 shadow-float">
-        <p className="font-label text-xs uppercase tracking-widest text-sky-300">BLUF</p>
-        <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+      <section className="mt-8 max-w-3xl rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-gold">BLUF</p>
+        <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
           {topicContent.definition}
         </p>
       </section>
 
-      <section className="mt-6 max-w-3xl rounded-2xl bg-zinc-900 p-6 shadow-float">
-        <p className="font-label text-xs uppercase tracking-widest text-zinc-300">Contents</p>
+      <section className="mt-6 max-w-3xl rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Contents</p>
         <ol className="mt-4 space-y-2 text-sm">
           {tocItems.map((item) => (
             <li key={item.id}>
-              <a href={`#${item.id}`} className="text-white hover:text-sky-300">
+              <a href={`#${item.id}`} className="text-on-background hover:text-primary">
                 {item.title}
               </a>
             </li>
@@ -223,33 +223,33 @@ export default async function BlogTopicPage({ params }: Props) {
       </section>
 
       <section className="mt-8 grid gap-4 md:grid-cols-3">
-        <div id="definition" className="rounded-2xl bg-zinc-900 p-6 shadow-float scroll-mt-28">
-          <p className="font-label text-xs uppercase tracking-widest text-sky-300">Definition</p>
-          <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+        <div id="definition" className="rounded-2xl bg-surface-container-low p-6 shadow-float scroll-mt-28">
+          <p className="font-label text-xs uppercase tracking-widest text-gold">Definition</p>
+          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
             {topicContent.definition}
           </p>
         </div>
-        <div id="why-it-matters" className="rounded-2xl bg-zinc-900 p-6 shadow-float scroll-mt-28">
-          <p className="font-label text-xs uppercase tracking-widest text-sky-300">Why It Matters</p>
-          <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+        <div id="why-it-matters" className="rounded-2xl bg-surface-container-low p-6 shadow-float scroll-mt-28">
+          <p className="font-label text-xs uppercase tracking-widest text-gold">Why It Matters</p>
+          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
             {topicContent.whyItMatters}
           </p>
         </div>
-        <div id="practical-takeaway" className="rounded-2xl bg-zinc-900 p-6 shadow-float scroll-mt-28">
-          <p className="font-label text-xs uppercase tracking-widest text-sky-300">
+        <div id="practical-takeaway" className="rounded-2xl bg-surface-container-low p-6 shadow-float scroll-mt-28">
+          <p className="font-label text-xs uppercase tracking-widest text-gold">
             Practical takeaway
           </p>
-          <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+          <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
             {topicContent.practicalTakeaway}
           </p>
         </div>
       </section>
 
-      <div className="mt-4 rounded-2xl bg-zinc-900 p-6 shadow-float">
-        <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
+      <div className="mt-4 rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
           Cluster summary
         </p>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-300">
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
           This topic page exists so the GEO-Pulse blog has a stable cluster URL with a clear
           definition, a bounded explanation of why the topic matters, and direct paths into the
           supporting canonical articles.
@@ -258,8 +258,8 @@ export default async function BlogTopicPage({ params }: Props) {
 
       <div className="mt-12 grid gap-10 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
-          <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-            <p className="font-label text-xs uppercase tracking-widest text-sky-300">Browse topics</p>
+          <section className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+            <p className="font-label text-xs uppercase tracking-widest text-gold">Browse topics</p>
             <ul className="mt-4 space-y-3 text-sm">
               {topicGroups.map((topicGroup) => (
                 <li key={topicGroup.topicKey}>
@@ -267,13 +267,13 @@ export default async function BlogTopicPage({ params }: Props) {
                     href={buildTopicHref(topicGroup.topicKey)}
                     className={
                       topicGroup.topicKey === group.topicKey
-                        ? 'text-sky-300'
-                        : 'text-white hover:text-sky-300'
+                        ? 'text-gold'
+                        : 'text-on-background hover:text-primary'
                     }
                   >
                     {topicGroup.topicLabel}
                   </Link>
-                  <p className="mt-1 text-xs text-zinc-300">
+                  <p className="mt-1 text-xs text-on-surface-variant">
                     {topicGroup.articles.length} article{topicGroup.articles.length === 1 ? '' : 's'}
                   </p>
                 </li>
@@ -286,12 +286,12 @@ export default async function BlogTopicPage({ params }: Props) {
           {topicArticles.map((article) => (
             <article
               key={article.content_id}
-              className="overflow-hidden rounded-2xl bg-zinc-950 shadow-float"
+              className="overflow-hidden rounded-2xl bg-surface-container-lowest shadow-float"
             >
               {(() => {
                 const articleMetadata = parseArticleMetadata(article.metadata);
                 return articleMetadata.heroImageUrl ? (
-                  <div className="aspect-[16/8] w-full overflow-hidden bg-zinc-900">
+                  <div className="aspect-[16/8] w-full overflow-hidden bg-surface-container-low">
                     <img
                       src={articleMetadata.heroImageUrl}
                       alt={articleMetadata.heroImageAlt ?? article.title}
@@ -301,23 +301,23 @@ export default async function BlogTopicPage({ params }: Props) {
                 ) : null;
               })()}
               <div className="p-8">
-              <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-zinc-300">
+              <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-on-surface-variant">
                 <span>{formatDate(article.published_at)}</span>
                 <span>&bull;</span>
                 <span>{article.target_persona ?? '-'}</span>
               </div>
-              <h2 className="mt-4 font-headline text-3xl font-bold text-white">
-                <Link href={`/blog/${article.slug}`} className="hover:text-sky-300">
+              <h2 className="mt-4 font-headline text-3xl font-bold text-on-background">
+                <Link href={`/blog/${article.slug}`} className="hover:text-gold">
                   {article.title}
                 </Link>
               </h2>
               {article.primary_problem ? (
-                <p className="mt-3 font-body text-sm font-medium text-white">
+                <p className="mt-3 font-body text-sm font-medium text-on-background">
                   Problem: {article.primary_problem}
                 </p>
               ) : null}
               {article.excerpt ? (
-                <p className="mt-4 max-w-3xl font-body leading-relaxed text-zinc-300">
+                <p className="mt-4 max-w-3xl font-body leading-relaxed text-on-surface-variant">
                   {article.excerpt}
                 </p>
               ) : null}

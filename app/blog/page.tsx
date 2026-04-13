@@ -1,11 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { BlogEditorsChoice } from '@/components/blog/blog-editors-choice';
+import { BlogFeedCard } from '@/components/blog/blog-feed-card';
+import { BlogHeroCard } from '@/components/blog/blog-hero-card';
+import { BlogPagination } from '@/components/blog/blog-pagination';
+import { BlogPromoStrip } from '@/components/blog/blog-promo-strip';
+import { BlogSubBar } from '@/components/blog/blog-sub-bar';
+import { BlogTopicColumns } from '@/components/blog/blog-topic-columns';
+import { EDITORS_CHOICE_SLUGS } from '@/lib/blog/editors-choice';
+import { estimateReadMinutes } from '@/lib/blog/read-time';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
-import {
-  buildTopicAnchor,
-  buildTopicHref,
-  groupArticlesByTopic,
-} from '@/lib/server/content-navigation';
+import { buildTopicAnchor, buildTopicHref, groupArticlesByTopic } from '@/lib/server/content-navigation';
 import { parseArticleMetadata } from '@/lib/server/content-article-metadata';
 import {
   buildBlogIndexStructuredData,
@@ -13,9 +18,11 @@ import {
 } from '@/lib/server/content-structured-data';
 import { createPublicContentClient } from '@/lib/server/public-content-client';
 import { createPublicContentData } from '@/lib/server/public-content-data';
+import type { PublicContentListRow } from '@/lib/server/public-content-data';
 import {
   buildPublicPageMetadata,
   SITE_AUTHOR_NAME,
+  SITE_AUTHOR_URL_PATH,
   SITE_DESCRIPTION,
   SITE_EDITORIAL_NAME,
 } from '@/lib/server/public-site-seo';
@@ -24,6 +31,8 @@ export const dynamic = 'force-dynamic';
 
 const BLOG_DESCRIPTION =
   'Operator-grade articles about AI search readiness, extractability, and site visibility.';
+
+const PAGE_SIZE = 6;
 
 function toAbsoluteUrl(appUrl: string, pathOrUrl: string): string {
   const base = appUrl.endsWith('/') ? appUrl.slice(0, -1) : appUrl;
@@ -71,13 +80,51 @@ function getLatestTimestamp(values: ReadonlyArray<string | null | undefined>): s
   return latest === null ? null : new Date(latest).toISOString();
 }
 
-export default async function BlogIndexPage() {
+function sortByPublishedDesc(articles: readonly PublicContentListRow[]): PublicContentListRow[] {
+  return [...articles].sort((a, b) => {
+    const ta = a.published_at ? new Date(a.published_at).getTime() : 0;
+    const tb = b.published_at ? new Date(b.published_at).getTime() : 0;
+    return tb - ta;
+  });
+}
+
+function resolveAuthorHref(meta: ReturnType<typeof parseArticleMetadata>): string {
+  const url = meta.authorUrl?.trim();
+  if (url?.startsWith('http')) return url;
+  if (url?.startsWith('/')) return url;
+  return SITE_AUTHOR_URL_PATH;
+}
+
+type Props = {
+  searchParams?: Promise<{ page?: string }>;
+};
+
+export default async function BlogIndexPage({ searchParams }: Props) {
+  const sp = (await searchParams) ?? {};
+  const pageRaw = sp.page;
+  const pageParsed = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
+  const currentPage = Number.isFinite(pageParsed) && pageParsed > 0 ? pageParsed : 1;
+
   const supabase = await createPublicContentClient();
   const [articles, env] = await Promise.all([
     createPublicContentData(supabase).getPublishedArticles(),
     getPaymentApiEnv(),
   ]);
+
+  const sorted = sortByPublishedDesc(articles);
   const topicGroups = groupArticlesByTopic(articles);
+  const topicLinks = topicGroups.map((g) => ({
+    href: `/blog#${buildTopicAnchor(g.topicKey)}`,
+    label: g.topicLabel,
+  }));
+
+  const editorsChoiceArticles =
+    EDITORS_CHOICE_SLUGS.length > 0
+      ? EDITORS_CHOICE_SLUGS.map((slug) => sorted.find((a) => a.slug === slug)).filter(
+          (a): a is PublicContentListRow => a !== undefined
+        )
+      : [];
+
   const blogUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/blog');
   const topicUrls = topicGroups.map((group) =>
     toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, buildTopicHref(group.topicKey))
@@ -92,8 +139,16 @@ export default async function BlogIndexPage() {
   });
   const breadcrumbStructuredData = buildBreadcrumbStructuredData([{ name: 'Blog', item: blogUrl }]);
 
+  const totalFeed = Math.max(0, sorted.length - 1);
+  const totalPages = totalFeed <= 0 ? 1 : Math.max(1, Math.ceil(totalFeed / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const feedOffset = (safePage - 1) * PAGE_SIZE;
+  const hero = sorted.length > 0 ? sorted[0] : null;
+  const feedRest = sorted.slice(1);
+  const feedSlice = feedRest.slice(feedOffset, feedOffset + PAGE_SIZE);
+
   return (
-    <main className="mx-auto max-w-7xl px-6 py-16 md:px-10">
+    <main className="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(blogStructuredData) }}
@@ -102,213 +157,143 @@ export default async function BlogIndexPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbStructuredData) }}
       />
-      <section className="max-w-3xl">
-        <nav aria-label="Breadcrumb" className="font-label text-xs uppercase tracking-widest">
-          <ol className="flex flex-wrap items-center gap-2 text-zinc-300">
-            <li className="text-white">Blog</li>
+
+      <BlogPromoStrip />
+
+      <div className="mt-10">
+        <BlogSubBar topicLinks={topicLinks} />
+      </div>
+
+      <section className="mt-10 max-w-3xl">
+        <nav aria-label="Breadcrumb" className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+          <ol className="flex flex-wrap items-center gap-2">
+            <li className="text-on-background">Blog</li>
           </ol>
         </nav>
-        <p className="font-label text-sm font-semibold uppercase tracking-widest text-sky-300">
-          GEO-Pulse Blog
-        </p>
-        <h1 className="mt-3 font-headline text-4xl font-bold text-white md:text-5xl">
+        <p className="mt-4 font-label text-sm font-semibold uppercase tracking-widest text-gold">GEO-Pulse Blog</p>
+        <h1 className="mt-3 font-sans text-4xl font-bold tracking-tight text-on-background md:text-5xl">
           Clear answers about AI search readiness
         </h1>
-        <p className="mt-4 font-body text-lg leading-relaxed text-zinc-300">
-          Site-first articles designed to be useful for operators and easy for language models to
-          segment, summarize, and cite accurately.
+        <p className="mt-4 font-body text-lg leading-relaxed text-on-surface-variant">
+          Site-first articles designed to be useful for operators and easy for language models to segment, summarize, and
+          cite accurately.
         </p>
-        <p className="mt-3 font-body text-sm text-zinc-300">
+        <p className="mt-3 font-body text-sm text-on-surface-variant">
           Founder-led by{' '}
-          <Link href="/about" className="font-semibold text-sky-300 hover:underline">
+          <Link href="/about" className="font-semibold text-primary hover:underline">
             {SITE_AUTHOR_NAME}
           </Link>
           .
         </p>
-        <p className="mt-2 font-body text-xs text-zinc-400">
-          Editorially maintained by {SITE_EDITORIAL_NAME}.
-        </p>
+        <p className="mt-2 font-body text-xs text-on-surface-variant/90">Editorially maintained by {SITE_EDITORIAL_NAME}.</p>
       </section>
 
       {articles.length === 0 ? (
         <section className="mt-12">
-          <div className="rounded-2xl bg-zinc-900 p-8 shadow-float">
-            <h2 className="font-headline text-2xl font-semibold text-white">
-              No published articles yet
-            </h2>
-            <p className="mt-3 max-w-2xl font-body text-zinc-300">
-              The content machine is live in admin, but no article has been marked published yet.
-              Once an item is published from the canonical content tables, it will appear here.
+          <div className="rounded-2xl border border-outline-variant/40 bg-surface-container-lowest p-8 shadow-float">
+            <h2 className="font-sans text-2xl font-semibold text-on-background">No published articles yet</h2>
+            <p className="mt-3 max-w-2xl font-body text-on-surface-variant">
+              The content machine is live in admin, but no article has been marked published yet. Once an item is published
+              from the canonical content tables, it will appear here.
             </p>
           </div>
         </section>
       ) : (
-        <div className="mt-12 grid gap-10 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
-            <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-              <p className="font-label text-xs uppercase tracking-widest text-sky-300">
-                Browse topics
-              </p>
-              <ul className="mt-4 space-y-3 text-sm">
-                {topicGroups.map((group) => (
-                  <li key={group.topicKey}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <a
-                        href={`#${buildTopicAnchor(group.topicKey)}`}
-                        className="text-white hover:text-sky-300"
-                      >
-                        {group.topicLabel}
-                      </a>
-                      <span className="text-zinc-300">/</span>
-                      <Link href={buildTopicHref(group.topicKey)} className="text-sky-300 hover:text-sky-200 hover:underline">
-                        Open topic page
-                      </Link>
-                    </div>
-                    <p className="mt-1 text-xs text-zinc-300">
-                      {group.articles.length} article{group.articles.length === 1 ? '' : 's'}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
+        <>
+          {hero ? (
+            <div className="mt-12">
+              {(() => {
+                const meta = parseArticleMetadata(hero.metadata);
+                const authorName = meta.authorName ?? SITE_AUTHOR_NAME;
+                const authorHref = resolveAuthorHref(meta);
+                return (
+                  <BlogHeroCard
+                    href={`/blog/${hero.slug}`}
+                    title={hero.title}
+                    excerpt={hero.excerpt}
+                    categoryHref={buildTopicHref(hero.topic_cluster)}
+                    categoryLabel={formatLabel(hero.topic_cluster)}
+                    readMinutes={estimateReadMinutes(hero.excerpt)}
+                    authorName={authorName}
+                    authorHref={authorHref}
+                    dateLabel={formatDate(hero.published_at)}
+                    dateIso={hero.published_at}
+                    heroImageUrl={meta.heroImageUrl}
+                    heroImageAlt={meta.heroImageAlt ?? hero.title}
+                  />
+                );
+              })()}
+            </div>
+          ) : null}
 
-            <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-              <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
-                Article menu
-              </p>
-              <ul className="mt-4 space-y-3 text-sm">
-                {articles.map((article) => (
-                  <li key={article.content_id}>
-                    <Link href={`/blog/${article.slug}`} className="text-white hover:text-sky-300">
-                      {article.title}
-                    </Link>
-                    <p className="mt-1 text-xs text-zinc-300">
-                      {formatLabel(article.topic_cluster)}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {feedSlice.length > 0 ? (
+            <div className="mt-12 space-y-8">
+              {feedSlice.map((article, index) => {
+                const meta = parseArticleMetadata(article.metadata);
+                const authorName = meta.authorName ?? SITE_AUTHOR_NAME;
+                const authorHref = resolveAuthorHref(meta);
+                const globalIndex = feedOffset + index;
+                return (
+                  <BlogFeedCard
+                    key={article.content_id}
+                    href={`/blog/${article.slug}`}
+                    title={article.title}
+                    excerpt={article.excerpt}
+                    categoryHref={buildTopicHref(article.topic_cluster)}
+                    categoryLabel={formatLabel(article.topic_cluster)}
+                    readMinutes={estimateReadMinutes(article.excerpt)}
+                    authorName={authorName}
+                    authorHref={authorHref}
+                    dateLabel={formatDate(article.published_at)}
+                    dateIso={article.published_at}
+                    variantIndex={globalIndex}
+                  />
+                );
+              })}
+            </div>
+          ) : null}
 
-            <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-              <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
-                References
-              </p>
-              <ul className="mt-4 space-y-3 text-sm text-zinc-300">
-                <li>
-                  <a
-                    href="https://developers.google.com/search/docs/crawling-indexing/robots/intro"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sky-300 hover:text-sky-200 hover:underline"
-                  >
-                    Google Search Central robots.txt guide
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://schema.org"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sky-300 hover:text-sky-200 hover:underline"
-                  >
-                    Schema.org vocabulary
-                  </a>
-                </li>
-                <li>
-                  <a
-                    href="https://llmstxt.org"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sky-300 hover:text-sky-200 hover:underline"
-                  >
-                    llms.txt specification
-                  </a>
-                </li>
-              </ul>
-            </section>
-          </aside>
+          <div className="mt-12">
+            <BlogPagination currentPage={safePage} totalPages={totalPages} basePath="/blog" />
+          </div>
 
-          <section className="space-y-10">
-            {topicGroups.map((group) => (
-              <section key={group.topicKey} id={buildTopicAnchor(group.topicKey)} className="scroll-mt-28">
-                <div className="mb-5">
-                  <p className="font-label text-xs uppercase tracking-widest text-sky-300">
-                    Topic cluster
-                  </p>
-                  <h2 className="mt-2 font-headline text-2xl font-bold text-white">
-                    <Link href={buildTopicHref(group.topicKey)} className="hover:text-sky-300">
-                      {group.topicLabel}
-                    </Link>
-                  </h2>
-                  <p className="mt-2 text-sm text-zinc-300">
-                    Keep related articles linked and clustered so readers and language models can move
-                    through the topic without dead ends.
-                  </p>
-                </div>
+          {editorsChoiceArticles.length > 0 ? (
+            <div className="mt-16 lg:max-w-xl">
+              <BlogEditorsChoice articles={editorsChoiceArticles} />
+            </div>
+          ) : null}
 
-                <div className="grid gap-6">
-                  {group.articles.map((article) => (
-                    <article
-                      key={article.content_id}
-                      className="overflow-hidden rounded-2xl bg-zinc-950 shadow-float"
-                    >
-                      {(() => {
-                        const articleMetadata = parseArticleMetadata((article as { metadata?: Record<string, unknown> }).metadata);
-                        return articleMetadata.heroImageUrl ? (
-                          <div className="aspect-[16/8] w-full overflow-hidden bg-zinc-900">
-                            <img
-                              src={articleMetadata.heroImageUrl}
-                              alt={articleMetadata.heroImageAlt ?? article.title}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        ) : null;
-                      })()}
-                      <div className="p-8">
-                      <div className="flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-zinc-300">
-                        <span>{formatDate(article.published_at)}</span>
-                        <span>&bull;</span>
-                        <span>{formatLabel(article.target_persona)}</span>
-                        <span>&bull;</span>
-                        <Link href={buildTopicHref(article.topic_cluster)} className="hover:text-sky-300">
-                          {formatLabel(article.topic_cluster)}
-                        </Link>
-                      </div>
-                      <h3 className="mt-4 font-headline text-3xl font-bold text-white">
-                        <Link href={`/blog/${article.slug}`} className="hover:text-sky-300">
-                          {article.title}
-                        </Link>
-                      </h3>
-                      {article.primary_problem ? (
-                        <p className="mt-3 font-body text-sm font-medium text-white">
-                          Problem: {article.primary_problem}
-                        </p>
-                      ) : null}
-                      {article.excerpt ? (
-                        <p className="mt-4 max-w-3xl font-body leading-relaxed text-zinc-300">
-                          {article.excerpt}
-                        </p>
-                      ) : null}
-                      <div className="mt-6">
-                        <Link
-                          href={`/blog/${article.slug}`}
-                          className="inline-flex rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
-                        >
-                          Read article
-                        </Link>
-                      </div>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            ))}
+          <div className="mt-16">
+            <BlogTopicColumns topicGroups={topicGroups} />
+          </div>
+
+          <section className="mt-16 rounded-2xl border border-dashed border-outline-variant/50 bg-surface-container-lowest/80 p-8">
+            <h2 className="font-sans text-lg font-semibold text-on-background">References</h2>
+            <ul className="mt-4 space-y-3 font-body text-sm text-on-surface-variant">
+              <li>
+                <a
+                  href="https://developers.google.com/search/docs/crawling-indexing/robots/intro"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  Google Search Central robots.txt guide
+                </a>
+              </li>
+              <li>
+                <a href="https://schema.org" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                  Schema.org vocabulary
+                </a>
+              </li>
+              <li>
+                <a href="https://llmstxt.org" target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                  llms.txt specification
+                </a>
+              </li>
+            </ul>
           </section>
-        </div>
+        </>
       )}
     </main>
   );
 }
-
-

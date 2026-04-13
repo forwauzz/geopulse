@@ -212,40 +212,40 @@ export default async function BlogArticlePage({ params }: Props) {
       />
       <div className="mb-10">
         <nav aria-label="Breadcrumb" className="font-label text-xs uppercase tracking-widest">
-          <ol className="flex flex-wrap items-center gap-2 text-zinc-300">
+          <ol className="flex flex-wrap items-center gap-2 text-on-surface-variant">
             <li>
-              <Link href="/blog" className="text-sky-300 hover:text-sky-200 hover:underline">
+              <Link href="/blog" className="text-primary hover:text-primary-dim hover:underline">
                 Blog
               </Link>
             </li>
             <li aria-hidden="true">/</li>
             <li>
-              <Link href={buildTopicHref(article.topic_cluster)} className="text-sky-300 hover:text-sky-200 hover:underline">
+              <Link href={buildTopicHref(article.topic_cluster)} className="text-primary hover:text-primary-dim hover:underline">
                 {formatLabel(article.topic_cluster)}
               </Link>
             </li>
             <li aria-hidden="true">/</li>
-            <li className="text-white">{article.title}</li>
+            <li className="text-on-background">{article.title}</li>
           </ol>
         </nav>
-        <div className="mt-6 flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-zinc-300">
+        <div className="mt-6 flex flex-wrap items-center gap-3 text-xs uppercase tracking-widest text-on-surface-variant">
           <span>{formatDate(article.published_at)}</span>
           <span>&bull;</span>
-          <Link href={authorUrl} className="hover:text-sky-300">
+          <Link href={authorUrl} className="hover:text-primary">
             {articleMetadata.authorName ?? 'GEO-Pulse'}
           </Link>
           <span>&bull;</span>
           <span>{formatLabel(article.target_persona)}</span>
           <span>&bull;</span>
-          <Link href={buildTopicHref(article.topic_cluster)} className="hover:text-sky-300">
+          <Link href={buildTopicHref(article.topic_cluster)} className="hover:text-primary">
             {formatLabel(article.topic_cluster)}
           </Link>
         </div>
-        <h1 className="mt-4 max-w-4xl font-headline text-4xl font-bold leading-tight text-white md:text-5xl">
+        <h1 className="mt-4 max-w-4xl font-headline text-4xl font-bold leading-tight text-on-background md:text-5xl">
           {article.title}
         </h1>
         {articleMetadata.heroImageUrl ? (
-          <div className="mt-6 overflow-hidden rounded-2xl bg-zinc-900 shadow-float">
+          <div className="mt-6 overflow-hidden rounded-2xl bg-surface-container-low shadow-float">
             <img
               src={articleMetadata.heroImageUrl}
               alt={articleMetadata.heroImageAlt ?? article.title}
@@ -254,30 +254,30 @@ export default async function BlogArticlePage({ params }: Props) {
           </div>
         ) : null}
         {article.primary_problem ? (
-          <p className="mt-4 max-w-3xl font-body text-lg font-medium leading-relaxed text-white">
+          <p className="mt-4 max-w-3xl font-body text-lg font-medium leading-relaxed text-on-background">
             {article.primary_problem}
           </p>
         ) : null}
       </div>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <article className="rounded-2xl bg-zinc-950 p-8 shadow-float">
+        <article className="rounded-2xl bg-surface-container-lowest p-8 shadow-float">
           <section className="mb-8 grid gap-4 md:grid-cols-2">
             {leadParagraph ? (
-              <div className="rounded-2xl bg-zinc-900 p-6">
-                <p className="font-label text-xs uppercase tracking-widest text-sky-300">BLUF</p>
-                <p className="mt-3 max-w-3xl font-body leading-relaxed text-zinc-300">{leadParagraph}</p>
+              <div className="rounded-2xl bg-surface-container-low p-6">
+                <p className="font-label text-xs uppercase tracking-widest text-gold">BLUF</p>
+                <p className="mt-3 max-w-3xl font-body leading-relaxed text-on-surface-variant">{leadParagraph}</p>
               </div>
             ) : null}
-            <div className="rounded-2xl bg-zinc-900 p-6">
-              <p className="font-label text-xs uppercase tracking-widest text-sky-300">Editorial context</p>
-              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-zinc-300">
+            <div className="rounded-2xl bg-surface-container-low p-6">
+              <p className="font-label text-xs uppercase tracking-widest text-gold">Editorial context</p>
+              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">
                 Authored by{' '}
-                <Link href={authorUrl} className="font-semibold text-sky-300 hover:text-sky-200 hover:underline">
+                <Link href={authorUrl} className="font-semibold text-primary hover:text-primary-dim hover:underline">
                   {articleMetadata.authorName ?? 'GEO-Pulse'}
                 </Link>
                 {articleMetadata.authorRole ? `, ${articleMetadata.authorRole}` : ''}. See the{' '}
-                <Link href="/about" className="font-semibold text-sky-300 hover:underline">
+                <Link href="/about" className="font-semibold text-primary hover:underline">
                   About page
                 </Link>
                 {' '}for site identity and editorial context.
@@ -285,15 +285,15 @@ export default async function BlogArticlePage({ params }: Props) {
             </div>
           </section>
 
-          <section className="mb-8 rounded-2xl bg-zinc-900 p-6">
-            <p className="font-label text-xs uppercase tracking-widest text-sky-300">
+          <section className="mb-8 rounded-2xl bg-surface-container-low p-6">
+            <p className="font-label text-xs uppercase tracking-widest text-gold">
               On this topic
             </p>
-            <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+            <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
               This article is part of the{' '}
               <Link
                 href={buildTopicHref(article.topic_cluster)}
-                className="font-medium text-sky-300 hover:text-sky-200 hover:underline"
+                className="font-medium text-primary hover:text-primary-dim hover:underline"
               >
                 {formatLabel(article.topic_cluster)}
               </Link>{' '}
@@ -303,7 +303,7 @@ export default async function BlogArticlePage({ params }: Props) {
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
                 href={buildTopicHref(article.topic_cluster)}
-                className="rounded-xl border border-white/15 bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+                className="rounded-xl border border-outline-variant/35 bg-surface-container px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface-container-high"
               >
                 Open topic page
               </Link>
@@ -311,7 +311,7 @@ export default async function BlogArticlePage({ params }: Props) {
                 <Link
                   key={related.content_id}
                   href={`/blog/${related.slug}`}
-                  className="rounded-xl border border-white/15 bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700"
+                  className="rounded-xl border border-outline-variant/35 bg-surface-container px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface-container-high"
                 >
                   {related.title}
                 </Link>
@@ -320,14 +320,14 @@ export default async function BlogArticlePage({ params }: Props) {
           </section>
 
           {tocItems.length > 0 ? (
-            <section className="mb-8 rounded-2xl bg-zinc-900 p-6">
-              <p className="font-label text-xs uppercase tracking-widest text-sky-300">
+            <section className="mb-8 rounded-2xl bg-surface-container-low p-6">
+              <p className="font-label text-xs uppercase tracking-widest text-gold">
                 Contents
               </p>
               <ol className="mt-4 space-y-2 text-sm">
                 {tocItems.map((item) => (
                   <li key={item.id} className={item.level === 3 ? 'pl-4' : ''}>
-                    <a href={`#${item.id}`} className="text-white hover:text-sky-300">
+                    <a href={`#${item.id}`} className="text-on-background hover:text-primary">
                       {item.title}
                     </a>
                   </li>
@@ -339,11 +339,11 @@ export default async function BlogArticlePage({ params }: Props) {
           <BlogArticleBody markdown={article.draft_markdown} />
 
           {relatedArticles.length > 0 ? (
-            <section className="mt-10 border-t border-white/15 pt-8">
-              <p className="font-label text-xs uppercase tracking-widest text-sky-300">
+            <section className="mt-10 border-t border-outline-variant/35 pt-8">
+              <p className="font-label text-xs uppercase tracking-widest text-gold">
                 Continue the topic
               </p>
-              <h2 className="mt-3 font-headline text-2xl font-semibold text-white">
+              <h2 className="mt-3 font-headline text-2xl font-semibold text-on-background">
                 Related articles
               </h2>
               <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -351,16 +351,16 @@ export default async function BlogArticlePage({ params }: Props) {
                   <Link
                     key={related.content_id}
                     href={`/blog/${related.slug}`}
-                    className="rounded-2xl bg-zinc-900 p-5 transition hover:bg-zinc-800"
+                    className="rounded-2xl bg-surface-container-low p-5 transition hover:bg-surface-container"
                   >
-                    <p className="text-xs uppercase tracking-widest text-zinc-300">
+                    <p className="text-xs uppercase tracking-widest text-on-surface-variant">
                       {formatLabel(related.topic_cluster)}
                     </p>
-                    <h3 className="mt-2 font-headline text-xl font-semibold text-white">
+                    <h3 className="mt-2 font-headline text-xl font-semibold text-on-background">
                       {related.title}
                     </h3>
                     {related.excerpt ? (
-                      <p className="mt-3 text-sm leading-relaxed text-zinc-300">
+                      <p className="mt-3 text-sm leading-relaxed text-on-surface-variant">
                         {related.excerpt}
                       </p>
                     ) : null}
@@ -372,8 +372,8 @@ export default async function BlogArticlePage({ params }: Props) {
         </article>
 
         <aside className="space-y-6">
-          <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-            <p className="font-label text-xs uppercase tracking-widest text-sky-300">Browse topics</p>
+          <section className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+            <p className="font-label text-xs uppercase tracking-widest text-gold">Browse topics</p>
             <ul className="mt-4 space-y-3 text-sm">
               {topicGroups.map((topicGroup) => (
                 <li key={topicGroup.topicKey}>
@@ -381,13 +381,13 @@ export default async function BlogArticlePage({ params }: Props) {
                     href={buildTopicHref(topicGroup.topicKey)}
                     className={
                       topicGroup.topicKey === (article.topic_cluster?.trim() || 'general')
-                        ? 'text-sky-300'
-                        : 'text-white hover:text-sky-300'
+                        ? 'text-gold'
+                        : 'text-on-background hover:text-primary'
                     }
                   >
                     {topicGroup.topicLabel}
                   </Link>
-                  <p className="mt-1 text-xs text-zinc-300">
+                  <p className="mt-1 text-xs text-on-surface-variant">
                     {topicGroup.articles.length} article{topicGroup.articles.length === 1 ? '' : 's'}
                   </p>
                 </li>
@@ -396,8 +396,8 @@ export default async function BlogArticlePage({ params }: Props) {
           </section>
 
           {inTopicArticles.length > 0 ? (
-            <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-              <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
+            <section className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
                 In this topic
               </p>
               <ul className="mt-4 space-y-3 text-sm">
@@ -405,7 +405,7 @@ export default async function BlogArticlePage({ params }: Props) {
                   <li key={topicArticle.content_id}>
                     <Link
                       href={`/blog/${topicArticle.slug}`}
-                      className="text-white hover:text-sky-300"
+                      className="text-on-background hover:text-primary"
                     >
                       {topicArticle.title}
                     </Link>
@@ -415,14 +415,14 @@ export default async function BlogArticlePage({ params }: Props) {
             </section>
           ) : null}
 
-          <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-            <p className="font-label text-xs uppercase tracking-widest text-sky-300">
+          <section className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+            <p className="font-label text-xs uppercase tracking-widest text-gold">
               Practical next step
             </p>
-            <h2 className="mt-3 font-headline text-2xl font-semibold text-white">
+            <h2 className="mt-3 font-headline text-2xl font-semibold text-on-background">
               Run the free scan
             </h2>
-            <p className="mt-3 font-body leading-relaxed text-zinc-300">
+            <p className="mt-3 font-body leading-relaxed text-on-surface-variant">
               Use GEO-Pulse to check crawlability, structure, extractability, and trust signals on
               your own site before you decide what to fix first.
             </p>
@@ -434,48 +434,48 @@ export default async function BlogArticlePage({ params }: Props) {
             </Link>
           </section>
 
-          <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-            <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
+          <section className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+            <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
               Article metadata
             </p>
             <div className="mt-4 space-y-3 text-sm">
               <div>
-                <p className="text-xs uppercase tracking-widest text-zinc-300">Content ID</p>
-                <p className="mt-1 text-white">{article.content_id}</p>
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Content ID</p>
+                <p className="mt-1 text-on-background">{article.content_id}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-zinc-300">Keyword cluster</p>
-                <p className="mt-1 text-white">{formatLabel(article.keyword_cluster)}</p>
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Keyword cluster</p>
+                <p className="mt-1 text-on-background">{formatLabel(article.keyword_cluster)}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-zinc-300">Topic page</p>
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Topic page</p>
                 <p className="mt-1">
                   <Link
                     href={buildTopicHref(article.topic_cluster)}
-                    className="text-sky-300 hover:text-sky-200 hover:underline"
+                    className="text-primary hover:text-primary-dim hover:underline"
                   >
                     {formatLabel(article.topic_cluster)}
                   </Link>
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-zinc-300">Updated</p>
-                <p className="mt-1 text-white">{formatDate(article.updated_at)}</p>
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Updated</p>
+                <p className="mt-1 text-on-background">{formatDate(article.updated_at)}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-zinc-300">Author</p>
-                <p className="mt-1 text-white">
-                  <Link href={authorUrl} className="hover:text-sky-300">
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">Author</p>
+                <p className="mt-1 text-on-background">
+                  <Link href={authorUrl} className="hover:text-primary">
                     {articleMetadata.authorName ?? 'GEO-Pulse'}
                   </Link>
                   {articleMetadata.authorRole ? ` / ${articleMetadata.authorRole}` : ''}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-zinc-300">
+                <p className="text-xs uppercase tracking-widest text-on-surface-variant">
                   Public sources
                 </p>
-                <ul className="mt-2 space-y-2 text-zinc-300">
+                <ul className="mt-2 space-y-2 text-on-surface-variant">
                   {publicSourceLinks.length === 0 ? (
                     <li>
                       This article is currently based on GEO-Pulse editorial and product-context
@@ -488,7 +488,7 @@ export default async function BlogArticlePage({ params }: Props) {
                           href={sourceLink}
                           target="_blank"
                           rel="noreferrer"
-                          className="hover:text-sky-300"
+                          className="hover:text-primary"
                         >
                           {sourceLink}
                         </a>
@@ -500,8 +500,8 @@ export default async function BlogArticlePage({ params }: Props) {
             </div>
           </section>
 
-          <section className="rounded-2xl bg-zinc-900 p-6 shadow-float">
-            <p className="font-label text-xs uppercase tracking-widest text-zinc-300">
+          <section className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+            <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
               Browse articles
             </p>
             <ul className="mt-4 space-y-3 text-sm">
@@ -509,12 +509,12 @@ export default async function BlogArticlePage({ params }: Props) {
                 <li key={browseArticle.content_id}>
                   <Link
                     href={`/blog/${browseArticle.slug}`}
-                    className="text-white hover:text-sky-300"
+                    className="text-on-background hover:text-primary"
                   >
                     {browseArticle.title}
                   </Link>
-                  <p className="mt-1 text-xs text-zinc-300">
-                    <Link href={buildTopicHref(browseArticle.topic_cluster)} className="hover:text-sky-300">
+                  <p className="mt-1 text-xs text-on-surface-variant">
+                    <Link href={buildTopicHref(browseArticle.topic_cluster)} className="hover:text-primary">
                       {formatLabel(browseArticle.topic_cluster)}
                     </Link>
                   </p>
@@ -522,7 +522,7 @@ export default async function BlogArticlePage({ params }: Props) {
               ))}
             </ul>
             <div className="mt-5">
-              <Link href="/blog" className="text-sm font-medium text-sky-300 hover:text-sky-200 hover:underline">
+              <Link href="/blog" className="text-sm font-medium text-primary hover:text-primary-dim hover:underline">
                 View all topics and articles
               </Link>
             </div>

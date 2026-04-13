@@ -28,6 +28,38 @@
   --color-gold: 183 156 96;          /* muted gold — structural use only (dividers, accents, separators) */
 }
 
+/* Light tokens for blog pages + matching header/footer when route is /blog (html may still be .dark). */
+.blog-theme,
+.blog-chrome-light {
+  --foreground: #2c3435;
+  --background: #f8f9f9;
+  --color-background: 248 249 249;
+  --color-surface: 248 249 249;
+  --color-surface-container: 234 239 239;
+  --color-surface-container-low: 241 244 244;
+  --color-surface-container-high: 227 233 234;
+  --color-surface-container-lowest: 255 255 255;
+  --color-on-background: 44 52 53;
+  --color-on-surface: 44 52 53;
+  --color-on-surface-variant: 88 97 98;
+  --color-primary: 86 94 116;
+  --color-primary-dim: 74 82 104;
+  --color-on-primary: 247 247 255;
+  --color-secondary: 82 96 117;
+  --color-secondary-container: 213 227 253;
+  --color-tertiary: 0 91 196;
+  --color-tertiary-dim: 0 79 173;
+  --color-on-tertiary: 249 248 255;
+  --color-tertiary-container: 67 136 253;
+  --color-outline-variant: 171 180 181;
+  --color-error: 159 64 61;
+  --color-gold: 183 156 96;
+  --blog-hero-tint: 245 242 232;
+  --blog-card-a: 248 246 238;
+  --blog-card-b: 242 238 228;
+  --blog-card-c: 236 232 220;
+}
+
 .dark {
   --foreground: #e6ebef;
   --background: #090d12;

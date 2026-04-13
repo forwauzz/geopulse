@@ -20,17 +20,14 @@ export function SiteHeaderShell({
   const isDashboardRoute = pathname.startsWith('/dashboard');
   const isBlogRoute = pathname.startsWith('/blog');
   const headerClassName = isBlogRoute
-    ? 'sticky top-0 z-50 border-b border-white/10 bg-black/95 backdrop-blur'
+    ? 'blog-chrome-light sticky top-0 z-50 border-b border-outline-variant/30 bg-surface backdrop-blur'
     : 'sticky top-0 z-50 bg-surface';
-  const primaryNavLinkClassName = isBlogRoute
-    ? 'hidden font-sans text-lg font-semibold text-white md:inline'
-    : 'hidden font-sans text-lg font-semibold text-on-background md:inline';
-  const subtleNavLinkClassName = isBlogRoute
-    ? 'text-xs font-semibold uppercase tracking-widest text-zinc-300 transition-colors hover:text-white'
-    : 'text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background';
-  const dashboardLinkClassName = isBlogRoute
-    ? 'text-sm font-medium text-sky-300 transition-colors hover:text-white'
-    : 'text-sm font-medium text-primary transition-colors hover:text-on-background';
+  const primaryNavLinkClassName =
+    'hidden font-sans text-lg font-semibold text-on-background md:inline';
+  const subtleNavLinkClassName =
+    'text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background';
+  const dashboardLinkClassName =
+    'text-sm font-medium text-primary transition-colors hover:text-on-background';
 
   return (
     <header className={headerClassName}>
@@ -119,16 +116,30 @@ export function SiteHeaderShell({
               >
                 About
               </Link>
-              <Link
-                href="/login"
-                className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
-              >
-                Sign in
-              </Link>
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                <Link
+                  href="/login?mode=signup&next=/pricing"
+                  className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-on-background transition hover:bg-surface-container-low sm:px-5"
+                >
+                  Sign up
+                </Link>
+                <Link
+                  href="/pricing"
+                  className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-on-background transition hover:bg-surface-container-low sm:px-5"
+                >
+                  Start free trial
+                </Link>
+                <Link
+                  href="/login"
+                  className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
+                >
+                  Sign in
+                </Link>
+              </div>
               {/* Admin link removed — admins use /login then navigate to /admin directly */}
             </>
           )}
-          {!isBlogRoute ? <ThemeToggle /> : null}
+          <ThemeToggle />
         </div>
       </nav>
     </header>
