@@ -78,9 +78,9 @@ export type StartupAuditExecutionRecord = {
 const TRANSITIONS: Record<StartupAuditExecutionStatus, readonly StartupAuditExecutionStatus[]> = {
   received: ['planning', 'failed', 'cancelled'],
   planning: ['plan_ready', 'failed', 'cancelled'],
-  plan_ready: ['executing', 'cancelled', 'failed'],
+  plan_ready: ['waiting_manual', 'executing', 'cancelled', 'failed'],
   executing: ['waiting_manual', 'completed', 'failed', 'cancelled'],
-  waiting_manual: ['executing', 'completed', 'failed', 'cancelled'],
+  waiting_manual: ['plan_ready', 'executing', 'completed', 'failed', 'cancelled'],
   completed: [],
   failed: ['planning', 'cancelled'],
   cancelled: [],

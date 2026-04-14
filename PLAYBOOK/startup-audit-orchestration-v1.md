@@ -151,9 +151,9 @@ User should be able to test:
 | SAO-010 | Implement planning workflow: execution -> reviews -> plan_ready | Backend | DONE |
 | SAO-011 | Add approval-gated execution state and founder/admin approval actions | Backend + Frontend | DONE |
 | SAO-012 | Extend PR workflow linkage from recommendation-only runs to execution/task-aware runs | Backend | DONE |
-| SAO-013 | Add manual operator task tracking and wait/resume behavior | Backend + Frontend | PLANNED |
-| SAO-014 | Add orchestration dashboard module for plan, blockers, approvals, and model provenance | Frontend + Backend | PLANNED |
-| SAO-015 | Add improvement-history rollups and benchmark-ready execution outcome summaries | Backend + Frontend | PLANNED |
+| SAO-013 | Add manual operator task tracking and wait/resume behavior | Backend + Frontend | DONE |
+| SAO-014 | Add orchestration dashboard module for plan, blockers, approvals, and model provenance | Frontend + Backend | DONE |
+| SAO-015 | Add improvement-history rollups and benchmark-ready execution outcome summaries | Backend + Frontend | DONE |
 
 ## Sequencing
 
@@ -177,3 +177,19 @@ Current PR-linkage truth:
 - PR runs can now carry `execution_id` plus bounded `plan_task_ids`
 - recommendation linkage remains backward-compatible and nullable instead of mandatory
 - PR status sync now updates linked execution state (`executing`, `completed`, `failed`) as well as recommendation lifecycle when a recommendation is still attached
+
+Current manual-operator truth:
+- implementation plans now hydrate `execution_id` from plan metadata so manual task actions can update the linked audit execution without a parallel lookup path
+- manual implementation tasks can now be marked `blocked` or `done` through typed task-status helpers
+- startup audit executions can now pause in `waiting_manual` from both `plan_ready` and `executing`, and can resume back to `plan_ready` or `executing`
+- `/dashboard/startup` overview now exposes a manual operator queue with founder/admin controls to block execution on a manual task and resume once the manual step is completed
+
+Current orchestration-dashboard truth:
+- the startup dashboard overview now includes a dedicated orchestration module for the latest execution
+- that module shows execution state, approval state, linked plan task count, summary/blocker text, and model provenance for planner/repo/db/risk review roles
+- the execution read model now hydrates plan linkage, manual wait metadata, and role-level effective model names from execution metadata for dashboard use
+
+Current improvement-history truth:
+- startup tracking metrics now include execution-history rollups plus stable benchmark-ready outcome buckets: `In flight`, `Blocked manual`, `Completed`, `Failed`, and `Cancelled`
+- `/dashboard/startup` overview now exposes an improvement-history module with execution totals, manual blockers, completed count, and the benchmark-ready outcome summary
+- focused Playwright coverage now clicks the visible founder/admin orchestration controls in trial mode and captures screenshots for the orchestration, manual-operator, approval, and improvement-history states

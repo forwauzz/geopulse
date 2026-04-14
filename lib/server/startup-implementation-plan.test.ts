@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildStartupImplementationLaneCards,
+  canTransitionStartupImplementationTaskStatus,
   createStartupImplementationPlanFromMarkdownAudit,
   createStartupImplementationPlanFromPlannerOutput,
+  getStartupImplementationPlanTask,
   getLatestStartupImplementationPlan,
+  listStartupImplementationPlanTasks,
   parseMarkdownAuditImplementationTasks,
+  updateStartupImplementationPlanTaskStatus,
 } from './startup-implementation-plan';
 import { parseStartupOrchestratorPlannerOutput } from './startup-orchestrator-plan-contract';
 
@@ -250,6 +254,7 @@ describe('startup implementation plan helpers', () => {
                 status: 'ready',
                 summary: 'Latest plan',
                 metadata: {
+                  execution_id: 'exec-1',
                   planner_artifact: {
                     contract_version: 'startup_audit_planner_v1',
                     touched_areas: ['app/dashboard/startup'],
@@ -345,6 +350,7 @@ describe('startup implementation plan helpers', () => {
       startupWorkspaceId: 'ws-1',
     });
     expect(plan?.id).toBe('plan-1');
+    expect(plan?.executionId).toBe('exec-1');
     expect(plan?.tasks).toHaveLength(2);
     expect(plan?.plannerArtifact).toMatchObject({
       contractVersion: 'startup_audit_planner_v1',
@@ -370,5 +376,172 @@ describe('startup implementation plan helpers', () => {
     const cards = buildStartupImplementationLaneCards(plan);
     expect(cards.find((card) => card.lane === 'dev')?.open).toBe(1);
     expect(cards.find((card) => card.lane === 'ops')?.done).toBe(1);
+  });
+
+  it('enforces implementation task status transitions', () => {
+    expect(canTransitionStartupImplementationTaskStatus({ from: 'todo', to: 'blocked' })).toBe(true);
+    expect(canTransitionStartupImplementationTaskStatus({ from: 'blocked', to: 'done' })).toBe(true);
+    expect(canTransitionStartupImplementationTaskStatus({ from: 'done', to: 'todo' })).toBe(false);
+  });
+
+  it('updates implementation task status and resolves execution linkage', async () => {
+    let updatePayload: Record<string, unknown> | null = null;
+
+    const supabase = {
+      from(table: string) {
+        if (table === 'startup_implementation_plan_tasks') {
+          let orderCalls = 0;
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            maybeSingle() {
+              return Promise.resolve({
+                data: {
+                  id: 'task-2',
+                  plan_id: 'plan-1',
+                  recommendation_id: null,
+                  team_lane: 'ops',
+                  task_kind: 'manual_action',
+                  title: 'Run migration',
+                  detail: 'Apply schema first.',
+                  priority: 'critical',
+                  confidence: null,
+                  evidence: {},
+                  execution_mode: 'manual',
+                  depends_on_task_ids: ['task-1'],
+                  acceptance_criteria: [],
+                  evidence_required: ['Migration output'],
+                  artifact_refs: ['migration://042'],
+                  status: 'todo',
+                  sort_order: 1,
+                  blocked_reason: null,
+                  agent_role: 'manual_operator',
+                  manual_instructions: 'Run migration 042 in production.',
+                  created_at: '2026-04-04T00:00:00.000Z',
+                },
+                error: null,
+              });
+            },
+            update(payload: Record<string, unknown>) {
+              updatePayload = payload;
+              return this;
+            },
+            limit() {
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'task-2',
+                    plan_id: 'plan-1',
+                    recommendation_id: null,
+                    team_lane: 'ops',
+                    task_kind: 'manual_action',
+                    title: 'Run migration',
+                    detail: 'Apply schema first.',
+                    priority: 'critical',
+                    confidence: null,
+                    evidence: {},
+                    execution_mode: 'manual',
+                    depends_on_task_ids: ['task-1'],
+                    acceptance_criteria: [],
+                    evidence_required: ['Migration output'],
+                    artifact_refs: ['migration://042'],
+                    status: updatePayload?.status ?? 'todo',
+                    sort_order: 1,
+                    blocked_reason: updatePayload?.blocked_reason ?? null,
+                    agent_role: 'manual_operator',
+                    manual_instructions: 'Run migration 042 in production.',
+                    created_at: '2026-04-04T00:00:00.000Z',
+                  },
+                ],
+                error: null,
+              });
+            },
+            order() {
+              orderCalls += 1;
+              if (orderCalls === 1) return this;
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'task-2',
+                    plan_id: 'plan-1',
+                    recommendation_id: null,
+                    team_lane: 'ops',
+                    task_kind: 'manual_action',
+                    title: 'Run migration',
+                    detail: 'Apply schema first.',
+                    priority: 'critical',
+                    confidence: null,
+                    evidence: {},
+                    execution_mode: 'manual',
+                    depends_on_task_ids: ['task-1'],
+                    acceptance_criteria: [],
+                    evidence_required: ['Migration output'],
+                    artifact_refs: ['migration://042'],
+                    status: 'blocked',
+                    sort_order: 1,
+                    blocked_reason: 'Waiting on production migration',
+                    agent_role: 'manual_operator',
+                    manual_instructions: 'Run migration 042 in production.',
+                    created_at: '2026-04-04T00:00:00.000Z',
+                  },
+                ],
+                error: null,
+              });
+            },
+          };
+        }
+        if (table === 'startup_implementation_plans') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            maybeSingle() {
+              return Promise.resolve({
+                data: {
+                  id: 'plan-1',
+                  startup_workspace_id: 'ws-1',
+                  metadata: {
+                    execution_id: 'exec-1',
+                  },
+                },
+                error: null,
+              });
+            },
+          };
+        }
+        throw new Error(`Unexpected table ${table}`);
+      },
+    } as any;
+
+    const task = await getStartupImplementationPlanTask({
+      supabase,
+      taskId: 'task-2',
+      expectedWorkspaceId: 'ws-1',
+    });
+    expect(task.executionId).toBe('exec-1');
+
+    const updated = await updateStartupImplementationPlanTaskStatus({
+      supabase,
+      taskId: 'task-2',
+      expectedWorkspaceId: 'ws-1',
+      toStatus: 'blocked',
+      blockedReason: 'Waiting on production migration',
+      changedByUserId: 'founder-1',
+    });
+    expect(updated.status).toBe('blocked');
+    expect(updated.blockedReason).toBe('Waiting on production migration');
+
+    const tasks = await listStartupImplementationPlanTasks({
+      supabase,
+      planId: 'plan-1',
+    });
+    expect(tasks[0]?.status).toBe('blocked');
   });
 });

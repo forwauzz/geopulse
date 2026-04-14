@@ -6,6 +6,9 @@ const E2E_STARTUP_SCAN_ID = '00000000-0000-4000-8000-000000000103';
 const E2E_STARTUP_REPORT_ID = '00000000-0000-4000-8000-000000000104';
 const E2E_STARTUP_RECOMMENDATION_ID = '00000000-0000-4000-8000-000000000105';
 const E2E_STARTUP_EXECUTION_ID = '00000000-0000-4000-8000-000000000106';
+const E2E_STARTUP_PLAN_ID = '00000000-0000-4000-8000-000000000107';
+const E2E_STARTUP_PLAN_TASK_ID = '00000000-0000-4000-8000-000000000108';
+const E2E_STARTUP_MANUAL_TASK_ID = '00000000-0000-4000-8000-000000000109';
 // Agency fixture identifiers
 const E2E_AGENCY_USER_ID = '00000000-0000-4000-8000-000000000200';
 const E2E_AGENCY_ACCOUNT_ID = '00000000-0000-4000-8000-000000000201';
@@ -393,6 +396,14 @@ function createE2EQueryBuilder(table: string) {
           approval_status: 'ready_for_review',
           approval_requested_at: now,
           approval_requested_by_user_id: E2E_ADMIN_USER_ID,
+          plan_id: E2E_STARTUP_PLAN_ID,
+          plan_task_count: 2,
+          planning_model_policies: {
+            planner: { effectiveModel: 'claude-opus-4.1' },
+            repoReview: { effectiveModel: 'gpt-5.4' },
+            dbReview: { effectiveModel: 'gpt-5.4-mini' },
+            riskReview: { effectiveModel: 'claude-sonnet-4.5' },
+          },
         },
         completed_at: null,
         created_at: now,
@@ -405,8 +416,90 @@ function createE2EQueryBuilder(table: string) {
     startup_slack_destinations: [],
     startup_slack_delivery_events: [],
     startup_agent_pr_runs: [],
-    startup_implementation_plans: [],
-    startup_implementation_plan_tasks: [],
+    startup_implementation_plans: [
+      {
+        id: E2E_STARTUP_PLAN_ID,
+        startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
+        scan_id: E2E_STARTUP_SCAN_ID,
+        report_id: E2E_STARTUP_REPORT_ID,
+        source_kind: 'agent',
+        source_ref: 'execution://e2e-startup',
+        status: 'ready',
+        summary: 'Latest execution plan for the startup dashboard fixture.',
+        metadata: {
+          execution_id: E2E_STARTUP_EXECUTION_ID,
+          planner_artifact: {
+            contract_version: 'startup_audit_planner_v1',
+            touched_areas: ['app/dashboard/startup', 'lib/server/startup-audit-execution.ts'],
+            risks: [
+              {
+                title: 'Migration order',
+                severity: 'high',
+                detail: 'Pause execution until the manual migration step is confirmed.',
+              },
+            ],
+            manual_actions: [
+              {
+                title: 'Run migration',
+                instructions: 'Apply the SQL migration before resuming execution.',
+                teamLane: 'ops',
+                evidenceRequired: ['Migration output'],
+                artifactRefs: ['migration://042'],
+              },
+            ],
+          },
+        },
+        created_at: now,
+      },
+    ],
+    startup_implementation_plan_tasks: [
+      {
+        id: E2E_STARTUP_PLAN_TASK_ID,
+        plan_id: E2E_STARTUP_PLAN_ID,
+        recommendation_id: null,
+        team_lane: 'dev',
+        task_kind: 'implementation',
+        title: 'Persist execution-aware PR linkage',
+        detail: 'Keep PR activity attached to the startup audit execution spine.',
+        priority: 'high',
+        confidence: 0.9,
+        evidence: {},
+        execution_mode: 'approval_required',
+        depends_on_task_ids: [],
+        acceptance_criteria: ['PR run stores execution context'],
+        evidence_required: ['Database row'],
+        artifact_refs: ['execution://e2e-startup'],
+        status: 'todo',
+        sort_order: 0,
+        blocked_reason: null,
+        agent_role: 'execution_worker',
+        manual_instructions: null,
+        created_at: now,
+      },
+      {
+        id: E2E_STARTUP_MANUAL_TASK_ID,
+        plan_id: E2E_STARTUP_PLAN_ID,
+        recommendation_id: null,
+        team_lane: 'ops',
+        task_kind: 'manual_action',
+        title: 'Run production migration',
+        detail: 'Apply migration 042 before continuing execution.',
+        priority: 'critical',
+        confidence: null,
+        evidence: {},
+        execution_mode: 'manual',
+        depends_on_task_ids: [E2E_STARTUP_PLAN_TASK_ID],
+        acceptance_criteria: [],
+        evidence_required: ['Migration output', 'Dashboard screenshot'],
+        artifact_refs: ['migration://042'],
+        status: 'todo',
+        sort_order: 1,
+        blocked_reason: null,
+        agent_role: 'manual_operator',
+        manual_instructions: 'Run migration 042 in production, then confirm the output in the app.',
+        created_at: now,
+      },
+    ],
     // Agency fixture tables — used by the 'agency' cookie session
     agency_users: [
       {

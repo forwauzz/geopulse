@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import {
+  blockStartupManualTaskAction,
+  completeStartupManualTaskAction,
   markStartupPrRunFailedAction,
   markStartupPrRunMergedAction,
   markStartupPrRunOpenedAction,
@@ -41,6 +43,40 @@ function formatDelta(current: number | null | undefined, previous: number | null
   if (current == null || previous == null) return null;
   const delta = current - previous;
   return `${delta > 0 ? '+' : ''}${delta}`;
+}
+
+function executionStatusLabel(
+  status:
+    | 'received'
+    | 'planning'
+    | 'plan_ready'
+    | 'executing'
+    | 'waiting_manual'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+): string {
+  switch (status) {
+    case 'plan_ready':
+      return 'Plan ready';
+    case 'waiting_manual':
+      return 'Waiting manual';
+    default:
+      return status.replace(/_/g, ' ');
+  }
+}
+
+function approvalStatusLabel(status: 'draft' | 'ready_for_review' | 'approved_for_execution' | 'rejected'): string {
+  switch (status) {
+    case 'ready_for_review':
+      return 'Ready for review';
+    case 'approved_for_execution':
+      return 'Approved';
+    case 'rejected':
+      return 'Rejected';
+    default:
+      return 'Draft';
+  }
 }
 
 export function StartupOverviewStatStrip({
@@ -90,9 +126,18 @@ export function StartupOverviewTab({
 }: StartupOverviewTabProps) {
   const workspaceId = dashboard.selectedWorkspaceId;
   const latestScan = dashboard.scans[0] ?? null;
+  const latestExecution = dashboard.executions[0] ?? null;
   const latestTrendPoint = trend[trend.length - 1] ?? null;
   const previousTrendPoint = trend[trend.length - 2] ?? null;
   const scoreDelta = formatDelta(latestTrendPoint?.score, previousTrendPoint?.score);
+  const manualTasks = latestPlan?.tasks.filter(
+    (task) => task.executionMode === 'manual' || task.taskKind === 'manual_action'
+  ) ?? [];
+  const openManualTasks = manualTasks.filter((task) => task.status !== 'done' && task.status !== 'failed');
+  const latestPlanExecution =
+    latestPlan?.executionId != null
+      ? dashboard.executions.find((execution) => execution.id === latestPlan.executionId) ?? null
+      : null;
 
   return (
     <>
@@ -167,6 +212,85 @@ export function StartupOverviewTab({
       <article className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
+            <p className="text-xs uppercase tracking-widest text-on-surface-variant">Audit orchestration</p>
+            <h2 className="mt-1 text-lg font-semibold">Current execution and blockers</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              This is the control plane for the latest startup audit execution: where it is, what is blocked, and which models produced the current plan.
+            </p>
+          </div>
+          <Link
+            href={auditsTabHref(workspaceId)}
+            className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+          >
+            Open audit history
+          </Link>
+        </div>
+        {latestExecution ? (
+          <div
+            className="mt-4 grid gap-3 rounded-xl border border-outline-variant bg-surface-container-low p-4"
+            data-testid="startup-orchestration-module"
+          >
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div className="rounded-lg bg-surface-container px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Execution</p>
+                <p className="mt-1 text-lg font-bold capitalize text-on-surface">
+                  {executionStatusLabel(latestExecution.status)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-surface-container px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Approval</p>
+                <p className="mt-1 text-lg font-bold text-on-surface">
+                  {approvalStatusLabel(latestExecution.approvalStatus)}
+                </p>
+              </div>
+              <div className="rounded-lg bg-surface-container px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Plan</p>
+                <p className="mt-1 text-lg font-bold text-on-surface">
+                  {latestExecution.planTaskCount != null ? `${latestExecution.planTaskCount} tasks` : 'Not linked'}
+                </p>
+              </div>
+              <div className="rounded-lg bg-surface-container px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Updated</p>
+                <p className="mt-1 text-sm font-semibold text-on-surface">
+                  {new Date(latestExecution.updatedAt).toLocaleString()}
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr]">
+              <div className="rounded-lg bg-surface-container px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Execution summary</p>
+                <p className="mt-2 text-sm text-on-surface">
+                  {latestExecution.summary ?? latestExecution.errorMessage ?? 'No execution summary yet.'}
+                </p>
+                {latestExecution.manualWaitReason ? (
+                  <p className="mt-2 text-sm text-amber-200">
+                    Manual blocker: {latestExecution.manualWaitReason}
+                  </p>
+                ) : latestExecution.approvalRejectionReason ? (
+                  <p className="mt-2 text-sm text-rose-300">
+                    Rejection reason: {latestExecution.approvalRejectionReason}
+                  </p>
+                ) : null}
+              </div>
+              <div className="rounded-lg bg-surface-container px-3 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Model provenance</p>
+                <ul className="mt-2 space-y-2 text-sm text-on-surface">
+                  <li>Planner: {latestExecution.plannerModel ?? 'Not stamped yet'}</li>
+                  <li>Repo review: {latestExecution.repoReviewModel ?? 'Not stamped yet'}</li>
+                  <li>DB review: {latestExecution.dbReviewModel ?? 'Not stamped yet'}</li>
+                  <li>Risk review: {latestExecution.riskReviewModel ?? 'Not stamped yet'}</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-on-surface-variant">No audit execution yet for this workspace.</p>
+        )}
+      </article>
+
+      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
             <p className="text-xs uppercase tracking-widest text-on-surface-variant">Progress</p>
             <h2 className="mt-1 text-lg font-semibold">Recent improvement at a glance</h2>
           <p className="mt-1 text-sm text-on-surface-variant">
@@ -193,6 +317,53 @@ export function StartupOverviewTab({
             <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Validated</p>
             <p className="mt-1 text-2xl font-bold">{metrics.funnel.validated}</p>
           </div>
+        </div>
+      </article>
+
+      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-on-surface-variant">Improvement history</p>
+            <h2 className="mt-1 text-lg font-semibold">Execution outcomes over time</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Startup audit executions are summarized into stable outcome buckets so the same history can later feed benchmark comparisons.
+            </p>
+          </div>
+          <Link
+            href={auditsTabHref(workspaceId)}
+            className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-2 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
+          >
+            Review execution history
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-4" data-testid="startup-improvement-history">
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Executions</p>
+            <p className="mt-1 text-2xl font-bold">{metrics.executionHistory.total}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Plan ready</p>
+            <p className="mt-1 text-2xl font-bold">{metrics.executionHistory.planReady}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Blocked manual</p>
+            <p className="mt-1 text-2xl font-bold">{metrics.executionHistory.waitingManual}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant bg-surface-container-low px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Completed</p>
+            <p className="mt-1 text-2xl font-bold">{metrics.executionHistory.completed}</p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl border border-outline-variant bg-surface-container-low p-4">
+          <p className="text-xs uppercase tracking-widest text-on-surface-variant">Benchmark-ready outcomes</p>
+          <ul className="mt-3 space-y-2 text-sm">
+            {metrics.benchmarkOutcomeSummary.map((item) => (
+              <li key={item.label} className="flex items-center justify-between rounded-lg bg-surface-container px-3 py-2">
+                <span className="text-on-surface">{item.label}</span>
+                <span className="font-semibold text-on-surface">{item.value}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </article>
 
@@ -325,6 +496,94 @@ export function StartupOverviewTab({
                       <li key={point.label} className="flex items-center justify-between rounded-lg bg-surface-container-low px-3 py-2">
                         <span className="text-on-surface">{point.label}</span>
                         <span className="font-semibold">{point.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div
+                className="mt-3 rounded-xl border border-outline-variant bg-surface-container-low p-3"
+                data-testid="startup-manual-operator-queue"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-widest text-on-surface-variant">Manual operator queue</p>
+                    <p className="mt-1 text-sm text-on-surface-variant">
+                      Use this when a task needs a human step such as a migration, env update, or external dashboard action.
+                    </p>
+                  </div>
+                  <div className="text-right text-xs text-on-surface-variant">
+                    <p>
+                      Execution:{' '}
+                      <span className="font-semibold text-on-surface">
+                        {latestPlanExecution?.status ?? 'not linked'}
+                      </span>
+                    </p>
+                    {latestPlanExecution?.status === 'waiting_manual' ? (
+                      <p>Paused until the blocked manual task is completed.</p>
+                    ) : null}
+                  </div>
+                </div>
+                {openManualTasks.length === 0 ? (
+                  <p className="mt-3 text-sm text-on-surface-variant">No open manual tasks in the current plan.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2 text-sm">
+                    {openManualTasks.map((task) => (
+                      <li key={task.id} className="rounded-lg border border-outline-variant bg-surface-container px-3 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-on-surface">{task.title}</p>
+                            <p className="text-xs text-on-surface-variant">
+                              {task.teamLane} • {task.status} • {task.executionMode}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {workspaceId && latestPlan?.executionId ? (
+                              <>
+                                {task.status !== 'blocked' ? (
+                                  <form action={blockStartupManualTaskAction}>
+                                    <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
+                                    <input type="hidden" name="executionId" value={latestPlan.executionId} />
+                                    <input type="hidden" name="taskId" value={task.id} />
+                                    <input
+                                      type="hidden"
+                                      name="blockedReason"
+                                      value={task.manualInstructions ?? task.blockedReason ?? 'Waiting on manual operator action'}
+                                    />
+                                    <button
+                                      type="submit"
+                                      className="rounded border border-outline-variant bg-surface-container-low px-2 py-1 text-[11px] font-semibold text-on-surface"
+                                    >
+                                      Block execution
+                                    </button>
+                                  </form>
+                                ) : null}
+                                <form action={completeStartupManualTaskAction}>
+                                  <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
+                                  <input type="hidden" name="executionId" value={latestPlan.executionId} />
+                                  <input type="hidden" name="taskId" value={task.id} />
+                                  <button
+                                    type="submit"
+                                    className="rounded border border-outline-variant bg-surface-container-low px-2 py-1 text-[11px] font-semibold text-on-surface"
+                                  >
+                                    Mark complete
+                                  </button>
+                                </form>
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                        {task.manualInstructions ? (
+                          <p className="mt-2 text-xs text-on-surface-variant">{task.manualInstructions}</p>
+                        ) : null}
+                        {task.evidenceRequired.length > 0 ? (
+                          <p className="mt-2 text-xs text-on-surface-variant">
+                            Evidence needed: {task.evidenceRequired.join(', ')}
+                          </p>
+                        ) : null}
+                        {task.blockedReason ? (
+                          <p className="mt-2 text-xs text-amber-200">Blocked reason: {task.blockedReason}</p>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

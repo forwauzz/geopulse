@@ -28,6 +28,7 @@ export type StartupImplementationTaskAgentRole =
   | 'manual_operator'
   | 'founder_approval'
   | 'qa_verification';
+export type StartupImplementationTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'done' | 'failed';
 
 export type ParsedImplementationTask = {
   readonly teamLane: StartupImplementationTeamLane;
@@ -49,8 +50,9 @@ export type ParsedImplementationTask = {
 
 export type StartupImplementationPlanTask = ParsedImplementationTask & {
   readonly id: string;
+  readonly planId: string;
   readonly recommendationId: string | null;
-  readonly status: 'todo' | 'in_progress' | 'blocked' | 'done' | 'failed';
+  readonly status: StartupImplementationTaskStatus;
   readonly sortOrder: number;
   readonly createdAt: string;
 };
@@ -64,6 +66,7 @@ export type StartupImplementationPlanRecord = {
   readonly sourceRef: string | null;
   readonly status: 'draft' | 'ready' | 'archived';
   readonly summary: string | null;
+  readonly executionId: string | null;
   readonly createdAt: string;
   readonly plannerArtifact: {
     readonly contractVersion: string;
@@ -90,6 +93,41 @@ export type StartupImplementationLaneCard = {
   readonly open: number;
   readonly done: number;
   readonly topTasks: StartupImplementationPlanTask[];
+};
+
+type StartupImplementationPlanTaskRecordRow = {
+  id: string;
+  plan_id: string;
+  recommendation_id: string | null;
+  team_lane: StartupImplementationTeamLane;
+  task_kind: StartupImplementationTaskKind | null;
+  title: string;
+  detail: string | null;
+  priority: StartupImplementationTaskPriority;
+  confidence: number | null;
+  evidence: Record<string, unknown> | null;
+  execution_mode: StartupImplementationTaskExecutionMode | null;
+  depends_on_task_ids: string[] | null;
+  acceptance_criteria: string[] | null;
+  evidence_required: string[] | null;
+  artifact_refs: string[] | null;
+  status: StartupImplementationTaskStatus;
+  sort_order: number;
+  blocked_reason: string | null;
+  agent_role: StartupImplementationTaskAgentRole | null;
+  manual_instructions: string | null;
+  created_at: string;
+};
+
+const TASK_STATUS_TRANSITIONS: Record<
+  StartupImplementationTaskStatus,
+  readonly StartupImplementationTaskStatus[]
+> = {
+  todo: ['in_progress', 'blocked', 'done', 'failed'],
+  in_progress: ['todo', 'blocked', 'done', 'failed'],
+  blocked: ['todo', 'in_progress', 'done', 'failed'],
+  done: [],
+  failed: ['todo', 'in_progress', 'blocked'],
 };
 
 function clampConfidence(value: number | null): number | null {
@@ -158,6 +196,32 @@ function parseAgentRole(raw: string): StartupImplementationTaskAgentRole | null 
 function parseBracketToken(content: string, key: string): string | null {
   const match = content.match(new RegExp(`\\[${key}:([^\\]]+)\\]`, 'i'));
   return match?.[1]?.trim() ?? null;
+}
+
+function parsePlanTaskRow(task: StartupImplementationPlanTaskRecordRow): StartupImplementationPlanTask {
+  return {
+    id: task.id,
+    planId: task.plan_id,
+    recommendationId: task.recommendation_id,
+    teamLane: task.team_lane,
+    taskKind: task.task_kind ?? 'implementation',
+    title: task.title,
+    detail: task.detail,
+    priority: task.priority,
+    confidence: task.confidence,
+    evidence: task.evidence ?? {},
+    executionMode: task.execution_mode ?? 'approval_required',
+    dependsOnTaskIds: task.depends_on_task_ids ?? [],
+    acceptanceCriteria: task.acceptance_criteria ?? [],
+    evidenceRequired: task.evidence_required ?? [],
+    artifactRefs: task.artifact_refs ?? [],
+    blockedReason: task.blocked_reason,
+    agentRole: task.agent_role,
+    manualInstructions: task.manual_instructions,
+    status: task.status,
+    sortOrder: task.sort_order,
+    createdAt: task.created_at,
+  };
 }
 
 function stripInlineTokens(raw: string): string {
@@ -524,6 +588,10 @@ export async function getLatestStartupImplementationPlan(args: {
     sourceRef: planRow.source_ref,
     status: planRow.status,
     summary: planRow.summary,
+    executionId:
+      typeof (planRow.metadata as Record<string, unknown> | null)?.['execution_id'] === 'string'
+        ? ((planRow.metadata as Record<string, unknown>)['execution_id'] as string)
+        : null,
     createdAt: planRow.created_at,
     plannerArtifact: (() => {
       const artifact = (planRow.metadata as Record<string, unknown> | null)?.['planner_artifact'] as
@@ -581,49 +649,198 @@ export async function getLatestStartupImplementationPlan(args: {
           : [],
       };
     })(),
-    tasks: ((taskRows ?? []) as Array<{
-      id: string;
-      recommendation_id: string | null;
-      team_lane: StartupImplementationTeamLane;
-      task_kind: StartupImplementationTaskKind | null;
-      title: string;
-      detail: string | null;
-      priority: StartupImplementationTaskPriority;
-      confidence: number | null;
-      evidence: Record<string, unknown> | null;
-      execution_mode: StartupImplementationTaskExecutionMode | null;
-      depends_on_task_ids: string[] | null;
-      acceptance_criteria: string[] | null;
-      evidence_required: string[] | null;
-      artifact_refs: string[] | null;
-      status: 'todo' | 'in_progress' | 'blocked' | 'done' | 'failed';
-      sort_order: number;
-      blocked_reason: string | null;
-      agent_role: StartupImplementationTaskAgentRole | null;
-      manual_instructions: string | null;
-      created_at: string;
-    }>).map((task) => ({
-      id: task.id,
-      recommendationId: task.recommendation_id,
-      teamLane: task.team_lane,
-      taskKind: task.task_kind ?? 'implementation',
-      title: task.title,
-      detail: task.detail,
-      priority: task.priority,
-      confidence: task.confidence,
-      evidence: task.evidence ?? {},
-      executionMode: task.execution_mode ?? 'approval_required',
-      dependsOnTaskIds: task.depends_on_task_ids ?? [],
-      acceptanceCriteria: task.acceptance_criteria ?? [],
-      evidenceRequired: task.evidence_required ?? [],
-      artifactRefs: task.artifact_refs ?? [],
-      blockedReason: task.blocked_reason,
-      agentRole: task.agent_role,
-      manualInstructions: task.manual_instructions,
-      status: task.status,
-      sortOrder: task.sort_order,
-      createdAt: task.created_at,
-    })),
+    tasks: ((taskRows ?? []) as StartupImplementationPlanTaskRecordRow[]).map(parsePlanTaskRow),
+  };
+}
+
+export function canTransitionStartupImplementationTaskStatus(args: {
+  readonly from: StartupImplementationTaskStatus;
+  readonly to: StartupImplementationTaskStatus;
+}): boolean {
+  if (args.from === args.to) return true;
+  return TASK_STATUS_TRANSITIONS[args.from].includes(args.to);
+}
+
+export async function listStartupImplementationPlanTasks(args: {
+  readonly supabase: SupabaseLike;
+  readonly planId: string;
+}): Promise<StartupImplementationPlanTask[]> {
+  const { data, error } = await args.supabase
+    .from('startup_implementation_plan_tasks')
+    .select(
+      [
+        'id',
+        'plan_id',
+        'recommendation_id',
+        'team_lane',
+        'task_kind',
+        'title',
+        'detail',
+        'priority',
+        'confidence',
+        'evidence',
+        'execution_mode',
+        'depends_on_task_ids',
+        'acceptance_criteria',
+        'evidence_required',
+        'artifact_refs',
+        'status',
+        'sort_order',
+        'blocked_reason',
+        'agent_role',
+        'manual_instructions',
+        'created_at',
+      ].join(',')
+    )
+    .eq('plan_id', args.planId)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as StartupImplementationPlanTaskRecordRow[]).map(parsePlanTaskRow);
+}
+
+export async function getStartupImplementationPlanTask(args: {
+  readonly supabase: SupabaseLike;
+  readonly taskId: string;
+  readonly expectedWorkspaceId?: string | null;
+}): Promise<
+  StartupImplementationPlanTask & {
+    readonly startupWorkspaceId: string;
+    readonly executionId: string | null;
+  }
+> {
+  const { data: taskRow, error: taskError } = await args.supabase
+    .from('startup_implementation_plan_tasks')
+    .select(
+      [
+        'id',
+        'plan_id',
+        'recommendation_id',
+        'team_lane',
+        'task_kind',
+        'title',
+        'detail',
+        'priority',
+        'confidence',
+        'evidence',
+        'execution_mode',
+        'depends_on_task_ids',
+        'acceptance_criteria',
+        'evidence_required',
+        'artifact_refs',
+        'status',
+        'sort_order',
+        'blocked_reason',
+        'agent_role',
+        'manual_instructions',
+        'created_at',
+      ].join(',')
+    )
+    .eq('id', args.taskId)
+    .maybeSingle();
+  if (taskError) throw taskError;
+  if (!taskRow?.id) throw new Error('Startup implementation task not found.');
+
+  const { data: planRow, error: planError } = await args.supabase
+    .from('startup_implementation_plans')
+    .select('id,startup_workspace_id,metadata')
+    .eq('id', taskRow.plan_id)
+    .maybeSingle();
+  if (planError) throw planError;
+  if (!planRow?.id) throw new Error('Startup implementation plan not found.');
+  if (args.expectedWorkspaceId && planRow.startup_workspace_id !== args.expectedWorkspaceId) {
+    throw new Error('Startup implementation task is outside the expected workspace.');
+  }
+
+  return {
+    ...parsePlanTaskRow(taskRow as StartupImplementationPlanTaskRecordRow),
+    startupWorkspaceId: planRow.startup_workspace_id,
+    executionId:
+      typeof (planRow.metadata as Record<string, unknown> | null)?.['execution_id'] === 'string'
+        ? ((planRow.metadata as Record<string, unknown>)['execution_id'] as string)
+        : null,
+  };
+}
+
+export async function updateStartupImplementationPlanTaskStatus(args: {
+  readonly supabase: SupabaseLike;
+  readonly taskId: string;
+  readonly expectedWorkspaceId?: string | null;
+  readonly toStatus: StartupImplementationTaskStatus;
+  readonly blockedReason?: string | null;
+  readonly changedByUserId?: string | null;
+}): Promise<
+  StartupImplementationPlanTask & {
+    readonly startupWorkspaceId: string;
+    readonly executionId: string | null;
+  }
+> {
+  const current = await getStartupImplementationPlanTask({
+    supabase: args.supabase,
+    taskId: args.taskId,
+    expectedWorkspaceId: args.expectedWorkspaceId,
+  });
+  if (!canTransitionStartupImplementationTaskStatus({ from: current.status, to: args.toStatus })) {
+    throw new Error(`Invalid startup implementation task transition: ${current.status} -> ${args.toStatus}`);
+  }
+
+  const { data: rows, error } = await args.supabase
+    .from('startup_implementation_plan_tasks')
+    .update({
+      status: args.toStatus,
+      blocked_reason: args.toStatus === 'blocked' ? args.blockedReason ?? current.blockedReason : null,
+    })
+    .eq('id', args.taskId)
+    .select(
+      [
+        'id',
+        'plan_id',
+        'recommendation_id',
+        'team_lane',
+        'task_kind',
+        'title',
+        'detail',
+        'priority',
+        'confidence',
+        'evidence',
+        'execution_mode',
+        'depends_on_task_ids',
+        'acceptance_criteria',
+        'evidence_required',
+        'artifact_refs',
+        'status',
+        'sort_order',
+        'blocked_reason',
+        'agent_role',
+        'manual_instructions',
+        'created_at',
+      ].join(',')
+    )
+    .limit(1);
+  if (error) throw error;
+  const updatedRow = (rows?.[0] ?? null) as StartupImplementationPlanTaskRecordRow | null;
+  if (!updatedRow) throw new Error('Startup implementation task update failed.');
+
+  structuredLog(
+    'startup_implementation_task_status_updated',
+    {
+      startup_workspace_id: current.startupWorkspaceId,
+      plan_id: current.planId,
+      task_id: current.id,
+      execution_id: current.executionId,
+      from_status: current.status,
+      to_status: args.toStatus,
+      blocked_reason:
+        args.toStatus === 'blocked' ? args.blockedReason ?? current.blockedReason : null,
+      changed_by_user_id: args.changedByUserId ?? null,
+    },
+    'info'
+  );
+
+  return {
+    ...parsePlanTaskRow(updatedRow),
+    startupWorkspaceId: current.startupWorkspaceId,
+    executionId: current.executionId,
   };
 }
 
