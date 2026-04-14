@@ -301,249 +301,257 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     });
   }
 
+  const actionCard = buildActionCard({
+    host,
+    reportStatus: data.reportStatus,
+    hasPaidReport: data.hasPaidReport,
+    hasDirectReportAccess,
+    scanId: data.scanId,
+    pdfUrl: data.pdfUrl,
+    markdownUrl: data.markdownUrl,
+  });
+
   return (
     <>
-      <section className="mb-12 md:mb-16">
-        <div className="mb-2 flex items-baseline gap-2">
-          <span className="font-label text-sm uppercase tracking-widest text-on-surface-variant">
-            AI search readiness diagnostic
-          </span>
-          <div className="h-px min-w-[2rem] flex-grow bg-surface-container-low" />
-        </div>
-        <h1 className="font-headline text-4xl font-bold tracking-tight text-on-background md:text-5xl">
+      {/* ── Page heading ── */}
+      <section className="mb-8">
+        <span className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+          AI search readiness diagnostic
+        </span>
+        <h1 className="mt-1 font-headline text-3xl font-bold tracking-tight text-on-background md:text-4xl">
           Diagnostic for <span className="italic text-primary">{host}</span>
         </h1>
-        <p className="mt-4 max-w-2xl font-body text-on-surface-variant">
-          Your AI search readiness score for <span className="font-medium text-on-background">{host}</span>.
-        </p>
       </section>
 
-      {(() => {
-        const actionCard = buildActionCard({
-          host,
-          reportStatus: data.reportStatus,
-          hasPaidReport: data.hasPaidReport,
-          hasDirectReportAccess,
-          scanId: data.scanId,
-          pdfUrl: data.pdfUrl,
-          markdownUrl: data.markdownUrl,
-        });
+      {/* ── Two-column layout: score left, CTA right ── */}
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_340px]">
 
-        return (
-          <section className="mb-8 rounded-[28px] border border-outline-variant/20 bg-on-background px-6 py-6 text-surface md:px-8">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl">
-                <p className="font-label text-xs uppercase tracking-[0.22em] text-surface/70">
-                  {actionCard.eyebrow}
-                </p>
-                <h2 className="mt-2 font-headline text-2xl font-bold text-surface-container-lowest">
-                  {actionCard.title}
-                </h2>
-                <p className="mt-3 font-body text-sm leading-6 text-surface/75">{actionCard.body}</p>
-                {actionCard.note ? (
-                  <p className="mt-3 font-body text-xs leading-5 text-surface/60">{actionCard.note}</p>
-                ) : null}
+        {/* LEFT — score + details */}
+        <div className="space-y-8 min-w-0">
+          <ScoreDisplay
+            score={data.score}
+            letterGrade={data.letterGrade}
+            issues={data.topIssues}
+            categoryScores={data.categoryScores}
+            snapshotAction={handleShareSnapshot}
+            snapshotState={shareState}
+          />
+
+          {/* Delivered report access */}
+          {data.reportStatus === 'delivered' && (
+            <div className="rounded-xl border border-primary/20 bg-surface-container-lowest px-6 py-6">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-2xl text-primary">task_alt</span>
+                <div>
+                  <p className="font-headline font-semibold text-on-background">
+                    Your full report has been delivered
+                  </p>
+                  <p className="mt-1 font-body text-sm text-on-surface-variant">
+                    {hasDirectReportAccess
+                      ? 'Your report is in your checkout email, and the same assets are unlocked below.'
+                      : 'Check your Stripe checkout email for the detailed PDF and prioritized action plan.'}
+                  </p>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-3">
-                {actionCard.primaryHref ? (
+              {(data.pdfUrl || data.markdownUrl) && (
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {data.markdownUrl && (
+                    <a
+                      href={buildReportPath(data.scanId)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
+                    >
+                      <span className="material-symbols-outlined text-base">article</span>
+                      View report
+                    </a>
+                  )}
+                  {data.markdownUrl && (
+                    <a
+                      href={`/api/scans/${data.scanId}/report-markdown?download=1`}
+                      className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
+                    >
+                      <span className="material-symbols-outlined text-base">description</span>
+                      Download markdown
+                    </a>
+                  )}
+                  {data.pdfUrl && (
+                    <a
+                      href={data.pdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
+                    >
+                      <span className="material-symbols-outlined text-base">download</span>
+                      Download PDF
+                    </a>
+                  )}
+                </div>
+              )}
+              <div className="mt-4 rounded-xl bg-surface-container-low px-4 py-4">
+                <p className="font-body text-sm font-semibold text-on-background">
+                  Want this report in your dashboard too?
+                </p>
+                <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">
+                  Sign in with the same email you used in Stripe checkout to recover it from your dashboard.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-3">
                   <Link
-                    href={actionCard.primaryHref}
-                    className="inline-flex items-center gap-2 rounded-xl bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface"
+                    href="/login?next=/dashboard"
+                    className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-high"
+                  >
+                    <span className="material-symbols-outlined text-base">login</span>
+                    Sign in to dashboard
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Checkout form (anchored target from CTA button) */}
+          {!data.deepAuditAvailable ? (
+            <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6">
+              <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">Full audit</p>
+              <h2 className="mt-2 font-headline text-xl font-bold text-on-background">
+                Full audit is disabled for this agency client
+              </h2>
+              <p className="mt-3 font-body text-sm leading-6 text-on-surface-variant">
+                GEO-Pulse admin has turned off the deep-audit module for this agency context.
+              </p>
+            </section>
+          ) : null}
+
+          {showCheckout ? (
+            <section id="full-audit-checkout" className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
+              <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">Step 2</p>
+              <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
+                Continue to the full audit
+              </h2>
+              <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
+                {getCheckoutModeCopy(data.checkoutMode)}
+              </p>
+              <div className="mt-5">
+                <DeepAuditCheckout
+                  siteKey={turnstileSiteKey}
+                  scanId={data.scanId}
+                  mode={data.checkoutMode}
+                />
+              </div>
+            </section>
+          ) : null}
+
+          {showEmailGate ? (
+            <section id="preview-save" className="mx-auto max-w-3xl">
+              <EmailGate
+                siteKey={turnstileSiteKey}
+                scanId={data.scanId}
+                url={data.url}
+                score={data.score}
+              />
+            </section>
+          ) : null}
+
+          <div className="pb-4 text-center">
+            <a
+              href="/"
+              className="inline-flex items-center gap-1.5 font-body text-sm text-on-surface-variant transition hover:text-primary"
+            >
+              <span className="material-symbols-outlined text-base">refresh</span>
+              Scan another URL
+            </a>
+          </div>
+        </div>
+
+        {/* RIGHT — sticky CTA panel */}
+        <aside className="lg:sticky lg:top-6 flex flex-col gap-3">
+          <div className="rounded-2xl bg-on-background p-6 text-surface">
+            <p className="font-label text-[11px] uppercase tracking-[0.18em] text-surface/50 mb-1">
+              {actionCard.eyebrow}
+            </p>
+            <h2 className="font-headline text-lg font-bold text-surface leading-snug mb-2">
+              {actionCard.title}
+            </h2>
+            <p className="font-body text-sm leading-6 text-surface/65 mb-6">
+              {actionCard.body}
+            </p>
+
+            {/* Primary CTA — intentionally large */}
+            {actionCard.primaryHref ? (
+              <Link
+                href={actionCard.primaryHref}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface px-5 py-4 font-body text-base font-bold text-on-background shadow-md transition hover:bg-surface/90 active:scale-[0.98]"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {data.reportStatus === 'delivered' ? 'description' : data.reportStatus === 'generating' ? 'refresh' : 'arrow_forward'}
+                </span>
+                {actionCard.primaryLabel}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  const target = actionCard.primaryTargetId
+                    ? document.getElementById(actionCard.primaryTargetId)
+                    : null;
+                  target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface px-5 py-4 font-body text-base font-bold text-on-background shadow-md transition hover:bg-surface/90 active:scale-[0.98]"
+              >
+                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                {actionCard.primaryLabel}
+              </button>
+            )}
+
+            {/* Secondary action */}
+            {actionCard.secondaryLabel ? (
+              <div className="mt-3">
+                {actionCard.secondaryHref ? (
+                  <Link
+                    href={actionCard.secondaryHref}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-medium text-surface/80 transition hover:bg-surface/10"
                   >
                     <span className="material-symbols-outlined text-base">
-                      {data.reportStatus === 'delivered' ? 'description' : data.reportStatus === 'generating' ? 'refresh' : 'arrow_downward'}
+                      {data.reportStatus === 'delivered' ? 'login' : 'notifications'}
                     </span>
-                    {actionCard.primaryLabel}
+                    {actionCard.secondaryLabel}
                   </Link>
                 ) : (
                   <button
                     type="button"
                     onClick={() => {
-                      const target = actionCard.primaryTargetId
-                        ? document.getElementById(actionCard.primaryTargetId)
+                      const target = actionCard.secondaryTargetId
+                        ? document.getElementById(actionCard.secondaryTargetId)
                         : null;
                       target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="inline-flex items-center gap-2 rounded-xl bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-medium text-surface/80 transition hover:bg-surface/10"
                   >
-                    <span className="material-symbols-outlined text-base">arrow_downward</span>
-                    {actionCard.primaryLabel}
+                    <span className="material-symbols-outlined text-base">notifications</span>
+                    {actionCard.secondaryLabel}
                   </button>
                 )}
-                {actionCard.secondaryLabel ? (
-                  actionCard.secondaryHref ? (
-                    <Link
-                      href={actionCard.secondaryHref}
-                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-surface/10"
-                    >
-                      <span className="material-symbols-outlined text-base">
-                        {data.reportStatus === 'delivered' ? 'login' : data.reportStatus === 'generating' ? 'login' : 'bookmark'}
-                      </span>
-                      {actionCard.secondaryLabel}
-                    </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const target = actionCard.secondaryTargetId
-                          ? document.getElementById(actionCard.secondaryTargetId)
-                          : null;
-                        target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }}
-                      className="inline-flex items-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-semibold text-surface-container-lowest transition hover:bg-surface/10"
-                    >
-                      <span className="material-symbols-outlined text-base">bookmark</span>
-                      {actionCard.secondaryLabel}
-                    </button>
-                  )
-                ) : null}
               </div>
-            </div>
-          </section>
-        );
-      })()}
+            ) : null}
 
-      <ScoreDisplay
-        score={data.score}
-        letterGrade={data.letterGrade}
-        issues={data.topIssues}
-        categoryScores={data.categoryScores}
-        snapshotAction={handleShareSnapshot}
-        snapshotState={shareState}
-      />
-
-      <div className="mt-10 space-y-8">
-        {data.reportStatus === 'delivered' && (
-          <div className="rounded-xl border border-primary/20 bg-surface-container-lowest px-6 py-6">
-            <div className="flex items-center gap-3">
-              <span className="material-symbols-outlined text-2xl text-primary">task_alt</span>
-              <div>
-                <p className="font-headline font-semibold text-on-background">
-                  Your full report has been delivered
-                </p>
-                <p className="mt-1 font-body text-sm text-on-surface-variant">
-                  {hasDirectReportAccess
-                    ? 'Your report is in your checkout email, and the same assets are unlocked below.'
-                    : 'Check your Stripe checkout email for the detailed PDF and prioritized action plan.'}
-                </p>
-              </div>
-            </div>
-            {(data.pdfUrl || data.markdownUrl) && (
-              <div className="mt-4 flex flex-wrap gap-3">
-                {data.markdownUrl && (
-                  <a
-                  href={buildReportPath(data.scanId)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
-                  >
-                    <span className="material-symbols-outlined text-base">article</span>
-                    View report
-                  </a>
-                )}
-                {data.markdownUrl && (
-                  <a
-                    href={`/api/scans/${data.scanId}/report-markdown?download=1`}
-                    className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
-                  >
-                    <span className="material-symbols-outlined text-base">description</span>
-                    Download markdown
-                  </a>
-                )}
-                {data.pdfUrl && (
-                  <a
-                    href={data.pdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-5 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
-                  >
-                    <span className="material-symbols-outlined text-base">download</span>
-                    Download PDF
-                  </a>
-                )}
-              </div>
-            )}
-            <div className="mt-4 rounded-xl bg-surface-container-low px-4 py-4">
-              <p className="font-body text-sm font-semibold text-on-background">
-                Want this report in your dashboard too?
+            {actionCard.note ? (
+              <p className="mt-4 font-body text-[11px] leading-5 text-surface/40">
+                {actionCard.note}
               </p>
-              <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">
-                Sign in with the same email you used in Stripe checkout. GEO-Pulse links paid reports to that email so you can recover them later from your dashboard.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <Link
-                  href={`/login?next=/dashboard`}
-                  className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-high"
-                >
-                  <span className="material-symbols-outlined text-base">login</span>
-                  Sign in to dashboard
-                </Link>
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center gap-2 rounded-xl px-4 py-3 font-body text-sm font-semibold text-primary transition hover:underline"
-                >
-                  <span className="material-symbols-outlined text-base">dashboard</span>
-                  Open dashboard
-                </Link>
-              </div>
-            </div>
+            ) : null}
           </div>
-        )}
 
-        {!data.deepAuditAvailable ? (
-          <section className="rounded-[28px] border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
-            <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">
-              Full audit
-            </p>
-            <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
-              Full audit is disabled for this agency client
-            </h2>
-            <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
-              GEO-Pulse admin has turned off the deep-audit module for this agency context. The preview remains
-              available, but the full-audit path is currently locked.
-            </p>
-          </section>
-        ) : null}
-
-        {showCheckout ? (
-          <section id="full-audit-checkout" className="rounded-[28px] border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
-            <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">
-              Step 2
-            </p>
-            <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
-              Continue from preview to the full audit
-            </h2>
-            <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
-              {getCheckoutModeCopy(data.checkoutMode)}
-            </p>
-            <div className="mt-5">
-              <DeepAuditCheckout
-                siteKey={turnstileSiteKey}
-                scanId={data.scanId}
-                mode={data.checkoutMode}
-              />
-            </div>
-          </section>
-        ) : null}
-
-        {showEmailGate ? (
-          <section id="preview-save" className="mx-auto max-w-3xl">
-            <EmailGate
-              siteKey={turnstileSiteKey}
-              scanId={data.scanId}
-              url={data.url}
-              score={data.score}
-            />
-          </section>
-        ) : null}
-
-        <div className="text-center">
-          <a
-            href="/"
-            className="inline-flex items-center gap-1.5 font-body text-sm text-on-surface-variant transition hover:text-primary"
+          {/* Share snapshot — quiet link below the card */}
+          <button
+            type="button"
+            onClick={() => void handleShareSnapshot()}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-3 font-body text-sm text-on-surface-variant transition hover:bg-surface-container-low hover:text-on-background"
           >
-            <span className="material-symbols-outlined text-base">refresh</span>
-            Scan another URL
-          </a>
-        </div>
+            <span className="material-symbols-outlined text-base">share</span>
+            {shareState?.label ?? 'Share this snapshot'}
+          </button>
+          {shareState?.helper ? (
+            <p className="px-1 text-center font-body text-xs text-on-surface-variant">{shareState.helper}</p>
+          ) : null}
+        </aside>
+
       </div>
     </>
   );
