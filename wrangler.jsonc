@@ -32,7 +32,7 @@
   // Values in `vars` are part of the deployed Worker config and persist across deploys.
   // You do NOT need to re-add these after every push unless you want to change them.
   "vars": {
-    "STRIPE_PRICE_ID_DEEP_AUDIT": "price_1TEi0JKknNpProh1sKThObxl",
+    "STRIPE_PRICE_ID_DEEP_AUDIT": "price_1TMFKSKknNpProh1qis5uGXF",
     "NEXT_PUBLIC_SUPABASE_URL": "https://vynrlgtxqnomxenakafn.supabase.co",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
     "NEXT_PUBLIC_APP_URL": "https://getgeopulse.com/",
