@@ -24,6 +24,12 @@ describe('startup audit execution helpers', () => {
       canTransitionStartupAuditExecutionStatus({ from: 'received', to: 'completed' })
     ).toBe(false);
     expect(
+      canTransitionStartupAuditExecutionStatus({ from: 'plan_ready', to: 'waiting_manual' })
+    ).toBe(true);
+    expect(
+      canTransitionStartupAuditExecutionStatus({ from: 'waiting_manual', to: 'plan_ready' })
+    ).toBe(true);
+    expect(
       canTransitionStartupAuditExecutionApprovalStatus({
         from: 'ready_for_review',
         to: 'approved_for_execution',

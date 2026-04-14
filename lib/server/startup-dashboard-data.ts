@@ -78,6 +78,14 @@ export type StartupWorkspaceAuditExecution = {
   readonly approvalApprovedAt: string | null;
   readonly approvalRejectedAt: string | null;
   readonly approvalRejectionReason: string | null;
+  readonly planId: string | null;
+  readonly planTaskCount: number | null;
+  readonly manualWaitTaskId: string | null;
+  readonly manualWaitReason: string | null;
+  readonly plannerModel: string | null;
+  readonly repoReviewModel: string | null;
+  readonly dbReviewModel: string | null;
+  readonly riskReviewModel: string | null;
   readonly completedAt: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -94,6 +102,21 @@ export type StartupDashboardData = {
 
 function parseStringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function parseNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function parseModelName(
+  metadata: Record<string, unknown> | null,
+  role: 'planner' | 'repoReview' | 'dbReview' | 'riskReview'
+): string | null {
+  const policies = metadata?.['planning_model_policies'];
+  if (!policies || typeof policies !== 'object') return null;
+  const policy = (policies as Record<string, unknown>)[role];
+  if (!policy || typeof policy !== 'object') return null;
+  return parseStringOrNull((policy as Record<string, unknown>)['effectiveModel']);
 }
 
 function parseStartupExecutionApprovalStatus(args: {
@@ -374,6 +397,14 @@ export async function getStartupDashboardData(args: {
       approvalApprovedAt: parseStringOrNull(row.metadata?.['approval_approved_at']),
       approvalRejectedAt: parseStringOrNull(row.metadata?.['approval_rejected_at']),
       approvalRejectionReason: parseStringOrNull(row.metadata?.['approval_rejection_reason']),
+      planId: parseStringOrNull(row.metadata?.['plan_id']),
+      planTaskCount: parseNumberOrNull(row.metadata?.['plan_task_count']),
+      manualWaitTaskId: parseStringOrNull(row.metadata?.['manual_wait_task_id']),
+      manualWaitReason: parseStringOrNull(row.metadata?.['manual_wait_reason']),
+      plannerModel: parseModelName(row.metadata, 'planner'),
+      repoReviewModel: parseModelName(row.metadata, 'repoReview'),
+      dbReviewModel: parseModelName(row.metadata, 'dbReview'),
+      riskReviewModel: parseModelName(row.metadata, 'riskReview'),
       completedAt: row.completed_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

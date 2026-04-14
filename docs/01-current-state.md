@@ -293,6 +293,22 @@ Current truth:
   - PR status sync now updates linked execution state (`executing`, `completed`, `failed`) in addition to recommendation lifecycle when a recommendation is attached
   - focused helper coverage now asserts both legacy recommendation queueing and execution-aware PR linkage in `lib/server/startup-agent-pr-workflow.test.ts`
   - current truth: PR runs can now be tied back to startup audit executions and task groups, but the execution-worker entrypoint and richer orchestration UI are still pending
+- `SAO-013` is now in repo:
+  - startup implementation-plan helpers now support typed task-status transitions, plan `execution_id` hydration, and direct manual-task updates in `lib/server/startup-implementation-plan.ts`
+  - startup audit executions can now pause into `waiting_manual` from `plan_ready` and resume back out, so manual steps are part of the execution lifecycle instead of being implied in plan text
+  - `/dashboard/startup` overview now includes a manual operator queue with founder/admin controls to block execution on a manual task and mark that task complete once the human step is done
+  - focused coverage now includes task-status/unit assertions plus Playwright checks for the manual operator queue in `tests/e2e/startup-dashboard-tabs.spec.ts`
+  - current truth: manual follow-up work is now first-class in the startup dashboard, but automatic execution-worker pickup and the richer orchestration module are still pending
+- `SAO-014` is now in repo:
+  - the startup dashboard execution read model now hydrates linked plan ids/counts, manual wait metadata, and role-level model provenance from execution metadata
+  - `/dashboard/startup` overview now includes a dedicated orchestration module for the latest execution, covering execution state, approval state, plan size, summary/blocker text, and model provenance
+  - focused browser coverage now asserts that the orchestration module renders the latest execution summary and planner/reviewer model names from the seeded E2E fixture
+  - current truth: the startup dashboard now has a usable orchestration control plane for the latest execution, while execution-worker pickup and long-term improvement rollups are still pending
+- `SAO-015` is now in repo:
+  - startup tracking metrics now roll up execution-history totals and benchmark-ready outcome buckets (`In flight`, `Blocked manual`, `Completed`, `Failed`, `Cancelled`)
+  - `/dashboard/startup` overview now includes an improvement-history module that surfaces execution totals, plan-ready/manual-blocked/completed counts, and the normalized outcome summary
+  - focused Playwright coverage now clicks visible orchestration controls in trial mode and writes screenshots for orchestration, manual-operator, approval, and improvement-history states into the test output
+  - current truth: the startup dashboard now keeps visible improvement history that can later feed benchmark summaries, while execution-worker pickup is still the main remaining orchestration slice
 - next startup stream step is pilot rollout execution using SD-015 controls
 - startup Slack MVP planning stream is now opened:
   - contract and byte-sized execution plan in `docs/17-startup-slack-integration-mvp-plan.md`

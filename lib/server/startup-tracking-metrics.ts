@@ -20,6 +20,14 @@ export type StartupTrackingMetrics = {
     readonly d14: number | null;
     readonly d30: number | null;
   };
+  readonly executionHistory: {
+    readonly total: number;
+    readonly planReady: number;
+    readonly completed: number;
+    readonly waitingManual: number;
+    readonly failed: number;
+  };
+  readonly benchmarkOutcomeSummary: MetricPoint[];
 };
 
 function toIsoDay(value: string): string {
@@ -96,6 +104,42 @@ export function buildStartupTrackingMetrics(data: StartupDashboardData): Startup
     return Math.round(bucket.reduce((sum, scan) => sum + scan.score, 0) / bucket.length);
   }
 
+  const executionHistory = {
+    total: data.executions.length,
+    planReady: data.executions.filter((execution) => execution.status === 'plan_ready').length,
+    completed: data.executions.filter((execution) => execution.status === 'completed').length,
+    waitingManual: data.executions.filter((execution) => execution.status === 'waiting_manual').length,
+    failed: data.executions.filter((execution) => execution.status === 'failed').length,
+  };
+
+  const benchmarkOutcomeSummary: MetricPoint[] = [
+    {
+      label: 'In flight',
+      value: data.executions.filter((execution) =>
+        execution.status === 'received' ||
+        execution.status === 'planning' ||
+        execution.status === 'plan_ready' ||
+        execution.status === 'executing'
+      ).length,
+    },
+    {
+      label: 'Blocked manual',
+      value: data.executions.filter((execution) => execution.status === 'waiting_manual').length,
+    },
+    {
+      label: 'Completed',
+      value: data.executions.filter((execution) => execution.status === 'completed').length,
+    },
+    {
+      label: 'Failed',
+      value: data.executions.filter((execution) => execution.status === 'failed').length,
+    },
+    {
+      label: 'Cancelled',
+      value: data.executions.filter((execution) => execution.status === 'cancelled').length,
+    },
+  ];
+
   return {
     burnDown,
     funnel: {
@@ -111,5 +155,7 @@ export function buildStartupTrackingMetrics(data: StartupDashboardData): Startup
       d14: averageWithinDays(14),
       d30: averageWithinDays(30),
     },
+    executionHistory,
+    benchmarkOutcomeSummary,
   };
 }

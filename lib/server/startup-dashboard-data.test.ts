@@ -161,6 +161,14 @@ describe('getStartupDashboardData', () => {
                     metadata: {
                       approval_status: 'ready_for_review',
                       approval_requested_at: '2026-04-04T00:46:00.000Z',
+                      plan_id: 'plan-1',
+                      plan_task_count: 4,
+                      planning_model_policies: {
+                        planner: { effectiveModel: 'claude-opus' },
+                        repoReview: { effectiveModel: 'gpt-5.4' },
+                        dbReview: { effectiveModel: 'gpt-5.4-mini' },
+                        riskReview: { effectiveModel: 'claude-sonnet' },
+                      },
                     },
                     completed_at: null,
                     created_at: '2026-04-04T00:40:00.000Z',
@@ -196,6 +204,10 @@ describe('getStartupDashboardData', () => {
     expect(data.executions[0]?.summary).toBe('Planner produced a task graph.');
     expect(data.executions[0]?.approvalStatus).toBe('ready_for_review');
     expect(data.executions[0]?.approvalRequestedAt).toBe('2026-04-04T00:46:00.000Z');
+    expect(data.executions[0]?.planId).toBe('plan-1');
+    expect(data.executions[0]?.planTaskCount).toBe(4);
+    expect(data.executions[0]?.plannerModel).toBe('claude-opus');
+    expect(data.executions[0]?.repoReviewModel).toBe('gpt-5.4');
   });
 
   it('falls back to first workspace when selected id is invalid', async () => {

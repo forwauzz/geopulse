@@ -4,6 +4,142 @@
 > A task is not done until it has an entry here AND Orchestrator has marked it ACCEPTED.
 
 ---
+### 2026-04-13 - SAO-015 - Improvement-history rollups and benchmark-ready outcome summaries
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Metrics extension + overview module + focused unit/browser verification
+
+Added the first benchmark-ready improvement-history layer to the startup dashboard so audit executions can be summarized over time using stable outcome categories instead of ad hoc status text.
+
+**Changes:**
+
+1. **`lib/server/startup-tracking-metrics.ts`**
+   - Added execution-history rollups for:
+     - total executions
+     - plan-ready executions
+     - waiting-manual executions
+     - completed executions
+     - failed executions
+   - Added normalized benchmark-ready outcome buckets:
+     - `In flight`
+     - `Blocked manual`
+     - `Completed`
+     - `Failed`
+     - `Cancelled`
+
+2. **`app/dashboard/startup/components/startup-overview-tab.tsx`**
+   - Added an improvement-history module to the Overview tab.
+   - The module now shows execution totals, manual blockers, completed counts, and the benchmark-ready outcome summary.
+
+3. **`lib/server/startup-tracking-metrics.test.ts`**
+   - Added focused coverage for execution-history rollups and benchmark-ready outcome buckets.
+
+4. **`tests/e2e/startup-dashboard-tabs.spec.ts`**
+   - Browser coverage now asserts the improvement-history module in the startup overview.
+   - The spec now clicks visible founder/admin orchestration controls in trial mode and captures screenshots for key startup orchestration states:
+     - overview orchestration module
+     - manual operator queue
+     - audits execution approval
+     - improvement history
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-tracking-metrics.test.ts lib/server/startup-dashboard-data.test.ts`
+- `npx.cmd playwright test tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-014 - Startup orchestration dashboard module
+
+**Agent:** Frontend + Backend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Dashboard read-model extension + overview module + focused browser verification
+
+Added the first dedicated orchestration module to the startup dashboard so the latest execution is readable in one place without jumping between audits and implementation details.
+
+**Changes:**
+
+1. **`lib/server/startup-dashboard-data.ts`**
+   - Extended startup execution hydration with:
+     - `planId`
+     - `planTaskCount`
+     - `manualWaitTaskId`
+     - `manualWaitReason`
+     - `plannerModel`
+     - `repoReviewModel`
+     - `dbReviewModel`
+     - `riskReviewModel`
+   - These values are derived from existing execution metadata rather than a new table.
+
+2. **`app/dashboard/startup/components/startup-overview-tab.tsx`**
+   - Added a dedicated orchestration module to the Overview tab.
+   - The module now shows:
+     - execution state
+     - approval state
+     - linked plan task count
+     - execution summary / blocker text
+     - planner/reviewer model provenance
+
+3. **`lib/supabase/e2e-auth.ts`**
+   - Extended the startup execution fixture metadata with linked plan info and role-level model provenance so browser coverage exercises a realistic orchestration state.
+
+4. **Focused tests**
+   - `lib/server/startup-dashboard-data.test.ts`
+   - `tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-dashboard-data.test.ts`
+- `npx.cmd playwright test tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-13 - SAO-013 - Manual operator task tracking and wait/resume behavior
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-13
+**Evidence type:** Task-helper extension + startup dashboard controls + focused unit/browser coverage
+
+Added the first real manual-operator lifecycle to startup audit orchestration so a human-required step can explicitly pause an execution and then resume it once the manual task is completed.
+
+**Changes:**
+
+1. **`lib/server/startup-implementation-plan.ts`**
+   - Added typed implementation-task status transitions.
+   - Added `executionId` hydration on the latest plan record.
+   - Added helper support to get/list/update implementation tasks directly from the startup plan layer.
+
+2. **`lib/server/startup-audit-execution.ts`**
+   - Extended execution status transitions so executions can move `plan_ready -> waiting_manual` and `waiting_manual -> plan_ready`, not only wait during active execution.
+
+3. **`app/dashboard/startup/actions.ts`**
+   - Added founder/admin server actions to block a manual task and move the linked execution into `waiting_manual`.
+   - Added completion action that marks the manual task done and resumes the execution when no other open manual tasks remain.
+
+4. **`app/dashboard/startup/components/startup-overview-tab.tsx`**
+   - Added a manual operator queue to the existing implementation-lane panel.
+   - The queue now shows open manual tasks, instructions, evidence requirements, and the founder/admin controls to block execution or mark the task complete.
+
+5. **`lib/supabase/e2e-auth.ts`**
+   - Seeded a latest startup implementation plan plus a manual operator task into the E2E workspace fixture so browser tests cover a non-empty orchestration state.
+
+6. **Focused tests**
+   - `lib/server/startup-implementation-plan.test.ts`
+   - `lib/server/startup-audit-execution.test.ts`
+   - `tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-implementation-plan.test.ts`
+- `npx.cmd vitest run lib/server/startup-audit-execution.test.ts`
+- `npx.cmd playwright test tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
 ### 2026-04-13 - SAO-012 - Execution-aware PR linkage
 
 **Agent:** Backend

@@ -7,7 +7,16 @@ import {
   queueStartupRecommendationPrRun,
   updateStartupAgentPrRunStatus,
 } from '@/lib/server/startup-agent-pr-workflow';
-import { updateStartupAuditExecutionApproval } from '@/lib/server/startup-audit-execution';
+import {
+  getStartupAuditExecution,
+  updateStartupAuditExecutionApproval,
+  updateStartupAuditExecutionStatus,
+} from '@/lib/server/startup-audit-execution';
+import {
+  getStartupImplementationPlanTask,
+  listStartupImplementationPlanTasks,
+  updateStartupImplementationPlanTaskStatus,
+} from '@/lib/server/startup-implementation-plan';
 import {
   createStartupGithubInstallSession,
   disconnectStartupGithubInstallation,
@@ -54,6 +63,14 @@ function buildStartupAuditsUrl(workspaceId: string): string {
   const params = new URLSearchParams({
     startupWorkspace: workspaceId,
     tab: 'audits',
+  });
+  return `/dashboard/startup?${params.toString()}`;
+}
+
+function buildStartupOverviewUrl(workspaceId: string): string {
+  const params = new URLSearchParams({
+    startupWorkspace: workspaceId,
+    tab: 'overview',
   });
   return `/dashboard/startup?${params.toString()}`;
 }
@@ -834,6 +851,160 @@ export async function rejectStartupAuditExecutionAction(formData: FormData): Pro
 
   revalidatePath('/dashboard/startup');
   redirect(buildStartupAuditsUrl(workspaceId));
+}
+
+export async function blockStartupManualTaskAction(formData: FormData): Promise<void> {
+  const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
+  const taskId = String(formData.get('taskId') ?? '').trim();
+  const executionId = String(formData.get('executionId') ?? '').trim();
+  const blockedReason = String(formData.get('blockedReason') ?? '').trim();
+  if (!workspaceId || !taskId || !executionId) {
+    throw new Error('Missing manual task blocking inputs.');
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/startup');
+
+  await requireWorkspaceMember({ supabase, userId: user.id, workspaceId });
+  await requireWorkspaceRole({
+    supabase,
+    userId: user.id,
+    workspaceId,
+    roles: ['founder', 'admin'],
+  });
+
+  const task = await getStartupImplementationPlanTask({
+    supabase,
+    taskId,
+    expectedWorkspaceId: workspaceId,
+  });
+  if (task.executionMode !== 'manual' && task.taskKind !== 'manual_action') {
+    throw new Error('Only manual implementation tasks can pause execution.');
+  }
+  if (task.executionId !== executionId) {
+    throw new Error('Manual task is not linked to the expected execution.');
+  }
+
+  const execution = await getStartupAuditExecution({
+    supabase,
+    executionId,
+    expectedWorkspaceId: workspaceId,
+  });
+  const resumeStatus = execution.status === 'executing' ? 'executing' : 'plan_ready';
+
+  await updateStartupImplementationPlanTaskStatus({
+    supabase,
+    taskId,
+    expectedWorkspaceId: workspaceId,
+    toStatus: 'blocked',
+    blockedReason: blockedReason || task.manualInstructions || 'Waiting on manual operator action',
+    changedByUserId: user.id,
+  });
+
+  if (execution.status !== 'waiting_manual') {
+    await updateStartupAuditExecutionStatus({
+      supabase,
+      executionId,
+      expectedWorkspaceId: workspaceId,
+      toStatus: 'waiting_manual',
+      changedByUserId: user.id,
+      note: 'Execution paused for manual operator task',
+      metadata: {
+        manual_resume_status: resumeStatus,
+        manual_wait_task_id: taskId,
+        manual_wait_started_at: new Date().toISOString(),
+        manual_wait_reason: blockedReason || task.manualInstructions || 'Waiting on manual operator action',
+      },
+    });
+  }
+
+  revalidatePath('/dashboard/startup');
+  redirect(buildStartupOverviewUrl(workspaceId));
+}
+
+export async function completeStartupManualTaskAction(formData: FormData): Promise<void> {
+  const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
+  const taskId = String(formData.get('taskId') ?? '').trim();
+  const executionId = String(formData.get('executionId') ?? '').trim();
+  if (!workspaceId || !taskId || !executionId) {
+    throw new Error('Missing manual task completion inputs.');
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/startup');
+
+  await requireWorkspaceMember({ supabase, userId: user.id, workspaceId });
+  await requireWorkspaceRole({
+    supabase,
+    userId: user.id,
+    workspaceId,
+    roles: ['founder', 'admin'],
+  });
+
+  const task = await getStartupImplementationPlanTask({
+    supabase,
+    taskId,
+    expectedWorkspaceId: workspaceId,
+  });
+  if (task.executionMode !== 'manual' && task.taskKind !== 'manual_action') {
+    throw new Error('Only manual implementation tasks can be completed from the operator flow.');
+  }
+  if (task.executionId !== executionId) {
+    throw new Error('Manual task is not linked to the expected execution.');
+  }
+
+  await updateStartupImplementationPlanTaskStatus({
+    supabase,
+    taskId,
+    expectedWorkspaceId: workspaceId,
+    toStatus: 'done',
+    changedByUserId: user.id,
+  });
+
+  const remainingTasks = await listStartupImplementationPlanTasks({
+    supabase,
+    planId: task.planId,
+  });
+  const pendingManualTasks = remainingTasks.filter(
+    (item) =>
+      item.id !== taskId &&
+      (item.executionMode === 'manual' || item.taskKind === 'manual_action') &&
+      item.status !== 'done' &&
+      item.status !== 'failed'
+  );
+
+  const execution = await getStartupAuditExecution({
+    supabase,
+    executionId,
+    expectedWorkspaceId: workspaceId,
+  });
+  if (execution.status === 'waiting_manual' && pendingManualTasks.length === 0) {
+    const resumeStatus =
+      execution.metadata['manual_resume_status'] === 'executing' ? 'executing' : 'plan_ready';
+    await updateStartupAuditExecutionStatus({
+      supabase,
+      executionId,
+      expectedWorkspaceId: workspaceId,
+      toStatus: resumeStatus,
+      changedByUserId: user.id,
+      note: 'Execution resumed after manual operator task completion',
+      metadata: {
+        manual_resume_status: resumeStatus,
+        manual_wait_task_id: null,
+        manual_wait_resolved_at: new Date().toISOString(),
+        manual_wait_reason: null,
+      },
+    });
+  }
+
+  revalidatePath('/dashboard/startup');
+  redirect(buildStartupOverviewUrl(workspaceId));
 }
 
 export async function markStartupPrRunOpenedAction(formData: FormData): Promise<void> {
