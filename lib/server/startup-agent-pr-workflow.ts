@@ -4,6 +4,12 @@ import {
   isStartupAuditExecutionApprovedForExecution,
   updateStartupAuditExecutionStatus,
 } from './startup-audit-execution';
+import {
+  canTransitionStartupImplementationTaskStatus,
+  getStartupImplementationPlanTask,
+  updateStartupImplementationPlanTaskStatus,
+  type StartupImplementationTaskStatus,
+} from './startup-implementation-plan';
 import { structuredLog } from './structured-log';
 
 type SupabaseLike = {
@@ -94,6 +100,41 @@ function toRun(row: {
     createdAt: row.created_at,
     completedAt: row.completed_at,
   };
+}
+
+async function syncExecutionTasksForRun(args: {
+  readonly supabase: SupabaseLike;
+  readonly startupWorkspaceId: string;
+  readonly taskIds: readonly string[];
+  readonly toStatus: StartupImplementationTaskStatus;
+  readonly changedByUserId: string;
+}): Promise<void> {
+  const boundedTaskIds = Array.from(new Set(args.taskIds.map((value) => value.trim()).filter(Boolean)));
+  if (boundedTaskIds.length === 0) return;
+
+  for (const taskId of boundedTaskIds) {
+    const current = await getStartupImplementationPlanTask({
+      supabase: args.supabase,
+      taskId,
+      expectedWorkspaceId: args.startupWorkspaceId,
+    });
+    if (
+      !canTransitionStartupImplementationTaskStatus({
+        from: current.status,
+        to: args.toStatus,
+      })
+    ) {
+      continue;
+    }
+
+    await updateStartupImplementationPlanTaskStatus({
+      supabase: args.supabase,
+      taskId,
+      expectedWorkspaceId: args.startupWorkspaceId,
+      toStatus: args.toStatus,
+      changedByUserId: args.changedByUserId,
+    });
+  }
 }
 
 export async function listStartupAgentPrRuns(args: {
@@ -339,6 +380,14 @@ export async function queueStartupExecutionPrRun(args: {
     'info'
   );
 
+  await syncExecutionTasksForRun({
+    supabase: args.supabase,
+    startupWorkspaceId: args.startupWorkspaceId,
+    taskIds: boundedTaskIds,
+    toStatus: 'in_progress',
+    changedByUserId: args.queuedByUserId,
+  });
+
   return toRun(runRow);
 }
 
@@ -434,6 +483,40 @@ export async function updateStartupAgentPrRunStatus(args: {
     },
     'info'
   );
+
+  if (runRow.execution_id && args.toStatus === 'running') {
+    await syncExecutionTasksForRun({
+      supabase: args.supabase,
+      startupWorkspaceId: args.startupWorkspaceId,
+      taskIds: runRow.plan_task_ids ?? [],
+      toStatus: 'in_progress',
+      changedByUserId: args.changedByUserId,
+    });
+  } else if (runRow.execution_id && args.toStatus === 'merged') {
+    await syncExecutionTasksForRun({
+      supabase: args.supabase,
+      startupWorkspaceId: args.startupWorkspaceId,
+      taskIds: runRow.plan_task_ids ?? [],
+      toStatus: 'done',
+      changedByUserId: args.changedByUserId,
+    });
+  } else if (runRow.execution_id && args.toStatus === 'failed') {
+    await syncExecutionTasksForRun({
+      supabase: args.supabase,
+      startupWorkspaceId: args.startupWorkspaceId,
+      taskIds: runRow.plan_task_ids ?? [],
+      toStatus: 'failed',
+      changedByUserId: args.changedByUserId,
+    });
+  } else if (runRow.execution_id && (args.toStatus === 'closed' || args.toStatus === 'cancelled')) {
+    await syncExecutionTasksForRun({
+      supabase: args.supabase,
+      startupWorkspaceId: args.startupWorkspaceId,
+      taskIds: runRow.plan_task_ids ?? [],
+      toStatus: 'todo',
+      changedByUserId: args.changedByUserId,
+    });
+  }
 
   if (runRow.execution_id && (args.toStatus === 'running' || args.toStatus === 'pr_opened')) {
     await updateStartupAuditExecutionStatus({

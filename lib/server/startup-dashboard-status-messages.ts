@@ -36,12 +36,18 @@ export function readPrStatusMessage(code: string | undefined): string | null {
   switch (code) {
     case 'pr_queued':
       return 'PR execution run queued from approved recommendation.';
+    case 'pr_execution_queued':
+      return 'Execution PR run queued from the next approved task batch.';
     case 'pr_opened':
       return 'PR run marked as opened and recommendation moved to shipped.';
     case 'pr_merged':
       return 'PR run marked merged and recommendation moved to validated.';
     case 'pr_failed':
       return 'PR run marked failed and recommendation moved to failed.';
+    case 'pr_execution_plan_missing':
+      return 'No execution-linked plan was found for this workspace.';
+    case 'pr_execution_no_tasks':
+      return 'No auto-executable tasks are ready for the next PR run.';
     case 'pr_not_entitled':
       return 'PR workflow is disabled for this workspace bundle.';
     case 'pr_rollout_disabled':

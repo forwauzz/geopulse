@@ -95,6 +95,8 @@ export type StartupImplementationLaneCard = {
   readonly topTasks: StartupImplementationPlanTask[];
 };
 
+export const STARTUP_EXECUTION_PR_TASK_BATCH_LIMIT = 3;
+
 type StartupImplementationPlanTaskRecordRow = {
   id: string;
   plan_id: string;
@@ -860,4 +862,29 @@ export function buildStartupImplementationLaneCards(
       topTasks: laneTasks.filter((task) => task.status !== 'done').slice(0, 3),
     };
   });
+}
+
+export function isStartupImplementationTaskAutoExecutable(
+  task: Pick<StartupImplementationPlanTask, 'executionMode' | 'taskKind'>
+): boolean {
+  return task.executionMode !== 'manual' && task.taskKind !== 'manual_action';
+}
+
+export function selectStartupExecutionPrTaskBatch(args: {
+  readonly tasks: readonly StartupImplementationPlanTask[];
+  readonly limit?: number;
+}): StartupImplementationPlanTask[] {
+  const limit = Math.max(1, Math.min(args.limit ?? STARTUP_EXECUTION_PR_TASK_BATCH_LIMIT, 10));
+  const taskMap = new Map(args.tasks.map((task) => [task.id, task]));
+  return args.tasks
+    .filter((task) => task.status === 'todo')
+    .filter((task) => isStartupImplementationTaskAutoExecutable(task))
+    .filter((task) =>
+      task.dependsOnTaskIds.every((dependencyId) => {
+        const dependency = taskMap.get(dependencyId);
+        if (!dependency) return true;
+        return dependency.status === 'done';
+      })
+    )
+    .slice(0, limit);
 }

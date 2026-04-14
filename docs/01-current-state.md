@@ -309,6 +309,18 @@ Current truth:
   - `/dashboard/startup` overview now includes an improvement-history module that surfaces execution totals, plan-ready/manual-blocked/completed counts, and the normalized outcome summary
   - focused Playwright coverage now clicks visible orchestration controls in trial mode and writes screenshots for orchestration, manual-operator, approval, and improvement-history states into the test output
   - current truth: the startup dashboard now keeps visible improvement history that can later feed benchmark summaries, while execution-worker pickup is still the main remaining orchestration slice
+  - `SAO-016` is now in repo:
+  - founder/admin users can now queue the next approved execution task batch from the startup overview PR activity panel when rollout + service gates allow PR execution
+  - queueing uses the linked implementation plan and only includes auto-capable, dependency-ready `todo` tasks; manual/operator tasks remain excluded from execution batches
+  - execution-aware PR runs now sync linked task rows through the same spine (`in_progress` on queue, `done` on merge, `failed` on PR failure, `todo` on close/cancel)
+  - focused helper coverage now asserts bounded task-batch selection and execution-task sync in `lib/server/startup-implementation-plan.test.ts` and `lib/server/startup-agent-pr-workflow.test.ts`
+  - current truth: the startup dashboard now has a first founder-triggered execution-worker launch path, while the remaining slice is true autonomous worker pickup/branch creation from approved executions
+- `SAO-017` is now in repo:
+  - worker cron now runs a startup execution-dispatch sweep after the existing startup Slack auto-post sweep
+  - scheduled dispatch scans `plan_ready` executions and only queues work when approval, rollout flags, startup GitHub / PR service gates, execution-linked plan state, dependency-ready auto tasks, and single-repo selection all line up
+  - the scheduler safely skips executions with active PR runs, missing actor attribution, ambiguous enabled repos, plan mismatch, or no ready auto-task batch
+  - focused scheduler coverage now exists in `lib/server/startup-execution-dispatch-schedule.test.ts`
+  - current truth: approved execution batches can now be queued by worker cron, while the remaining execution-worker slice is actual GitHub branch / PR creation from those queued runs
 - next startup stream step is pilot rollout execution using SD-015 controls
 - startup Slack MVP planning stream is now opened:
   - contract and byte-sized execution plan in `docs/17-startup-slack-integration-mvp-plan.md`

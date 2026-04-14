@@ -1,6 +1,6 @@
 # Startup Audit Orchestration v1
 
-Last updated: 2026-04-13
+Last updated: 2026-04-14
 
 ## Intent
 
@@ -135,6 +135,18 @@ User should be able to test:
 User should be able to test:
 - execution outcomes can be summarized by workspace and outcome category
 
+### M17. Execution Worker Launch Path
+User should be able to test:
+- founder/admin can queue the next approved execution task batch from the startup dashboard
+- only auto-capable tasks are included in the PR run
+- queued, merged, failed, and cancelled PR states sync back into linked execution-task rows
+
+### M18. Scheduled Execution Dispatch
+User should be able to test:
+- worker cron can auto-queue the next approved execution task batch
+- only workspaces with startup dashboard + GitHub agent + auto-PR enabled are considered
+- ambiguous repo selection or existing active PR runs cause safe skip behavior instead of duplicate dispatch
+
 ## Byte-sized task registry
 
 | Task ID | Description | Owner | Status |
@@ -154,6 +166,8 @@ User should be able to test:
 | SAO-013 | Add manual operator task tracking and wait/resume behavior | Backend + Frontend | DONE |
 | SAO-014 | Add orchestration dashboard module for plan, blockers, approvals, and model provenance | Frontend + Backend | DONE |
 | SAO-015 | Add improvement-history rollups and benchmark-ready execution outcome summaries | Backend + Frontend | DONE |
+| SAO-016 | Add founder/admin execution-batch queueing and task-state sync through the PR workflow | Backend + Frontend | DONE |
+| SAO-017 | Add scheduled worker pickup for approved execution batches behind rollout + entitlement gates | Backend + Worker | DONE |
 
 ## Sequencing
 
@@ -193,3 +207,15 @@ Current improvement-history truth:
 - startup tracking metrics now include execution-history rollups plus stable benchmark-ready outcome buckets: `In flight`, `Blocked manual`, `Completed`, `Failed`, and `Cancelled`
 - `/dashboard/startup` overview now exposes an improvement-history module with execution totals, manual blockers, completed count, and the benchmark-ready outcome summary
 - focused Playwright coverage now clicks the visible founder/admin orchestration controls in trial mode and captures screenshots for the orchestration, manual-operator, approval, and improvement-history states
+
+Current execution-worker-launch truth:
+- founder/admin users can now queue the next approved execution task batch from the startup overview PR activity panel when rollout + entitlement gates allow PR execution
+- the next batch is derived from the linked implementation plan using only `todo` tasks that are auto-capable and dependency-ready; manual tasks are excluded
+- execution-task rows now sync with execution-aware PR runs: queued execution batches move selected tasks to `in_progress`, merged PR runs move them to `done`, failed PR runs move them to `failed`, and closed/cancelled runs return them to `todo`
+- focused helper coverage now asserts bounded task-batch selection and execution-task state sync in `lib/server/startup-implementation-plan.test.ts` and `lib/server/startup-agent-pr-workflow.test.ts`
+
+Current scheduled-dispatch truth:
+- worker cron now runs `runScheduledStartupExecutionDispatch(...)` after the existing startup Slack auto-post sweep
+- scheduled execution dispatch scans `plan_ready` executions, requires `approved_for_execution`, and re-resolves workspace rollout flags plus startup GitHub / PR service gates before queueing work
+- auto-dispatch is intentionally conservative: it skips executions with no approver/creator actor, no execution-linked latest plan, no dependency-ready auto tasks, active queued/running/open PR runs, or ambiguous enabled-repo selection
+- auto-dispatch currently selects the single enabled GitHub repo only when exactly one allowlisted repo is enabled; anything broader is logged and skipped until preferred-repo selection is modeled explicitly

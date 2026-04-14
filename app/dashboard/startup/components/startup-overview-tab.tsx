@@ -5,8 +5,10 @@ import {
   markStartupPrRunFailedAction,
   markStartupPrRunMergedAction,
   markStartupPrRunOpenedAction,
+  queueStartupExecutionPrRunAction,
   queueStartupRecommendationPrRunAction,
 } from '@/app/dashboard/startup/actions';
+import { selectStartupExecutionPrTaskBatch } from '@/lib/server/startup-implementation-plan';
 import type { StartupOverviewStatStripProps, StartupOverviewTabProps } from './startup-tab-types';
 
 function newScanHref(workspaceId: string | null): string {
@@ -138,6 +140,7 @@ export function StartupOverviewTab({
     latestPlan?.executionId != null
       ? dashboard.executions.find((execution) => execution.id === latestPlan.executionId) ?? null
       : null;
+  const executionTaskBatch = latestPlan ? selectStartupExecutionPrTaskBatch({ tasks: latestPlan.tasks }) : [];
 
   return (
     <>
@@ -621,6 +624,60 @@ export function StartupOverviewTab({
             <p className="text-xs uppercase tracking-widest text-on-surface-variant">Agent PR workflow</p>
             {prStatusMessage ? (
               <p className="mt-2 rounded-md bg-surface-container-low px-3 py-2 text-xs text-on-surface">{prStatusMessage}</p>
+            ) : null}
+            {workspaceId &&
+            latestPlanExecution &&
+            latestPlanExecution.approvalStatus === 'approved_for_execution' &&
+            startupRolloutFlags?.githubAgent &&
+            startupRolloutFlags?.autoPr &&
+            startupServiceGates?.githubIntegration.enabled &&
+            startupServiceGates?.agentPrExecution.enabled &&
+            githubState.repositories.length > 0 ? (
+              <div className="mt-3 rounded-lg border border-outline-variant bg-surface-container p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-on-surface-variant">
+                  Next execution task batch
+                </p>
+                {executionTaskBatch.length === 0 ? (
+                  <p className="mt-2 text-xs text-on-surface-variant">
+                    No auto-executable tasks are ready yet. Complete dependencies or clear manual blockers first.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-2 text-xs text-on-surface-variant">
+                      Queue the next bounded execution run from the approved plan. This batch includes {executionTaskBatch.length}{' '}
+                      task{executionTaskBatch.length === 1 ? '' : 's'}.
+                    </p>
+                    <ul className="mt-2 space-y-1 text-xs text-on-surface-variant">
+                      {executionTaskBatch.map((task) => (
+                        <li key={task.id} className="rounded-md bg-surface-container-low px-2 py-1">
+                          {task.title}
+                        </li>
+                      ))}
+                    </ul>
+                    <form action={queueStartupExecutionPrRunAction} className="mt-3 grid gap-2">
+                      <input type="hidden" name="startupWorkspaceId" value={workspaceId} />
+                      <input type="hidden" name="executionId" value={latestPlanExecution.id} />
+                      <select
+                        name="repoFullName"
+                        className="rounded-md border border-outline-variant bg-surface-container-low px-3 py-2 text-xs text-on-surface"
+                        defaultValue={githubState.repositories[0]?.fullName ?? ''}
+                      >
+                        {githubState.repositories.map((repo) => (
+                          <option key={repo.id} value={repo.fullName}>
+                            {repo.fullName}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        className="rounded-md border border-outline-variant bg-surface-container-low px-3 py-2 text-xs font-semibold text-on-surface transition hover:bg-surface-container-high"
+                      >
+                        Queue execution PR run
+                      </button>
+                    </form>
+                  </>
+                )}
+              </div>
             ) : null}
             {workspaceId &&
             startupRolloutFlags?.autoPr &&

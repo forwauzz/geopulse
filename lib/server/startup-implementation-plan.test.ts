@@ -6,8 +6,11 @@ import {
   createStartupImplementationPlanFromPlannerOutput,
   getStartupImplementationPlanTask,
   getLatestStartupImplementationPlan,
+  isStartupImplementationTaskAutoExecutable,
   listStartupImplementationPlanTasks,
   parseMarkdownAuditImplementationTasks,
+  selectStartupExecutionPrTaskBatch,
+  type StartupImplementationPlanTask,
   updateStartupImplementationPlanTaskStatus,
 } from './startup-implementation-plan';
 import { parseStartupOrchestratorPlannerOutput } from './startup-orchestrator-plan-contract';
@@ -382,6 +385,113 @@ describe('startup implementation plan helpers', () => {
     expect(canTransitionStartupImplementationTaskStatus({ from: 'todo', to: 'blocked' })).toBe(true);
     expect(canTransitionStartupImplementationTaskStatus({ from: 'blocked', to: 'done' })).toBe(true);
     expect(canTransitionStartupImplementationTaskStatus({ from: 'done', to: 'todo' })).toBe(false);
+  });
+
+  it('filters auto-executable execution tasks and selects a bounded batch', () => {
+    const tasks: StartupImplementationPlanTask[] = [
+      {
+        id: 'task-1',
+        planId: 'plan-1',
+        recommendationId: null,
+        teamLane: 'dev',
+        taskKind: 'implementation',
+        title: 'Persist worker metadata',
+        detail: null,
+        priority: 'high',
+        confidence: 0.9,
+        evidence: {},
+        executionMode: 'approval_required',
+        dependsOnTaskIds: [],
+        acceptanceCriteria: [],
+        evidenceRequired: [],
+        artifactRefs: [],
+        blockedReason: null,
+        agentRole: 'execution_worker',
+        manualInstructions: null,
+        status: 'todo',
+        sortOrder: 0,
+        createdAt: '2026-04-04T00:00:00.000Z',
+      },
+      {
+        id: 'task-2',
+        planId: 'plan-1',
+        recommendationId: null,
+        teamLane: 'ops',
+        taskKind: 'manual_action',
+        title: 'Run migration',
+        detail: null,
+        priority: 'critical',
+        confidence: null,
+        evidence: {},
+        executionMode: 'manual',
+        dependsOnTaskIds: [],
+        acceptanceCriteria: [],
+        evidenceRequired: ['Migration output'],
+        artifactRefs: ['migration://042'],
+        blockedReason: null,
+        agentRole: 'manual_operator',
+        manualInstructions: 'Run migration 042 in production.',
+        status: 'todo',
+        sortOrder: 1,
+        createdAt: '2026-04-04T00:00:00.000Z',
+      },
+      {
+        id: 'task-3',
+        planId: 'plan-1',
+        recommendationId: null,
+        teamLane: 'dev',
+        taskKind: 'verification',
+        title: 'Verify PR branch output',
+        detail: null,
+        priority: 'medium',
+        confidence: 0.7,
+        evidence: {},
+        executionMode: 'auto',
+        dependsOnTaskIds: ['task-1'],
+        acceptanceCriteria: [],
+        evidenceRequired: [],
+        artifactRefs: [],
+        blockedReason: null,
+        agentRole: 'qa_verification',
+        manualInstructions: null,
+        status: 'todo',
+        sortOrder: 2,
+        createdAt: '2026-04-04T00:00:00.000Z',
+      },
+      {
+        id: 'task-4',
+        planId: 'plan-1',
+        recommendationId: null,
+        teamLane: 'dev',
+        taskKind: 'implementation',
+        title: 'Already complete',
+        detail: null,
+        priority: 'low',
+        confidence: 0.5,
+        evidence: {},
+        executionMode: 'auto',
+        dependsOnTaskIds: [],
+        acceptanceCriteria: [],
+        evidenceRequired: [],
+        artifactRefs: [],
+        blockedReason: null,
+        agentRole: 'execution_worker',
+        manualInstructions: null,
+        status: 'done',
+        sortOrder: 3,
+        createdAt: '2026-04-04T00:00:00.000Z',
+      },
+    ];
+
+    expect(isStartupImplementationTaskAutoExecutable(tasks[0]!)).toBe(true);
+    expect(isStartupImplementationTaskAutoExecutable(tasks[1]!)).toBe(false);
+
+    const batch = selectStartupExecutionPrTaskBatch({
+      tasks,
+      limit: 3,
+    });
+
+    expect(batch.map((task) => task.id)).toEqual(['task-1']);
   });
 
   it('updates implementation task status and resolves execution linkage', async () => {

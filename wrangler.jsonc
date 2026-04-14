@@ -58,6 +58,9 @@
     "STARTUP_SLACK_AGENT_ENABLED": "true",
     "STARTUP_SLACK_AUTO_POST_ENABLED": "true",
 
+    // GitHub App install entrypoint for startup connect flow (non-secret).
+    "GITHUB_APP_INSTALL_URL": "https://github.com/forwauzz/geopulse.git",
+
     // Slack OAuth install entrypoint (non-secret).
     "STARTUP_SLACK_APP_INSTALL_URL": "https://slack.com/oauth/v2/authorize",
     "STARTUP_SLACK_CLIENT_ID": "10736716341730.10845478441990",

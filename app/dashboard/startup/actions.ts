@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import {
+  queueStartupExecutionPrRun,
   queueStartupRecommendationPrRun,
   updateStartupAgentPrRunStatus,
 } from '@/lib/server/startup-agent-pr-workflow';
@@ -14,7 +15,9 @@ import {
 } from '@/lib/server/startup-audit-execution';
 import {
   getStartupImplementationPlanTask,
+  getLatestStartupImplementationPlan,
   listStartupImplementationPlanTasks,
+  selectStartupExecutionPrTaskBatch,
   updateStartupImplementationPlanTaskStatus,
 } from '@/lib/server/startup-implementation-plan';
 import {
@@ -785,6 +788,130 @@ export async function queueStartupRecommendationPrRunAction(formData: FormData):
 
   revalidatePath('/dashboard/startup');
   redirect(buildStartupUrl(workspaceId, undefined, 'pr_queued'));
+}
+
+export async function queueStartupExecutionPrRunAction(formData: FormData): Promise<void> {
+  const workspaceId = String(formData.get('startupWorkspaceId') ?? '').trim();
+  const executionId = String(formData.get('executionId') ?? '').trim();
+  const repoFullName = String(formData.get('repoFullName') ?? '').trim();
+  if (!workspaceId || !executionId || !repoFullName) {
+    throw new Error('Missing execution PR queue inputs.');
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/startup');
+
+  await requireWorkspaceMember({ supabase, userId: user.id, workspaceId });
+  await requireWorkspaceRole({
+    supabase,
+    userId: user.id,
+    workspaceId,
+    roles: ['founder', 'admin'],
+  });
+
+  const env = await getScanApiEnv();
+  const rollout = await resolveStartupWorkspaceRolloutFlags({
+    supabase,
+    startupWorkspaceId: workspaceId,
+    env,
+  });
+  if (!rollout.startupDashboard || !rollout.githubAgent) {
+    redirect(buildStartupUrl(workspaceId, undefined, 'pr_rollout_disabled'));
+  }
+  if (!rollout.autoPr) {
+    redirect(buildStartupUrl(workspaceId, undefined, 'pr_suggest_only'));
+  }
+
+  if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    redirect(buildStartupUrl(workspaceId, undefined, 'pr_env_missing'));
+  }
+  const serviceSupabase = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  const gates = await resolveStartupDashboardUiGates({
+    memberSupabase: supabase,
+    serviceSupabase,
+    startupWorkspaceId: workspaceId,
+    userId: user.id,
+  });
+  if (!gates.githubIntegration.enabled || !gates.agentPrExecution.enabled) {
+    const blockedServiceKey = !gates.agentPrExecution.enabled
+      ? 'agent_pr_execution'
+      : 'github_integration';
+    const blockedReason = !gates.agentPrExecution.enabled
+      ? gates.agentPrExecution.blockedReason
+      : gates.githubIntegration.blockedReason;
+    structuredLog(
+      'startup_service_gate_blocked',
+      {
+        startup_workspace_id: workspaceId,
+        service_key: blockedServiceKey,
+        blocked_reason: blockedReason ?? 'service_disabled',
+        user_id: user.id,
+      },
+      'warning'
+    );
+    if (
+      gates.agentPrExecution.blockedReason === 'workspace_requires_paid_mode' ||
+      gates.agentPrExecution.blockedReason === 'stripe_mapping_missing' ||
+      gates.agentPrExecution.blockedReason === 'stripe_mapping_inactive'
+    ) {
+      redirect(buildStartupUrl(workspaceId, undefined, 'pr_billing_blocked'));
+    }
+    redirect(buildStartupUrl(workspaceId, undefined, 'pr_not_entitled'));
+  }
+
+  const latestPlan = await getLatestStartupImplementationPlan({
+    supabase,
+    startupWorkspaceId: workspaceId,
+  });
+  if (!latestPlan || latestPlan.executionId !== executionId) {
+    redirect(buildStartupUrl(workspaceId, undefined, 'pr_execution_plan_missing'));
+  }
+
+  const taskBatch = selectStartupExecutionPrTaskBatch({
+    tasks: latestPlan.tasks,
+  });
+  if (taskBatch.length === 0) {
+    redirect(buildStartupUrl(workspaceId, undefined, 'pr_execution_no_tasks'));
+  }
+
+  const prPolicy = await resolveStartupServiceModelPolicy({
+    supabase: serviceSupabase,
+    startupWorkspaceId: workspaceId,
+    serviceKey: 'startup_audit_execution',
+    fallbackProvider: env.BENCHMARK_EXECUTION_PROVIDER || 'gemini',
+    fallbackModel: env.BENCHMARK_EXECUTION_MODEL || env.GEMINI_MODEL || 'gemini-2.0-flash',
+    supportedProviders: ['gemini', 'openai', 'anthropic', 'custom'],
+    estimatedCostUsd: null,
+  });
+
+  await queueStartupExecutionPrRun({
+    supabase,
+    startupWorkspaceId: workspaceId,
+    executionId,
+    repoFullName,
+    queuedByUserId: user.id,
+    planTaskIds: taskBatch.map((task) => task.id),
+    executionModelPolicy: {
+      source: prPolicy.source,
+      bundle_key: prPolicy.bundleKey,
+      requested_provider: prPolicy.requestedProvider,
+      requested_model: prPolicy.requestedModel,
+      effective_provider: prPolicy.effectiveProvider,
+      effective_model: prPolicy.effectiveModel,
+      max_cost_usd: prPolicy.maxCostUsd,
+      budget_exceeded: prPolicy.budgetExceeded,
+      fallback_reason: prPolicy.fallbackReason,
+    },
+  });
+
+  revalidatePath('/dashboard/startup');
+  redirect(buildStartupUrl(workspaceId, undefined, 'pr_execution_queued'));
 }
 
 export async function approveStartupAuditExecutionAction(formData: FormData): Promise<void> {

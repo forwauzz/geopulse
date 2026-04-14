@@ -13,9 +13,14 @@ function createWorkflowMock(options?: {
     recommendationStatus: options?.recommendationStatus ?? ('approved' as 'approved' | 'in_progress' | 'shipped'),
     runStatus: options?.runStatus ?? ('running' as 'queued' | 'running' | 'pr_opened'),
     executionStatus: 'plan_ready' as 'plan_ready' | 'executing' | 'completed' | 'failed',
+    taskStatuses: {
+      'task-1': 'todo',
+      'task-2': 'todo',
+    } as Record<string, 'todo' | 'in_progress' | 'blocked' | 'done' | 'failed'>,
     recommendationUpdates: [] as Array<Record<string, unknown>>,
     executionUpdates: [] as Array<Record<string, unknown>>,
     runUpdates: [] as Array<Record<string, unknown>>,
+    taskUpdates: [] as Array<Record<string, unknown>>,
     runEvents: [] as Array<Record<string, unknown>>,
     recommendationEvents: [] as Array<Record<string, unknown>>,
     insertedRun: null as Record<string, unknown> | null,
@@ -125,6 +130,47 @@ function createWorkflowMock(options?: {
               error: null,
             });
           }
+          if (table === 'startup_implementation_plan_tasks') {
+            const taskId = String(filters['id'] ?? 'task-1');
+            return Promise.resolve({
+              data: {
+                id: taskId,
+                plan_id: 'plan-1',
+                recommendation_id: null,
+                team_lane: 'dev',
+                task_kind: 'implementation',
+                title: taskId === 'task-2' ? 'Verify output' : 'Persist worker metadata',
+                detail: null,
+                priority: taskId === 'task-2' ? 'medium' : 'high',
+                confidence: 0.9,
+                evidence: {},
+                execution_mode: 'approval_required',
+                depends_on_task_ids: [],
+                acceptance_criteria: [],
+                evidence_required: [],
+                artifact_refs: [],
+                status: state.taskStatuses[taskId] ?? 'todo',
+                sort_order: taskId === 'task-2' ? 1 : 0,
+                blocked_reason: null,
+                agent_role: 'execution_worker',
+                manual_instructions: null,
+                created_at: '2026-04-04T00:00:00.000Z',
+              },
+              error: null,
+            });
+          }
+          if (table === 'startup_implementation_plans') {
+            return Promise.resolve({
+              data: {
+                id: 'plan-1',
+                startup_workspace_id: 'ws-1',
+                metadata: {
+                  execution_id: 'exec-1',
+                },
+              },
+              error: null,
+            });
+          }
           throw new Error(`Unexpected maybeSingle on ${table}`);
         },
         update(payload: Record<string, unknown>) {
@@ -146,6 +192,9 @@ function createWorkflowMock(options?: {
             if (typeof payload.status === 'string') {
               state.executionStatus = payload.status as typeof state.executionStatus;
             }
+          }
+          if (table === 'startup_implementation_plan_tasks') {
+            state.taskUpdates.push(payload);
           }
           return this;
         },
@@ -261,6 +310,40 @@ function createWorkflowMock(options?: {
               error: null,
             });
           }
+          if (table === 'startup_implementation_plan_tasks') {
+            const taskId = String(filters['id'] ?? 'task-1');
+            if (typeof updatePayload?.status === 'string') {
+              state.taskStatuses[taskId] = updatePayload.status as typeof state.taskStatuses[string];
+            }
+            return Promise.resolve({
+              data: [
+                {
+                  id: taskId,
+                  plan_id: 'plan-1',
+                  recommendation_id: null,
+                  team_lane: 'dev',
+                  task_kind: 'implementation',
+                  title: taskId === 'task-2' ? 'Verify output' : 'Persist worker metadata',
+                  detail: null,
+                  priority: taskId === 'task-2' ? 'medium' : 'high',
+                  confidence: 0.9,
+                  evidence: {},
+                  execution_mode: 'approval_required',
+                  depends_on_task_ids: [],
+                  acceptance_criteria: [],
+                  evidence_required: [],
+                  artifact_refs: [],
+                  status: state.taskStatuses[taskId],
+                  sort_order: taskId === 'task-2' ? 1 : 0,
+                  blocked_reason: updatePayload?.blocked_reason ?? null,
+                  agent_role: 'execution_worker',
+                  manual_instructions: null,
+                  created_at: '2026-04-04T00:00:00.000Z',
+                },
+              ],
+              error: null,
+            });
+          }
           throw new Error(`Unexpected limit on ${table}`);
         },
       };
@@ -307,6 +390,8 @@ describe('startup agent pr workflow', () => {
     expect(run.planTaskIds).toEqual(['task-1', 'task-2']);
     expect(state.insertedRun?.['execution_id']).toBe('exec-1');
     expect(state.runEvents.some((event) => event.execution_id === 'exec-1')).toBe(true);
+    expect(state.taskStatuses['task-1']).toBe('in_progress');
+    expect(state.taskStatuses['task-2']).toBe('in_progress');
   });
 
   it('syncs recommendation to shipped when PR is opened', async () => {
@@ -346,5 +431,24 @@ describe('startup agent pr workflow', () => {
     expect(run.status).toBe('merged');
     expect(state.executionUpdates.some((payload) => payload.status === 'completed')).toBe(true);
     expect(state.recommendationUpdates.some((payload) => payload.status === 'validated')).toBe(true);
+    expect(state.taskStatuses['task-1']).toBe('done');
+  });
+
+  it('syncs linked execution tasks to failed when PR execution fails', async () => {
+    const { supabase, state } = createWorkflowMock({ recommendationStatus: 'in_progress', runStatus: 'running' });
+    state.taskStatuses['task-1'] = 'in_progress';
+
+    const run = await updateStartupAgentPrRunStatus({
+      supabase,
+      startupWorkspaceId: 'ws-1',
+      runId: 'run-1',
+      toStatus: 'failed',
+      changedByUserId: 'user-1',
+      errorMessage: 'Checks failed in CI',
+    });
+
+    expect(run.status).toBe('failed');
+    expect(state.executionUpdates.some((payload) => payload.status === 'failed')).toBe(true);
+    expect(state.taskStatuses['task-1']).toBe('failed');
   });
 });

@@ -4,6 +4,96 @@
 > A task is not done until it has an entry here AND Orchestrator has marked it ACCEPTED.
 
 ---
+### 2026-04-14 - SAO-017 - Scheduled worker pickup for approved execution batches
+
+**Agent:** Backend + Worker
+**Claimed complete:** 2026-04-14
+**Evidence type:** Scheduled dispatch helper + worker cron wiring + focused scheduler verification
+
+Added the first scheduled execution-dispatch worker path so approved startup audit executions can be picked up automatically and queued into bounded PR runs without a founder/admin manually pressing the launch button.
+
+**Changes:**
+
+1. **`lib/server/startup-execution-dispatch-schedule.ts`**
+   - Added `runScheduledStartupExecutionDispatch(...)`.
+   - The scheduler now scans `plan_ready` startup audit executions and only queues work when all of the following are true:
+     - execution is `approved_for_execution`
+     - rollout flags still allow startup dashboard + GitHub agent + auto-PR
+     - startup GitHub integration and agent PR execution service gates are enabled
+     - no active queued/running/open PR run already exists for the execution
+     - the latest implementation plan is linked to that execution
+     - at least one dependency-ready auto task is available
+     - exactly one allowlisted GitHub repo is enabled
+   - Summary counters were added for queued work and every bounded skip reason.
+
+2. **`workers/cloudflare-entry.ts`**
+   - Wired the new execution-dispatch sweep into worker cron after the existing startup Slack auto-post sweep.
+   - Worker errors are logged separately under `startup_execution_dispatch_worker_error`.
+
+3. **`lib/server/startup-execution-dispatch-schedule.test.ts`**
+   - Added focused coverage for:
+     - global auto-PR disabled -> scheduler disabled
+     - happy path queueing of one approved execution batch
+     - skipping when an active PR run already exists
+     - skipping when repo selection is ambiguous
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-execution-dispatch-schedule.test.ts lib/server/startup-agent-pr-workflow.test.ts lib/server/startup-implementation-plan.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-14 - SAO-016 - Founder/admin execution-batch queueing and PR-linked task-state sync
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-14
+**Evidence type:** Execution-task helper extension + execution-aware PR sync + founder/admin dashboard launch controls
+
+Added the first execution-worker launch path for startup audit orchestration so a founder/admin can queue the next approved auto-capable task batch from the startup dashboard, and linked task rows now stay synchronized with execution-aware PR run status.
+
+**Changes:**
+
+1. **`lib/server/startup-implementation-plan.ts`**
+   - Added bounded execution-task batch selection helpers for startup plans.
+   - Auto-executable batches now include only `todo` tasks that are:
+     - not manual tasks
+     - not `executionMode = manual`
+     - dependency-ready
+   - Default batch size is capped so one PR run stays narrow and reviewable.
+
+2. **`lib/server/startup-agent-pr-workflow.ts`**
+   - Extended execution-aware PR queueing so linked plan-task IDs can be attached to a PR run.
+   - Added execution-task status synchronization:
+     - queued/running PR runs keep linked tasks `in_progress`
+     - merged PR runs move linked tasks to `done`
+     - failed PR runs move linked tasks to `failed`
+     - closed/cancelled PR runs return linked tasks to `todo`
+
+3. **`app/dashboard/startup/actions.ts`**
+   - Added founder/admin action to queue an execution PR run from the latest approved execution plan.
+   - The action enforces:
+     - startup dashboard + GitHub agent + auto-PR rollout flags
+     - startup service-gate access
+     - linked plan/execution match
+     - available auto-capable task batch
+
+4. **`app/dashboard/startup/components/startup-overview-tab.tsx`**
+   - Added a new PR activity block that previews the next execution task batch and exposes the founder/admin queue action when rollout and GitHub prerequisites are satisfied.
+
+5. **Focused tests**
+   - `lib/server/startup-implementation-plan.test.ts`
+   - `lib/server/startup-agent-pr-workflow.test.ts`
+   - `tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-implementation-plan.test.ts lib/server/startup-agent-pr-workflow.test.ts`
+- `npx.cmd playwright test tests/e2e/startup-dashboard-tabs.spec.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
 ### 2026-04-13 - SAO-015 - Improvement-history rollups and benchmark-ready outcome summaries
 
 **Agent:** Backend + Frontend
