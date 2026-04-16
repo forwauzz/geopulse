@@ -37,8 +37,44 @@ function printCheck(name: string, ok: boolean, detail: string): void {
   console.log(`${prefix} ${name}: ${detail}`);
 }
 
-function findLineContaining(text: string, token: string): string | null {
-  return text.split(/\r?\n/).find((line) => hasToken(line, token)) ?? null;
+function parseRobotsBlocks(text: string): Array<{ userAgents: string[]; lines: string[] }> {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'));
+  const blocks: Array<{ userAgents: string[]; lines: string[] }> = [];
+  let current: { userAgents: string[]; lines: string[] } | null = null;
+
+  for (const line of lines) {
+    const separatorIndex = line.indexOf(':');
+    if (separatorIndex === -1) continue;
+    const key = line.slice(0, separatorIndex).trim().toLowerCase();
+    const value = line.slice(separatorIndex + 1).trim();
+
+    if (key === 'user-agent') {
+      if (!current || current.lines.length > 0) {
+        current = { userAgents: [], lines: [] };
+        blocks.push(current);
+      }
+      current.userAgents.push(value);
+      continue;
+    }
+
+    if (!current) continue;
+    current.lines.push(line);
+  }
+
+  return blocks;
+}
+
+function getRobotsDirectivesForAgent(text: string, userAgent: string): string[] {
+  return parseRobotsBlocks(text)
+    .filter((block) => block.userAgents.some((candidate) => candidate.toLowerCase() === userAgent.toLowerCase()))
+    .flatMap((block) => block.lines);
+}
+
+function hasCloudflareManagedRobotsBlock(text: string): boolean {
+  return hasToken(text, '# BEGIN Cloudflare Managed content');
 }
 
 async function main(): Promise<void> {
@@ -47,8 +83,9 @@ async function main(): Promise<void> {
     args.baseUrl ?? process.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com'
   );
 
-  const [home, robots, llms] = await Promise.all([
+  const [home, login, robots, llms] = await Promise.all([
     fetchText(baseUrl),
+    fetchText(`${baseUrl}/login`),
     fetchText(`${baseUrl}/robots.txt`),
     fetchText(`${baseUrl}/llms.txt`),
   ]);
@@ -57,6 +94,8 @@ async function main(): Promise<void> {
   const homepageRobots = homepageRobotsMatch?.[1]?.trim() ?? null;
   const homepageCanonicalMatch = home.text.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
   const homepageCanonical = homepageCanonicalMatch?.[1]?.trim() ?? null;
+  const loginRobotsMatch = login.text.match(/<meta[^>]+name=["']robots["'][^>]+content=["']([^"']+)["']/i);
+  const loginRobots = loginRobotsMatch?.[1]?.trim() ?? null;
 
   const headersToCheck = [
     'strict-transport-security',
@@ -66,6 +105,7 @@ async function main(): Promise<void> {
 
   console.log(`base_url: ${baseUrl}`);
   printCheck('homepage', home.ok, `status ${home.status}`);
+  printCheck('login', login.ok, `status ${login.status}`);
   printCheck('robots.txt', robots.ok, `status ${robots.status}`);
   printCheck('llms.txt', llms.ok, `status ${llms.status}`);
 
@@ -80,39 +120,59 @@ async function main(): Promise<void> {
     !homepageRobots || (!hasToken(homepageRobots, 'noindex') && !hasToken(homepageRobots, 'nofollow')),
     homepageRobots ?? 'missing'
   );
+  printCheck(
+    'login robots meta',
+    !loginRobots || (!hasToken(loginRobots, 'noindex') && !hasToken(loginRobots, 'nofollow')),
+    loginRobots ?? 'missing'
+  );
 
   const robotBotChecks = [
     'ClaudeBot',
+    'CloudflareBrowserRenderingCrawler',
     'Google-Extended',
     'GPTBot',
   ] as const;
 
   const robotBotFailures = robotBotChecks.map((bot) => {
-    const botLine = findLineContaining(robots.text, bot);
-    const blocked = botLine ? hasToken(botLine, 'disallow') : false;
-    printCheck(`robots allow:${bot}`, !blocked, botLine ?? 'not referenced');
+    const directives = getRobotsDirectivesForAgent(robots.text, bot);
+    const blocked = directives.some((line) => /^disallow\s*:\s*\/\s*$/i.test(line));
+    printCheck(`robots allow:${bot}`, !blocked, directives.join(' | ') || 'not referenced');
     return blocked ? 1 : 0;
   });
 
   const hasLlmsContent = llms.ok && llms.text.trim().length > 0;
   const hasContentDate = hasToken(home.text, 'dateModified') || hasToken(home.text, 'datePublished');
+  const cloudflareManagedRobots = hasCloudflareManagedRobotsBlock(robots.text);
 
   printCheck('llms content', hasLlmsContent, `${llms.text.trim().length} bytes`);
   printCheck('homepage content date', hasContentDate, 'content date signal');
+  printCheck(
+    'robots managed override',
+    !cloudflareManagedRobots,
+    cloudflareManagedRobots ? 'Cloudflare managed robots block detected' : 'not detected'
+  );
 
   const failures = [
     !home.ok,
+    !login.ok,
     !robots.ok,
     !llms.ok,
     ...headersToCheck.map((header) => !home.headers.get(header)),
     !homepageCanonical,
     Boolean(homepageRobots && (hasToken(homepageRobots, 'noindex') || hasToken(homepageRobots, 'nofollow'))),
+    Boolean(loginRobots && (hasToken(loginRobots, 'noindex') || hasToken(loginRobots, 'nofollow'))),
     ...robotBotFailures.map((value) => value === 1),
     !hasLlmsContent,
     !hasContentDate,
+    cloudflareManagedRobots,
   ].filter(Boolean).length;
 
   if (failures > 0) {
+    if (cloudflareManagedRobots) {
+      console.error(
+        'Cloudflare is prepending a managed robots.txt block that disallows AI crawlers before GEO-Pulse allow rules.'
+      );
+    }
     console.error(`audit signal verification failed with ${failures} issue(s).`);
     process.exit(1);
   }

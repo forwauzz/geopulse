@@ -8,8 +8,12 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
   return {
     rules: [
       { userAgent: 'ClaudeBot', allow: '/' },
+      { userAgent: 'ChatGPT-User', allow: '/' },
+      { userAgent: 'CloudflareBrowserRenderingCrawler', allow: '/' },
       { userAgent: 'Google-Extended', allow: '/' },
       { userAgent: 'GPTBot', allow: '/' },
+      { userAgent: 'OAI-SearchBot', allow: '/' },
+      { userAgent: 'PerplexityBot', allow: '/' },
       {
         userAgent: '*',
         allow: '/',

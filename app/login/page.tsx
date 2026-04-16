@@ -39,7 +39,6 @@ export async function generateMetadata(): Promise<Metadata> {
     description: 'Sign in to GEO-Pulse to access dashboards, saved audits, and paid reports.',
     canonicalPath: '/login',
     openGraphType: 'website',
-    noIndex: true,
   });
 }
 
