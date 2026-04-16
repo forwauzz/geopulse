@@ -40,17 +40,27 @@ const faqItems = [
   {
     question: 'What does GEO-Pulse check?',
     answer:
-      'It checks the signals that affect how clearly machines can crawl, interpret, and reuse your public pages, including robots rules, structured data, heading structure, trust cues, and content extractability.',
+      'It checks the signals that affect how clearly machines can crawl, interpret, and reuse your public pages. That includes robots rules, crawl access, structured data, heading structure, trust cues, internal linking, and content extractability.',
+  },
+  {
+    question: 'What does AI search readiness mean?',
+    answer:
+      'AI search readiness means a public page is easy for crawlers and answer engines to fetch, segment, understand, and quote. The core requirements are crawl access, clear page structure, explicit entities, and copy that can stand on its own when extracted.',
   },
   {
     question: 'Do I need an account to run a scan?',
     answer:
-      'No. You can run a free scan first. An account is only needed if you want to save reports, compare runs over time, or use the full workspace.',
+      'No. You can run a free scan first. You only need an account when you want to save reports, compare runs over time, manage a workspace, or route findings to a team workflow.',
   },
   {
     question: 'Is this a ranking or traffic prediction tool?',
     answer:
       'No. GEO-Pulse is an audit tool. It surfaces readiness gaps and practical fixes, but it does not predict rankings, traffic, or citations.',
+  },
+  {
+    question: 'What should I fix first after a scan?',
+    answer:
+      'Fix blocking directives and crawl access first. Then improve answer structure, metadata, and trust signals on the public pages that explain your product, capture demand, or support high-intent queries.',
   },
 ] as const;
 
@@ -71,17 +81,58 @@ const howItWorks = [
   {
     step: '1',
     title: 'Audit',
-    body: 'Scan your public site for crawl access, structured data, trust cues, and content extractability.',
+    body: 'Scan your public site for crawl access, robots directives, structured data, trust cues, and content extractability.',
   },
   {
     step: '2',
-    title: 'Automate',
-    body: 'Turn the findings into reusable reports and machine-readable guidance for your team.',
+    title: 'Prioritize',
+    body: 'See which issues block machine retrieval first, which issues weaken trust, and which fixes can wait.',
   },
   {
     step: '3',
-    title: 'Integrate',
-    body: 'Push the audit outputs into Slack so marketing and engineering can act on the same plan.',
+    title: 'Act',
+    body: 'Turn the findings into a practical fix list for engineering, content, and SEO without guessing what to do next.',
+  },
+] as const;
+
+const answerBlocks = [
+  {
+    title: 'Definition',
+    body: 'AI search readiness is the degree to which a public page can be fetched, interpreted, and reused accurately by search engines and answer engines.',
+  },
+  {
+    title: 'What GEO-Pulse audits',
+    body: 'GEO-Pulse audits crawl access, robots directives, metadata, structured data, internal linking, trust signals, and content extractability.',
+  },
+  {
+    title: 'What a strong result looks like',
+    body: 'A strong result means important pages are crawlable, metadata is explicit, content answers likely questions directly, and machines can extract the main claim without depending on layout.',
+  },
+  {
+    title: 'What to do first',
+    body: 'Fix blocking directives first, then improve answer structure and trust signals on the pages that drive signups, product understanding, and citations.',
+  },
+] as const;
+
+const extractabilityChecklist = [
+  'One clear H1 that names the page topic directly.',
+  'Short sections that answer one question or decision at a time.',
+  'Definitions, lists, and steps that still make sense when quoted alone.',
+  'Visible authorship, canonical URLs, and supporting references where claims matter.',
+] as const;
+
+const audienceUseCases = [
+  {
+    title: 'Founders and in-house teams',
+    body: 'Use GEO-Pulse to see whether your homepage, pricing page, product pages, and docs are easy for answer engines to interpret before you invest in more content.',
+  },
+  {
+    title: 'Agencies',
+    body: 'Use the same audit flow across client sites to separate urgent crawl and metadata issues from lower-signal cleanup work.',
+  },
+  {
+    title: 'Content and SEO operators',
+    body: 'Use the report to identify where pages need clearer definitions, better internal linking, and more extractable answers instead of more volume.',
   },
 ] as const;
 
@@ -202,6 +253,12 @@ export default async function HomePage({
           <p className="mx-auto mt-4 max-w-2xl font-body text-sm text-on-surface-variant">
             Editorially maintained by {SITE_EDITORIAL_NAME}.
           </p>
+          <p className="mx-auto mt-6 max-w-3xl font-body text-base leading-7 text-on-surface-variant md:text-lg">
+            GEO-Pulse helps teams understand whether their public pages are easy for ChatGPT,
+            Claude, Perplexity, Gemini, and traditional crawlers to fetch, interpret, and reuse.
+            It is not a ranking predictor. It is an audit layer for crawl access, structured data,
+            trust, and answer extraction.
+          </p>
           <div className="mx-auto mt-10 max-w-5xl">
             {siteKey ? (
               <ScanForm
@@ -261,6 +318,38 @@ export default async function HomePage({
       </section>
 
       <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
+              Direct answers
+            </span>
+            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+              The homepage states the core idea plainly
+            </h2>
+            <p className="mt-4 max-w-sm font-body text-on-surface-variant">
+              These blocks are written to stand on their own so people and machines can extract the
+              key definitions without reading the full page.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:col-span-8 md:grid-cols-2">
+            {answerBlocks.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float"
+              >
+                <p className="font-label text-xs uppercase tracking-widest text-primary">
+                  {item.title}
+                </p>
+                <p className="mt-4 font-body text-sm leading-7 text-on-surface-variant">
+                  {item.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-start">
           <div className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">How it works</span>
@@ -268,7 +357,8 @@ export default async function HomePage({
               Three steps from scan to action
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
-              The workflow stays simple: inspect the site, turn findings into a repeatable report, and route the output into Slack.
+              The workflow stays simple: inspect the site, rank the problems by impact, and move to
+              a fix list that engineering and content can use immediately.
             </p>
           </div>
           <div className="lg:col-span-8">
@@ -297,7 +387,8 @@ export default async function HomePage({
             <div>
               <h2 className="mb-6 font-headline text-3xl font-bold text-on-background md:text-4xl">What you get</h2>
               <p className="mb-12 font-body text-on-surface-variant">
-                Every scan produces a concise report: one score, the issues that matter most, and fixes you can act on.
+                Every scan produces a concise report with one score, the issues that matter most,
+                and fixes you can act on without decoding a vague SEO dashboard.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -352,11 +443,15 @@ export default async function HomePage({
               <ul className="mt-4 space-y-4 font-body text-sm text-on-surface-variant">
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-tertiary text-lg">info</span>
-                  <span>Structured data and crawl signals tailored to your URL.</span>
+                  <span>Blocking directives, crawl access, and metadata issues tied to your actual URL.</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-tertiary text-lg">info</span>
                   <span>Actionable fixes — no predicted rankings or traffic outcomes.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-tertiary text-lg">info</span>
+                  <span>Clear ownership signals so engineering, content, and marketing know which team should move first.</span>
                 </li>
               </ul>
             </div>
@@ -365,26 +460,61 @@ export default async function HomePage({
         </div>
       </section>
 
+      <section className="bg-surface-container-high/30 px-6 py-24 md:px-10 md:py-32">
+        <div className="mx-auto grid max-w-screen-2xl grid-cols-1 gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
+              Extractability
+            </span>
+            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+              What makes a page easier to quote and summarize
+            </h2>
+            <p className="mt-4 max-w-sm font-body text-on-surface-variant">
+              A page does not become reusable because it is long. It becomes reusable because the
+              main claim is explicit and the structure is easy to segment.
+            </p>
+          </div>
+          <div className="lg:col-span-8">
+            <ol className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {extractabilityChecklist.map((item, index) => (
+                <li
+                  key={item}
+                  className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float"
+                >
+                  <p className="font-label text-xs uppercase tracking-widest text-primary">
+                    Check {index + 1}
+                  </p>
+                  <p className="mt-4 font-body text-sm leading-7 text-on-surface-variant">{item}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      </section>
+
       <section className="bg-surface-container-high/40 px-6 py-16 md:px-10 md:py-24">
         <div className="mx-auto flex max-w-screen-2xl flex-col items-center justify-between gap-12 md:flex-row">
           <div className="max-w-xl">
             <h2 className="mb-4 font-headline text-2xl font-bold text-on-background md:text-3xl">
-              Built for teams &amp; agencies
+              Who GEO-Pulse is for
             </h2>
             <p className="font-body text-on-surface-variant">
-              Use the same audit flow for client sites — free scan first, optional paid deep report when you need a
-              shareable artifact.
+              GEO-Pulse is for teams that need to understand whether their public site is readable
+              by answer engines before they scale more pages, more schema, or more editorial work.
             </p>
           </div>
-          <div className="flex flex-wrap gap-8">
-            <div className="flex items-center gap-2 font-label text-sm uppercase tracking-wide text-on-surface-variant opacity-90">
-              <span className="material-symbols-outlined text-primary">picture_as_pdf</span>
-              PDF export
-            </div>
-            <div className="flex items-center gap-2 font-label text-sm uppercase tracking-wide text-on-surface-variant opacity-90">
-              <span className="material-symbols-outlined text-primary">account_circle</span>
-              Account history
-            </div>
+          <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-3">
+            {audienceUseCases.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float"
+              >
+                <h3 className="font-headline text-lg font-bold text-on-background">{item.title}</h3>
+                <p className="mt-3 font-body text-sm leading-7 text-on-surface-variant">
+                  {item.body}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -397,7 +527,8 @@ export default async function HomePage({
               Common questions, answered directly
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
-              Short answers help people and machines understand the tool without reading the whole report.
+              Short answers help people and machines understand the tool without reading the whole
+              report or inferring the meaning from layout alone.
             </p>
           </div>
           <div className="lg:col-span-8">
