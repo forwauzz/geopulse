@@ -4,6 +4,42 @@
 > A task is not done until it has an entry here AND Orchestrator has marked it ACCEPTED.
 
 ---
+### 2026-04-14 - SAO-018 - Repo reservation and one-active-run guardrails
+
+**Agent:** Backend
+**Claimed complete:** 2026-04-14
+**Evidence type:** Shared repo-guardrail helper + queue-path enforcement + focused unit verification
+
+Added the first repo safety guardrails for startup PR automation so internal product repos can be reserved and the same workspace+repo cannot queue overlapping active PR runs before real GitHub branch/PR execution is added.
+
+**Changes:**
+
+1. **`lib/server/startup-github-guardrails.ts`**
+   - Added shared helper logic for:
+     - reserved internal repo detection
+     - internal-workspace access check via `startup_workspaces.metadata.allow_internal_product_repo`
+     - active PR run detection for the same workspace+repo
+
+2. **`lib/server/startup-agent-pr-workflow.ts`**
+   - Manual recommendation queueing and execution queueing now both enforce:
+     - reserved internal repo access
+     - no existing active PR run for the same workspace+repo
+
+3. **`lib/server/startup-execution-dispatch-schedule.ts`**
+   - Scheduled execution pickup now uses the same repo-guardrail helper before queueing work.
+
+4. **Focused tests**
+   - `lib/server/startup-github-guardrails.test.ts`
+   - `lib/server/startup-agent-pr-workflow.test.ts`
+   - `lib/server/startup-execution-dispatch-schedule.test.ts`
+
+**Verification:**
+- `npx.cmd tsc --noEmit`
+- `npx.cmd vitest run lib/server/startup-github-guardrails.test.ts lib/server/startup-agent-pr-workflow.test.ts lib/server/startup-execution-dispatch-schedule.test.ts`
+
+**Orchestrator verification:** ACCEPTED
+
+---
 ### 2026-04-14 - SAO-017 - Scheduled worker pickup for approved execution batches
 
 **Agent:** Backend + Worker

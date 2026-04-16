@@ -204,6 +204,8 @@ describe('startup execution dispatch schedule', () => {
             },
           ],
         })) as any,
+        assertRepoAccess: vi.fn(async () => undefined) as any,
+        assertNoActiveRepoRun: vi.fn(async () => undefined) as any,
         resolveModelPolicy: vi.fn(async () => ({
           serviceKey: 'startup_audit_execution' as const,
           bundleKey: 'startup_dev' as const,
@@ -302,6 +304,8 @@ describe('startup execution dispatch schedule', () => {
             completedAt: null,
           },
         ] satisfies StartupAgentPrRun[]) as any,
+        assertRepoAccess: vi.fn(async () => undefined) as any,
+        assertNoActiveRepoRun: vi.fn(async () => undefined) as any,
       },
     });
 
@@ -405,6 +409,8 @@ describe('startup execution dispatch schedule', () => {
             { id: 'repo-2', owner: 'acme', name: 'site', fullName: 'acme/site', enabled: true },
           ],
         })) as any,
+        assertRepoAccess: vi.fn(async () => undefined) as any,
+        assertNoActiveRepoRun: vi.fn(async () => undefined) as any,
         queueExecutionPrRun: queueExecutionPrRun as any,
       },
     });

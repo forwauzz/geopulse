@@ -8,6 +8,8 @@ import {
 function createWorkflowMock(options?: {
   recommendationStatus?: 'approved' | 'in_progress' | 'shipped';
   runStatus?: 'queued' | 'running' | 'pr_opened';
+  existingRepoRun?: boolean;
+  allowInternalProductRepo?: boolean;
 }) {
   const state = {
     recommendationStatus: options?.recommendationStatus ?? ('approved' as 'approved' | 'in_progress' | 'shipped'),
@@ -84,6 +86,30 @@ function createWorkflowMock(options?: {
             });
           }
           if (table === 'startup_agent_pr_runs') {
+            if (!Object.prototype.hasOwnProperty.call(filters, 'id')) {
+              if (!options?.existingRepoRun) {
+                return Promise.resolve({ data: null, error: null });
+              }
+              return Promise.resolve({
+                data: {
+                  id: 'run-existing',
+                  startup_workspace_id: 'ws-1',
+                  recommendation_id: null,
+                  execution_id: 'exec-older',
+                  plan_task_ids: ['task-9'],
+                  repository_owner: String(filters['repository_owner'] ?? 'acme'),
+                  repository_name: String(filters['repository_name'] ?? 'geo-pulse'),
+                  branch_name: 'agent/existing',
+                  pull_request_number: null,
+                  pull_request_url: null,
+                  status: 'queued',
+                  error_message: null,
+                  created_at: '2026-04-04T00:00:00.000Z',
+                  completed_at: null,
+                },
+                error: null,
+              });
+            }
             return Promise.resolve({
               data: {
                 id: 'run-1',
@@ -100,6 +126,17 @@ function createWorkflowMock(options?: {
                 error_message: null,
                 created_at: '2026-04-04T00:00:00.000Z',
                 completed_at: null,
+              },
+              error: null,
+            });
+          }
+          if (table === 'startup_workspaces') {
+            return Promise.resolve({
+              data: {
+                id: 'ws-1',
+                metadata: {
+                  allow_internal_product_repo: options?.allowInternalProductRepo === true,
+                },
               },
               error: null,
             });
@@ -216,6 +253,35 @@ function createWorkflowMock(options?: {
         },
         limit() {
           if (table === 'startup_agent_pr_runs') {
+            if (!insertPayload && !updatePayload) {
+              if (!options?.existingRepoRun) {
+                return Promise.resolve({
+                  data: [],
+                  error: null,
+                });
+              }
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'run-existing',
+                    startup_workspace_id: 'ws-1',
+                    recommendation_id: null,
+                    execution_id: 'exec-older',
+                    plan_task_ids: ['task-9'],
+                    repository_owner: String(filters['repository_owner'] ?? 'acme'),
+                    repository_name: String(filters['repository_name'] ?? 'geo-pulse'),
+                    branch_name: 'agent/existing',
+                    pull_request_number: null,
+                    pull_request_url: null,
+                    status: 'queued',
+                    error_message: null,
+                    created_at: '2026-04-04T00:00:00.000Z',
+                    completed_at: null,
+                  },
+                ],
+                error: null,
+              });
+            }
             const insertedRun = state.insertedRun ?? {};
             return Promise.resolve({
               data: [
@@ -392,6 +458,44 @@ describe('startup agent pr workflow', () => {
     expect(state.runEvents.some((event) => event.execution_id === 'exec-1')).toBe(true);
     expect(state.taskStatuses['task-1']).toBe('in_progress');
     expect(state.taskStatuses['task-2']).toBe('in_progress');
+  });
+
+  it('blocks queueing when another active PR run already exists for the same workspace repo', async () => {
+    const { supabase } = createWorkflowMock({
+      recommendationStatus: 'approved',
+      runStatus: 'queued',
+      existingRepoRun: true,
+    });
+
+    await expect(
+      queueStartupExecutionPrRun({
+        supabase,
+        startupWorkspaceId: 'ws-1',
+        executionId: 'exec-1',
+        repoFullName: 'acme/geo-pulse',
+        queuedByUserId: 'user-1',
+        planTaskIds: ['task-1'],
+      })
+    ).rejects.toThrow('An active PR run already exists for this workspace and repository.');
+  });
+
+  it('blocks reserved internal repo access for non-internal workspaces', async () => {
+    const { supabase } = createWorkflowMock({
+      recommendationStatus: 'approved',
+      runStatus: 'queued',
+      allowInternalProductRepo: false,
+    });
+
+    await expect(
+      queueStartupExecutionPrRun({
+        supabase,
+        startupWorkspaceId: 'ws-1',
+        executionId: 'exec-1',
+        repoFullName: 'forwauzz/geopulse',
+        queuedByUserId: 'user-1',
+        planTaskIds: ['task-1'],
+      })
+    ).rejects.toThrow('Repository is reserved for internal startup workspaces.');
   });
 
   it('syncs recommendation to shipped when PR is opened', async () => {

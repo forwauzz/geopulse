@@ -10,6 +10,10 @@ import {
   updateStartupImplementationPlanTaskStatus,
   type StartupImplementationTaskStatus,
 } from './startup-implementation-plan';
+import {
+  assertNoActiveStartupPrRunForRepo,
+  assertStartupWorkspaceRepoAccess,
+} from './startup-github-guardrails';
 import { structuredLog } from './structured-log';
 
 type SupabaseLike = {
@@ -164,6 +168,17 @@ export async function queueStartupRecommendationPrRun(args: {
 }): Promise<StartupAgentPrRun> {
   const { owner, name } = parseRepoFullName(args.repoFullName);
 
+  await assertStartupWorkspaceRepoAccess({
+    supabase: args.supabase,
+    startupWorkspaceId: args.startupWorkspaceId,
+    repoFullName: `${owner}/${name}`,
+  });
+  await assertNoActiveStartupPrRunForRepo({
+    supabase: args.supabase,
+    startupWorkspaceId: args.startupWorkspaceId,
+    repoFullName: `${owner}/${name}`,
+  });
+
   const { data: installation, error: installationError } = await args.supabase
     .from('startup_github_installations')
     .select('id,status')
@@ -288,6 +303,17 @@ export async function queueStartupExecutionPrRun(args: {
   readonly executionModelPolicy?: Record<string, unknown> | null;
 }): Promise<StartupAgentPrRun> {
   const { owner, name } = parseRepoFullName(args.repoFullName);
+
+  await assertStartupWorkspaceRepoAccess({
+    supabase: args.supabase,
+    startupWorkspaceId: args.startupWorkspaceId,
+    repoFullName: `${owner}/${name}`,
+  });
+  await assertNoActiveStartupPrRunForRepo({
+    supabase: args.supabase,
+    startupWorkspaceId: args.startupWorkspaceId,
+    repoFullName: `${owner}/${name}`,
+  });
 
   const { data: installation, error: installationError } = await args.supabase
     .from('startup_github_installations')

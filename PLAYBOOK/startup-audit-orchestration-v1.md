@@ -147,6 +147,11 @@ User should be able to test:
 - only workspaces with startup dashboard + GitHub agent + auto-PR enabled are considered
 - ambiguous repo selection or existing active PR runs cause safe skip behavior instead of duplicate dispatch
 
+### M19. Repo Guardrails
+User should be able to test:
+- reserved internal repos can only be targeted by explicitly authorized internal startup workspaces
+- queueing is blocked when the same workspace+repo already has an active PR run
+
 ## Byte-sized task registry
 
 | Task ID | Description | Owner | Status |
@@ -168,6 +173,7 @@ User should be able to test:
 | SAO-015 | Add improvement-history rollups and benchmark-ready execution outcome summaries | Backend + Frontend | DONE |
 | SAO-016 | Add founder/admin execution-batch queueing and task-state sync through the PR workflow | Backend + Frontend | DONE |
 | SAO-017 | Add scheduled worker pickup for approved execution batches behind rollout + entitlement gates | Backend + Worker | DONE |
+| SAO-018 | Add repo reservation and one-active-run-per-workspace+repo guardrails before real GitHub execution | Backend | DONE |
 
 ## Sequencing
 
@@ -219,3 +225,8 @@ Current scheduled-dispatch truth:
 - scheduled execution dispatch scans `plan_ready` executions, requires `approved_for_execution`, and re-resolves workspace rollout flags plus startup GitHub / PR service gates before queueing work
 - auto-dispatch is intentionally conservative: it skips executions with no approver/creator actor, no execution-linked latest plan, no dependency-ready auto tasks, active queued/running/open PR runs, or ambiguous enabled-repo selection
 - auto-dispatch currently selects the single enabled GitHub repo only when exactly one allowlisted repo is enabled; anything broader is logged and skipped until preferred-repo selection is modeled explicitly
+
+Current repo-guardrail truth:
+- `forwauzz/geopulse` is now treated as a reserved internal repo and can only be queued by startup workspaces whose metadata explicitly sets `allow_internal_product_repo=true`
+- manual queueing and scheduled auto-dispatch both reject queue creation when the same workspace+repo already has an active queued/running/open PR run
+- the guardrails live in one shared backend helper so dashboard actions and worker cron stay aligned before real GitHub branch/PR creation is added

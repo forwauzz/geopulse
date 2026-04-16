@@ -3,6 +3,10 @@ import { listStartupAgentPrRuns, queueStartupExecutionPrRun, type StartupAgentPr
 import { getStartupAuditExecution, isStartupAuditExecutionApprovedForExecution } from './startup-audit-execution';
 import { getLatestStartupImplementationPlan, selectStartupExecutionPrTaskBatch } from './startup-implementation-plan';
 import { getStartupGithubIntegrationState } from './startup-github-integration';
+import {
+  assertNoActiveStartupPrRunForRepo,
+  assertStartupWorkspaceRepoAccess,
+} from './startup-github-guardrails';
 import { resolveStartupServiceModelPolicy } from './startup-model-policy';
 import { resolveStartupWorkspaceRolloutFlags } from './startup-rollout-flags';
 import { resolveStartupDashboardUiGates } from './startup-service-gates';
@@ -27,6 +31,8 @@ type StartupExecutionDispatchDependencies = {
   readonly getGithubState?: typeof getStartupGithubIntegrationState;
   readonly getLatestPlan?: typeof getLatestStartupImplementationPlan;
   readonly listPrRuns?: typeof listStartupAgentPrRuns;
+  readonly assertRepoAccess?: typeof assertStartupWorkspaceRepoAccess;
+  readonly assertNoActiveRepoRun?: typeof assertNoActiveStartupPrRunForRepo;
   readonly resolveModelPolicy?: typeof resolveStartupServiceModelPolicy;
   readonly queueExecutionPrRun?: typeof queueStartupExecutionPrRun;
   readonly structuredLog?: typeof structuredLog;
@@ -121,6 +127,8 @@ export async function runScheduledStartupExecutionDispatch(args: {
   const getGithubState = args.deps?.getGithubState ?? getStartupGithubIntegrationState;
   const getLatestPlan = args.deps?.getLatestPlan ?? getLatestStartupImplementationPlan;
   const listPrRuns = args.deps?.listPrRuns ?? listStartupAgentPrRuns;
+  const assertRepoAccess = args.deps?.assertRepoAccess ?? assertStartupWorkspaceRepoAccess;
+  const assertNoActiveRepoRun = args.deps?.assertNoActiveRepoRun ?? assertNoActiveStartupPrRunForRepo;
   const resolveModelPolicy = args.deps?.resolveModelPolicy ?? resolveStartupServiceModelPolicy;
   const queueExecutionPrRun = args.deps?.queueExecutionPrRun ?? queueStartupExecutionPrRun;
   const log = args.deps?.structuredLog ?? structuredLog;
@@ -231,6 +239,22 @@ export async function runScheduledStartupExecutionDispatch(args: {
           },
           'info'
         );
+        continue;
+      }
+
+      await assertRepoAccess({
+        supabase: args.supabase,
+        startupWorkspaceId: execution.startupWorkspaceId,
+        repoFullName: enabledRepos[0]!.fullName,
+      });
+      try {
+        await assertNoActiveRepoRun({
+          supabase: args.supabase,
+          startupWorkspaceId: execution.startupWorkspaceId,
+          repoFullName: enabledRepos[0]!.fullName,
+        });
+      } catch {
+        summary.skippedActiveRun += 1;
         continue;
       }
 

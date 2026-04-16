@@ -185,7 +185,9 @@ export default async function HomePage({
         />
         <div className="relative mx-auto max-w-6xl">
           <h1 className="mx-auto max-w-5xl font-headline text-4xl font-bold leading-[1.05] tracking-tight text-on-background md:text-6xl lg:text-7xl">
-            Make your website discoverable by ChatGPT, Perplexity, Claude, and Gemini.
+            Make your website discoverable by <span className="text-tertiary">ChatGPT</span>,{' '}
+            <span className="text-tertiary">Perplexity</span>, <span className="text-tertiary">Claude</span>, and{' '}
+            <span className="text-tertiary">Gemini</span>.
           </h1>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             {modelLabels.map((label) => (
@@ -197,9 +199,6 @@ export default async function HomePage({
               </span>
             ))}
           </div>
-          <p className="mx-auto mt-8 max-w-3xl font-body text-lg leading-relaxed text-on-surface-variant md:text-xl">
-            Run a free AI search readiness audit and get one score, the key blockers, and the first fixes to make.
-          </p>
           <p className="mx-auto mt-4 max-w-2xl font-body text-sm text-on-surface-variant">
             Editorially maintained by {SITE_EDITORIAL_NAME}.
           </p>
