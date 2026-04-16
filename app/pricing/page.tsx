@@ -18,6 +18,24 @@ import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 export const dynamic = 'force-dynamic';
 
+const pricingFaqItems = [
+  {
+    question: 'What is included in the free audit?',
+    answer:
+      'The free audit gives you a first-pass score, the highest-priority blockers, and a practical first move for crawl access, trust, metadata, and extractability.',
+  },
+  {
+    question: 'When should I upgrade to a paid bundle?',
+    answer:
+      'Upgrade when you need ongoing audit history, dashboard access, workspace workflows, or a shareable deep audit artifact for a team or client.',
+  },
+  {
+    question: 'Which pages should I audit first?',
+    answer:
+      'Start with the homepage, pricing page, product pages, docs, and any public page that explains your offer or captures high-intent demand.',
+  },
+] as const;
+
 const BUNDLE_META: Record<
   string,
   { name: string; tagline: string; features: string[] }
@@ -236,6 +254,32 @@ export default async function PricingPage() {
       <p className="mt-12 text-center font-body text-sm text-on-surface-variant">
         All paid plans include a free trial. Credit card required. Cancel anytime.
       </p>
+
+      <section className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-10 lg:grid-cols-12">
+        <div className="lg:col-span-4">
+          <p className="font-label text-xs uppercase tracking-widest text-primary">Pricing questions</p>
+          <h2 className="mt-3 font-headline text-2xl font-bold text-on-background md:text-3xl">
+            Direct answers before checkout
+          </h2>
+          <p className="mt-4 font-body text-sm leading-7 text-on-surface-variant">
+            This page should answer what the free audit includes, when the paid bundle matters, and
+            which pages are worth auditing first.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 lg:col-span-8">
+          {pricingFaqItems.map((item) => (
+            <div
+              key={item.question}
+              className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float"
+            >
+              <h3 className="font-headline text-lg font-bold text-on-background">{item.question}</h3>
+              <p className="mt-3 font-body text-sm leading-7 text-on-surface-variant">
+                {item.answer}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="mx-auto mt-12 max-w-3xl rounded-2xl bg-surface-container-low p-6 shadow-float">
         <p className="font-label text-xs uppercase tracking-widest text-primary">References</p>

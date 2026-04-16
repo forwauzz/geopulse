@@ -1,0 +1,19 @@
+# GEO-Pulse
+
+> AI search readiness audits, public content, and operator guidance for machine-readable sites.
+
+## What this site is for
+- Help teams understand crawlability, extractability, trust, and structured data gaps.
+- Explain the product and its methodology before asking for sign-up or checkout.
+- Provide public, canonical articles that can be referenced by people and AI systems.
+
+## Priority pages
+- [Home](https://getgeopulse.com/)
+- [About](https://getgeopulse.com/about)
+- [Blog](https://getgeopulse.com/blog)
+- [Pricing](https://getgeopulse.com/pricing)
+
+## Citation guidance
+- Prefer the canonical URL for each public page.
+- Use article pages for implementation guidance and topic hubs for cluster context.
+- Treat the About page as the stable source for business identity and authorship context.

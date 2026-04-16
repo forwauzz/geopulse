@@ -291,15 +291,19 @@ export default async function HomePage({
               href="/pricing"
               className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
             >
-              Start free trial
+              Run a free audit
             </Link>
             <Link
               href="/pricing"
               className="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-6 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
             >
-              See plans
+              See plans and reports
             </Link>
           </div>
+          <p className="mx-auto mt-4 max-w-3xl font-body text-sm leading-7 text-on-surface-variant">
+            Start with a free audit to see the highest-priority blockers. Upgrade only if you need
+            a shareable deep report, saved history, or workspace-level execution.
+          </p>
         </div>
       </section>
 
@@ -435,9 +439,19 @@ export default async function HomePage({
                     <div className="h-full w-3/5 bg-primary" />
                   </div>
                   <p className="mt-3 font-body text-xs text-on-surface-variant">
-                    Run a scan to see your score and prioritized fixes — numbers here are a layout preview only.
+                    Run a scan to see your score, the top blockers, and the first fixes to move. The numbers here are illustrative only.
                   </p>
                 </div>
+              </div>
+              <div className="mb-8 rounded-2xl border border-outline-variant/50 bg-surface-container-low p-5">
+                <p className="font-label text-xs uppercase tracking-widest text-primary">
+                  Typical first actions
+                </p>
+                <ol className="mt-4 space-y-3 font-body text-sm leading-7 text-on-surface-variant">
+                  <li>1. Remove blocking directives that prevent important pages from being fetched.</li>
+                  <li>2. Tighten the page sections that explain the product, category, or offer.</li>
+                  <li>3. Add clearer trust and reference signals where claims need support.</li>
+                </ol>
               </div>
               <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Priority fixes</p>
               <ul className="mt-4 space-y-4 font-body text-sm text-on-surface-variant">
@@ -447,7 +461,7 @@ export default async function HomePage({
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-tertiary text-lg">info</span>
-                  <span>Actionable fixes — no predicted rankings or traffic outcomes.</span>
+                  <span>Actionable fixes with a concrete first move instead of generic optimization advice.</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-tertiary text-lg">info</span>
@@ -556,7 +570,14 @@ export default async function HomePage({
               We align the audit to public standards and search guidance
             </h2>
             <p className="mt-3 font-body text-sm leading-relaxed text-on-surface-variant">
-              The checks in GEO-Pulse map to documented crawl, metadata, and structured-data guidance instead of opaque scoring rules.
+              GEO-Pulse does not use a hidden scoring model. The checks map to documented crawl,
+              metadata, and structured-data guidance so teams can review the underlying standards
+              before they act on the report.
+            </p>
+            <p className="mt-3 font-body text-sm leading-relaxed text-on-surface-variant">
+              That makes the output easier to trust internally: engineering can verify the technical
+              fixes, content teams can understand the extraction requirements, and operators can tie
+              each recommendation back to a public reference.
             </p>
           </div>
           <div className="flex flex-col gap-3">
@@ -577,19 +598,33 @@ export default async function HomePage({
 
       <section className="mx-auto max-w-screen-xl px-6 py-24 text-center md:py-40">
         <h2 className="mb-10 font-headline text-3xl font-bold text-on-background md:text-4xl lg:text-5xl">
-          See how clearly your site is set up for search and sharing
+          See which public pages need work first
         </h2>
+        <p className="mx-auto max-w-3xl font-body text-base leading-7 text-on-surface-variant">
+          Run the homepage, pricing page, docs, or blog through GEO-Pulse and get a clearer first
+          move for crawl access, extractability, trust, and answer structure.
+        </p>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
             href="/pricing"
             className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-medium text-on-primary transition-opacity hover:opacity-90"
           >
-            Start free trial
+            Run a free audit
           </Link>
-          <p className="font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
-            No credit card for the free scan
-          </p>
+          <Link
+            href="/about"
+            className="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-6 py-3 font-body text-sm font-medium text-on-background transition hover:bg-surface-container-low"
+          >
+            Read how GEO-Pulse works
+          </Link>
         </div>
+        <p className="mt-4 font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
+          No credit card for the free audit
+        </p>
+        <p className="mt-3 font-body text-sm leading-7 text-on-surface-variant">
+          Start with the page that explains your offer most directly. That is usually where answer
+          engines and high-intent buyers decide whether the rest of the site is worth reading.
+        </p>
       </section>
     </main>
   );

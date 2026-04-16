@@ -88,6 +88,18 @@ export default async function LoginPage({ searchParams }: Props) {
         </Link>{' '}
         for data handling details.
       </p>
+      <p className="mt-3 max-w-2xl font-body text-sm text-on-surface-variant">
+        Authentication and abuse protection also rely on{' '}
+        <a
+          href="https://developers.cloudflare.com/turnstile/"
+          target="_blank"
+          rel="noreferrer"
+          className="font-semibold text-primary hover:underline"
+        >
+          Cloudflare Turnstile
+        </a>{' '}
+        on public forms.
+      </p>
       {!isSignUp && (
         <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
           <p className="font-body text-sm font-semibold text-on-background">Report recovery tip</p>
