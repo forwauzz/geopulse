@@ -1,0 +1,76 @@
+{
+  "name": "tech-startups-b2b-software-core",
+  "version": "v2",
+  "vertical": "tech_startups",
+  "description": "Second startup benchmark frame tightened toward company-evaluable prompts that grounded site evidence can answer honestly.",
+  "status": "draft",
+  "metadata": {
+    "owner": "internal",
+    "source": "startup_proof_window_linear_analysis_v1",
+    "target_subcohort": "b2b_software",
+    "replacement_for": "tech-startups-b2b-software-core v1",
+    "reason": "Reduce grounded refusals caused by category-wide prompts that one company site cannot support"
+  },
+  "queries": [
+    {
+      "queryKey": "company-core-job",
+      "queryText": "What does this startup software company appear to help teams do?",
+      "intentType": "direct",
+      "topic": "core_job",
+      "weight": 1.15,
+      "metadata": {
+        "frame": "company_explainer"
+      }
+    },
+    {
+      "queryKey": "buyer-fit",
+      "queryText": "What kind of team or buyer seems best suited for this startup software company?",
+      "intentType": "direct",
+      "topic": "buyer_fit",
+      "weight": 1.05,
+      "metadata": {
+        "frame": "buyer_fit"
+      }
+    },
+    {
+      "queryKey": "enterprise-readiness-signals",
+      "queryText": "What signals on this company's site suggest enterprise readiness or operational maturity?",
+      "intentType": "direct",
+      "topic": "enterprise_readiness",
+      "weight": 1.1,
+      "metadata": {
+        "frame": "trust_signal"
+      }
+    },
+    {
+      "queryKey": "product-differentiators",
+      "queryText": "What product or workflow differentiators does this startup software company emphasize?",
+      "intentType": "direct",
+      "topic": "product_differentiators",
+      "weight": 1,
+      "metadata": {
+        "frame": "product_positioning"
+      }
+    },
+    {
+      "queryKey": "trust-signals",
+      "queryText": "What trust signals does this company provide around customers, adoption, reliability, or scale?",
+      "intentType": "direct",
+      "topic": "trust_signals",
+      "weight": 1,
+      "metadata": {
+        "frame": "trust_signal"
+      }
+    },
+    {
+      "queryKey": "site-clarity",
+      "queryText": "How clearly does this startup software company's site explain the product and target use case?",
+      "intentType": "comparative",
+      "topic": "site_clarity",
+      "weight": 0.95,
+      "metadata": {
+        "frame": "site_clarity"
+      }
+    }
+  ]
+}

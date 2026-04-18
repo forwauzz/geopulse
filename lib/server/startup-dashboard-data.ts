@@ -1,3 +1,5 @@
+import { structuredLog } from './structured-log';
+
 type SupabaseLike = {
   from(table: string): any;
 };
@@ -143,6 +145,33 @@ function parseStartupExecutionApprovalStatus(args: {
   return 'draft';
 }
 
+function readErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code.trim().length > 0 ? code : null;
+}
+
+function readErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim().length > 0) return message;
+  }
+  return String(error ?? 'unknown_error');
+}
+
+function isMissingOptionalStartupFeatureError(error: unknown, table: string): boolean {
+  const code = readErrorCode(error);
+  if (code === '42P01' || code === '42703') return true;
+  const message = readErrorMessage(error).toLowerCase();
+  return message.includes(table.toLowerCase()) && (
+    message.includes('does not exist') ||
+    message.includes('could not find') ||
+    message.includes('column') ||
+    message.includes('relation')
+  );
+}
+
 export async function getStartupDashboardData(args: {
   readonly supabase: SupabaseLike;
   readonly userId: string;
@@ -272,8 +301,49 @@ export async function getStartupDashboardData(args: {
       .order('created_at', { ascending: false }),
   ]);
 
-  if (scansError || reportsError || recommendationsError || executionsError) {
-    throw scansError ?? reportsError ?? recommendationsError ?? executionsError;
+  if (scansError || reportsError) {
+    throw scansError ?? reportsError;
+  }
+
+  const optionalRecommendationsError =
+    recommendationsError && isMissingOptionalStartupFeatureError(recommendationsError, 'startup_recommendations')
+      ? recommendationsError
+      : null;
+  const optionalExecutionsError =
+    executionsError && isMissingOptionalStartupFeatureError(executionsError, 'startup_audit_executions')
+      ? executionsError
+      : null;
+
+  if (recommendationsError && !optionalRecommendationsError) {
+    throw recommendationsError;
+  }
+  if (executionsError && !optionalExecutionsError) {
+    throw executionsError;
+  }
+
+  if (optionalRecommendationsError) {
+    structuredLog(
+      'startup_dashboard_optional_table_unavailable',
+      {
+        startup_workspace_id: selectedWorkspaceId,
+        table: 'startup_recommendations',
+        code: readErrorCode(optionalRecommendationsError),
+        message: readErrorMessage(optionalRecommendationsError),
+      },
+      'warning'
+    );
+  }
+  if (optionalExecutionsError) {
+    structuredLog(
+      'startup_dashboard_optional_table_unavailable',
+      {
+        startup_workspace_id: selectedWorkspaceId,
+        table: 'startup_audit_executions',
+        code: readErrorCode(optionalExecutionsError),
+        message: readErrorMessage(optionalExecutionsError),
+      },
+      'warning'
+    );
   }
 
   return {
@@ -324,7 +394,7 @@ export async function getStartupDashboardData(args: {
       pdfUrl: row.pdf_url,
       createdAt: row.created_at,
     })),
-    recommendations: ((recommendations ?? []) as Array<{
+    recommendations: (((optionalRecommendationsError ? [] : recommendations) ?? []) as Array<{
       id: string;
       startup_workspace_id: string;
       scan_id: string | null;
@@ -357,7 +427,7 @@ export async function getStartupDashboardData(args: {
       statusUpdatedByUserId: row.status_updated_by_user_id,
       createdAt: row.created_at,
     })),
-    executions: ((executions ?? []) as Array<{
+    executions: (((optionalExecutionsError ? [] : executions) ?? []) as Array<{
       id: string;
       startup_workspace_id: string;
       scan_id: string | null;

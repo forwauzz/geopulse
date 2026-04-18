@@ -6,14 +6,14 @@ import {
 } from './startup-rollout-flags';
 
 describe('startup rollout flags', () => {
-  it('defaults to startup dashboard/github on and auto-pr off', () => {
+  it('defaults to startup dashboard/github/slack on and auto-pr off', () => {
     const flags = resolveStartupRolloutFlagsFromMetadata({});
     expect(flags).toEqual({
       startupDashboard: true,
       githubAgent: true,
       autoPr: false,
-      slackAgent: false,
-      slackAutoPost: false,
+      slackAgent: true,
+      slackAutoPost: true,
     });
   });
 

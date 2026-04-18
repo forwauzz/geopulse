@@ -1,0 +1,44 @@
+{
+  "name": "tech-startups-b2b-software-v2-pilot",
+  "vertical": "tech_startups",
+  "description": "First recurring startup benchmark pilot cohort limited to the four v2-proofed b2b software domains.",
+  "metadata": {
+    "seed_source": "benchmark_tech_startups_collection_pilot_v1",
+    "seed_status": "pilot_ready",
+    "seed_priority": 1,
+    "schedule_enabled": true,
+    "target_subcohort": "b2b_software",
+    "query_set_version": "v2",
+    "schedule_version": "tech-startups-b2b-software-v2-pilot"
+  },
+  "domains": [
+    {
+      "siteUrl": "https://linear.app/",
+      "domain": "linear.app",
+      "displayName": "Linear",
+      "subvertical": "workflow_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://supabase.com/",
+      "domain": "supabase.com",
+      "displayName": "Supabase",
+      "subvertical": "developer_tools",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://vercel.com/",
+      "domain": "vercel.com",
+      "displayName": "Vercel",
+      "subvertical": "developer_tools",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://replicate.com/",
+      "domain": "replicate.com",
+      "displayName": "Replicate",
+      "subvertical": "ai_software",
+      "geoRegion": "north_america"
+    }
+  ]
+}

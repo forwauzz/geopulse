@@ -29,6 +29,7 @@
     "eval:retrieval:write": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/retrieval-eval-write.ts",
     "benchmark:seed": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed.ts",
     "benchmark:seed:domains": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-domains.ts",
+    "benchmark:seed:domain-cohort": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-domain-cohort.ts",
     "benchmark:seed:query-set": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts",
     "benchmark:seed:query-set:business-counsel": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts --fixture eval/fixtures/benchmark-law-firms-business-counsel-v1-query-set.json",
     "benchmark:schedule:preview": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-preview.ts",

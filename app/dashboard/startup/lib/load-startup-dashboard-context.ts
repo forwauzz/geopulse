@@ -23,6 +23,7 @@ import {
 } from '@/lib/server/startup-dashboard-status-messages';
 import { resolveStartupAccess } from '@/lib/server/startup-access-resolver';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { structuredLog } from '@/lib/server/structured-log';
 import type { StartupWorkspaceSummary } from '@/lib/server/startup-dashboard-data';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -53,6 +54,37 @@ type SearchSlice = {
   readonly slack?: string;
   readonly slack_detail?: string;
 };
+
+function readOptionalLoaderError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object') {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim().length > 0) return message;
+  }
+  return String(error ?? 'unknown_error');
+}
+
+async function safeStartupOptionalLoad<T>(args: {
+  readonly label: string;
+  readonly workspaceId: string | null;
+  readonly fallback: T;
+  readonly load: () => Promise<T>;
+}): Promise<T> {
+  try {
+    return await args.load();
+  } catch (error) {
+    structuredLog(
+      'startup_dashboard_optional_loader_failed',
+      {
+        loader: args.label,
+        startup_workspace_id: args.workspaceId,
+        message: readOptionalLoaderError(error),
+      },
+      'warning'
+    );
+    return args.fallback;
+  }
+}
 
 export async function loadStartupDashboardContext(args: {
   readonly supabase: SupabaseClient;
@@ -97,38 +129,62 @@ export async function loadStartupDashboardContext(args: {
   const trend = buildStartupTrendSeries(dashboard.scans);
   const backlog = buildStartupActionBacklog(dashboard);
   const metrics = buildStartupTrackingMetrics(dashboard);
-  const latestPlan = dashboard.selectedWorkspaceId
-    ? await getLatestStartupImplementationPlan({
-        supabase,
-        startupWorkspaceId: dashboard.selectedWorkspaceId,
-      })
-    : null;
-  const laneCards = buildStartupImplementationLaneCards(latestPlan);
   const env = await getScanApiEnv();
   const serviceSupabase =
     env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
       ? createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
       : null;
+  const latestPlan = dashboard.selectedWorkspaceId
+    ? await safeStartupOptionalLoad({
+        label: 'latest_plan',
+        workspaceId: dashboard.selectedWorkspaceId,
+        fallback: null,
+        load: () =>
+          getLatestStartupImplementationPlan({
+            supabase,
+            startupWorkspaceId: dashboard.selectedWorkspaceId!,
+          }),
+      })
+    : null;
+  const laneCards = buildStartupImplementationLaneCards(latestPlan);
   const startupServiceGates =
     dashboard.selectedWorkspaceId && serviceSupabase
-      ? await resolveStartupDashboardUiGates({
-          memberSupabase: supabase,
-          serviceSupabase,
-          startupWorkspaceId: dashboard.selectedWorkspaceId,
-          userId,
+      ? await safeStartupOptionalLoad({
+          label: 'startup_service_gates',
+          workspaceId: dashboard.selectedWorkspaceId,
+          fallback: null,
+          load: () =>
+            resolveStartupDashboardUiGates({
+              memberSupabase: supabase,
+              serviceSupabase,
+              startupWorkspaceId: dashboard.selectedWorkspaceId!,
+              userId,
+            }),
         })
       : null;
   const startupRolloutFlags = dashboard.selectedWorkspaceId
-    ? await resolveStartupWorkspaceRolloutFlags({
-        supabase,
-        startupWorkspaceId: dashboard.selectedWorkspaceId,
-        env,
+    ? await safeStartupOptionalLoad({
+        label: 'startup_rollout_flags',
+        workspaceId: dashboard.selectedWorkspaceId,
+        fallback: null,
+        load: () =>
+          resolveStartupWorkspaceRolloutFlags({
+            supabase,
+            startupWorkspaceId: dashboard.selectedWorkspaceId!,
+            env,
+          }),
       })
     : null;
   const githubState = dashboard.selectedWorkspaceId
-    ? await getStartupGithubIntegrationState({
-        supabase,
-        startupWorkspaceId: dashboard.selectedWorkspaceId,
+    ? await safeStartupOptionalLoad({
+        label: 'github_integration_state',
+        workspaceId: dashboard.selectedWorkspaceId,
+        fallback: { installation: null, repositories: [] },
+        load: () =>
+          getStartupGithubIntegrationState({
+            supabase,
+            startupWorkspaceId: dashboard.selectedWorkspaceId!,
+          }),
       })
     : { installation: null, repositories: [] };
   const githubAllowlistValue = githubState.repositories.map((repo) => repo.fullName).join('\n');
@@ -136,22 +192,40 @@ export async function loadStartupDashboardContext(args: {
   const prStatusMessage = readPrStatusMessage(sp.pr);
   const slackStatusMessage = readSlackStatusMessage(sp.slack, sp.slack_detail);
   const slackState = dashboard.selectedWorkspaceId
-    ? await getStartupSlackIntegrationState({
-        supabase,
-        startupWorkspaceId: dashboard.selectedWorkspaceId,
+    ? await safeStartupOptionalLoad({
+        label: 'slack_integration_state',
+        workspaceId: dashboard.selectedWorkspaceId,
+        fallback: { installations: [] },
+        load: () =>
+          getStartupSlackIntegrationState({
+            supabase,
+            startupWorkspaceId: dashboard.selectedWorkspaceId!,
+          }),
       })
     : { installations: [] };
   const slackDestinations = dashboard.selectedWorkspaceId
-    ? await listStartupSlackDestinations({
-        supabase,
-        startupWorkspaceId: dashboard.selectedWorkspaceId,
+    ? await safeStartupOptionalLoad({
+        label: 'slack_destinations',
+        workspaceId: dashboard.selectedWorkspaceId,
+        fallback: [],
+        load: () =>
+          listStartupSlackDestinations({
+            supabase,
+            startupWorkspaceId: dashboard.selectedWorkspaceId!,
+          }),
       })
     : [];
   const slackDeliveryEvents = dashboard.selectedWorkspaceId
-    ? await listStartupSlackDeliveryEvents({
-        supabase,
-        startupWorkspaceId: dashboard.selectedWorkspaceId,
-        limit: 6,
+    ? await safeStartupOptionalLoad({
+        label: 'slack_delivery_events',
+        workspaceId: dashboard.selectedWorkspaceId,
+        fallback: [],
+        load: () =>
+          listStartupSlackDeliveryEvents({
+            supabase,
+            startupWorkspaceId: dashboard.selectedWorkspaceId!,
+            limit: 6,
+          }),
       })
     : [];
   const slackActiveDestinations = slackDestinations.filter((destination) => destination.status === 'active');
@@ -159,10 +233,16 @@ export async function loadStartupDashboardContext(args: {
     (installation) => installation.status === 'active'
   );
   const prRuns = dashboard.selectedWorkspaceId
-    ? await listStartupAgentPrRuns({
-        supabase,
-        startupWorkspaceId: dashboard.selectedWorkspaceId,
-        limit: 8,
+    ? await safeStartupOptionalLoad({
+        label: 'agent_pr_runs',
+        workspaceId: dashboard.selectedWorkspaceId,
+        fallback: [],
+        load: () =>
+          listStartupAgentPrRuns({
+            supabase,
+            startupWorkspaceId: dashboard.selectedWorkspaceId!,
+            limit: 8,
+          }),
       })
     : [];
   const approvedRecommendations = dashboard.recommendations.filter((item) => item.status === 'approved');

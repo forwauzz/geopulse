@@ -6,6 +6,7 @@
 ---
 ### 2026-04-14 - SAO-018 - Repo reservation and one-active-run guardrails
 
+
 **Agent:** Backend
 **Claimed complete:** 2026-04-14
 **Evidence type:** Shared repo-guardrail helper + queue-path enforcement + focused unit verification
@@ -12197,3 +12198,86 @@ Files: `components/new-subscriber-welcome-banner.tsx`, `app/dashboard/page.tsx`
 
 
 
+---
+
+### 2026-04-17 - BM-055 - Inspect one-off startup pilot grounded regression
+
+**Agent:** Backend + Ops
+**Claimed complete:** 2026-04-17
+**Evidence type:** Direct run-group diagnostic + query-level inspection against adjacent clean windows
+
+Reviewed the one-off grounded `replicate.com` dip from the startup pilot window `2026-04-17T12` to determine whether it reflected a scheduling/runtime bug, a grounding/provenance failure, or a narrow model behavior blip.
+
+**What was done:**
+- Ran direct benchmark diagnostics on the affected grounded run and the adjacent clean grounded pilot runs:
+  - bad run: `bb5a1e80-a5d5-4f33-a9ed-bfe275811325`
+  - clean comparison runs: `32f9c258-ec67-448d-9aac-e5aae3f65c31`, `2b4457b9-48a3-4695-a229-615c5acaabbd`
+- Confirmed all three runs had:
+  - `query_count = 6`
+  - `grounding_evidence_count = 4`
+  - `page_url_citations = 0`
+  - `matched_citations = 0`
+  - `probable_issue = model_returning_domain_level_or_no_urls`
+- Ran a query-by-query inspection over all three grounded run groups.
+- Confirmed the regression was isolated to `product-differentiators` on the bad run:
+  - affected run returned a normal grounded answer but produced `0` citations for that query
+  - both adjacent clean grounded runs cited `replicate.com` on `product-differentiators`
+  - the other 5 queries on the bad run still cited `replicate.com`
+
+**Conclusion:**
+- The `83%` dip was caused by a one-query measured-domain citation omission.
+- It does **not** look like:
+  - a scheduler failure
+  - a grounding-evidence extraction failure
+  - a citation provenance matcher regression
+- It does look like a one-off model citation omission within the existing domain-level startup lane.
+
+**Evidence commands:**
+- `npm.cmd run benchmark:run:diagnostic -- --run-group-ids bb5a1e80-a5d5-4f33-a9ed-bfe275811325,32f9c258-ec67-448d-9aac-e5aae3f65c31,2b4457b9-48a3-4695-a229-615c5acaabbd`
+- one-off query-level inspector over the same three run groups using `createBenchmarkAdminData(...).getRunGroupDetail(...)`
+
+**Files updated:**
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `PLAYBOOK/benchmark-tech-startups-collection-pilot-v1.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+**Orchestrator verification:** ACCEPTED
+
+---
+
+### 2026-04-17 - BM-056 - Startup widening decision freeze after BM-055
+
+**Agent:** Architect + Ops
+**Claimed complete:** 2026-04-17
+**Evidence type:** Decision freeze based on three-window pilot evidence plus BM-055 regression review
+
+Froze the post-review startup benchmark decision so the repo has an explicit answer on whether the startup recurring lane should widen beyond the current four-domain pilot.
+
+**Decision:**
+- Hold the startup recurring lane at the current four-domain pilot.
+
+**Reasoning:**
+- The startup pilot is operationally clean across three comparable windows.
+- `BM-055` showed the `replicate.com` dip was a one-off citation omission, not a systems regression.
+- The startup lane still behaves as a domain-level citation lane:
+  - no page-URL citations
+  - no provenance matches
+  - exact-page quality remains non-gating
+- The recurrence view remains neutral rather than showing a stable grounded advantage strong enough to justify widening.
+
+**What remains blocked by this decision:**
+- Seeding the next startup cohort (`BM-057`)
+- Running a widened startup proof window (`BM-058`)
+
+**What remains allowed:**
+- Continued low-touch recurring collection on the current four-domain startup pilot
+- Reopening startup widening later if stronger repeatable evidence appears
+
+**Files updated:**
+- `agents/memory/PROJECT_STATE.md`
+- `docs/01-current-state.md`
+- `PLAYBOOK/benchmark-tech-startups-collection-pilot-v1.md`
+- `agents/memory/COMPLETION_LOG.md`
+
+**Orchestrator verification:** ACCEPTED

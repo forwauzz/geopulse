@@ -553,6 +553,16 @@ Current truth:
    - this is intended for evidence review across a few comparable windows, not a new benchmark subsystem
  - schedule run-now override:
    - the scheduler now supports `--window-date YYYY-MM-DDTHH` for controlled internal creation of the next benchmark window without waiting for cron time to advance
+ - startup benchmark expansion:
+   - `tech_startups` is now the next explicit benchmark expansion domain toward the long-term `1000 sites / 10 domains` target
+   - the first startup frame is intentionally narrow: `b2b_software`
+   - the startup `v2` query family plus cleaner evidence extraction now produced stable measured-domain inclusion across `linear.app`, `supabase.com`, `vercel.com`, and `replicate.com`
+   - the first explicit startup scheduled pilot window (`2026-04-17T00`) also ran cleanly across those same four domains through the existing scheduler path
+   - three comparable startup pilot windows now exist and all ran cleanly, but the recurrence view is neutral rather than strongly positive
+   - `replicate.com` showed one grounded dip to `83%` before returning to `100%`; that outlier is now inspected and was isolated to one `product-differentiators` answer that omitted the measured-domain citation while still returning a normal grounded answer
+   - startup citations still remain domain-level rather than page-level, so startup provenance quality is still non-gating
+   - the next startup benchmark step remains a tiny recurring pilot on those four proofed domains only, using the existing scheduler path rather than a new startup-specific benchmark subsystem
+   - the post-review decision is now frozen as hold-at-four-domains: broader startup widening is not approved because the pilot is clean but still neutral rather than clearly stronger under grounding
 
 ### Marketing attribution
 - event ingestion
@@ -705,7 +715,7 @@ Current domain truth:
 - The broader distribution engine is no longer planning-only: the repo now contains its schema foundation, repository seam, feature-flagged admin shell, writable controls, a bounded manual dispatch path, and a feature-flagged queue-backed background runtime with retry/DLQ handling, but not the final hardened orchestration model.
 - Deep-audit core scale plumbing is implemented; remaining launch risk is operational/security closure, not DA-004 core code.
 - Retrieval analytics are implemented for deterministic and Promptfoo-backed runs, but RAGAS runtime remains intentionally unshipped.
-- The latest public-site clarity pass is now in repo too: the homepage hero now leads with the ChatGPT / Perplexity / Gemini discoverability message, emits `SoftwareApplication` plus FAQ JSON-LD, and adds a small `Audit -> Automate -> Integrate` flow and references strip; the startup overview now points to the existing Slack connectors hub instead of duplicating Slack controls; blog articles now open with a BLUF block plus a compact heading-derived contents list; topic pages now mirror that BLUF/contents structure with anchored definition / why-it-matters / practical-takeaway cards.
+- The latest public-site clarity pass is now in repo too: the homepage hero now leads with the stronger AI-visibility positioning (`Stop guessing whether AI is surfacing your company.`), reframes the page around `See / Fix / Prove`, demotes score-led language in favor of visibility / implementation / proof framing, still emits `SoftwareApplication` plus FAQ JSON-LD, and preserves the existing scan entry plus compact references strip; the startup overview still points to the existing Slack connectors hub instead of duplicating Slack controls; blog articles still open with a BLUF block plus a compact heading-derived contents list; topic pages still mirror that BLUF/contents structure with anchored definition / why-it-matters / practical-takeaway cards.
 - The latest public-site trust pass is now in repo too: public pages now carry `GEO-Pulse Editorial` author/schema attribution, blog article meta descriptions are clamped to audit-friendly length, and the privacy page is published and linked from the footer.
 - The latest public-site trust pass also now includes compact outbound references on the blog index and pricing page so the remaining trust-signal gaps are closed with minimal layout noise.
 - The first live `law_firms` benchmark lane is operationally real, but its current frame is over-mixed: many domain/query pairs are low-fit by design because the cohort mixes enterprise firms, immigration, divorce, PI, and employment specialists under one broad query set.

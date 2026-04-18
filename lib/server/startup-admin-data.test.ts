@@ -134,8 +134,8 @@ describe('startup admin data timeline', () => {
       startupDashboard: true,
       githubAgent: true,
       autoPr: false,
-      slackAgent: false,
-      slackAutoPost: false,
+      slackAgent: true,
+      slackAutoPost: true,
     });
     expect(workspaces[0]?.timeline[0]).toMatchObject({
       event: 'startup_recommendation_status_transitioned',

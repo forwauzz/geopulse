@@ -324,4 +324,141 @@ describe('getStartupDashboardData', () => {
     expect(data.workspaces[0]?.workspaceKey).toBe('acme');
     expect(data.executions).toEqual([]);
   });
+
+  it('degrades gracefully when optional startup tables are unavailable', async () => {
+    const supabase = {
+      from(table: string) {
+        if (table === 'startup_workspace_users') {
+          let eqCount = 0;
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              eqCount += 1;
+              if (eqCount < 2) return this;
+              return Promise.resolve({
+                data: [{ startup_workspace_id: 'ws-1', role: 'founder', status: 'active' }],
+                error: null,
+              });
+            },
+          };
+        }
+
+        if (table === 'startup_workspaces') {
+          return {
+            select() {
+              return this;
+            },
+            in() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'ws-1',
+                    workspace_key: 'acme',
+                    name: 'Acme',
+                    canonical_domain: 'acme.com',
+                  },
+                ],
+                error: null,
+              });
+            },
+          };
+        }
+
+        if (table === 'scans') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'scan-1',
+                    startup_workspace_id: 'ws-1',
+                    url: 'https://acme.com',
+                    domain: 'acme.com',
+                    score: 88,
+                    letter_grade: 'B+',
+                    created_at: '2026-04-04T00:00:00.000Z',
+                    run_source: 'startup_dashboard',
+                  },
+                ],
+                error: null,
+              });
+            },
+          };
+        }
+
+        if (table === 'reports') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({
+                data: [
+                  {
+                    id: 'report-1',
+                    scan_id: 'scan-1',
+                    startup_workspace_id: 'ws-1',
+                    type: 'deep_audit',
+                    email_delivered_at: '2026-04-04T01:00:00.000Z',
+                    pdf_generated_at: '2026-04-04T00:30:00.000Z',
+                    pdf_url: 'https://example.com/report.pdf',
+                    created_at: '2026-04-04T00:20:00.000Z',
+                  },
+                ],
+                error: null,
+              });
+            },
+          };
+        }
+
+        if (table === 'startup_recommendations' || table === 'startup_audit_executions') {
+          return {
+            select() {
+              return this;
+            },
+            eq() {
+              return this;
+            },
+            order() {
+              return Promise.resolve({
+                data: null,
+                error: {
+                  code: '42P01',
+                  message: `relation "${table}" does not exist`,
+                },
+              });
+            },
+          };
+        }
+
+        throw new Error(`Unexpected table ${table}`);
+      },
+    } as any;
+
+    const data = await getStartupDashboardData({
+      supabase,
+      userId: 'user-1',
+      selectedWorkspaceId: 'ws-1',
+    });
+
+    expect(data.selectedWorkspaceId).toBe('ws-1');
+    expect(data.scans).toHaveLength(1);
+    expect(data.reports).toHaveLength(1);
+    expect(data.recommendations).toEqual([]);
+    expect(data.executions).toEqual([]);
+  });
 });

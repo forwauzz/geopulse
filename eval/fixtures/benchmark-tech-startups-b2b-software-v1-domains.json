@@ -1,0 +1,140 @@
+{
+  "name": "tech-startups-b2b-software-v1",
+  "vertical": "tech_startups",
+  "description": "First narrow startup benchmark target cohort for b2b software, developer tools, AI software, and workflow infrastructure.",
+  "metadata": {
+    "seed_source": "benchmark_tech_startups_b2b_software_methodology_v1",
+    "seed_status": "planned",
+    "seed_priority": 1,
+    "schedule_enabled": false,
+    "target_subcohort": "b2b_software"
+  },
+  "domains": [
+    {
+      "siteUrl": "https://linear.app/",
+      "domain": "linear.app",
+      "displayName": "Linear",
+      "subvertical": "workflow_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://vercel.com/",
+      "domain": "vercel.com",
+      "displayName": "Vercel",
+      "subvertical": "developer_tools",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://supabase.com/",
+      "domain": "supabase.com",
+      "displayName": "Supabase",
+      "subvertical": "developer_tools",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://clerk.com/",
+      "domain": "clerk.com",
+      "displayName": "Clerk",
+      "subvertical": "developer_tools",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://render.com/",
+      "domain": "render.com",
+      "displayName": "Render",
+      "subvertical": "infrastructure_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://railway.com/",
+      "domain": "railway.com",
+      "displayName": "Railway",
+      "subvertical": "infrastructure_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://retool.com/",
+      "domain": "retool.com",
+      "displayName": "Retool",
+      "subvertical": "workflow_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://posthog.com/",
+      "domain": "posthog.com",
+      "displayName": "PostHog",
+      "subvertical": "product_analytics",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://sentry.io/",
+      "domain": "sentry.io",
+      "displayName": "Sentry",
+      "subvertical": "developer_tools",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://replicate.com/",
+      "domain": "replicate.com",
+      "displayName": "Replicate",
+      "subvertical": "ai_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://modal.com/",
+      "domain": "modal.com",
+      "displayName": "Modal",
+      "subvertical": "ai_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://www.pinecone.io/",
+      "domain": "pinecone.io",
+      "displayName": "Pinecone",
+      "subvertical": "ai_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://www.langchain.com/",
+      "domain": "langchain.com",
+      "displayName": "LangChain",
+      "subvertical": "ai_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://zapier.com/",
+      "domain": "zapier.com",
+      "displayName": "Zapier",
+      "subvertical": "workflow_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://www.dbtlabs.com/",
+      "domain": "dbtlabs.com",
+      "displayName": "dbt Labs",
+      "subvertical": "data_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://www.glean.com/",
+      "domain": "glean.com",
+      "displayName": "Glean",
+      "subvertical": "ai_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://www.coda.io/",
+      "domain": "coda.io",
+      "displayName": "Coda",
+      "subvertical": "workflow_software",
+      "geoRegion": "north_america"
+    },
+    {
+      "siteUrl": "https://www.airbyte.com/",
+      "domain": "airbyte.com",
+      "displayName": "Airbyte",
+      "subvertical": "data_software",
+      "geoRegion": "north_america"
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "name": "tech-startups-b2b-software-core",
+  "version": "v1",
+  "vertical": "tech_startups",
+  "description": "First frozen benchmark frame for the tech_startups b2b_software startup cohort.",
+  "status": "draft",
+  "metadata": {
+    "owner": "internal",
+    "source": "benchmark_tech_startups_b2b_software_methodology_v1",
+    "target_subcohort": "b2b_software",
+    "cohort_shape": [
+      "saas",
+      "developer_tools",
+      "ai_software",
+      "workflow_infrastructure"
+    ]
+  },
+  "queries": [
+    {
+      "queryKey": "startup-software-evaluation",
+      "queryText": "What should a team look for when evaluating a startup software vendor?",
+      "intentType": "comparative",
+      "topic": "vendor_evaluation",
+      "weight": 1.15,
+      "metadata": {
+        "frame": "selection_criteria"
+      }
+    },
+    {
+      "queryKey": "enterprise-ready-startup-software",
+      "queryText": "How can buyers tell if a startup software company is enterprise-ready?",
+      "intentType": "direct",
+      "topic": "enterprise_readiness",
+      "weight": 1.1,
+      "metadata": {
+        "frame": "trust_signal"
+      }
+    },
+    {
+      "queryKey": "workflow-automation-startups",
+      "queryText": "Which startup software companies are worth considering for workflow automation?",
+      "intentType": "discovery",
+      "topic": "workflow_automation",
+      "weight": 1.05,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "developer-tools-startups",
+      "queryText": "Which startup companies are known for useful developer tools or engineering workflow software?",
+      "intentType": "discovery",
+      "topic": "developer_tools",
+      "weight": 1.05,
+      "metadata": {
+        "frame": "category_buying"
+      }
+    },
+    {
+      "queryKey": "ai-startup-platform-comparison",
+      "queryText": "What should a buyer compare when looking at AI software startups or AI workflow platforms?",
+      "intentType": "comparative",
+      "topic": "ai_platforms",
+      "weight": 1,
+      "metadata": {
+        "frame": "comparison_frame"
+      }
+    },
+    {
+      "queryKey": "startup-software-trust-signals",
+      "queryText": "What makes a startup software company credible for security, reliability, or operational maturity?",
+      "intentType": "direct",
+      "topic": "trust_signals",
+      "weight": 1,
+      "metadata": {
+        "frame": "trust_signal"
+      }
+    }
+  ]
+}

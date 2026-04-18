@@ -16,6 +16,16 @@ function countMatches(html: string, re: RegExp): number {
   return g?.length ?? 0;
 }
 
+function stripLowSignalBlocks(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<template\b[^>]*>[\s\S]*?<\/template>/gi, ' ')
+    .replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, ' ');
+}
+
 function stripTags(s: string): string {
   return s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -25,7 +35,7 @@ function stripTags(s: string): string {
  */
 export function buildTextSample(html: string, maxChars = 8000): string {
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  const slice = (bodyMatch?.[1] ?? html).slice(0, MAX_HTML_CHARS);
+  const slice = stripLowSignalBlocks((bodyMatch?.[1] ?? html).slice(0, MAX_HTML_CHARS));
   return stripTags(slice).slice(0, maxChars);
 }
 

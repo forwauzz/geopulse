@@ -15,23 +15,23 @@ import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 const features = [
   {
-    icon: 'smart_toy',
-    title: 'Crawl access',
-    body: 'Review robots and server signals so public pages you intend to expose stay discoverable without weakening security controls.',
+    icon: 'visibility',
+    title: 'See where AI includes you',
+    body: 'Understand whether your public pages are structured well enough for answer engines to find, interpret, and reuse in buyer-relevant moments.',
   },
   {
-    icon: 'schema',
-    title: 'Structured data',
-    body: 'Check JSON-LD and schema signals so machines can interpret your page context clearly.',
+    icon: 'rule_settings',
+    title: 'Fix what keeps you from being cited',
+    body: 'Turn crawl, structure, metadata, and trust gaps into a practical fix list instead of another static audit report.',
   },
   {
-    icon: 'description',
-    title: 'Content extractability',
-    body: 'Inspect structure and markup so core content is not buried in noise or fragile layout.',
+    icon: 'task_alt',
+    title: 'Turn audits into shipped work',
+    body: 'Move from findings to prioritized implementation work across engineering, content, and SEO without guessing what matters first.',
   },
   {
-    icon: 'podcasts',
-    title: 'Authority signals',
+    icon: 'monitoring',
+    title: 'Prove improvement over time',
     body: 'Surface patterns that affect how clearly your pages present facts and entities — not rankings or predictions.',
   },
 ] as const;
@@ -55,7 +55,7 @@ const faqItems = [
   {
     question: 'Is this a ranking or traffic prediction tool?',
     answer:
-      'No. GEO-Pulse is an audit tool. It surfaces readiness gaps and practical fixes, but it does not predict rankings, traffic, or citations.',
+      'No. GEO-Pulse helps you measure visibility readiness and presence signals, but it does not guarantee rankings, traffic, or citations.',
   },
   {
     question: 'What should I fix first after a scan?',
@@ -75,42 +75,134 @@ const referenceLinks = [
   },
 ] as const;
 
-const modelLabels = ['ChatGPT', 'Perplexity', 'Claude', 'Gemini'] as const;
+const modelPlatforms = [
+  {
+    label: 'ChatGPT',
+    icon: 'chatgpt' as const,
+    iconClassName: 'text-[#10A37F]',
+  },
+  {
+    label: 'Perplexity',
+    icon: 'perplexity' as const,
+    iconClassName: 'text-[#1FB8A6]',
+  },
+  {
+    label: 'Claude',
+    icon: 'claude' as const,
+    iconClassName: 'text-[#D97757]',
+  },
+  {
+    label: 'Gemini',
+    icon: 'gemini' as const,
+    iconClassName: 'text-[#5B7CFA]',
+  },
+] as const;
+
+function ModelPlatformLogo({
+  icon,
+  className,
+}: {
+  icon: (typeof modelPlatforms)[number]['icon'];
+  className?: string;
+}) {
+  const classes = className ?? '';
+
+  if (icon === 'chatgpt') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
+        <path
+          d="M12 3.25 17.5 6.5v6L12 15.75 6.5 12.5v-6L12 3.25Z"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+        <path
+          d="m9.2 7.6 5.6 8.8M14.8 7.6l-5.6 8.8M7 12h10"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (icon === 'perplexity') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
+        <path
+          d="M6 7.5h12M6 12h12M6 16.5h12M8 5v14M16 5v14"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  if (icon === 'claude') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
+        <path
+          d="M7.5 5.5h8a3 3 0 0 1 0 6h-7a3.5 3.5 0 1 0 0 7h8"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
+      <path
+        d="m12 4.5 1.8 4.2 4.2 1.8-4.2 1.8-1.8 4.2-1.8-4.2-4.2-1.8 4.2-1.8L12 4.5Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path
+        d="m17.2 14.8.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 const howItWorks = [
   {
     step: '1',
-    title: 'Audit',
-    body: 'Scan your public site for crawl access, robots directives, structured data, trust cues, and content extractability.',
+    title: 'See',
+    body: 'Scan your public site to understand where AI visibility is weak, fragile, or blocked by crawl, structure, and trust gaps.',
   },
   {
     step: '2',
-    title: 'Prioritize',
-    body: 'See which issues block machine retrieval first, which issues weaken trust, and which fixes can wait.',
+    title: 'Fix',
+    body: 'Turn the findings into prioritized implementation work so the right team can move on the right changes first.',
   },
   {
     step: '3',
-    title: 'Act',
-    body: 'Turn the findings into a practical fix list for engineering, content, and SEO without guessing what to do next.',
+    title: 'Prove',
+    body: 'Track whether visibility is improving over time so progress means more than a one-time score change.',
   },
 ] as const;
 
 const answerBlocks = [
   {
-    title: 'Definition',
-    body: 'AI search readiness is the degree to which a public page can be fetched, interpreted, and reused accurately by search engines and answer engines.',
+    title: 'What the product does',
+    body: 'GEO-Pulse helps teams see where AI includes them, fix what keeps them from being cited, and track whether visibility is improving over time.',
   },
   {
-    title: 'What GEO-Pulse audits',
-    body: 'GEO-Pulse audits crawl access, robots directives, metadata, structured data, internal linking, trust signals, and content extractability.',
+    title: 'What the score is for',
+    body: 'The score is a leading indicator for prioritization, not the product outcome. The real outcome is stronger inclusion in the AI answers that matter.',
   },
   {
     title: 'What a strong result looks like',
-    body: 'A strong result means important pages are crawlable, metadata is explicit, content answers likely questions directly, and machines can extract the main claim without depending on layout.',
+    body: 'A strong result means important pages are crawlable, explicit, easy to extract, and easier for answer engines to understand and reuse accurately.',
   },
   {
     title: 'What to do first',
-    body: 'Fix blocking directives first, then improve answer structure and trust signals on the pages that drive signups, product understanding, and citations.',
+    body: 'Fix blocking directives first, then improve answer structure, trust signals, and product clarity on the pages that shape demand.',
   },
 ] as const;
 
@@ -124,15 +216,15 @@ const extractabilityChecklist = [
 const audienceUseCases = [
   {
     title: 'Founders and in-house teams',
-    body: 'Use GEO-Pulse to see whether your homepage, pricing page, product pages, and docs are easy for answer engines to interpret before you invest in more content.',
+    body: 'Use GEO-Pulse to understand whether AI is ignoring the pages that explain your product, pricing, and buyer value before you invest in more content.',
   },
   {
     title: 'Agencies',
-    body: 'Use the same audit flow across client sites to separate urgent crawl and metadata issues from lower-signal cleanup work.',
+    body: 'Use the same workflow across client sites to separate real visibility blockers from lower-signal cleanup work and move clients toward shipped fixes faster.',
   },
   {
     title: 'Content and SEO operators',
-    body: 'Use the report to identify where pages need clearer definitions, better internal linking, and more extractable answers instead of more volume.',
+    body: 'Use the report to identify where pages need clearer definitions, better internal linking, and stronger extractability instead of more volume for its own sake.',
   },
 ] as const;
 
@@ -236,17 +328,20 @@ export default async function HomePage({
         />
         <div className="relative mx-auto max-w-6xl">
           <h1 className="mx-auto max-w-5xl font-headline text-4xl font-bold leading-[1.05] tracking-tight text-on-background md:text-6xl lg:text-7xl">
-            Make your website discoverable by <span className="text-tertiary">ChatGPT</span>,{' '}
-            <span className="text-tertiary">Perplexity</span>, <span className="text-tertiary">Claude</span>, and{' '}
-            <span className="text-tertiary">Gemini</span>.
+            Stop guessing whether AI is <span className="text-tertiary">surfacing</span> your company.
           </h1>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            {modelLabels.map((label) => (
+            {modelPlatforms.map((platform) => (
               <span
-                key={label}
-                className="rounded-full border border-tertiary/20 bg-surface-container-lowest px-4 py-2 font-label text-xs font-semibold uppercase tracking-[0.18em] text-tertiary shadow-float"
+                key={platform.label}
+                className="inline-flex items-center gap-2 rounded-full border border-tertiary/20 bg-surface-container-lowest px-4 py-2 shadow-float"
               >
-                {label}
+                <span className={`h-4 w-4 ${platform.iconClassName}`}>
+                  <ModelPlatformLogo icon={platform.icon} className="h-full w-full" />
+                </span>
+                <span className="font-label text-[11px] font-semibold uppercase tracking-[0.18em] text-tertiary">
+                  {platform.label}
+                </span>
               </span>
             ))}
           </div>
@@ -254,10 +349,9 @@ export default async function HomePage({
             Editorially maintained by {SITE_EDITORIAL_NAME}.
           </p>
           <p className="mx-auto mt-6 max-w-3xl font-body text-base leading-7 text-on-surface-variant md:text-lg">
-            GEO-Pulse helps teams understand whether their public pages are easy for ChatGPT,
-            Claude, Perplexity, Gemini, and traditional crawlers to fetch, interpret, and reuse.
-            It is not a ranking predictor. It is an audit layer for crawl access, structured data,
-            trust, and answer extraction.
+            See, fix, and prove your AI visibility. GEO-Pulse shows where your company appears in AI
+            answers, turns gaps into prioritized improvements, and helps you verify whether visibility
+            is improving over time.
           </p>
           <div className="mx-auto mt-10 max-w-5xl">
             {siteKey ? (
@@ -291,19 +385,41 @@ export default async function HomePage({
               href="/pricing"
               className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
             >
-              Run a free audit
+              See your AI visibility gaps
             </Link>
             <Link
-              href="/pricing"
+              href="/about"
               className="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-6 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
             >
-              See plans and reports
+              How it works
             </Link>
           </div>
           <p className="mx-auto mt-4 max-w-3xl font-body text-sm leading-7 text-on-surface-variant">
-            Start with a free audit to see the highest-priority blockers. Upgrade only if you need
-            a shareable deep report, saved history, or workspace-level execution.
+            Start with a free audit to see where AI visibility is weak, what to fix first, and whether
+            the gaps are serious enough to warrant deeper implementation work.
           </p>
+          <div className="relative mx-auto mt-16 max-w-5xl">
+            <div className="relative overflow-hidden rounded-3xl border border-outline-variant/30 bg-surface-container-lowest shadow-float">
+              <video
+                className="block h-auto w-full"
+                src="/media/hero-pulse.mp4"
+                poster="/media/hero-pulse-poster.jpg"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+                aria-label="Animated visual: a connected globe lights up and a heartbeat pulse sweeps across it, illustrating AI visibility"
+              />
+              <div
+                className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-surface-container-lowest/90 to-transparent"
+                aria-hidden
+              />
+            </div>
+            <p className="mt-4 font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
+              The pulse of your AI visibility — rendered, not guessed
+            </p>
+          </div>
         </div>
       </section>
 
@@ -328,11 +444,11 @@ export default async function HomePage({
               Direct answers
             </span>
             <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
-              The homepage states the core idea plainly
+              A better score is not the point
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
-              These blocks are written to stand on their own so people and machines can extract the
-              key definitions without reading the full page.
+              The real outcome is making your company easier for AI systems to find, understand, and
+              include in relevant answers. The score is useful, but it is not the value by itself.
             </p>
           </div>
           <div className="grid grid-cols-1 gap-4 lg:col-span-8 md:grid-cols-2">
@@ -358,14 +474,28 @@ export default async function HomePage({
           <div className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">How it works</span>
             <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
-              Three steps from scan to action
+              See, fix, and prove your AI visibility
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
-              The workflow stays simple: inspect the site, rank the problems by impact, and move to
-              a fix list that engineering and content can use immediately.
+              GEO-Pulse is strongest when it helps you understand where AI includes you, what blocks
+              better visibility, and whether the changes are actually working over time.
             </p>
           </div>
           <div className="lg:col-span-8">
+            <figure className="mb-8 overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
+              <img
+                src="/media/journey-cards.webp"
+                alt="Three stages side by side: an invisible, low-signal page; the same page scanned by GEO-Pulse flagging visibility gaps, citation blockers, and weak trust signals; and a structured, trusted page included in AI answers."
+                className="block h-auto w-full"
+                loading="lazy"
+                decoding="async"
+                width={1920}
+                height={1071}
+              />
+              <figcaption className="px-6 py-4 font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
+                See — Fix — Prove, in one picture
+              </figcaption>
+            </figure>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {howItWorks.map((item) => (
                 <div key={item.title} className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float">
@@ -386,31 +516,45 @@ export default async function HomePage({
       </section>
 
       <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
+        <figure className="mb-16 overflow-hidden rounded-3xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
+          <img
+            src="/media/browser-journey.webp"
+            alt="A site's journey across three browser mockups: an unstructured content page, the same page with gaps like citation blocked, trust low, and structure errors flagged, then the page rewritten so AI answer cards quote it as a trusted source."
+            className="block h-auto w-full"
+            loading="lazy"
+            decoding="async"
+            width={1920}
+            height={1071}
+          />
+          <figcaption className="px-6 py-4 font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
+            From invisible content to AI answer source — the shape of the fix
+          </figcaption>
+        </figure>
         <div className="grid grid-cols-1 items-start gap-16 lg:grid-cols-12">
           <div className="space-y-12 lg:col-span-5">
             <div>
               <h2 className="mb-6 font-headline text-3xl font-bold text-on-background md:text-4xl">What you get</h2>
               <p className="mb-12 font-body text-on-surface-variant">
-                Every scan produces a concise report with one score, the issues that matter most,
-                and fixes you can act on without decoding a vague SEO dashboard.
+                Every scan should answer three questions clearly: where AI visibility is weak, what
+                to fix first, and how to tell whether progress is becoming real rather than cosmetic.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
-                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Metrics</h4>
-                <p className="font-headline text-lg font-bold text-on-background">Site Readiness Score</p>
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Visibility</h4>
+                <p className="font-headline text-lg font-bold text-on-background">AI inclusion gaps</p>
               </div>
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
-                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Analysis</h4>
-                <p className="font-headline text-lg font-bold text-on-background">Top issues to fix</p>
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Diagnosis</h4>
+                <p className="font-headline text-lg font-bold text-on-background">Top blockers to fix</p>
               </div>
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
-                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Action</h4>
-                <p className="font-headline text-lg font-bold text-on-background">Priority recommendations</p>
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Execution</h4>
+                <p className="font-headline text-lg font-bold text-on-background">Priority implementation path</p>
               </div>
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
-                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Optional</h4>
-                <p className="font-headline text-lg font-bold text-on-background">Deep audit PDF</p>
+                <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Evidence</h4>
+                <p className="font-headline text-lg font-bold text-on-background">Tracked improvement over time</p>
               </div>
             </div>
           </div>
@@ -439,33 +583,34 @@ export default async function HomePage({
                     <div className="h-full w-3/5 bg-primary" />
                   </div>
                   <p className="mt-3 font-body text-xs text-on-surface-variant">
-                    Run a scan to see your score, the top blockers, and the first fixes to move. The numbers here are illustrative only.
+                    Run a scan to see where visibility is fragile, which blockers matter first, and how the
+                    first fixes should be sequenced. The numbers here are illustrative only.
                   </p>
                 </div>
               </div>
               <div className="mb-8 rounded-2xl border border-outline-variant/50 bg-surface-container-low p-5">
                 <p className="font-label text-xs uppercase tracking-widest text-primary">
-                  Typical first actions
+                  What a useful report should clarify
                 </p>
                 <ol className="mt-4 space-y-3 font-body text-sm leading-7 text-on-surface-variant">
-                  <li>1. Remove blocking directives that prevent important pages from being fetched.</li>
-                  <li>2. Tighten the page sections that explain the product, category, or offer.</li>
-                  <li>3. Add clearer trust and reference signals where claims need support.</li>
+                  <li>1. Which pages or signals are limiting inclusion in AI answers.</li>
+                  <li>2. Which fixes deserve engineering or content attention first.</li>
+                  <li>3. Which improvements should be tracked to prove the work is paying off.</li>
                 </ol>
               </div>
-              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Priority fixes</p>
+              <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">Why teams use it</p>
               <ul className="mt-4 space-y-4 font-body text-sm text-on-surface-variant">
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-tertiary text-lg">info</span>
-                  <span>Blocking directives, crawl access, and metadata issues tied to your actual URL.</span>
+                  <span>See whether AI is ignoring the pages that explain your product, offer, and buyer value.</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-tertiary text-lg">info</span>
-                  <span>Actionable fixes with a concrete first move instead of generic optimization advice.</span>
+                  <span>Turn findings into concrete implementation work instead of leaving the audit in a doc.</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="material-symbols-outlined text-tertiary text-lg">info</span>
-                  <span>Clear ownership signals so engineering, content, and marketing know which team should move first.</span>
+                  <span>Track whether progress is becoming real, not just prettier in an internal scoring model.</span>
                 </li>
               </ul>
             </div>
@@ -489,6 +634,17 @@ export default async function HomePage({
             </p>
           </div>
           <div className="lg:col-span-8">
+            <figure className="mb-8 overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
+              <img
+                src="/media/extract-flow.webp"
+                alt="Dense, hard-to-read page blocks on the left fan into clearer, structured components on the right, with a rising trust arrow showing how extractable content turns into quotable answers."
+                className="block h-auto w-full"
+                loading="lazy"
+                decoding="async"
+                width={1920}
+                height={1071}
+              />
+            </figure>
             <ol className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {extractabilityChecklist.map((item, index) => (
                 <li
@@ -513,8 +669,8 @@ export default async function HomePage({
               Who GEO-Pulse is for
             </h2>
             <p className="font-body text-on-surface-variant">
-              GEO-Pulse is for teams that need to understand whether their public site is readable
-              by answer engines before they scale more pages, more schema, or more editorial work.
+              GEO-Pulse is for teams that need to stop guessing whether AI is surfacing them, and
+              want a practical way to move from visibility uncertainty to shipped improvements.
             </p>
           </div>
           <div className="grid flex-1 grid-cols-1 gap-4 md:grid-cols-3">
@@ -598,18 +754,18 @@ export default async function HomePage({
 
       <section className="mx-auto max-w-screen-xl px-6 py-24 text-center md:py-40">
         <h2 className="mb-10 font-headline text-3xl font-bold text-on-background md:text-4xl lg:text-5xl">
-          See which public pages need work first
+          Stop treating AI visibility like guesswork
         </h2>
         <p className="mx-auto max-w-3xl font-body text-base leading-7 text-on-surface-variant">
-          Run the homepage, pricing page, docs, or blog through GEO-Pulse and get a clearer first
-          move for crawl access, extractability, trust, and answer structure.
+          Run the pages that explain your offer most directly and see where visibility is weak, what
+          to fix first, and whether the work is becoming measurable over time.
         </p>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
             href="/pricing"
             className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-medium text-on-primary transition-opacity hover:opacity-90"
           >
-            Run a free audit
+            See your AI visibility gaps
           </Link>
           <Link
             href="/about"
@@ -623,7 +779,7 @@ export default async function HomePage({
         </p>
         <p className="mt-3 font-body text-sm leading-7 text-on-surface-variant">
           Start with the page that explains your offer most directly. That is usually where answer
-          engines and high-intent buyers decide whether the rest of the site is worth reading.
+          engines and high-intent buyers decide whether the rest of the site is worth trusting.
         </p>
       </section>
     </main>
