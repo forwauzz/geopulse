@@ -100,6 +100,23 @@ export type QueryCitationRow = {
   readonly created_at: string;
 };
 
+export type ClientBenchmarkConfigRow = {
+  readonly id: string;
+  readonly startup_workspace_id: string | null;
+  readonly agency_account_id: string | null;
+  readonly benchmark_domain_id: string;
+  readonly topic: string;
+  readonly location: string;
+  readonly query_set_id: string | null;
+  readonly competitor_list: string[];
+  readonly cadence: 'monthly' | 'biweekly' | 'weekly';
+  readonly platforms_enabled: string[];
+  readonly report_email: string | null;
+  readonly metadata: Record<string, unknown>;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
 type SupabaseLike = SupabaseClient<any, 'public', any>;
 
 function mergeMetadata(
@@ -543,6 +560,131 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
 
       if (error) throw error;
       return (data ?? []) as QueryCitationRow[];
+    },
+
+    async insertClientBenchmarkConfig(input: {
+      readonly startupWorkspaceId?: string | null;
+      readonly agencyAccountId?: string | null;
+      readonly benchmarkDomainId: string;
+      readonly topic: string;
+      readonly location: string;
+      readonly querySetId?: string | null;
+      readonly competitorList?: string[];
+      readonly cadence?: 'monthly' | 'biweekly' | 'weekly';
+      readonly platformsEnabled?: string[];
+      readonly reportEmail?: string | null;
+      readonly metadata?: Record<string, unknown>;
+    }): Promise<ClientBenchmarkConfigRow> {
+      const { data, error } = await supabase
+        .from('client_benchmark_configs')
+        .insert({
+          startup_workspace_id: input.startupWorkspaceId ?? null,
+          agency_account_id: input.agencyAccountId ?? null,
+          benchmark_domain_id: input.benchmarkDomainId,
+          topic: input.topic,
+          location: input.location,
+          query_set_id: input.querySetId ?? null,
+          competitor_list: input.competitorList ?? [],
+          cadence: input.cadence ?? 'monthly',
+          platforms_enabled: input.platformsEnabled ?? ['chatgpt', 'gemini', 'perplexity'],
+          report_email: input.reportEmail ?? null,
+          metadata: input.metadata ?? {},
+        })
+        .select(
+          'id,startup_workspace_id,agency_account_id,benchmark_domain_id,topic,location,query_set_id,competitor_list,cadence,platforms_enabled,report_email,metadata,created_at,updated_at'
+        )
+        .single();
+
+      if (error) throw error;
+      return data as ClientBenchmarkConfigRow;
+    },
+
+    async getClientBenchmarkConfig(id: string): Promise<ClientBenchmarkConfigRow | null> {
+      const { data, error } = await supabase
+        .from('client_benchmark_configs')
+        .select(
+          'id,startup_workspace_id,agency_account_id,benchmark_domain_id,topic,location,query_set_id,competitor_list,cadence,platforms_enabled,report_email,metadata,created_at,updated_at'
+        )
+        .eq('id', id)
+        .maybeSingle();
+
+      if (error) throw error;
+      return (data ?? null) as ClientBenchmarkConfigRow | null;
+    },
+
+    async listClientBenchmarkConfigsByStartupWorkspace(
+      workspaceId: string
+    ): Promise<ClientBenchmarkConfigRow[]> {
+      const { data, error } = await supabase
+        .from('client_benchmark_configs')
+        .select(
+          'id,startup_workspace_id,agency_account_id,benchmark_domain_id,topic,location,query_set_id,competitor_list,cadence,platforms_enabled,report_email,metadata,created_at,updated_at'
+        )
+        .eq('startup_workspace_id', workspaceId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []) as ClientBenchmarkConfigRow[];
+    },
+
+    async listClientBenchmarkConfigsByAgencyAccount(
+      accountId: string
+    ): Promise<ClientBenchmarkConfigRow[]> {
+      const { data, error } = await supabase
+        .from('client_benchmark_configs')
+        .select(
+          'id,startup_workspace_id,agency_account_id,benchmark_domain_id,topic,location,query_set_id,competitor_list,cadence,platforms_enabled,report_email,metadata,created_at,updated_at'
+        )
+        .eq('agency_account_id', accountId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data ?? []) as ClientBenchmarkConfigRow[];
+    },
+
+    async updateClientBenchmarkConfig(
+      id: string,
+      input: {
+        readonly topic?: string;
+        readonly location?: string;
+        readonly querySetId?: string | null;
+        readonly competitorList?: string[];
+        readonly cadence?: 'monthly' | 'biweekly' | 'weekly';
+        readonly platformsEnabled?: string[];
+        readonly reportEmail?: string | null;
+        readonly metadata?: Record<string, unknown>;
+      }
+    ): Promise<ClientBenchmarkConfigRow> {
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (input.topic !== undefined) patch['topic'] = input.topic;
+      if (input.location !== undefined) patch['location'] = input.location;
+      if (input.querySetId !== undefined) patch['query_set_id'] = input.querySetId;
+      if (input.competitorList !== undefined) patch['competitor_list'] = input.competitorList;
+      if (input.cadence !== undefined) patch['cadence'] = input.cadence;
+      if (input.platformsEnabled !== undefined) patch['platforms_enabled'] = input.platformsEnabled;
+      if (input.reportEmail !== undefined) patch['report_email'] = input.reportEmail;
+      if (input.metadata !== undefined) patch['metadata'] = input.metadata;
+
+      const { data, error } = await supabase
+        .from('client_benchmark_configs')
+        .update(patch)
+        .eq('id', id)
+        .select(
+          'id,startup_workspace_id,agency_account_id,benchmark_domain_id,topic,location,query_set_id,competitor_list,cadence,platforms_enabled,report_email,metadata,created_at,updated_at'
+        )
+        .single();
+
+      if (error) throw error;
+      return data as ClientBenchmarkConfigRow;
+    },
+
+    async deleteClientBenchmarkConfig(id: string): Promise<void> {
+      const { error } = await supabase
+        .from('client_benchmark_configs')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
     },
   };
 }

@@ -6,6 +6,11 @@ export type BenchmarkMetricComputation = {
   readonly measuredDomainCitationRate: number;
   readonly shareOfVoice: number;
   readonly exactPageQualityRate: number;
+  readonly visibilityPctByPlatform: {
+    readonly gemini: number;
+    readonly openai: number;
+    readonly perplexity: number;
+  };
   readonly metrics: {
     readonly scheduled_runs: number;
     readonly completed_runs: number;
@@ -23,8 +28,37 @@ export type BenchmarkMetricComputation = {
     readonly exact_page_matched_runs: number;
     readonly exact_page_supported_runs: number;
     readonly exact_page_quality_rate: number;
+    readonly industry_rank: number | null;
+    readonly chatgpt_visibility_pct: number;
+    readonly gemini_visibility_pct: number;
+    readonly perplexity_visibility_pct: number;
   };
 };
+
+export function inferProviderFromModelId(modelId: string): 'gemini' | 'openai' | 'perplexity' | 'unknown' {
+  const lower = modelId.toLowerCase();
+  if (lower.startsWith('openai/') || lower.startsWith('gpt-') || /^o\d/.test(lower)) return 'openai';
+  if (lower.startsWith('gemini-') || lower.startsWith('models/gemini-') || lower.startsWith('google/')) return 'gemini';
+  if (lower.startsWith('perplexity/') || lower.includes('sonar') || lower.startsWith('llama-')) return 'perplexity';
+  return 'unknown';
+}
+
+function platformVisibilityPct(
+  platform: 'gemini' | 'openai' | 'perplexity',
+  completedRuns: readonly QueryRunRow[],
+  citations: readonly QueryCitationRow[],
+  measuredCanonicalDomain: string
+): number {
+  const platformRuns = completedRuns.filter((r) => inferProviderFromModelId(r.model_id) === platform);
+  if (platformRuns.length === 0) return 0;
+  const platformRunIds = new Set(platformRuns.map((r) => r.id));
+  const citedCount = new Set(
+    citations
+      .filter((c) => platformRunIds.has(c.query_run_id) && c.cited_domain === measuredCanonicalDomain)
+      .map((c) => c.query_run_id)
+  ).size;
+  return citedCount / platformRuns.length;
+}
 
 function hasMatchedGroundedPage(metadata: Record<string, unknown>): boolean {
   const provenance = metadata['grounding_provenance'];
@@ -105,6 +139,18 @@ export function computeBenchmarkMetrics(input: {
       .map((citation) => citation.query_run_id)
   );
 
+  const rankedMeasuredCitations = measuredCitations.filter(
+    (c) => completedRunIds.has(c.query_run_id) && c.rank_position !== null
+  );
+  const industryRank =
+    rankedMeasuredCitations.length > 0
+      ? rankedMeasuredCitations.reduce((sum, c) => sum + c.rank_position!, 0) / rankedMeasuredCitations.length
+      : null;
+
+  const geminiVisibilityPct = platformVisibilityPct('gemini', completedRuns, input.citations, input.measuredCanonicalDomain);
+  const openaiVisibilityPct = platformVisibilityPct('openai', completedRuns, input.citations, input.measuredCanonicalDomain);
+  const perplexityVisibilityPct = platformVisibilityPct('perplexity', completedRuns, input.citations, input.measuredCanonicalDomain);
+
   const queryCoverage =
     input.scheduledRuns > 0 ? completedRuns.length / input.scheduledRuns : 0;
   const citationRate =
@@ -124,6 +170,11 @@ export function computeBenchmarkMetrics(input: {
     measuredDomainCitationRate,
     shareOfVoice,
     exactPageQualityRate,
+    visibilityPctByPlatform: {
+      gemini: geminiVisibilityPct,
+      openai: openaiVisibilityPct,
+      perplexity: perplexityVisibilityPct,
+    },
     metrics: {
       scheduled_runs: input.scheduledRuns,
       completed_runs: completedRuns.length,
@@ -141,6 +192,10 @@ export function computeBenchmarkMetrics(input: {
       exact_page_matched_runs: exactPageMatchedRunIds.size,
       exact_page_supported_runs: exactPageSupportedRunIds.size,
       exact_page_quality_rate: exactPageQualityRate,
+      industry_rank: industryRank,
+      chatgpt_visibility_pct: openaiVisibilityPct,
+      gemini_visibility_pct: geminiVisibilityPct,
+      perplexity_visibility_pct: perplexityVisibilityPct,
     },
   };
 }

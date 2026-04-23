@@ -3,6 +3,7 @@ import {
   assessCitationClaimEvidenceMatch,
   matchCitationToGroundingEvidence,
   parseBenchmarkCitations,
+  parseCompetitorCitations,
 } from './benchmark-citations';
 import type { BenchmarkDomainRow } from './benchmark-repository';
 
@@ -252,5 +253,174 @@ describe('parseBenchmarkCitations', () => {
       evidenceTokenCount: 0,
       overlapRatio: 0,
     });
+  });
+});
+
+describe('parseBenchmarkCitations — rankPosition extraction (GPM-004)', () => {
+  it('assigns rank from numbered list position for url citations', () => {
+    const response = [
+      '1. https://acupuncture.com is the best option.',
+      '2. https://physio.ca is also recommended.',
+      '3. https://www.geopulse.ai ranks third.',
+    ].join('\n');
+    const citations = parseBenchmarkCitations(response, domain);
+
+    const geopulse = citations.find((c) => c.citedDomain === 'geopulse.ai');
+    expect(geopulse?.rankPosition).toBe(3);
+    const acupuncture = citations.find((c) => c.citedDomain === 'acupuncture.com');
+    expect(acupuncture?.rankPosition).toBe(1);
+  });
+
+  it('assigns sequential rank for bullet list citations', () => {
+    const response = [
+      '- https://acupuncture.com',
+      '- https://physio.ca',
+      '- GeoPulse is third.',
+    ].join('\n');
+    const citations = parseBenchmarkCitations(response, domain);
+
+    const geopulse = citations.find((c) => c.citedDomain === 'geopulse.ai');
+    expect(geopulse?.rankPosition).toBe(3);
+    const physio = citations.find((c) => c.citedDomain === 'physio.ca');
+    expect(physio?.rankPosition).toBe(2);
+  });
+
+  it('assigns null rank for plain prose responses', () => {
+    const response =
+      'GeoPulse is one of many platforms that helps measure AI visibility alongside example.com.';
+    const citations = parseBenchmarkCitations(response, domain);
+
+    expect(citations.length).toBeGreaterThan(0);
+    expect(citations.every((c) => c.rankPosition === null)).toBe(true);
+  });
+
+  it('assigns rank from ordinal word in prose', () => {
+    const response =
+      'First, consider acupuncture.com for vestibular care. Second, physio.ca offers great services. Third, GeoPulse tracks AI visibility.';
+    const citations = parseBenchmarkCitations(response, domain);
+
+    const geopulse = citations.find((c) => c.citedDomain === 'geopulse.ai');
+    expect(geopulse?.rankPosition).toBe(3);
+    const acupuncture = citations.find((c) => c.citedDomain === 'acupuncture.com');
+    expect(acupuncture?.rankPosition).toBe(1);
+  });
+
+  it('stores response_structure in citation metadata', () => {
+    const numberedResponse = '1. https://www.geopulse.ai\n2. https://example.com';
+    const [first] = parseBenchmarkCitations(numberedResponse, domain);
+    expect(first?.metadata?.['response_structure']).toBe('numbered_list');
+
+    const proseResponse = 'GeoPulse is a well-known platform.';
+    const [proseFirst] = parseBenchmarkCitations(proseResponse, domain);
+    expect(proseFirst?.metadata?.['response_structure']).toBe('prose');
+  });
+
+  it('assigns null rank when citation appears between numbered list items', () => {
+    const response = [
+      'Here are some options:',
+      '1. https://acupuncture.com',
+      '2. https://physio.ca',
+      'Note: GeoPulse is not a clinic.',
+    ].join('\n');
+    const citations = parseBenchmarkCitations(response, domain);
+
+    // GeoPulse is on a line NOT matching the numbered list pattern
+    const geopulse = citations.find((c) => c.citedDomain === 'geopulse.ai');
+    expect(geopulse?.rankPosition).toBeNull();
+  });
+});
+
+describe('parseCompetitorCitations (GPM-006)', () => {
+  it('returns empty array when competitor list is empty', () => {
+    const citations = parseCompetitorCitations(
+      'GeoPulse is great alongside physio.ca.',
+      [],
+      'geopulse.ai'
+    );
+    expect(citations).toHaveLength(0);
+  });
+
+  it('matches a domain-like competitor via explicit URL citation', () => {
+    const response = '1. https://physio.ca/services is recommended.\n2. https://www.geopulse.ai is second.';
+    const citations = parseCompetitorCitations(response, ['physio.ca'], 'geopulse.ai');
+
+    expect(citations).toHaveLength(1);
+    expect(citations[0]?.citedDomain).toBe('physio.ca');
+    expect(citations[0]?.citationType).toBe('explicit_url');
+    expect(citations[0]?.rankPosition).toBe(1);
+    expect(citations[0]?.metadata?.['is_competitor']).toBe(true);
+    expect(citations[0]?.metadata?.['competitor_name']).toBe('physio.ca');
+  });
+
+  it('matches a domain-like competitor via domain mention when no URL present', () => {
+    const response = '1. physio.ca\n2. geopulse.ai';
+    const citations = parseCompetitorCitations(response, ['physio.ca'], 'geopulse.ai');
+
+    expect(citations).toHaveLength(1);
+    expect(citations[0]?.citationType).toBe('explicit_domain');
+    expect(citations[0]?.rankPosition).toBe(1);
+  });
+
+  it('matches a brand-name competitor via brand mention', () => {
+    const response = 'First, Vestibular Rehab Center is the top choice. Second, GeoPulse tracks visibility.';
+    const citations = parseCompetitorCitations(
+      response,
+      ['Vestibular Rehab Center'],
+      'geopulse.ai'
+    );
+
+    expect(citations).toHaveLength(1);
+    expect(citations[0]?.citationType).toBe('brand_mention');
+    expect(citations[0]?.citedDomain).toBeNull();
+    expect(citations[0]?.rankPosition).toBe(1);
+    expect(citations[0]?.metadata?.['competitor_name']).toBe('Vestibular Rehab Center');
+  });
+
+  it('excludes the measured domain even if listed as a competitor', () => {
+    const citations = parseCompetitorCitations(
+      'Visit geopulse.ai for visibility data.',
+      ['geopulse.ai'],
+      'geopulse.ai'
+    );
+    expect(citations).toHaveLength(0);
+  });
+
+  it('returns nothing for a competitor not mentioned in the response', () => {
+    const citations = parseCompetitorCitations(
+      'GeoPulse measures AI visibility.',
+      ['notmentioned.com', 'UnknownBrand'],
+      'geopulse.ai'
+    );
+    expect(citations).toHaveLength(0);
+  });
+
+  it('extracts multiple competitors from a numbered list with correct ranks', () => {
+    const response = [
+      '1. https://physio.ca — top pick',
+      '2. Vestibular Rehab Center is second',
+      '3. acupuncture.com also recommended',
+    ].join('\n');
+    const citations = parseCompetitorCitations(
+      response,
+      ['physio.ca', 'Vestibular Rehab Center', 'acupuncture.com'],
+      'geopulse.ai'
+    );
+
+    expect(citations).toHaveLength(3);
+    const physio = citations.find((c) => c.citedDomain === 'physio.ca');
+    const vrc = citations.find((c) => c.metadata?.['competitor_name'] === 'Vestibular Rehab Center');
+    const acupuncture = citations.find((c) => c.citedDomain === 'acupuncture.com');
+    expect(physio?.rankPosition).toBe(1);
+    expect(vrc?.rankPosition).toBe(2);
+    expect(acupuncture?.rankPosition).toBe(3);
+  });
+
+  it('deduplicates the same competitor domain across multiple entries', () => {
+    const citations = parseCompetitorCitations(
+      'physio.ca is great.',
+      ['physio.ca', 'www.physio.ca'],
+      'geopulse.ai'
+    );
+    expect(citations).toHaveLength(1);
   });
 });

@@ -572,6 +572,51 @@ Current truth: the benchmark admin flow now supports an opt-in live Gemini lane 
 | RD-003 | Directional business exposure language placeholder: template language only, no formula, no numbers; marked pending data layer | Architect | Ã¢Â¬Å“ DEFERRED | Holds until RD-002 through RD-006 narrative is validated on real reports |
 | RD-007 | Standalone team-owner mapping artifact: `TeamOwner` type, `TEAM_OWNER_MAP`, `getTeamOwner` helper + test | Backend | Ã¢Å“â€¦ DONE | `workers/report/team-owner-map.ts`, `workers/report/team-owner-map.test.ts`; type-check 0 errors; 5/5 tests pass; COMPLETION_LOG RD-007 |
 
+### GEO Performance Monitoring (GPM-001 … GPM-022)
+> New billable service: recurring AI visibility reports (ChatGPT + Gemini + Perplexity) for startup and agency clients. Integrated into existing benchmark runner, service entitlement, workspace, PDF, and delivery infrastructure — not a microservice. All paid bundles get all three platforms. Spec: `PLAYBOOK/geo-performance-monitoring-v1.md`. Build in strict layer order: provider adapters → client config → scheduled runs → report generation → admin UI.
+
+#### Layer 1 — Provider Adapters + Data Foundation
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| GPM-001 | Freeze GEO Performance Monitoring v1 scope, service definition, package model, and task registry | Architect + Product | ✅ DONE | `PLAYBOOK/geo-performance-monitoring-v1.md`, `agents/memory/PROJECT_STATE.md` |
+| GPM-002 | Add OpenAI (ChatGPT) provider adapter to `lib/server/benchmark-execution.ts` with env-gated model config | Backend | ✅ DONE | `lib/server/benchmark-execution.ts` `OpenAiCompatibleBenchmarkExecutionAdapter`; `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_ENDPOINT` env vars; type-check 0 errors; 42/42 tests |
+| GPM-003 | Add Perplexity provider adapter to `lib/server/benchmark-execution.ts` reusing OpenAI-compatible request format | Backend | ✅ DONE | `lib/server/benchmark-execution.ts` `OpenAiCompatibleBenchmarkExecutionAdapter` with `providerTag: 'perplexity'`; `MultiProviderBenchmarkExecutionAdapter` for all-three routing; `PERPLEXITY_API_KEY`, `PERPLEXITY_MODEL`, `PERPLEXITY_ENDPOINT` env vars; type-check 0 errors; 42/42 tests |
+| GPM-004 | Harden `rankPosition` extraction in `lib/server/benchmark-citations.ts` to consistently populate rank from numbered lists, ordered bullets, and explicit first/second/third language; keep null when order is genuinely ambiguous | Backend | ✅ DONE | `detectResponseStructure` (numbered_list/bullet_list/ordinal_prose/prose), `buildLineSegments`, `getRankAtOffset`; prose → all null; `response_structure` stored in citation metadata; 6 new tests (17 total citations tests passing) |
+| GPM-005 | Add per-platform visibility metric split — compute `chatgpt_visibility_pct`, `gemini_visibility_pct`, `perplexity_visibility_pct` separately in `lib/server/benchmark-metrics.ts` and store in `benchmark_domain_metrics.metrics JSONB` | Backend | ✅ DONE | `inferProviderFromModelId` (handles gpt-/openai/o-series, gemini-/models/gemini-/google/, sonar/llama/perplexity/); `visibilityPctByPlatform` on return type; `chatgpt_visibility_pct`, `gemini_visibility_pct`, `perplexity_visibility_pct` in metrics JSONB; 10 new tests (14 total metrics tests passing) |
+| GPM-006 | Add competitor co-citation extraction — for each `query_run`, parse all brand/domain mentions in the response beyond the measured domain and persist them as competitor citation rows; design the storage shape at implementation time | Backend | ✅ DONE | `parseCompetitorCitations(responseText, competitorList, measuredCanonicalDomain)` in `benchmark-citations.ts`; handles domain-like competitors (URL then domain fallback) and brand-name competitors (brand_mention); `metadata.is_competitor: true` + `competitor_name` on each citation; rank lookup reuses structure/segments; 8 new tests (25 total citations tests passing) |
+| GPM-007 | Add `industry_rank` metric (average `rankPosition` across completed query runs where client was cited) to `lib/server/benchmark-metrics.ts` and store in `benchmark_domain_metrics.metrics JSONB` | Backend | ✅ DONE | Implemented as part of GPM-005 — `industry_rank` computed in `computeBenchmarkMetrics`, stored in `metrics.industry_rank`; null when no ranked citations exist; test coverage included |
+
+#### Layer 2 — Client Configuration
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| GPM-008 | Add `client_benchmark_configs` table migration: `workspace_id`, `benchmark_domain_id`, `topic`, `location`, `query_set_id`, `competitor_list`, `cadence`, `platforms_enabled`, `report_email`; add workspace→benchmark_domain FK | Backend + Database | ✅ DONE | `supabase/migrations/043_client_benchmark_configs.sql`; `ClientBenchmarkConfigRow` type + 6 repo functions (insert/get/listByStartup/listByAgency/update/delete) in `benchmark-repository.ts`; `'geo_performance_monitoring'` added to `SERVICE_KEYS`; admin CRUD at `app/admin/geo-performance/` (actions.ts + page.tsx); 442 tests passing, tsc 0 errors |
+| GPM-009 | Add typed server contracts and helpers for client benchmark configuration — CRUD, validation, and entitlement-aware resolver | Backend | ✅ DONE | `lib/server/geo-performance-entitlements.ts`: `ResolvedGeoPerformanceEntitlement`, `resolveGeoPerformanceCaps(bundleKey)` (pure, testable), `resolveGeoPerformanceEntitlement(args)` (DB-backed, wraps `resolveServiceEntitlement`), `validateClientBenchmarkConfigInput`, `enforceGeoPerformanceLimits`; 23/23 tests, tsc 0 errors |
+| GPM-010 | Add admin-side guided prompt set builder: given topic + location, generate and persist a `benchmark_query_set` with intent-typed prompts (high-intent, informational, local, branded) without requiring manual fixture seeding | Backend + Frontend | PENDING | Depends on GPM-009 |
+| GPM-011 | Add competitor roster management per client workspace — seed, update, and link competitor list to co-citation extraction path | Backend + Frontend | PENDING | Depends on GPM-009 |
+
+#### Layer 3 — Scheduled Client Runs
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| GPM-012 | Register `geo_performance_monitoring` as a service in the `services` catalog and map it to `startup_dev`, `agency_core`, and `agency_pro` bundles with entitlement defaults (prompts per run, cadence, platforms) | Backend + Database | PENDING | Depends on GPM-009 |
+| GPM-013 | Extend `lib/server/benchmark-schedule.ts` to trigger client-workspace-scoped runs on subscription cadence — resolve due workspaces, check entitlement, enqueue runs | Backend | PENDING | Depends on GPM-012 |
+| GPM-014 | Add `workspace_id` FK to `benchmark_run_groups` so client runs are scoped and queryable per workspace without leaking across accounts | Backend + Database | PENDING | Depends on GPM-013 |
+
+#### Layer 4 — Report Generation + Delivery
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| GPM-015 | Build GEO Performance Report PDF template: summary paragraph, AI visibility cards (per-platform %), industry rank, top prompts table (prompt / avg rank / ChatGPT / Gemini / Perplexity), competitor bar chart, opportunities section | Backend | PENDING | Depends on GPM-005, GPM-007 |
+| GPM-016 | Add Claude-generated summary narrative for GEO Performance Reports — brand, topic, location, period, headline visibility number, top win, top opportunity | Backend | PENDING | Depends on GPM-015 |
+| GPM-017 | Store generated GEO Performance Report in R2 and persist a report record linked to `workspace_id` and `benchmark_run_group_id` | Backend | PENDING | Depends on GPM-015 |
+| GPM-018 | Wire GEO Performance Report delivery via existing report queue worker on run completion — email report PDF to workspace `report_email` via Resend | Backend | PENDING | Depends on GPM-017 |
+| GPM-019 | Add optional Slack delivery for eligible workspaces — post report summary card to configured Slack destination using existing `lib/server/startup-slack-integration.ts` path | Backend | PENDING | Depends on GPM-018 |
+
+#### Layer 5 — Admin Configuration Portal
+| Task ID | Task | Agent | Status | Evidence |
+|---------|------|-------|--------|----------|
+| GPM-020 | Add admin client benchmark config UI — view and edit topic, location, competitor list, cadence, and platforms per workspace; surface in `/dashboard/startups` and `/dashboard/agencies` workspace detail | Frontend + Backend | PENDING | Depends on GPM-011 |
+| GPM-021 | Add package entitlement controls for `geo_performance_monitoring` in `/dashboard/services` — prompts per run, cadence, and report delivery surface per bundle; admin overrideable per workspace | Frontend + Backend | PENDING | Depends on GPM-012 |
+| GPM-022 | Add manual run trigger and report preview from admin panel — trigger one GPM run for any configured workspace immediately, preview the generated PDF before first scheduled delivery | Frontend + Backend | PENDING | Depends on GPM-020, GPM-021 |
+
 ---
 
 ## Active Blockers

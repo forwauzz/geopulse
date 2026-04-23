@@ -18,6 +18,7 @@ export const SERVICE_KEYS = [
   'slack_integration',
   'slack_notifications',
   'api_access',
+  'geo_performance_monitoring',
 ] as const;
 
 export type ServiceKey = (typeof SERVICE_KEYS)[number];

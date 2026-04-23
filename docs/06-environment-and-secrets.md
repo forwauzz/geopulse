@@ -83,6 +83,10 @@ Required:
 - optional: `LINKEDIN_OAUTH_SCOPE`
 - optional: `LINKEDIN_OAUTH_AUTH_URL`
 - optional: `LINKEDIN_OAUTH_TOKEN_URL`
+- optional: `OPENAI_MODEL` (default: `gpt-4o-mini`) — used when `BENCHMARK_EXECUTION_PROVIDER=openai` or `multi`
+- optional: `OPENAI_ENDPOINT` (default: `https://api.openai.com/v1/chat/completions`)
+- optional: `PERPLEXITY_MODEL` (default: `llama-3.1-sonar-small-128k-online`) — used when `BENCHMARK_EXECUTION_PROVIDER=perplexity` or `multi`
+- optional: `PERPLEXITY_ENDPOINT` (default: `https://api.perplexity.ai/chat/completions`)
 
 Source of truth:
 - `wrangler.jsonc`
@@ -101,6 +105,8 @@ Core app secrets:
 - `BENCHMARK_EXECUTION_API_KEY`
 - `RESEND_API_KEY`
 - `TURNSTILE_SECRET_KEY`
+- `OPENAI_API_KEY` — required when `BENCHMARK_EXECUTION_PROVIDER=openai` or `multi`
+- `PERPLEXITY_API_KEY` — required when `BENCHMARK_EXECUTION_PROVIDER=perplexity` or `multi`
 
 Conditional secrets:
 - `KIT_API_KEY`
