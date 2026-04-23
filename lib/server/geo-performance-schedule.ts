@@ -9,6 +9,7 @@ import {
 } from './geo-performance-entitlements';
 import { createBenchmarkRepository, type ClientBenchmarkConfigRow } from './benchmark-repository';
 import { runBenchmarkGroupSkeleton } from './benchmark-runner';
+import { storeGpmReport, type GpmReportStoreEnvLike, type GpmR2BucketLike } from './geo-performance-report-store';
 import { structuredError, structuredLog } from './structured-log';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -143,6 +144,8 @@ export async function executeGpmClientRun(args: {
   readonly adapter: BenchmarkExecutionAdapter;
   readonly now?: Date;
   readonly triggerSource?: string;
+  readonly reportEnv?: GpmReportStoreEnvLike;
+  readonly reportBucket?: GpmR2BucketLike;
 }): Promise<GpmRunSummary> {
   const now = args.now ?? new Date();
   const cadence = args.config.cadence;
@@ -244,6 +247,29 @@ export async function executeGpmClientRun(args: {
         measuredCanonicalDomain: domain.canonical_domain,
       });
 
+      // Generate + store PDF report (non-fatal — run is already recorded)
+      if (args.reportEnv) {
+        try {
+          await storeGpmReport({
+            supabase: args.supabase,
+            config: args.config,
+            runGroupId: result.runGroupId,
+            platform,
+            windowDate,
+            measuredCanonicalDomain: domain.canonical_domain,
+            bucket: args.reportBucket,
+            env: args.reportEnv,
+          });
+        } catch (reportErr) {
+          structuredError('gpm_report_store_failed', {
+            config_id: args.config.id,
+            run_group_id: result.runGroupId,
+            platform,
+            error: reportErr instanceof Error ? reportErr.message : 'unknown',
+          });
+        }
+      }
+
       structuredLog('gpm_client_run_launched', {
         config_id: args.config.id,
         platform,
@@ -281,6 +307,10 @@ export type GpmScheduleEnvLike = {
   readonly GPM_CHATGPT_MODEL_ID?: string;
   readonly GPM_GEMINI_MODEL_ID?: string;
   readonly GPM_PERPLEXITY_MODEL_ID?: string;
+  // Report generation
+  readonly ANTHROPIC_API_KEY?: string;
+  readonly GPM_NARRATIVE_MODEL?: string;
+  readonly GPM_REPORT_R2_PUBLIC_BASE?: string;
 };
 
 export function resolveGpmPlatformModelMap(env: GpmScheduleEnvLike): GpmPlatformModelMap {
@@ -298,6 +328,7 @@ export async function runGpmScheduledSweep(args: {
   readonly adapter?: BenchmarkExecutionAdapter;
   readonly now?: Date;
   readonly triggerSource?: string;
+  readonly reportBucket?: GpmR2BucketLike;
 }): Promise<GpmSweepSummary> {
   const enabled = args.env.GPM_SCHEDULE_ENABLED?.trim().toLowerCase() === 'true';
   const now = args.now ?? new Date();
@@ -360,6 +391,8 @@ export async function runGpmScheduledSweep(args: {
         adapter,
         now,
         triggerSource: args.triggerSource,
+        reportEnv: args.env,
+        reportBucket: args.reportBucket,
       });
 
       if (summary.entitlementBlocked) {

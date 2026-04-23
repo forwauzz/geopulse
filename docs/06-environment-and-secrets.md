@@ -115,6 +115,8 @@ Optional GPM configuration (public, no secret value):
 - `GPM_GEMINI_MODEL_ID` — override Gemini model (default: `gemini-2.0-flash`)
 - `GPM_PERPLEXITY_MODEL_ID` — override Perplexity model (default: `llama-3.1-sonar-small-128k-online`)
 - `GPM_PROMPT_BUILDER_MODEL` — override Claude model for prompt generation (default: `claude-haiku-4-5-20251001`)
+- `GPM_NARRATIVE_MODEL` — override Claude model for report narrative generation (default: `claude-haiku-4-5-20251001`)
+- `GPM_REPORT_R2_PUBLIC_BASE` — public base URL for GPM report PDFs served from R2 (e.g. `https://reports.getgeopulse.com`); if unset, `pdf_url` is stored as null
 
 Conditional secrets:
 - `KIT_API_KEY`

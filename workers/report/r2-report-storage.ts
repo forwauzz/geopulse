@@ -54,3 +54,28 @@ export async function uploadDeepAuditRewrittenMarkdown(
 
   return { rewrittenMarkdownKey };
 }
+
+// ── GPM report storage ────────────────────────────────────────────────────────
+
+export type UploadedGpmReportKey = {
+  readonly pdfKey: string;
+};
+
+/**
+ * Upload a GPM Performance Report PDF under `gpm-reports/{configId}/{windowDate}-{platform}.pdf`.
+ */
+export async function uploadGpmReportPdf(
+  bucket: R2Bucket,
+  configId: string,
+  windowDate: string,
+  platform: string,
+  pdfBytes: Uint8Array
+): Promise<UploadedGpmReportKey> {
+  const pdfKey = `gpm-reports/${configId}/${windowDate}-${platform}.pdf`;
+
+  await bucket.put(pdfKey, pdfBytes, {
+    httpMetadata: { contentType: 'application/pdf', cacheControl: 'private, max-age=3600' },
+  });
+
+  return { pdfKey };
+}
