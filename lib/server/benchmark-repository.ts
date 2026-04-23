@@ -568,6 +568,67 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
       return (data ?? []) as QueryCitationRow[];
     },
 
+    async listDomainMetricsForRunGroup(runGroupId: string): Promise<Array<{
+      readonly id: string;
+      readonly run_group_id: string;
+      readonly domain_id: string;
+      readonly model_id: string;
+      readonly citation_rate: number | null;
+      readonly share_of_voice: number | null;
+      readonly query_coverage: number | null;
+      readonly inference_probability: number | null;
+      readonly drift_score: number | null;
+      readonly metrics: Record<string, unknown>;
+      readonly computed_at: string | null;
+      readonly created_at: string;
+    }>> {
+      const { data, error } = await supabase
+        .from('benchmark_domain_metrics')
+        .select(
+          'id,run_group_id,domain_id,model_id,citation_rate,share_of_voice,query_coverage,inference_probability,drift_score,metrics,computed_at,created_at'
+        )
+        .eq('run_group_id', runGroupId);
+
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+
+    async listQueryRunsForRunGroup(runGroupId: string): Promise<QueryRunRow[]> {
+      const { data, error } = await supabase
+        .from('query_runs')
+        .select(
+          'id,run_group_id,domain_id,query_id,model_id,auditor_model_id,status,response_text,response_metadata,error_message,executed_at,created_at'
+        )
+        .eq('run_group_id', runGroupId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return (data ?? []) as QueryRunRow[];
+    },
+
+    async listCitationsForRunGroup(runGroupId: string): Promise<QueryCitationRow[]> {
+      // Fetch citations for all query_runs belonging to this run group
+      const { data: runs, error: runsErr } = await supabase
+        .from('query_runs')
+        .select('id')
+        .eq('run_group_id', runGroupId);
+
+      if (runsErr) throw runsErr;
+      if (!runs || runs.length === 0) return [];
+
+      const runIds = (runs as { id: string }[]).map((r) => r.id);
+
+      const { data, error } = await supabase
+        .from('query_citations')
+        .select(
+          'id,query_run_id,cited_domain,cited_url,grounding_evidence_id,grounding_page_url,grounding_page_type,rank_position,citation_type,sentiment,confidence,metadata,created_at'
+        )
+        .in('query_run_id', runIds);
+
+      if (error) throw error;
+      return (data ?? []) as QueryCitationRow[];
+    },
+
     async insertClientBenchmarkConfig(input: {
       readonly startupWorkspaceId?: string | null;
       readonly agencyAccountId?: string | null;
