@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { createBenchmarkRepository } from '@/lib/server/benchmark-repository';
+import { generateAndSeedGpmQuerySet } from '@/lib/server/geo-performance-prompt-builder';
 import { structuredLog } from '@/lib/server/structured-log';
 
 const REVALIDATE_PATH = '/admin/geo-performance';
@@ -109,6 +110,51 @@ export async function updateClientBenchmarkConfig(formData: FormData): Promise<v
   structuredLog('admin_update_client_benchmark_config', {
     adminId: ctx.user.id,
     configId: id,
+  }, 'info');
+
+  revalidatePath(REVALIDATE_PATH);
+}
+
+export async function generateQuerySetForConfig(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) throw new Error(ctx.message);
+
+  const configId = (formData.get('config_id') as string | null)?.trim();
+  const topic = (formData.get('topic') as string | null)?.trim();
+  const location = (formData.get('location') as string | null)?.trim();
+  const brandName = (formData.get('brand_name') as string | null)?.trim() || null;
+  const promptCountRaw = formData.get('prompt_count') as string | null;
+  const promptCount = promptCountRaw ? Math.min(20, Math.max(3, parseInt(promptCountRaw, 10))) : 10;
+
+  if (!configId) throw new Error('config_id is required.');
+  if (!topic) throw new Error('topic is required.');
+  if (!location) throw new Error('location is required.');
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set — cannot generate prompt set.');
+
+  const result = await generateAndSeedGpmQuerySet({
+    supabase: ctx.adminDb,
+    topic,
+    location,
+    brandName,
+    promptCount,
+    env: {
+      ANTHROPIC_API_KEY: apiKey,
+      GPM_PROMPT_BUILDER_MODEL: process.env.GPM_PROMPT_BUILDER_MODEL,
+    },
+  });
+
+  const repo = createBenchmarkRepository(ctx.adminDb);
+  await repo.updateClientBenchmarkConfig(configId, { querySetId: result.querySetId });
+
+  structuredLog('admin_generate_gpm_query_set', {
+    adminId: ctx.user.id,
+    configId,
+    querySetId: result.querySetId,
+    queryCount: result.queryCount,
+    topic,
+    location,
   }, 'info');
 
   revalidatePath(REVALIDATE_PATH);

@@ -107,6 +107,14 @@ Core app secrets:
 - `TURNSTILE_SECRET_KEY`
 - `OPENAI_API_KEY` — required when `BENCHMARK_EXECUTION_PROVIDER=openai` or `multi`
 - `PERPLEXITY_API_KEY` — required when `BENCHMARK_EXECUTION_PROVIDER=perplexity` or `multi`
+- `ANTHROPIC_API_KEY` — required for GPM prompt set generation (`generateAndSeedGpmQuerySet`)
+
+Optional GPM configuration (public, no secret value):
+- `GPM_SCHEDULE_ENABLED` — set to `true` to enable the GPM scheduled sweep worker
+- `GPM_CHATGPT_MODEL_ID` — override ChatGPT model (default: `gpt-4o-mini`)
+- `GPM_GEMINI_MODEL_ID` — override Gemini model (default: `gemini-2.0-flash`)
+- `GPM_PERPLEXITY_MODEL_ID` — override Perplexity model (default: `llama-3.1-sonar-small-128k-online`)
+- `GPM_PROMPT_BUILDER_MODEL` — override Claude model for prompt generation (default: `claude-haiku-4-5-20251001`)
 
 Conditional secrets:
 - `KIT_API_KEY`

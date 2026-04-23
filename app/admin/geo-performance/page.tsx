@@ -4,6 +4,7 @@ import type { ClientBenchmarkConfigRow } from '@/lib/server/benchmark-repository
 import {
   createClientBenchmarkConfig,
   deleteClientBenchmarkConfig,
+  generateQuerySetForConfig,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,32 @@ function ConfigCard({ config }: { config: ClientBenchmarkConfigRow }) {
 
       {config.report_email && (
         <p className="text-xs text-on-surface-variant">Email: {config.report_email}</p>
+      )}
+
+      {config.query_set_id ? (
+        <p className="text-xs text-on-surface-variant">Query set: <code className="text-xs">{config.query_set_id}</code></p>
+      ) : (
+        <form action={generateQuerySetForConfig} className="pt-1 space-y-2 border-t border-outline-variant/20">
+          <p className="text-xs font-medium text-warning pt-2">No query set — generate one:</p>
+          <input type="hidden" name="config_id" value={config.id} />
+          <input type="hidden" name="topic" value={config.topic} />
+          <input type="hidden" name="location" value={config.location} />
+          <div className="flex gap-2 items-center">
+            <label className="text-xs text-on-surface-variant">Brand name (optional)</label>
+            <input name="brand_name" type="text" placeholder="e.g. Elite Physio" className="flex-1 rounded border border-outline-variant/40 bg-surface px-2 py-0.5 text-xs" />
+          </div>
+          <div className="flex gap-2 items-center">
+            <label className="text-xs text-on-surface-variant">Prompts</label>
+            <select name="prompt_count" className="rounded border border-outline-variant/40 bg-surface px-2 py-0.5 text-xs">
+              <option value="5">5</option>
+              <option value="10" selected>10</option>
+              <option value="15">15</option>
+            </select>
+            <button type="submit" className="rounded bg-secondary px-3 py-0.5 text-xs font-medium text-on-secondary hover:opacity-90">
+              Generate with Claude
+            </button>
+          </div>
+        </form>
       )}
 
       <form action={deleteClientBenchmarkConfig} className="pt-1">
