@@ -65,4 +65,4 @@ ALTER TABLE public.client_benchmark_configs ENABLE ROW LEVEL SECURITY;
 
 CREATE TRIGGER client_benchmark_configs_updated_at
   BEFORE UPDATE ON public.client_benchmark_configs
-  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
