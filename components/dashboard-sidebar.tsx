@@ -150,7 +150,21 @@ function NavBlocks({
 
       <div className="mt-6 space-y-1 border-t border-gold/20 pt-4 lg:mt-8 lg:pt-5">
         {isAdmin ? (
-          <div className={`mb-2 border-b border-gold/30 pb-3 ${compact ? 'lg:mb-1 lg:border-0 lg:pb-0' : ''}`}>
+          <div className={`mb-2 border-b border-gold/30 pb-3 space-y-0.5 ${compact ? 'lg:mb-1 lg:border-0 lg:pb-0' : ''}`}>
+            <Link
+              href="/admin/geo-performance"
+              onClick={onNavigate}
+              aria-label={compact ? 'GEO Performance' : undefined}
+              title="GEO Performance"
+              className={`flex items-center gap-3 rounded-xl py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface ${
+                compact ? 'lg:justify-center lg:px-2 lg:gap-0' : 'px-3'
+              } ${pathname.startsWith('/admin/geo-performance') ? 'bg-surface-container text-on-surface font-semibold' : ''}`}
+            >
+              <span className="material-symbols-outlined shrink-0 text-[18px]" aria-hidden>
+                track_changes
+              </span>
+              <span className={compact ? 'lg:hidden' : ''}>GEO Performance</span>
+            </Link>
             <Link
               href="/admin"
               onClick={onNavigate}
@@ -158,7 +172,7 @@ function NavBlocks({
               title="Admin Console"
               className={`flex items-center gap-3 rounded-xl py-2 text-sm font-medium text-amber-500 transition-colors hover:bg-surface-container ${
                 compact ? 'lg:justify-center lg:px-2 lg:gap-0' : 'px-3'
-              } ${pathname.startsWith('/admin') ? 'bg-surface-container' : ''}`}
+              } ${pathname === '/admin' ? 'bg-surface-container' : ''}`}
             >
               <span className="material-symbols-outlined shrink-0 text-[18px]" aria-hidden>
                 shield

@@ -7,12 +7,21 @@ import {
   generateQuerySetForConfig,
 } from './actions';
 
+type WorkspaceNameMap = ReadonlyMap<string, string>;
+
 export const dynamic = 'force-dynamic';
 
-function ConfigCard({ config }: { config: ClientBenchmarkConfigRow }) {
-  const owner = config.startup_workspace_id
-    ? `startup: ${config.startup_workspace_id}`
-    : `agency: ${config.agency_account_id}`;
+function ConfigCard({
+  config,
+  workspaceNames,
+}: {
+  config: ClientBenchmarkConfigRow;
+  workspaceNames: WorkspaceNameMap;
+}) {
+  const rawOwner = config.startup_workspace_id ?? config.agency_account_id ?? '—';
+  const ownerName = workspaceNames.get(rawOwner) ?? rawOwner;
+  const ownerKind = config.startup_workspace_id ? 'startup' : 'agency';
+  const owner = `${ownerKind}: ${ownerName}`;
 
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4 space-y-2 text-sm">
@@ -187,6 +196,30 @@ export default async function GeoPerformanceAdminPage() {
 
     const configs = (allConfigs ?? []) as ClientBenchmarkConfigRow[];
 
+    // Fetch workspace names for display
+    const startupIds = configs.map((c) => c.startup_workspace_id).filter(Boolean) as string[];
+    const agencyIds  = configs.map((c) => c.agency_account_id).filter(Boolean) as string[];
+    const workspaceNames = new Map<string, string>();
+
+    if (startupIds.length > 0) {
+      const { data: workspaces } = await adminContext.adminDb
+        .from('startup_workspaces')
+        .select('id,name')
+        .in('id', startupIds);
+      for (const w of (workspaces ?? []) as { id: string; name: string }[]) {
+        workspaceNames.set(w.id, w.name);
+      }
+    }
+    if (agencyIds.length > 0) {
+      const { data: agencies } = await adminContext.adminDb
+        .from('agency_accounts')
+        .select('id,name')
+        .in('id', agencyIds);
+      for (const a of (agencies ?? []) as { id: string; name: string }[]) {
+        workspaceNames.set(a.id, a.name);
+      }
+    }
+
     return (
       <div className="space-y-6">
         <div>
@@ -202,7 +235,7 @@ export default async function GeoPerformanceAdminPage() {
           <div className="space-y-3">
             <h2 className="text-sm font-medium text-on-surface-variant uppercase tracking-wide">Enrolled clients</h2>
             {configs.map((config) => (
-              <ConfigCard key={config.id} config={config} />
+              <ConfigCard key={config.id} config={config} workspaceNames={workspaceNames} />
             ))}
           </div>
         )}
