@@ -216,6 +216,22 @@ class GpmPdfBuilder {
     }
   }
 
+  // ── Executive narrative ────────────────────────────────────────────────────
+
+  drawNarrative(narrative: string): void {
+    this.drawSectionTitle('Executive Summary');
+    this.y -= 2;
+    // Render as wrapped body text, slightly larger than table copy
+    const maxChars = Math.floor(MAX_W / (10 * 0.52));
+    const lines = wrapLine(narrative, maxChars);
+    for (const line of lines) {
+      this.ensureSpace(14 + 5);
+      this.page.drawText(line, { x: MARGIN, y: this.y, size: 10, font: this.font, color: INK });
+      this.y -= 14;
+    }
+    this.y -= 12;
+  }
+
   // ── Visibility cards ───────────────────────────────────────────────────────
   // Three side-by-side cards: Visibility %, Citation Rate, Industry Rank
 
@@ -484,12 +500,18 @@ class GpmPdfBuilder {
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-export async function buildGpmReportPdf(payload: GpmReportPayload): Promise<Uint8Array> {
+export async function buildGpmReportPdf(
+  payload: GpmReportPayload,
+  options?: { readonly narrative?: string }
+): Promise<Uint8Array> {
   const period = formatWindowDate(payload.windowDate);
   const builder = new GpmPdfBuilder();
   await builder.init(payload.domain, period);
 
   builder.drawCover(payload);
+  if (options?.narrative) {
+    builder.drawNarrative(options.narrative);
+  }
   builder.drawVisibilityCards(payload);
   builder.drawPromptsTable(payload);
   builder.drawCompetitorChart(payload);
