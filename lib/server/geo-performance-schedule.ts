@@ -221,6 +221,8 @@ export async function executeGpmClientRun(args: {
           runScope: 'gpm_client_run',
           runLabel: `gpm-${windowDate}-${domain.canonical_domain}-${platform}`.slice(0, 160),
           notes: `GEO Performance run (${windowDate}) — ${platform}`,
+          startupWorkspaceId: args.config.startup_workspace_id ?? undefined,
+          agencyAccountId: args.config.agency_account_id ?? undefined,
           runMetadata: {
             gpm_config_id: args.config.id,
             gpm_platform: platform,

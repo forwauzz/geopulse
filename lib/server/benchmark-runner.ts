@@ -82,6 +82,8 @@ export async function runBenchmarkGroupSkeleton(
     notes: input.notes ?? null,
     status: 'running',
     startedAt,
+    startupWorkspaceId: input.startupWorkspaceId ?? null,
+    agencyAccountId: input.agencyAccountId ?? null,
     metadata: {
       ...(input.runMetadata ?? {}),
       execution_mode: executionMode,

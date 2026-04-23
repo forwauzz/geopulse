@@ -64,6 +64,8 @@ export type BenchmarkRunGroupRow = {
   readonly status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   readonly notes: string | null;
   readonly metadata: Record<string, unknown>;
+  readonly startup_workspace_id: string | null;
+  readonly agency_account_id: string | null;
   readonly started_at: string | null;
   readonly completed_at: string | null;
   readonly created_at: string;
@@ -387,6 +389,8 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
       readonly status?: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
       readonly startedAt?: string | null;
       readonly completedAt?: string | null;
+      readonly startupWorkspaceId?: string | null;
+      readonly agencyAccountId?: string | null;
     }): Promise<BenchmarkRunGroupRow> {
       const { data, error } = await supabase
         .from('benchmark_run_groups')
@@ -400,9 +404,11 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
           status: input.status ?? 'running',
           started_at: input.startedAt ?? null,
           completed_at: input.completedAt ?? null,
+          startup_workspace_id: input.startupWorkspaceId ?? null,
+          agency_account_id: input.agencyAccountId ?? null,
         })
         .select(
-          'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,started_at,completed_at,created_at'
+          'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,startup_workspace_id,agency_account_id,started_at,completed_at,created_at'
         )
         .single<BenchmarkRunGroupRow>();
 
@@ -416,7 +422,7 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
       const { data, error } = await supabase
         .from('benchmark_run_groups')
         .select(
-          'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,started_at,completed_at,created_at'
+          'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,startup_workspace_id,agency_account_id,started_at,completed_at,created_at'
         )
         .contains('metadata', { schedule_run_key: scheduleRunKey })
         .order('created_at', { ascending: false })
@@ -446,7 +452,7 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
         })
         .eq('id', id)
         .select(
-          'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,started_at,completed_at,created_at'
+          'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,startup_workspace_id,agency_account_id,started_at,completed_at,created_at'
         )
         .single<BenchmarkRunGroupRow>();
 

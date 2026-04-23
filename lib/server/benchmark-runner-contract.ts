@@ -14,6 +14,8 @@ export const benchmarkRunnerInputSchema = z.object({
   runScope: z.string().min(1).max(80).optional(),
   notes: z.string().max(2000).optional(),
   runMetadata: z.record(z.string(), z.unknown()).optional(),
+  startupWorkspaceId: z.string().uuid().optional(),
+  agencyAccountId: z.string().uuid().optional(),
 });
 
 export type BenchmarkRunnerInput = z.infer<typeof benchmarkRunnerInputSchema>;
