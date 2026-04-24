@@ -14,8 +14,9 @@ const PLATFORM_LABELS: Record<string, string> = {
 export default async function GpmConfigDetailPage({
   params,
 }: {
-  params: { configId: string };
+  params: Promise<{ configId: string }>;
 }) {
+  const { configId } = await params;
   const adminContext = await loadAdminPageContext('/dashboard/benchmarks/gpm-configs');
   if (!adminContext.ok) {
     return (
@@ -28,8 +29,8 @@ export default async function GpmConfigDetailPage({
   const gpmData = createGpmAdminData(adminContext.adminDb);
 
   const [config, reports] = await Promise.all([
-    gpmData.getConfig(params.configId),
-    gpmData.getReportsForConfig(params.configId).catch(() => []),
+    gpmData.getConfig(configId),
+    gpmData.getReportsForConfig(configId).catch(() => []),
   ]);
 
   if (!config) {
