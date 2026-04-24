@@ -14,6 +14,8 @@ import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
 import { runScheduledDistributionDispatch } from '../lib/server/distribution-job-schedule';
 import { runScheduledStartupExecutionDispatch } from '../lib/server/startup-execution-dispatch-schedule';
 import { runScheduledStartupSlackAutoPost } from '../lib/server/startup-slack-schedule';
+import { runGpmScheduledSweep } from '../lib/server/geo-performance-schedule';
+import { buildGpmEntitlementsMap } from '../lib/server/geo-performance-entitlements';
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -162,6 +164,40 @@ export default {
         });
       } catch (err) {
         structuredError('startup_execution_dispatch_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const envRecord = env as unknown as Record<string, string | undefined>;
+        const gpmEnv = {
+          GPM_SCHEDULE_ENABLED:    envRecord['GPM_SCHEDULE_ENABLED'],
+          GPM_CHATGPT_MODEL_ID:    envRecord['GPM_CHATGPT_MODEL_ID'],
+          GPM_GEMINI_MODEL_ID:     envRecord['GPM_GEMINI_MODEL_ID'],
+          GPM_PERPLEXITY_MODEL_ID: envRecord['GPM_PERPLEXITY_MODEL_ID'],
+          ANTHROPIC_API_KEY:       envRecord['ANTHROPIC_API_KEY'],
+          GPM_NARRATIVE_MODEL:     envRecord['GPM_NARRATIVE_MODEL'],
+          GPM_REPORT_R2_PUBLIC_BASE: envRecord['GPM_REPORT_R2_PUBLIC_BASE'],
+          RESEND_API_KEY:          resendKey || undefined,
+          RESEND_FROM_EMAIL:       resendFrom || undefined,
+        };
+        const { data: configStubs } = await supabase
+          .from('client_benchmark_configs')
+          .select('id, startup_workspace_id, agency_account_id');
+        const entitlementsMap = await buildGpmEntitlementsMap(supabase, configStubs ?? []);
+        await runGpmScheduledSweep({
+          supabase,
+          env: gpmEnv,
+          entitlementsByConfigId: entitlementsMap,
+          adapter: createBenchmarkExecutionAdapter(env),
+          triggerSource: 'worker_cron',
+          reportBucket: (env as any).REPORT_FILES,
+        });
+      } catch (err) {
+        structuredError('gpm_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

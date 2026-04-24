@@ -1,6 +1,7 @@
 import { AgencyAdminControlView } from '@/components/agency-admin-control-view';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createAgencyAdminData } from '@/lib/server/agency-admin-data';
+import { createGpmAdminData, type GpmConfigAdminRow } from '@/lib/server/geo-performance-admin-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +17,29 @@ export default async function AgenciesAdminPage() {
 
   try {
     const agencyData = createAgencyAdminData(adminContext.adminDb);
-    const accounts = await agencyData.getAccounts();
-    return <AgencyAdminControlView accounts={accounts} />;
+    const gpmData = createGpmAdminData(adminContext.adminDb);
+
+    const [accounts, gpmConfigs, querySetOptions] = await Promise.all([
+      agencyData.getAccounts(),
+      gpmData.listAllConfigs().catch(() => [] as GpmConfigAdminRow[]),
+      gpmData.getQuerySetOptions().catch(() => []),
+    ]);
+
+    const gpmConfigsByAccountId = new Map<string, GpmConfigAdminRow[]>();
+    for (const config of gpmConfigs) {
+      if (!config.agency_account_id) continue;
+      const existing = gpmConfigsByAccountId.get(config.agency_account_id) ?? [];
+      existing.push(config);
+      gpmConfigsByAccountId.set(config.agency_account_id, existing);
+    }
+
+    return (
+      <AgencyAdminControlView
+        accounts={accounts}
+        gpmConfigsByAccountId={gpmConfigsByAccountId}
+        gpmQuerySetOptions={querySetOptions}
+      />
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Could not load agency pilot controls.';
     return (

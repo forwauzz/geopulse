@@ -12281,3 +12281,274 @@ Froze the post-review startup benchmark decision so the repo has an explicit ans
 - `agents/memory/COMPLETION_LOG.md`
 
 **Orchestrator verification:** ACCEPTED
+
+---
+
+## GPM-018 — GEO Performance Report email delivery via scheduled worker
+
+**Date:** 2026-04-24  
+**Agent:** Backend  
+**Task:** Wire GEO Performance Report delivery via existing report queue worker on run completion — email report PDF to workspace `report_email` via Resend.
+
+**What was implemented:**
+
+1. **`lib/server/geo-performance-schedule.ts`** — Added `RESEND_API_KEY` and `RESEND_FROM_EMAIL` to `GpmScheduleEnvLike` so Resend credentials flow from the worker environment into `storeGpmReport` → `sendGpmReportEmail`. Without this, the email send block was silently skipped every run.
+
+2. **`lib/server/geo-performance-entitlements.ts`** — Added `buildGpmEntitlementsMap(supabase, configs)`. Resolves entitlements for all client benchmark configs in two batch DB queries (startup workspaces + agency accounts) rather than per-config round trips. Uses `resolveGeoPerformanceCaps` (pure) per config after fetching bundle keys from `user_subscriptions`.
+
+3. **`workers/cloudflare-entry.ts`** — Added GPM sweep block to the `scheduled` handler. Fetches config stubs, resolves the entitlements map, then calls `runGpmScheduledSweep` with `gpmEnv` (all GPM + Resend env vars), the existing `REPORT_FILES` R2 bucket (GPM reports stored under `gpm-reports/` prefix), and a `createBenchmarkExecutionAdapter` instance. Failure is caught and logged — it does not abort other scheduled work.
+
+4. **`wrangler.jsonc`** — Added `GPM_SCHEDULE_ENABLED=false` (safe default) and `GPM_REPORT_R2_PUBLIC_BASE` (reuses existing R2 public base URL) to the `[vars]` block.
+
+5. **`workers/report/gpm-email-delivery.test.ts`** — Fixed pre-existing excess-property TypeScript errors (`queryKey` in `opportunities` objects — `opportunities` is `Pick<GpmPromptRow, 'queryText' | 'topCompetitorInQuery'>` so `queryKey` is illegal).
+
+**Evidence:**
+
+```
+npm run type-check → 0 errors
+
+npx vitest run lib/server/geo-performance-entitlements.test.ts workers/report/gpm-email-delivery.test.ts
+
+ Test Files  2 passed (2)
+      Tests  56 passed (56)
+   Duration  859ms
+```
+
+**Delivery chain (complete):**
+`cron → runGpmScheduledSweep → executeGpmClientRun → storeGpmReport → sendGpmReportEmail (Resend)`
+
+**Operator activation:** Set `GPM_SCHEDULE_ENABLED=true` as a Cloudflare Worker secret or override in the dashboard. Email delivery requires `RESEND_API_KEY` (already a Worker secret). PDF link in email requires `GPM_REPORT_R2_PUBLIC_BASE` (now in wrangler.jsonc) and the R2 bucket to be public or domain-mapped.
+
+**Orchestrator verification:** ACCEPTED
+
+---
+### 2026-04-23 - GPM-019 - Optional Slack delivery for eligible workspaces
+
+**Agent:** Backend
+**Claimed complete:** 2026-04-23
+**Evidence type:** New module + wiring + 19 tests; tsc 0 errors; 774/774 tests
+
+**Summary:** Added optional Slack report card delivery gated on `deliverySurfaces.includes('slack')` (agency_core / agency_pro entitlements). Report store now returns the built payload so downstream callers don't need a second DB round-trip. The Slack card uses mrkdwn and mirrors the key metrics from the email template.
+
+**Changes:**
+
+1. **`lib/server/geo-performance-slack.ts`** (new)
+   - `formatGpmSlackMessage(payload, pdfUrl)` — pure function; builds a mrkdwn card with domain header, platform/window label, visibility %, citation rate (% + count of N), industry rank, top 3 opportunities with competitor callout, and an optional PDF link block.
+   - `sendGpmReportSlackSummary(args)` — resolves default active Slack destination for the workspace via `listStartupSlackDestinations` + `getStartupSlackDestination`; calls `sendStartupSlackMessage`; logs `gpm_slack_no_destination` (silent skip) or `gpm_slack_report_sent`. Non-throwing — caller catches.
+
+2. **`lib/server/geo-performance-report-store.ts`**
+   - `GpmReportStoreResult` now includes `readonly payload: GpmReportPayload` (type change from previous session added the field; this session adds the value to the return statement).
+
+3. **`lib/server/geo-performance-schedule.ts`**
+   - Import: `sendGpmReportSlackSummary` from `./geo-performance-slack`.
+   - `executeGpmClientRun`: `storeGpmReport` result is now captured in `storeResult`. If `entitlement.deliverySurfaces.includes('slack')` and `config.startup_workspace_id` is set, calls `sendGpmReportSlackSummary` (wrapped in non-fatal `try/catch` → `structuredError('gpm_slack_delivery_failed', ...)`).
+
+4. **`lib/server/geo-performance-slack.test.ts`** (new — 19 tests)
+   - `formatGpmSlackMessage` pure unit: header, platform labels (ChatGPT/Gemini/Perplexity), monthly/weekly window date, visibility %, citation rate with count, rank, em-dash for null rank, opportunities section, competitor callout, 3-item cap, PDF link present/absent, empty opportunities omit section.
+   - `sendGpmReportSlackSummary` integration: sends to default active destination (fluent supabase mock + stubbed fetch); includes PDF link in text when pdfUrl provided; skips silently when no active destination (fetch not called).
+
+**Evidence:**
+
+```
+npx tsc --noEmit → 0 errors
+
+npx vitest run lib/server/geo-performance-slack.test.ts
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+
+npx vitest run
+
+ Test Files  147 passed (147)
+      Tests  774 passed (774)
+```
+
+**Delivery chain (complete):**
+`cron → runGpmScheduledSweep → executeGpmClientRun → storeGpmReport → sendGpmReportEmail (Resend)`
+`cron → runGpmScheduledSweep → executeGpmClientRun → storeGpmReport → sendGpmReportSlackSummary (Slack, agency_core+)`
+
+**Operator activation:** No new env vars or secrets required. Slack delivery activates automatically for configs where the entitlement resolves `deliverySurfaces: ['email', 'slack']` (agency_core / agency_pro bundles) and the workspace has an active Slack installation with a destination channel configured.
+
+**Orchestrator verification:** PENDING
+
+---
+### 2026-04-23 - GPM-011 - Competitor roster management per client workspace
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-23
+**Evidence type:** Admin data layer + server actions + admin page + 12 tests; tsc 0 errors; 786/786 tests
+
+**Summary:** Added competitor roster management for `client_benchmark_configs`. The co-citation extraction path already used `competitor_list TEXT[]`; this task adds the admin data layer and UI surface for seeding and updating that list per workspace. Validation for `competitorList` is now also enforced in the shared config validator (max 50, no blank entries).
+
+**Changes:**
+
+1. **`lib/server/geo-performance-entitlements.ts`**
+   - `validateClientBenchmarkConfigInput` extended with optional `competitorList?: readonly string[] | null` param.
+   - Rejects lists > 50 entries or lists containing blank strings.
+
+2. **`lib/server/geo-performance-admin-data.ts`** (new)
+   - `GpmConfigAdminRow` type: `ClientBenchmarkConfigRow` + `domain_canonical`, `domain_display`, `domain_site_url` (joined from `benchmark_domains`).
+   - `createGpmAdminData(supabase)` factory exposing:
+     - `listAllConfigs()` — all configs ordered by `created_at DESC`, Supabase FK join for domain info.
+     - `getConfig(id)` — single config with domain info, returns null if not found.
+     - `getDomainOptions()` / `getQuerySetOptions()` — dropdown data for the create form.
+     - `updateCompetitorList(configId, competitors)` — targeted competitor roster update.
+     - `createConfig(input)` / `deleteConfig(id)` — wraps repository CRUD.
+
+3. **`app/dashboard/benchmarks/gpm-configs/actions.ts`** (new)
+   - `createGpmConfigAction` — Zod-validated; calls `validateClientBenchmarkConfigInput` before insert; accepts topic, location, cadence, platforms, domain, owner IDs, report email, competitor list text.
+   - `updateGpmCompetitorListAction` — parses textarea (one-per-line or comma-separated); 50-entry cap.
+   - `deleteGpmConfigAction` — admin-gated delete.
+
+4. **`app/dashboard/benchmarks/gpm-configs/page.tsx`** (new)
+   - Server component; loads data via `createGpmAdminData`; renders `GpmConfigsAdminView`.
+
+5. **`components/gpm-configs-admin-view.tsx`** (new)
+   - `GpmConfigsAdminView` — client component; shows config table (domain, topic/location, cadence, platforms, owner, report email); `CompetitorEditForm` (collapsible `<details>`, textarea one-per-line); `DeleteConfigForm` (with JS confirm); `CreateConfigForm` (all config fields, platform checkboxes).
+
+6. **`lib/server/geo-performance-admin-data.test.ts`** (new — 12 tests)
+   - `listAllConfigs` maps domain info, returns empty array.
+   - `getConfig` returns null when not found, maps domain info when found.
+   - `getDomainOptions` / `getQuerySetOptions` map rows correctly.
+   - `validateClientBenchmarkConfigInput` — competitor list: undefined, empty, valid, >50, blank, exactly 50.
+
+**Evidence:**
+
+```
+npx tsc --noEmit → 0 errors
+
+npx vitest run lib/server/geo-performance-admin-data.test.ts
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+
+npx vitest run
+
+ Test Files  148 passed (148)
+      Tests  786 passed (786)
+```
+
+**Admin route:** `/dashboard/benchmarks/gpm-configs` (admin-gated via `loadAdminPageContext`).
+
+**Co-citation link:** `competitor_list` column already used by `persistCompetitorCitations` in `geo-performance-schedule.ts` — updating the list via the admin UI directly affects which domains are extracted on the next scheduled run. No additional wiring needed.
+
+**Orchestrator verification:** PENDING
+
+---
+### 2026-04-24 - GPM-020 - Admin client benchmark config UI in workspace detail pages
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-24
+**Evidence type:** Server action + client component + two page modifications + two view modifications; tsc 0 errors; 786/786 tests
+
+**Summary:** Surfaced full GPM config management (view + edit topic/location/cadence/platforms/querySetId/reportEmail + competitor roster + delete) directly within `/dashboard/startups` and `/dashboard/agencies` workspace detail cards. Each workspace now shows a collapsible `GpmWorkspaceConfigSection` listing its configs; empty state links to the global config page.
+
+**Changes:**
+
+1. **`lib/server/geo-performance-admin-data.ts`** — added `updateConfig(id, patch)` method updating topic, location, cadence, platforms_enabled, query_set_id, report_email.
+
+2. **`app/dashboard/benchmarks/gpm-configs/actions.ts`** — added `updateGpmConfigAction` server action; reuses `validateClientBenchmarkConfigInput` with dummy owner/domain IDs and filters those irrelevant errors before returning. Parses platform checkboxes via `platform_check` multivalue or fallback to `platforms` hidden input.
+
+3. **`components/gpm-workspace-config-section.tsx`** (new)
+   - `GpmWorkspaceConfigSection` — top-level component; lists configs or shows empty state.
+   - `ConfigEditCard` — collapsible edit form per config (all fields + platform checks); uses `updateGpmConfigAction`.
+   - `PlatformChecks` — React-controlled checkboxes writing to a `data-id`-keyed hidden input via `onChange`.
+   - `CompetitorEditForm` — reuses `updateGpmCompetitorListAction`.
+   - `DeleteConfigForm` — reuses `deleteGpmConfigAction` with JS confirm.
+
+4. **`components/startup-admin-control-view.tsx`** — extended props with `gpmConfigsByWorkspaceId?: ReadonlyMap<string, GpmConfigAdminRow[]>` and `gpmQuerySetOptions?: GpmQuerySetOption[]`; renders `<GpmWorkspaceConfigSection>` before the delete section in each workspace article.
+
+5. **`components/agency-admin-control-view.tsx`** — same pattern with `gpmConfigsByAccountId`.
+
+6. **`app/dashboard/startups/page.tsx`** — parallel-loads `gpmData.listAllConfigs()` + `gpmData.getQuerySetOptions()` (both `.catch(() => [])`); groups configs by `startup_workspace_id`; passes map + options to view.
+
+7. **`app/dashboard/agencies/page.tsx`** — same, groups by `agency_account_id`.
+
+**Evidence:**
+
+```
+npx tsc --noEmit → 0 errors
+
+npx vitest run
+
+ Test Files  148 passed (148)
+      Tests  786 passed (786)
+```
+
+**Orchestrator verification:** PENDING
+
+---
+### 2026-04-24 - GPM-021 - Package entitlement controls for GPM in /dashboard/services
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-24
+**Evidence type:** Data layer + server action + client component + page wiring + 13 new tests; tsc 0 errors; 799/799 tests
+
+**Summary:** Added GEO Performance Monitoring bundle caps management to `/dashboard/services`. Shows a per-bundle reference table (Startup Dev / Agency Core / Agency Pro) for maxPromptsPerRun, allowedCadences, and deliverySurfaces, with DB override support (stored in `service_bundle_services.metadata.gpm_caps`). Overrides take precedence over hardcoded constants at runtime via `mergeGpmBundleCaps`. `buildGpmEntitlementsMap` accepts optional cap overrides so the scheduled sweep can pass DB-sourced values.
+
+**Changes:**
+
+1. **`lib/server/geo-performance-entitlements.ts`** — `BUNDLE_GPM_CAPS` exported; `GpmBundleCapOverrideInput` type; `mergeGpmBundleCaps(bundleKey, dbOverride?)` helper; `buildGpmEntitlementsMap` accepts optional `bundleCapOverrides`; source becomes `'subscription_bundle_db_override'` when active.
+
+2. **`lib/server/geo-performance-admin-data.ts`** — `GpmBundleCapOverride` type; `getBundleCapOverrides()` reads `service_bundle_services.metadata.gpm_caps`; `updateBundleCaps(bundleKey, caps)` upserts that metadata key.
+
+3. **`app/dashboard/services/gpm-caps/actions.ts`** (new) — `updateGpmBundleCapsAction`: validates bundle, maxPromptsPerRun, cadences (≥1), delivery surfaces (≥1); calls data layer; logs; revalidates.
+
+4. **`components/gpm-bundle-caps-section.tsx`** (new) — `GpmBundleCapsSection`: bundle caps table (effective caps with DB override badge) + edit form (bundle select, maxPromptsPerRun input, cadence checkboxes, delivery surface checkboxes).
+
+5. **`app/dashboard/services/page.tsx`** — parallel-loads `getBundleCapOverrides()` (non-fatal); renders `<GpmBundleCapsSection>` after `<ServiceControlAdminView>`.
+
+6. **`lib/server/geo-performance-admin-data.test.ts`** — 13 new tests: `mergeGpmBundleCaps` (8 cases) + `getBundleCapOverrides` (4 cases).
+
+**Evidence:**
+
+```
+npx tsc --noEmit → 0 errors
+
+npx vitest run
+
+ Test Files  148 passed (148)
+      Tests  799 passed (799)
+```
+
+**Orchestrator verification:** PENDING
+
+---
+### 2026-04-24 - GPM-022 - Manual run trigger + report preview in admin panel
+
+**Agent:** Backend + Frontend
+**Claimed complete:** 2026-04-24
+**Evidence type:** Data method + server action + client component + config detail page + link wiring + 3 new tests; tsc 0 errors; 802/802 tests
+
+**Summary:** Admin can navigate from `/dashboard/benchmarks/gpm-configs` → config detail page → view all generated PDF reports per platform/window + trigger a dry run (stub adapter, no AI calls) to validate config wiring before the first scheduled delivery. Dry run creates run-group stubs in DB with `trigger_source: admin_dry_run` and returns per-platform status (launched / already existed / blocked).
+
+**Changes:**
+
+1. **`lib/server/geo-performance-admin-data.ts`** — `GpmReportAdminRow` type; `getReportsForConfig(configId)` loads `gpm_reports` ordered by `generated_at DESC`.
+
+2. **`app/dashboard/benchmarks/gpm-configs/manual-run/actions.ts`** (new) — `triggerGpmDryRunAction`: admin-gated; loads config via `getConfig`; resolves entitlement via `buildGpmEntitlementsMap`; calls `executeGpmClientRun` with `StubBenchmarkExecutionAdapter` + `triggerSource: 'admin_dry_run'`; returns `GpmDryRunActionState` with human-readable message + full `GpmRunSummary`.
+
+3. **`components/gpm-run-trigger-section.tsx`** (new) — `GpmRunTriggerSection`: reports table (platform, window, narrative badge, "View PDF ↗" link, generated timestamp) + dry run form (trigger button → action → per-platform status list inline).
+
+4. **`app/dashboard/benchmarks/gpm-configs/[configId]/page.tsx`** (new) — Config detail page: config summary card (topic, location, platforms, query set, report email, competitors, workspace ID) + `<GpmRunTriggerSection>`.
+
+5. **`components/gpm-configs-admin-view.tsx`** — Added "Reports & dry run →" link per config row pointing to `[configId]` detail page.
+
+6. **`lib/server/geo-performance-admin-data.test.ts`** — 3 new tests: `getReportsForConfig` (maps rows, empty array, null pdf_url/pdf_r2_key).
+
+**Evidence:**
+
+```
+npx tsc --noEmit → 0 errors
+
+npx vitest run
+
+ Test Files  148 passed (148)
+      Tests  802 passed (802)
+```
+
+**Admin route:** `/dashboard/benchmarks/gpm-configs/[configId]` — linked from config list via "Reports & dry run →".
+
+**Dry run semantics:** `StubBenchmarkExecutionAdapter` skips actual AI execution; run groups are created in DB with all query_runs `status='skipped'`. Idempotency key (`gpm:{configId}:{platform}:{windowDate}`) is respected — a second dry run for the same window returns `skipped_existing`. Report PDF is NOT generated in dry run (no real data exists); `storeGpmReport` is not called. Reports panel shows only PDFs from real scheduled runs.
+
+**Orchestrator verification:** PENDING

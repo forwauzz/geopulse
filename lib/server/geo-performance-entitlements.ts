@@ -27,7 +27,7 @@ export type GeoPerformanceCaps = {
 
 // Per playbook: startup_lite has no access; startup_dev, agency_core, agency_pro all get
 // all 3 platforms. Caps differ by prompt count, cadence frequency, and delivery surface.
-const BUNDLE_GPM_CAPS: Partial<Record<string, GeoPerformanceCaps>> = {
+export const BUNDLE_GPM_CAPS: Partial<Record<string, GeoPerformanceCaps>> = {
   startup_dev: {
     tier: 'startup_dev',
     maxPromptsPerRun: 10,
@@ -63,6 +63,40 @@ const DISABLED_ENTITLEMENT: ResolvedGeoPerformanceEntitlement = {
 export function resolveGeoPerformanceCaps(bundleKey: string | null): GeoPerformanceCaps | null {
   if (!bundleKey) return null;
   return BUNDLE_GPM_CAPS[bundleKey] ?? null;
+}
+
+export type GpmBundleCapOverrideInput = {
+  readonly maxPromptsPerRun: number | null;
+  readonly allowedCadences: readonly GeoPerformanceCadence[];
+  readonly deliverySurfaces: readonly GeoPerformanceDeliverySurface[];
+};
+
+export function mergeGpmBundleCaps(
+  bundleKey: string | null,
+  dbOverride?: GpmBundleCapOverrideInput | null
+): GeoPerformanceCaps | null {
+  if (!bundleKey) return null;
+  const hardcoded = BUNDLE_GPM_CAPS[bundleKey] ?? null;
+  if (!hardcoded) return null;
+  if (!dbOverride) return hardcoded;
+
+  const allowedCadences =
+    dbOverride.allowedCadences.length > 0
+      ? dbOverride.allowedCadences
+      : hardcoded.allowedCadences;
+  const deliverySurfaces =
+    dbOverride.deliverySurfaces.length > 0
+      ? dbOverride.deliverySurfaces
+      : hardcoded.deliverySurfaces;
+
+  return {
+    tier: hardcoded.tier,
+    maxPromptsPerRun: dbOverride.maxPromptsPerRun !== undefined
+      ? dbOverride.maxPromptsPerRun
+      : hardcoded.maxPromptsPerRun,
+    allowedCadences,
+    deliverySurfaces,
+  };
 }
 
 export async function resolveGeoPerformanceEntitlement(args: {
@@ -104,6 +138,96 @@ export async function resolveGeoPerformanceEntitlement(args: {
   };
 }
 
+// ── Sweep entitlements helper ─────────────────────────────────────────────────
+
+type GpmConfigStub = {
+  readonly id: string;
+  readonly startup_workspace_id: string | null;
+  readonly agency_account_id: string | null;
+};
+
+/**
+ * Resolves entitlements for a batch of client benchmark configs in two DB queries
+ * (one for startup workspaces, one for agency accounts). Used by the scheduled
+ * GPM sweep worker so it doesn't need to resolve entitlements one-by-one.
+ * Pass `bundleCapOverrides` (keyed by bundle_key) to apply DB-stored cap overrides
+ * in preference to hardcoded constants.
+ */
+export async function buildGpmEntitlementsMap(
+  supabase: SupabaseLike,
+  configs: readonly GpmConfigStub[],
+  bundleCapOverrides?: Readonly<Record<string, GpmBundleCapOverrideInput>>
+): Promise<ReadonlyMap<string, ResolvedGeoPerformanceEntitlement>> {
+  const startupIds = [
+    ...new Set(configs.filter((c) => c.startup_workspace_id).map((c) => c.startup_workspace_id!)),
+  ];
+  const agencyIds = [
+    ...new Set(configs.filter((c) => c.agency_account_id).map((c) => c.agency_account_id!)),
+  ];
+
+  // bundle_key keyed by workspace/account ID — most recent active subscription wins
+  const bundleByStartup = new Map<string, string>();
+  const bundleByAgency = new Map<string, string>();
+
+  if (startupIds.length > 0) {
+    const { data } = await (supabase as any)
+      .from('user_subscriptions')
+      .select('bundle_key, startup_workspace_id')
+      .in('startup_workspace_id', startupIds)
+      .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false });
+    for (const row of (data ?? []) as { bundle_key: string; startup_workspace_id: string }[]) {
+      if (!bundleByStartup.has(row.startup_workspace_id)) {
+        bundleByStartup.set(row.startup_workspace_id, row.bundle_key);
+      }
+    }
+  }
+
+  if (agencyIds.length > 0) {
+    const { data } = await (supabase as any)
+      .from('user_subscriptions')
+      .select('bundle_key, agency_account_id')
+      .in('agency_account_id', agencyIds)
+      .in('status', ['active', 'trialing'])
+      .order('created_at', { ascending: false });
+    for (const row of (data ?? []) as { bundle_key: string; agency_account_id: string }[]) {
+      if (!bundleByAgency.has(row.agency_account_id)) {
+        bundleByAgency.set(row.agency_account_id, row.bundle_key);
+      }
+    }
+  }
+
+  const result = new Map<string, ResolvedGeoPerformanceEntitlement>();
+
+  for (const config of configs) {
+    const bundleKey = config.startup_workspace_id
+      ? (bundleByStartup.get(config.startup_workspace_id) ?? null)
+      : config.agency_account_id
+        ? (bundleByAgency.get(config.agency_account_id) ?? null)
+        : null;
+
+    const dbOverride = bundleKey ? (bundleCapOverrides?.[bundleKey] ?? null) : null;
+    const caps = mergeGpmBundleCaps(bundleKey, dbOverride);
+
+    if (!caps) {
+      result.set(config.id, { ...DISABLED_ENTITLEMENT, source: 'no_active_subscription' });
+      continue;
+    }
+
+    result.set(config.id, {
+      enabled: true,
+      tier: caps.tier,
+      maxPromptsPerRun: caps.maxPromptsPerRun,
+      allowedCadences: caps.allowedCadences,
+      deliverySurfaces: caps.deliverySurfaces,
+      platformsAllowed: ALL_PLATFORMS,
+      source: dbOverride ? 'subscription_bundle_db_override' : 'subscription_bundle',
+    });
+  }
+
+  return result;
+}
+
 // ── Validation ────────────────────────────────────────────────────────────────
 
 export type GeoPerformanceValidationResult = {
@@ -122,6 +246,7 @@ export function validateClientBenchmarkConfigInput(input: {
   readonly benchmarkDomainId?: string | null;
   readonly startupWorkspaceId?: string | null;
   readonly agencyAccountId?: string | null;
+  readonly competitorList?: readonly string[] | null;
 }): GeoPerformanceValidationResult {
   const errors: string[] = [];
 
@@ -149,6 +274,16 @@ export function validateClientBenchmarkConfigInput(input: {
     const invalid = platforms.filter((p) => !VALID_PLATFORMS.has(p));
     if (invalid.length > 0) {
       errors.push(`Unknown platform(s): ${invalid.join(', ')}.`);
+    }
+  }
+
+  if (input.competitorList !== undefined && input.competitorList !== null) {
+    if (input.competitorList.length > 50) {
+      errors.push('Competitor list may not exceed 50 entries.');
+    }
+    const blanks = input.competitorList.filter((c) => !c.trim());
+    if (blanks.length > 0) {
+      errors.push('Competitor list entries must not be blank.');
     }
   }
 

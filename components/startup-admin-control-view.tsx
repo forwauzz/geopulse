@@ -10,11 +10,15 @@ import {
   updateStartupWorkspaceRolloutFlags,
 } from '@/app/dashboard/startups/actions';
 import type { StartupWorkspaceAdminDetail } from '@/lib/server/startup-admin-data';
+import type { GpmConfigAdminRow, GpmQuerySetOption } from '@/lib/server/geo-performance-admin-data';
+import { GpmWorkspaceConfigSection } from '@/components/gpm-workspace-config-section';
 
 const initialState: StartupAdminActionState | null = null;
 
 type Props = {
   readonly workspaces: StartupWorkspaceAdminDetail[];
+  readonly gpmConfigsByWorkspaceId?: ReadonlyMap<string, GpmConfigAdminRow[]>;
+  readonly gpmQuerySetOptions?: GpmQuerySetOption[];
 };
 
 function formatLabel(value: string | null): string {
@@ -35,7 +39,7 @@ function formatTimestamp(value: string): string {
   });
 }
 
-export function StartupAdminControlView({ workspaces }: Props) {
+export function StartupAdminControlView({ workspaces, gpmConfigsByWorkspaceId, gpmQuerySetOptions }: Props) {
   const [workspaceState, workspaceAction, workspacePending] = useActionState(
     createStartupWorkspace,
     initialState
@@ -371,6 +375,11 @@ export function StartupAdminControlView({ workspaces }: Props) {
                   )}
                 </ul>
               </div>
+
+              <GpmWorkspaceConfigSection
+                configs={gpmConfigsByWorkspaceId?.get(workspace.id) ?? []}
+                querySetOptions={gpmQuerySetOptions ?? []}
+              />
 
               <details className="mt-4">
                 <summary className="cursor-pointer text-xs text-error hover:underline">

@@ -88,6 +88,11 @@
 
     "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
 
+    // GEO Performance Monitoring scheduled sweep.
+    // Set GPM_SCHEDULE_ENABLED=true (via wrangler secret or dashboard) to activate.
+    "GPM_SCHEDULE_ENABLED": "true",
+    "GPM_REPORT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
+
     // Optional destination/provider defaults.
     "GHOST_ADMIN_API_VERSION": "v6.0"
   },

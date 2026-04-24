@@ -12,11 +12,15 @@ import {
   type AgencyAdminActionState,
 } from '@/app/dashboard/agencies/actions';
 import type { AgencyAccountAdminDetail } from '@/lib/server/agency-admin-data';
+import type { GpmConfigAdminRow, GpmQuerySetOption } from '@/lib/server/geo-performance-admin-data';
+import { GpmWorkspaceConfigSection } from '@/components/gpm-workspace-config-section';
 
 const initialState: AgencyAdminActionState | null = null;
 
 type Props = {
   readonly accounts: AgencyAccountAdminDetail[];
+  readonly gpmConfigsByAccountId?: ReadonlyMap<string, GpmConfigAdminRow[]>;
+  readonly gpmQuerySetOptions?: GpmQuerySetOption[];
 };
 
 const agencyFlagOptions = [
@@ -60,7 +64,7 @@ function formatLabel(value: string | null): string {
     .join(' ');
 }
 
-export function AgencyAdminControlView({ accounts }: Props) {
+export function AgencyAdminControlView({ accounts, gpmConfigsByAccountId, gpmQuerySetOptions }: Props) {
   const [accountState, accountAction, accountPending] = useActionState(
     createAgencyAccount,
     initialState
@@ -551,6 +555,11 @@ export function AgencyAdminControlView({ accounts }: Props) {
                   </div>
                 </section>
               </div>
+
+              <GpmWorkspaceConfigSection
+                configs={gpmConfigsByAccountId?.get(account.id) ?? []}
+                querySetOptions={gpmQuerySetOptions ?? []}
+              />
 
               <details className="mt-4">
                 <summary className="cursor-pointer text-xs text-error hover:underline">

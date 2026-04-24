@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { ServiceControlAdminView } from '@/components/service-control-admin-view';
+import { GpmBundleCapsSection } from '@/components/gpm-bundle-caps-section';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createServiceControlAdminData } from '@/lib/server/service-control-admin-data';
+import { createGpmAdminData } from '@/lib/server/geo-performance-admin-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,7 +41,13 @@ export default async function ServiceControlAdminPage() {
 
   try {
     const data = createServiceControlAdminData(adminContext.adminDb);
-    const overview = await data.getOverview();
+    const gpmData = createGpmAdminData(adminContext.adminDb);
+
+    const [overview, bundleCapOverrides] = await Promise.all([
+      data.getOverview(),
+      gpmData.getBundleCapOverrides().catch(() => ({} as Record<string, never>)),
+    ]);
+
     return (
       <div className="space-y-8">
         <section className="space-y-3">
@@ -63,6 +71,7 @@ export default async function ServiceControlAdminPage() {
           </div>
         </section>
         <ServiceControlAdminView overview={overview} />
+        <GpmBundleCapsSection bundleCapOverrides={bundleCapOverrides} />
       </div>
     );
   } catch (error) {

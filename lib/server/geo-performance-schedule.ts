@@ -10,6 +10,7 @@ import {
 import { createBenchmarkRepository, type ClientBenchmarkConfigRow } from './benchmark-repository';
 import { runBenchmarkGroupSkeleton } from './benchmark-runner';
 import { storeGpmReport, type GpmReportStoreEnvLike, type GpmR2BucketLike } from './geo-performance-report-store';
+import { sendGpmReportSlackSummary } from './geo-performance-slack';
 import { structuredError, structuredLog } from './structured-log';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -250,7 +251,7 @@ export async function executeGpmClientRun(args: {
       // Generate + store PDF report (non-fatal — run is already recorded)
       if (args.reportEnv) {
         try {
-          await storeGpmReport({
+          const storeResult = await storeGpmReport({
             supabase: args.supabase,
             config: args.config,
             runGroupId: result.runGroupId,
@@ -260,6 +261,29 @@ export async function executeGpmClientRun(args: {
             bucket: args.reportBucket,
             env: args.reportEnv,
           });
+
+          // Slack delivery — only for startup workspaces with 'slack' in deliverySurfaces
+          if (
+            args.config.startup_workspace_id &&
+            args.entitlement.deliverySurfaces.includes('slack')
+          ) {
+            try {
+              await sendGpmReportSlackSummary({
+                supabase: args.supabase,
+                startupWorkspaceId: args.config.startup_workspace_id,
+                payload: storeResult.payload,
+                pdfUrl: storeResult.pdfUrl,
+                configId: args.config.id,
+              });
+            } catch (slackErr) {
+              structuredError('gpm_slack_delivery_failed', {
+                config_id: args.config.id,
+                run_group_id: result.runGroupId,
+                platform,
+                error: slackErr instanceof Error ? slackErr.message : 'unknown',
+              });
+            }
+          }
         } catch (reportErr) {
           structuredError('gpm_report_store_failed', {
             config_id: args.config.id,
@@ -311,6 +335,9 @@ export type GpmScheduleEnvLike = {
   readonly ANTHROPIC_API_KEY?: string;
   readonly GPM_NARRATIVE_MODEL?: string;
   readonly GPM_REPORT_R2_PUBLIC_BASE?: string;
+  // Email delivery
+  readonly RESEND_API_KEY?: string;
+  readonly RESEND_FROM_EMAIL?: string;
 };
 
 export function resolveGpmPlatformModelMap(env: GpmScheduleEnvLike): GpmPlatformModelMap {

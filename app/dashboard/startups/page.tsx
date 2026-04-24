@@ -1,6 +1,7 @@
 import { StartupAdminControlView } from '@/components/startup-admin-control-view';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createStartupAdminData } from '@/lib/server/startup-admin-data';
+import { createGpmAdminData, type GpmConfigAdminRow } from '@/lib/server/geo-performance-admin-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,8 +39,29 @@ export default async function StartupsAdminPage() {
 
   try {
     const startupData = createStartupAdminData(adminContext.adminDb);
-    const workspaces = await startupData.getWorkspaces();
-    return <StartupAdminControlView workspaces={workspaces} />;
+    const gpmData = createGpmAdminData(adminContext.adminDb);
+
+    const [workspaces, gpmConfigs, querySetOptions] = await Promise.all([
+      startupData.getWorkspaces(),
+      gpmData.listAllConfigs().catch(() => [] as GpmConfigAdminRow[]),
+      gpmData.getQuerySetOptions().catch(() => []),
+    ]);
+
+    const gpmConfigsByWorkspaceId = new Map<string, GpmConfigAdminRow[]>();
+    for (const config of gpmConfigs) {
+      if (!config.startup_workspace_id) continue;
+      const existing = gpmConfigsByWorkspaceId.get(config.startup_workspace_id) ?? [];
+      existing.push(config);
+      gpmConfigsByWorkspaceId.set(config.startup_workspace_id, existing);
+    }
+
+    return (
+      <StartupAdminControlView
+        workspaces={workspaces}
+        gpmConfigsByWorkspaceId={gpmConfigsByWorkspaceId}
+        gpmQuerySetOptions={querySetOptions}
+      />
+    );
   } catch (error) {
     const message = readErrorMessage(error);
     const missingTable =

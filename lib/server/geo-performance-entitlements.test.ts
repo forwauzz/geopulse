@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildGpmEntitlementsMap,
   enforceGeoPerformanceLimits,
   resolveGeoPerformanceCaps,
   validateClientBenchmarkConfigInput,
@@ -239,5 +240,101 @@ describe('enforceGeoPerformanceLimits', () => {
     });
     expect(result.allowed).toBe(false);
     expect(result.violations.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+// ── buildGpmEntitlementsMap ───────────────────────────────────────────────────
+
+function makeSupabaseMock(subscriptions: Record<string, unknown>[]) {
+  return {
+    from(_table: string) {
+      return {
+        select(_cols: string) {
+          return {
+            in(_col: string, _vals: string[]) {
+              return {
+                in(_col2: string, _vals2: string[]) {
+                  return {
+                    order(_col3: string, _opts: unknown) {
+                      return { data: subscriptions, error: null };
+                    },
+                  };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
+describe('buildGpmEntitlementsMap', () => {
+  it('returns enabled entitlement for startup_dev workspace with active subscription', async () => {
+    const supabase = makeSupabaseMock([
+      { bundle_key: 'startup_dev', startup_workspace_id: 'ws-1' },
+    ]);
+    const map = await buildGpmEntitlementsMap(supabase, [
+      { id: 'cfg-1', startup_workspace_id: 'ws-1', agency_account_id: null },
+    ]);
+    const e = map.get('cfg-1')!;
+    expect(e.enabled).toBe(true);
+    expect(e.tier).toBe('startup_dev');
+    expect(e.allowedCadences).toContain('monthly');
+    expect(e.deliverySurfaces).toContain('email');
+    expect(e.platformsAllowed).toEqual(['chatgpt', 'gemini', 'perplexity']);
+  });
+
+  it('returns enabled entitlement for agency_core account with active subscription', async () => {
+    const supabase = makeSupabaseMock([
+      { bundle_key: 'agency_core', agency_account_id: 'acct-1' },
+    ]);
+    const map = await buildGpmEntitlementsMap(supabase, [
+      { id: 'cfg-2', startup_workspace_id: null, agency_account_id: 'acct-1' },
+    ]);
+    const e = map.get('cfg-2')!;
+    expect(e.enabled).toBe(true);
+    expect(e.tier).toBe('agency_core');
+    expect(e.allowedCadences).toContain('biweekly');
+  });
+
+  it('returns disabled entitlement when no subscription matches', async () => {
+    const supabase = makeSupabaseMock([]); // no subscriptions
+    const map = await buildGpmEntitlementsMap(supabase, [
+      { id: 'cfg-3', startup_workspace_id: 'ws-no-sub', agency_account_id: null },
+    ]);
+    const e = map.get('cfg-3')!;
+    expect(e.enabled).toBe(false);
+    expect(e.source).toBe('no_active_subscription');
+  });
+
+  it('returns disabled entitlement for startup_lite bundle (no GPM access)', async () => {
+    const supabase = makeSupabaseMock([
+      { bundle_key: 'startup_lite', startup_workspace_id: 'ws-lite' },
+    ]);
+    const map = await buildGpmEntitlementsMap(supabase, [
+      { id: 'cfg-4', startup_workspace_id: 'ws-lite', agency_account_id: null },
+    ]);
+    const e = map.get('cfg-4')!;
+    expect(e.enabled).toBe(false);
+  });
+
+  it('handles multiple configs in one call', async () => {
+    const supabase = makeSupabaseMock([
+      { bundle_key: 'startup_dev',  startup_workspace_id: 'ws-1' },
+      { bundle_key: 'agency_pro',   startup_workspace_id: 'ws-2' },
+    ]);
+    const map = await buildGpmEntitlementsMap(supabase, [
+      { id: 'cfg-a', startup_workspace_id: 'ws-1', agency_account_id: null },
+      { id: 'cfg-b', startup_workspace_id: 'ws-2', agency_account_id: null },
+    ]);
+    expect(map.get('cfg-a')!.tier).toBe('startup_dev');
+    expect(map.get('cfg-b')!.tier).toBe('agency_pro');
+  });
+
+  it('returns empty map for empty config list', async () => {
+    const supabase = makeSupabaseMock([]);
+    const map = await buildGpmEntitlementsMap(supabase, []);
+    expect(map.size).toBe(0);
   });
 });

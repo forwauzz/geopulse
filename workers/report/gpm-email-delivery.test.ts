@@ -34,8 +34,8 @@ function makePayload(overrides: Partial<GpmReportPayload> = {}): GpmReportPayloa
       { name: 'BalanceCenter.com', citationCount: 1, totalQueries: 5 },
     ],
     opportunities: [
-      { queryKey: 'q3', queryText: 'dizziness specialist near me', topCompetitorInQuery: 'physio.ca' },
-      { queryKey: 'q4', queryText: 'balance disorder therapy',     topCompetitorInQuery: null },
+      { queryText: 'dizziness specialist near me', topCompetitorInQuery: 'physio.ca' },
+      { queryText: 'balance disorder therapy',     topCompetitorInQuery: null },
     ],
     ...overrides,
   };
@@ -221,7 +221,7 @@ describe('gpm-email-delivery', () => {
   it('escapes HTML in opportunity query text', async () => {
     const html = await capturedHtml(makePayload({
       opportunities: [
-        { queryKey: 'q1', queryText: '<b>bold</b> query', topCompetitorInQuery: null },
+        { queryText: '<b>bold</b> query', topCompetitorInQuery: null },
       ],
     }));
     expect(html).not.toMatch(/<b>bold<\/b>/);

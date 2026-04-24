@@ -5,6 +5,7 @@ import { generateGpmNarrative } from './geo-performance-report-narrative';
 import { structuredLog, structuredError } from './structured-log';
 import type { ClientBenchmarkConfigRow } from './benchmark-repository';
 import { sendGpmReportEmail } from '../../workers/report/gpm-email-delivery';
+import type { GpmReportPayload } from './geo-performance-report-payload';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ export type GpmReportStoreResult = {
   readonly pdfUrl: string | null;
   readonly pdfR2Key: string | null;
   readonly narrativeGenerated: boolean;
+  readonly payload: GpmReportPayload;
 };
 
 // ── Core store function ───────────────────────────────────────────────────────
@@ -191,5 +193,5 @@ export async function storeGpmReport(args: {
     narrative_generated: narrativeGenerated,
   });
 
-  return { reportId, pdfUrl, pdfR2Key, narrativeGenerated };
+  return { reportId, pdfUrl, pdfR2Key, narrativeGenerated, payload };
 }
