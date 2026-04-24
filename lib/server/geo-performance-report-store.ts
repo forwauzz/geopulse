@@ -4,6 +4,7 @@ import { buildGpmReportPdf } from './geo-performance-report-pdf';
 import { generateGpmNarrative } from './geo-performance-report-narrative';
 import { structuredLog, structuredError } from './structured-log';
 import type { ClientBenchmarkConfigRow } from './benchmark-repository';
+import { sendGpmReportEmail } from '../../workers/report/gpm-email-delivery';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,8 @@ export type GpmReportStoreEnvLike = {
   readonly ANTHROPIC_API_KEY?: string;
   readonly GPM_NARRATIVE_MODEL?: string;
   readonly GPM_REPORT_R2_PUBLIC_BASE?: string;
+  readonly RESEND_API_KEY?: string;
+  readonly RESEND_FROM_EMAIL?: string;
 };
 
 export type GpmR2BucketLike = {
@@ -143,6 +146,40 @@ export async function storeGpmReport(args: {
   if (insertErr) throw new Error(`gpm_reports insert failed: ${insertErr.message}`);
 
   const reportId = (inserted as { id: string }).id;
+
+  // 6. Send email report if configured (non-fatal)
+  const resendKey  = args.env.RESEND_API_KEY?.trim();
+  const resendFrom = args.env.RESEND_FROM_EMAIL?.trim();
+  if (config.report_email && resendKey && resendFrom) {
+    try {
+      const idempotencyKey = `gpm-report/${config.id}/${platform}/${windowDate}`;
+      const emailResult = await sendGpmReportEmail({
+        apiKey: resendKey,
+        from: resendFrom,
+        to: config.report_email,
+        payload,
+        narrative,
+        pdfBytes: pdfUrl ? undefined : pdfBytes,
+        pdfUrl: pdfUrl ?? null,
+        idempotencyKey,
+      });
+      if (!emailResult.ok) {
+        structuredError('gpm_report_email_failed', {
+          config_id: config.id,
+          report_id: reportId,
+          message: emailResult.message,
+        });
+      } else {
+        structuredLog('gpm_report_email_sent', { config_id: config.id, report_id: reportId, to: config.report_email });
+      }
+    } catch (err) {
+      structuredError('gpm_report_email_exception', {
+        config_id: config.id,
+        report_id: reportId,
+        error: err instanceof Error ? err.message : 'unknown',
+      });
+    }
+  }
 
   structuredLog('gpm_report_store_done', {
     config_id: config.id,
