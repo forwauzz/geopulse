@@ -61,9 +61,9 @@ function ConfigCard({
           </div>
           <div className="flex gap-2 items-center">
             <label className="text-xs text-on-surface-variant">Prompts</label>
-            <select name="prompt_count" className="rounded border border-outline-variant/40 bg-surface px-2 py-0.5 text-xs">
+            <select name="prompt_count" defaultValue="10" className="rounded border border-outline-variant/40 bg-surface px-2 py-0.5 text-xs">
               <option value="5">5</option>
-              <option value="10" selected>10</option>
+              <option value="10">10</option>
               <option value="15">15</option>
             </select>
             <button type="submit" className="rounded bg-secondary px-3 py-0.5 text-xs font-medium text-on-secondary hover:opacity-90">
@@ -75,15 +75,7 @@ function ConfigCard({
 
       <form action={deleteClientBenchmarkConfig} className="pt-1">
         <input type="hidden" name="id" value={config.id} />
-        <button
-          type="submit"
-          className="text-xs text-error hover:underline"
-          onClick={(e) => {
-            if (!confirm('Delete this GEO Performance config? This cannot be undone.')) {
-              e.preventDefault();
-            }
-          }}
-        >
+        <button type="submit" className="text-xs text-error hover:underline">
           Delete config
         </button>
       </form>
@@ -242,8 +234,16 @@ export default async function GeoPerformanceAdminPage() {
       </div>
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Could not load GEO Performance configs.';
-    const missingTable = /client_benchmark_configs|relation .* does not exist|column .* does not exist|schema cache/i.test(message);
+    let message = 'Could not load GEO Performance configs.';
+    if (error instanceof Error) {
+      message = error.message;
+    } else if (error && typeof error === 'object') {
+      const e = error as Record<string, unknown>;
+      const parts = [e['message'], e['details'], e['hint']]
+        .filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
+      if (parts.length > 0) message = parts.join(' | ');
+    }
+    const missingTable = /client_benchmark_configs|benchmark_domains|query_sets|relation .* does not exist|column .* does not exist|schema cache/i.test(message);
     return (
       <div className="space-y-4">
         <h1 className="font-headline text-3xl font-bold text-on-background">GEO Performance Monitoring</h1>
