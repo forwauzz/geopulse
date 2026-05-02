@@ -7,6 +7,7 @@ import {
   saveStartupSlackDestination,
   updateStartupSlackAutoPostSetting,
 } from '@/app/dashboard/startup/actions';
+import Link from 'next/link';
 import type { StartupServiceGate } from '@/lib/server/startup-service-gates';
 import type { StartupSettingsTabProps } from './startup-tab-types';
 
@@ -244,6 +245,29 @@ export function StartupSettingsTab(props: StartupSettingsTabProps) {
             </div>
           </div>
         )}
+      </article>
+
+      <article className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Recurring audits</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Founders and admins can control automated audit cadence and Slack delivery from the connectors hub.
+            </p>
+          </div>
+          {workspaceId ? (
+            <Link
+              href={`/dashboard/connectors?startupWorkspace=${workspaceId}&connector=slack`}
+              className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Manage recurring audits
+            </Link>
+          ) : null}
+        </div>
+        <div className="mt-4 rounded-xl border border-outline-variant bg-surface-container-low p-4 text-sm text-on-surface-variant">
+          Recurring audits use the Slack connector settings:
+          connect a workspace, choose a default destination, enable auto-post, and save the scan cadence.
+        </div>
       </article>
 
       <details className="rounded-2xl border border-outline-variant bg-surface-container p-5 lg:col-span-2">

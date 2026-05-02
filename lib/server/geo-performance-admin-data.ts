@@ -53,6 +53,122 @@ export type GpmAgencyOption = {
 export function createGpmAdminData(supabase: SupabaseLike) {
   const repo = createBenchmarkRepository(supabase as any);
 
+  async function ensureWorkspaceDomainsAvailable(): Promise<void> {
+    const [
+      { data: startupWorkspaces, error: startupError },
+      { data: agencyAccounts, error: agencyError },
+      { data: agencyClients, error: clientError },
+    ] = await Promise.all([
+      supabase
+        .from('startup_workspaces')
+        .select('name,canonical_domain,primary_domain')
+        .not('canonical_domain', 'is', null),
+      supabase
+        .from('agency_accounts')
+        .select('name,canonical_domain,website_domain,benchmark_vertical,benchmark_subvertical')
+        .not('canonical_domain', 'is', null),
+      supabase
+        .from('agency_clients')
+        .select('name,display_name,canonical_domain,website_domain,vertical,subvertical')
+        .not('canonical_domain', 'is', null),
+    ]);
+
+    if (startupError) throw startupError;
+    if (agencyError) throw agencyError;
+    if (clientError) throw clientError;
+
+    const candidates: Array<{
+      siteUrl?: string | null;
+      domain?: string | null;
+      displayName?: string | null;
+      vertical?: string | null;
+      subvertical?: string | null;
+      metadata?: Record<string, unknown>;
+    }> = [];
+
+    for (const row of (startupWorkspaces ?? []) as Array<Record<string, unknown>>) {
+      candidates.push({
+        siteUrl:
+          typeof row['canonical_domain'] === 'string' && row['canonical_domain'].trim().length > 0
+            ? `https://${String(row['canonical_domain']).trim()}`
+            : null,
+        domain:
+          typeof row['canonical_domain'] === 'string' ? String(row['canonical_domain']).trim() : null,
+        displayName: typeof row['name'] === 'string' ? String(row['name']).trim() : null,
+        metadata: {
+          source: 'startup_workspace',
+          primary_domain:
+            typeof row['primary_domain'] === 'string' ? String(row['primary_domain']).trim() : null,
+        },
+      });
+    }
+
+    for (const row of (agencyAccounts ?? []) as Array<Record<string, unknown>>) {
+      candidates.push({
+        siteUrl:
+          typeof row['canonical_domain'] === 'string' && row['canonical_domain'].trim().length > 0
+            ? `https://${String(row['canonical_domain']).trim()}`
+            : null,
+        domain:
+          typeof row['canonical_domain'] === 'string' ? String(row['canonical_domain']).trim() : null,
+        displayName: typeof row['name'] === 'string' ? String(row['name']).trim() : null,
+        vertical:
+          typeof row['benchmark_vertical'] === 'string'
+            ? String(row['benchmark_vertical']).trim()
+            : null,
+        subvertical:
+          typeof row['benchmark_subvertical'] === 'string'
+            ? String(row['benchmark_subvertical']).trim()
+            : null,
+        metadata: {
+          source: 'agency_account',
+          website_domain:
+            typeof row['website_domain'] === 'string' ? String(row['website_domain']).trim() : null,
+        },
+      });
+    }
+
+    for (const row of (agencyClients ?? []) as Array<Record<string, unknown>>) {
+      candidates.push({
+        siteUrl:
+          typeof row['canonical_domain'] === 'string' && row['canonical_domain'].trim().length > 0
+            ? `https://${String(row['canonical_domain']).trim()}`
+            : null,
+        domain:
+          typeof row['canonical_domain'] === 'string' ? String(row['canonical_domain']).trim() : null,
+        displayName:
+          typeof row['display_name'] === 'string'
+            ? String(row['display_name']).trim()
+            : typeof row['name'] === 'string'
+              ? String(row['name']).trim()
+              : null,
+        vertical: typeof row['vertical'] === 'string' ? String(row['vertical']).trim() : null,
+        subvertical: typeof row['subvertical'] === 'string' ? String(row['subvertical']).trim() : null,
+        metadata: {
+          source: 'agency_client',
+          website_domain:
+            typeof row['website_domain'] === 'string' ? String(row['website_domain']).trim() : null,
+        },
+      });
+    }
+
+    const seen = new Set<string>();
+    for (const candidate of candidates) {
+      const canonical = candidate.domain?.trim().toLowerCase() ?? '';
+      if (!canonical || seen.has(canonical)) continue;
+      seen.add(canonical);
+      await repo.upsertDomain({
+        siteUrl: candidate.siteUrl ?? null,
+        domain: candidate.domain ?? null,
+        displayName: candidate.displayName ?? null,
+        vertical: candidate.vertical ?? null,
+        subvertical: candidate.subvertical ?? null,
+        isCustomer: true,
+        metadata: candidate.metadata ?? {},
+      });
+    }
+  }
+
   return {
     async listAllConfigs(): Promise<GpmConfigAdminRow[]> {
       const { data, error } = await supabase
@@ -156,6 +272,8 @@ export function createGpmAdminData(supabase: SupabaseLike) {
     },
 
     async getDomainOptions(): Promise<GpmDomainOption[]> {
+      await ensureWorkspaceDomainsAvailable();
+
       const { data, error } = await supabase
         .from('benchmark_domains')
         .select('id,canonical_domain,display_name,site_url')
