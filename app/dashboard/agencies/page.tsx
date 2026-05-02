@@ -19,10 +19,11 @@ export default async function AgenciesAdminPage() {
     const agencyData = createAgencyAdminData(adminContext.adminDb);
     const gpmData = createGpmAdminData(adminContext.adminDb);
 
-    const [accounts, gpmConfigs, querySetOptions] = await Promise.all([
+    const [accounts, gpmConfigs, querySetOptions, domainOptions] = await Promise.all([
       agencyData.getAccounts(),
       gpmData.listAllConfigs().catch(() => [] as GpmConfigAdminRow[]),
       gpmData.getQuerySetOptions().catch(() => []),
+      gpmData.getDomainOptions().catch(() => []),
     ]);
 
     const gpmConfigsByAccountId = new Map<string, GpmConfigAdminRow[]>();
@@ -38,6 +39,7 @@ export default async function AgenciesAdminPage() {
         accounts={accounts}
         gpmConfigsByAccountId={gpmConfigsByAccountId}
         gpmQuerySetOptions={querySetOptions}
+        gpmDomainOptions={domainOptions}
       />
     );
   } catch (error) {

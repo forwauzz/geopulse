@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import type { GpmConfigAdminRow, GpmQuerySetOption } from '@/lib/server/geo-performance-admin-data';
 import {
+  createGpmConfigAction,
   updateGpmConfigAction,
   updateGpmCompetitorListAction,
   deleteGpmConfigAction,
@@ -16,6 +17,27 @@ const PLATFORM_LABELS: Record<string, string> = {
   gemini: 'Gemini',
   perplexity: 'Perplexity',
 };
+
+type GpmDomainOption = {
+  readonly id: string;
+  readonly canonicalDomain: string;
+  readonly displayName: string | null;
+  readonly siteUrl: string | null;
+};
+
+type QuickEnrollOwner =
+  | {
+      readonly kind: 'startup';
+      readonly id: string;
+      readonly label: string;
+      readonly suggestedEmail?: string | null;
+    }
+  | {
+      readonly kind: 'agency';
+      readonly id: string;
+      readonly label: string;
+      readonly suggestedEmail?: string | null;
+    };
 
 // ── Competitor edit form ──────────────────────────────────────────────────────
 
@@ -77,6 +99,170 @@ function DeleteConfigForm({ configId }: { configId: string }) {
         {pending ? 'Deleting…' : 'Delete config'}
       </button>
     </form>
+  );
+}
+
+function QuickEnrollForm({
+  owner,
+  domainOptions,
+  querySetOptions,
+}: {
+  owner: QuickEnrollOwner;
+  domainOptions: GpmDomainOption[];
+  querySetOptions: GpmQuerySetOption[];
+}) {
+  const [state, action, pending] = useActionState<GpmConfigActionState | null, FormData>(
+    createGpmConfigAction,
+    null
+  );
+
+  return (
+    <details className="mt-3 rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+      <summary className="cursor-pointer text-sm font-medium text-on-background">
+        Quick enroll GPM for {owner.label}
+      </summary>
+      <form action={action} className="mt-4 grid gap-3 sm:grid-cols-2">
+        <input
+          type="hidden"
+          name={owner.kind === 'startup' ? 'startupWorkspaceId' : 'agencyAccountId'}
+          value={owner.id}
+        />
+
+        <label className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs font-medium text-on-surface-variant">Benchmark domain</span>
+          <select
+            name="benchmarkDomainId"
+            required
+            className="rounded-lg border border-outline-variant/30 bg-surface px-3 py-1.5 text-sm text-on-surface"
+          >
+            <option value="">Select domain...</option>
+            {domainOptions.map((domain) => (
+              <option key={domain.id} value={domain.id}>
+                {domain.displayName ?? domain.canonicalDomain}
+                {domain.displayName ? ` · ${domain.canonicalDomain}` : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-on-surface-variant">Topic</span>
+          <input
+            name="topic"
+            required
+            placeholder="e.g. Vestibular Rehabilitation"
+            className="rounded-lg border border-outline-variant/30 bg-surface px-3 py-1.5 text-sm text-on-surface"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-on-surface-variant">Location</span>
+          <input
+            name="location"
+            required
+            placeholder="e.g. Vancouver"
+            className="rounded-lg border border-outline-variant/30 bg-surface px-3 py-1.5 text-sm text-on-surface"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-on-surface-variant">Cadence</span>
+          <select
+            name="cadence"
+            defaultValue="monthly"
+            className="rounded-lg border border-outline-variant/30 bg-surface px-3 py-1.5 text-sm text-on-surface"
+          >
+            {CADENCE_OPTIONS.map((cadence) => (
+              <option key={cadence} value={cadence}>
+                {cadence.charAt(0).toUpperCase() + cadence.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-on-surface-variant">Query set</span>
+          <select
+            name="querySetId"
+            defaultValue=""
+            className="rounded-lg border border-outline-variant/30 bg-surface px-3 py-1.5 text-sm text-on-surface"
+          >
+            <option value="">None</option>
+            {querySetOptions.map((querySet) => (
+              <option key={querySet.id} value={querySet.id}>
+                {querySet.name} v{querySet.version}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs font-medium text-on-surface-variant">Report email</span>
+          <input
+            name="reportEmail"
+            type="email"
+            defaultValue={owner.suggestedEmail ?? ''}
+            placeholder="client@example.com"
+            className="rounded-lg border border-outline-variant/30 bg-surface px-3 py-1.5 text-sm text-on-surface"
+          />
+        </label>
+
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs font-medium text-on-surface-variant">Platforms</span>
+          <div className="flex flex-wrap gap-3">
+            {PLATFORM_OPTIONS.map((platform) => (
+              <label key={platform} className="flex items-center gap-1 text-sm text-on-surface">
+                <input
+                  type="checkbox"
+                  name="platform_check_create"
+                  value={platform}
+                  defaultChecked
+                  onChange={(e) => {
+                    const form = e.currentTarget.form;
+                    if (!form) return;
+                    const checked = Array.from(
+                      form.querySelectorAll<HTMLInputElement>('[name="platform_check_create"]')
+                    )
+                      .filter((el) => el.checked)
+                      .map((el) => el.value);
+                    const hidden = form.querySelector<HTMLInputElement>('[name="platforms"]');
+                    if (hidden) hidden.value = checked.join(',');
+                  }}
+                />
+                {PLATFORM_LABELS[platform]}
+              </label>
+            ))}
+          </div>
+          <input type="hidden" name="platforms" value="chatgpt,gemini,perplexity" />
+        </div>
+
+        <label className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-xs font-medium text-on-surface-variant">Competitors</span>
+          <textarea
+            name="competitorListText"
+            rows={3}
+            placeholder={'competitor.com\nrival.ca'}
+            className="rounded-lg border border-outline-variant/30 bg-surface px-3 py-2 font-mono text-xs text-on-surface"
+          />
+        </label>
+
+        {state ? (
+          <p className={`sm:col-span-2 text-xs ${state.ok ? 'text-success' : 'text-error'}`}>
+            {state.message}
+          </p>
+        ) : null}
+
+        <div className="sm:col-span-2">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-on-primary disabled:opacity-50"
+          >
+            {pending ? 'Creating…' : 'Create GPM config'}
+          </button>
+        </div>
+      </form>
+    </details>
   );
 }
 
@@ -250,9 +436,13 @@ function PlatformChecks({
 export function GpmWorkspaceConfigSection({
   configs,
   querySetOptions,
+  domainOptions,
+  quickEnrollOwner,
 }: {
   configs: GpmConfigAdminRow[];
   querySetOptions: GpmQuerySetOption[];
+  domainOptions: GpmDomainOption[];
+  quickEnrollOwner?: QuickEnrollOwner;
 }) {
   return (
     <div className="mt-4 rounded-xl bg-surface-container-low p-4">
@@ -280,6 +470,14 @@ export function GpmWorkspaceConfigSection({
           ))}
         </div>
       )}
+
+      {quickEnrollOwner ? (
+        <QuickEnrollForm
+          owner={quickEnrollOwner}
+          domainOptions={domainOptions}
+          querySetOptions={querySetOptions}
+        />
+      ) : null}
     </div>
   );
 }

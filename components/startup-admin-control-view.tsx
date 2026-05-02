@@ -10,7 +10,11 @@ import {
   updateStartupWorkspaceRolloutFlags,
 } from '@/app/dashboard/startups/actions';
 import type { StartupWorkspaceAdminDetail } from '@/lib/server/startup-admin-data';
-import type { GpmConfigAdminRow, GpmQuerySetOption } from '@/lib/server/geo-performance-admin-data';
+import type {
+  GpmConfigAdminRow,
+  GpmDomainOption,
+  GpmQuerySetOption,
+} from '@/lib/server/geo-performance-admin-data';
 import { GpmWorkspaceConfigSection } from '@/components/gpm-workspace-config-section';
 
 const initialState: StartupAdminActionState | null = null;
@@ -19,6 +23,7 @@ type Props = {
   readonly workspaces: StartupWorkspaceAdminDetail[];
   readonly gpmConfigsByWorkspaceId?: ReadonlyMap<string, GpmConfigAdminRow[]>;
   readonly gpmQuerySetOptions?: GpmQuerySetOption[];
+  readonly gpmDomainOptions?: GpmDomainOption[];
 };
 
 function formatLabel(value: string | null): string {
@@ -39,7 +44,12 @@ function formatTimestamp(value: string): string {
   });
 }
 
-export function StartupAdminControlView({ workspaces, gpmConfigsByWorkspaceId, gpmQuerySetOptions }: Props) {
+export function StartupAdminControlView({
+  workspaces,
+  gpmConfigsByWorkspaceId,
+  gpmQuerySetOptions,
+  gpmDomainOptions,
+}: Props) {
   const [workspaceState, workspaceAction, workspacePending] = useActionState(
     createStartupWorkspace,
     initialState
@@ -379,6 +389,18 @@ export function StartupAdminControlView({ workspaces, gpmConfigsByWorkspaceId, g
               <GpmWorkspaceConfigSection
                 configs={gpmConfigsByWorkspaceId?.get(workspace.id) ?? []}
                 querySetOptions={gpmQuerySetOptions ?? []}
+                domainOptions={gpmDomainOptions ?? []}
+                quickEnrollOwner={{
+                  kind: 'startup',
+                  id: workspace.id,
+                  label: workspace.name,
+                  suggestedEmail:
+                    workspace.users.find((user) =>
+                      ['founder', 'admin'].includes(user.role) && !!user.email
+                    )?.email ??
+                    workspace.users.find((user) => !!user.email)?.email ??
+                    null,
+                }}
               />
 
               <details className="mt-4">

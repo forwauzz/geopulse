@@ -12,7 +12,11 @@ import {
   type AgencyAdminActionState,
 } from '@/app/dashboard/agencies/actions';
 import type { AgencyAccountAdminDetail } from '@/lib/server/agency-admin-data';
-import type { GpmConfigAdminRow, GpmQuerySetOption } from '@/lib/server/geo-performance-admin-data';
+import type {
+  GpmConfigAdminRow,
+  GpmDomainOption,
+  GpmQuerySetOption,
+} from '@/lib/server/geo-performance-admin-data';
 import { GpmWorkspaceConfigSection } from '@/components/gpm-workspace-config-section';
 
 const initialState: AgencyAdminActionState | null = null;
@@ -21,6 +25,7 @@ type Props = {
   readonly accounts: AgencyAccountAdminDetail[];
   readonly gpmConfigsByAccountId?: ReadonlyMap<string, GpmConfigAdminRow[]>;
   readonly gpmQuerySetOptions?: GpmQuerySetOption[];
+  readonly gpmDomainOptions?: GpmDomainOption[];
 };
 
 const agencyFlagOptions = [
@@ -64,7 +69,12 @@ function formatLabel(value: string | null): string {
     .join(' ');
 }
 
-export function AgencyAdminControlView({ accounts, gpmConfigsByAccountId, gpmQuerySetOptions }: Props) {
+export function AgencyAdminControlView({
+  accounts,
+  gpmConfigsByAccountId,
+  gpmQuerySetOptions,
+  gpmDomainOptions,
+}: Props) {
   const [accountState, accountAction, accountPending] = useActionState(
     createAgencyAccount,
     initialState
@@ -559,6 +569,18 @@ export function AgencyAdminControlView({ accounts, gpmConfigsByAccountId, gpmQue
               <GpmWorkspaceConfigSection
                 configs={gpmConfigsByAccountId?.get(account.id) ?? []}
                 querySetOptions={gpmQuerySetOptions ?? []}
+                domainOptions={gpmDomainOptions ?? []}
+                quickEnrollOwner={{
+                  kind: 'agency',
+                  id: account.id,
+                  label: account.name,
+                  suggestedEmail:
+                    account.users.find((user) =>
+                      ['owner', 'manager'].includes(user.role) && !!user.email
+                    )?.email ??
+                    account.users.find((user) => !!user.email)?.email ??
+                    null,
+                }}
               />
 
               <details className="mt-4">

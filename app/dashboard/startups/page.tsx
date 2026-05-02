@@ -41,10 +41,11 @@ export default async function StartupsAdminPage() {
     const startupData = createStartupAdminData(adminContext.adminDb);
     const gpmData = createGpmAdminData(adminContext.adminDb);
 
-    const [workspaces, gpmConfigs, querySetOptions] = await Promise.all([
+    const [workspaces, gpmConfigs, querySetOptions, domainOptions] = await Promise.all([
       startupData.getWorkspaces(),
       gpmData.listAllConfigs().catch(() => [] as GpmConfigAdminRow[]),
       gpmData.getQuerySetOptions().catch(() => []),
+      gpmData.getDomainOptions().catch(() => []),
     ]);
 
     const gpmConfigsByWorkspaceId = new Map<string, GpmConfigAdminRow[]>();
@@ -60,6 +61,7 @@ export default async function StartupsAdminPage() {
         workspaces={workspaces}
         gpmConfigsByWorkspaceId={gpmConfigsByWorkspaceId}
         gpmQuerySetOptions={querySetOptions}
+        gpmDomainOptions={domainOptions}
       />
     );
   } catch (error) {
