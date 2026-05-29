@@ -89,11 +89,13 @@
     "BENCHMARK_SCHEDULE_VERSION": "v1",
 
     // Daily benchmark recap email.
-    // Sent once a day from the worker cron, after the overnight sweep completes.
-    // Recipient + hour (UTC) are configurable; leave _TO empty to disable.
-    // Requires RESEND_API_KEY + RESEND_FROM_EMAIL to actually send.
+    // Fires once a day at HOUR_LOCAL in the configured TIMEZONE (DST-aware via
+    // Intl.DateTimeFormat). The worker cron triggers cover both EST and EDT
+    // UTC offsets for America/Toronto. Leave _TO empty to disable. Requires
+    // RESEND_API_KEY + RESEND_FROM_EMAIL to actually send.
     "BENCHMARK_DAILY_RECAP_TO": "uzzielt@techehealthservices.com",
-    "BENCHMARK_DAILY_RECAP_HOUR_UTC": "0",
+    "BENCHMARK_DAILY_RECAP_HOUR_LOCAL": "19",
+    "BENCHMARK_DAILY_RECAP_TIMEZONE": "America/Toronto",
 
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
     "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
@@ -265,7 +267,12 @@
   },
 
   "triggers": {
-    "crons": ["0 0,12 * * *"]
+    // 00:00, 12:00, and 23:00 UTC. The 23:00 tick covers 7pm Toronto in EDT
+    // (summer); the 00:00 tick covers 7pm Toronto in EST (winter). The recap
+    // dispatch in workers/cloudflare-entry.ts gates on Toronto local hour so
+    // exactly one recap fires per day regardless of DST. Benchmark schedule
+    // sweeps dedup via schedule_run_key, so the extra tick is a no-op for them.
+    "crons": ["0 0,12,23 * * *"]
   },
 
   "observability": {

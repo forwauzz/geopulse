@@ -212,18 +212,34 @@ export default {
         });
       }
 
-      // Daily benchmark recap email — gated to a single cron tick per day so the
-      // noon and midnight runs don't both fire. Skipped when no recipient or
-      // Resend key is configured.
+      // Daily benchmark recap email — gated so exactly one recap fires per day at
+      // HOUR_LOCAL in the configured TIMEZONE (DST-aware). The cron schedule
+      // covers all UTC offsets that map to that local hour year-round; this gate
+      // picks the right one. Skipped when no recipient or Resend key is configured.
       const envRecord = env as unknown as Record<string, string | undefined>;
       const recapTo = envRecord['BENCHMARK_DAILY_RECAP_TO'];
-      const recapHourRaw = envRecord['BENCHMARK_DAILY_RECAP_HOUR_UTC'];
-      const recapHour = Number.parseInt(recapHourRaw ?? '0', 10);
-      const recapHourGate = Number.isFinite(recapHour) ? recapHour : 0;
+      const recapHourRaw = envRecord['BENCHMARK_DAILY_RECAP_HOUR_LOCAL'];
+      const recapHour = Number.parseInt(recapHourRaw ?? '19', 10);
+      const recapHourGate = Number.isFinite(recapHour) ? recapHour : 19;
+      const recapTimezone = envRecord['BENCHMARK_DAILY_RECAP_TIMEZONE'] ?? 'America/Toronto';
       const recapVertical = envRecord['BENCHMARK_SCHEDULE_VERTICAL'] ?? 'marketing_firms';
-      const nowUtcHour = new Date().getUTCHours();
 
-      if (recapTo && resendKey && resendFrom && nowUtcHour === recapHourGate) {
+      let currentLocalHour: number;
+      try {
+        currentLocalHour = Number.parseInt(
+          new Intl.DateTimeFormat('en-US', {
+            timeZone: recapTimezone,
+            hour: 'numeric',
+            hour12: false,
+          }).format(new Date()),
+          10
+        );
+      } catch {
+        // Bad timezone string — fall back to UTC so we still fire predictably.
+        currentLocalHour = new Date().getUTCHours();
+      }
+
+      if (recapTo && resendKey && resendFrom && currentLocalHour === recapHourGate) {
         try {
           const supabase = createClient(supaUrl, supaKey, {
             auth: { persistSession: false, autoRefreshToken: false },
@@ -245,6 +261,8 @@ export default {
             structuredLog('benchmark_daily_recap_sent', {
               to: recapTo,
               vertical: recapVertical,
+              timezone: recapTimezone,
+              local_hour: currentLocalHour,
               completed_runs: recap.runStatus.completed,
               failed_runs: recap.runStatus.failed,
               total_citations: recap.totalCitations,
