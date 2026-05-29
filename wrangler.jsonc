@@ -65,8 +65,16 @@
     "STARTUP_SLACK_APP_INSTALL_URL": "https://slack.com/oauth/v2/authorize",
     "STARTUP_SLACK_CLIENT_ID": "10736716341730.10845478441990",
 
+    // Vertical allowlist — benchmarking system is permitted to run these verticals
+    // only. Currently law_firms (the live production lane) + marketing_firms
+    // (seeded but not yet cut over). Set "*" to disable the lock.
+    "BENCHMARK_VERTICAL_ALLOWLIST": "marketing_firms,law_firms",
+
     // Recurring benchmark lane config.
-    // Keep disabled here until production values are finalized.
+    // Currently pointing at the law_firms query set (live production). To cut
+    // over to marketing_firms: seed the marketing query set
+    //   npm run benchmark:seed:query-set -- --fixture eval/fixtures/benchmark-marketing-firms-v1-query-set.json
+    // copy the printed UUID into QUERY_SET_ID below, and flip VERTICAL to "marketing_firms".
     "BENCHMARK_SCHEDULE_ENABLED": "true",
     "BENCHMARK_SCHEDULE_QUERY_SET_ID": "9910b5ac-ade6-42be-9dca-9b85c04e4469",
     "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite",
@@ -80,6 +88,13 @@
     "BENCHMARK_SCHEDULE_WINDOW_HOURS": "12",
     "BENCHMARK_SCHEDULE_VERSION": "v1",
 
+    // Daily benchmark recap email.
+    // Sent once a day from the worker cron, after the overnight sweep completes.
+    // Recipient + hour (UTC) are configurable; leave _TO empty to disable.
+    // Requires RESEND_API_KEY + RESEND_FROM_EMAIL to actually send.
+    "BENCHMARK_DAILY_RECAP_TO": "uzzielt@techehealthservices.com",
+    "BENCHMARK_DAILY_RECAP_HOUR_UTC": "0",
+
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
     "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
     "DEEP_AUDIT_BROWSER_RENDER_MODE": "auto",
@@ -91,10 +106,19 @@
     // GEO Performance Monitoring scheduled sweep.
     // Runtime defaults live here; provider API keys remain secrets.
     "GPM_SCHEDULE_ENABLED": "true",
+    // Platform feature flag: only these platforms run. Gemini is the only provider
+    // with a key today. To enable the others, add OPENAI_API_KEY / PERPLEXITY_API_KEY,
+    // set BENCHMARK_EXECUTION_PROVIDER=multi, then set this to "gemini,chatgpt,perplexity".
+    "GPM_ENABLED_PLATFORMS": "gemini",
     "GPM_CHATGPT_MODEL_ID": "gpt-4o-mini",
-    "GPM_GEMINI_MODEL_ID": "gemini-2.0-flash",
+    // Must be one of BENCHMARK_EXECUTION_ENABLED_MODELS or the Gemini adapter skips the
+    // run as "model lane not enabled". Aligned with the benchmark lane model.
+    "GPM_GEMINI_MODEL_ID": "gemini-2.5-flash-lite",
     "GPM_PERPLEXITY_MODEL_ID": "llama-3.1-sonar-small-128k-online",
     "GPM_NARRATIVE_MODEL": "claude-haiku-4-5-20251001",
+    // Gemini fallback for the report narrative when no ANTHROPIC_API_KEY is set.
+    "GPM_NARRATIVE_GEMINI_MODEL": "gemini-2.5-flash-lite",
+    "GPM_PROMPT_BUILDER_MODEL": "claude-haiku-4-5-20251001",
     "GPM_REPORT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
 
     // Optional destination/provider defaults.
