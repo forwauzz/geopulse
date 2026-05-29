@@ -8,7 +8,7 @@ import { dispatchQueueBatch, type ReportQueueBatch } from './queue/report-queue-
 import { dispatchDistributionQueueBatch } from './queue/distribution-job-queue-consumer';
 import { sendWeeklyReport } from '../services/marketing-attribution/weekly-report';
 import { createClient } from '@supabase/supabase-js';
-import { structuredError } from '../lib/server/structured-log';
+import { structuredError, structuredLog } from '../lib/server/structured-log';
 import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
 import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
 import { runScheduledDistributionDispatch } from '../lib/server/distribution-job-schedule';
@@ -16,6 +16,10 @@ import { runScheduledStartupExecutionDispatch } from '../lib/server/startup-exec
 import { runScheduledStartupSlackAutoPost } from '../lib/server/startup-slack-schedule';
 import { runGpmScheduledSweep } from '../lib/server/geo-performance-schedule';
 import { buildGpmEntitlementsMap } from '../lib/server/geo-performance-entitlements';
+import {
+  fetchAndBuildBenchmarkDailyRecap,
+  sendBenchmarkDailyRecap,
+} from '../lib/server/benchmark-daily-recap';
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -178,8 +182,14 @@ export default {
           GPM_CHATGPT_MODEL_ID:    envRecord['GPM_CHATGPT_MODEL_ID'],
           GPM_GEMINI_MODEL_ID:     envRecord['GPM_GEMINI_MODEL_ID'],
           GPM_PERPLEXITY_MODEL_ID: envRecord['GPM_PERPLEXITY_MODEL_ID'],
+          GPM_ENABLED_PLATFORMS:   envRecord['GPM_ENABLED_PLATFORMS'],
           ANTHROPIC_API_KEY:       envRecord['ANTHROPIC_API_KEY'],
           GPM_NARRATIVE_MODEL:     envRecord['GPM_NARRATIVE_MODEL'],
+          // Gemini narrative fallback (used when no ANTHROPIC_API_KEY). Falls back to
+          // the benchmark Gemini key so the narrative works with zero extra config.
+          GEMINI_API_KEY:          envRecord['GEMINI_API_KEY'] ?? envRecord['BENCHMARK_EXECUTION_API_KEY'],
+          GPM_NARRATIVE_GEMINI_MODEL: envRecord['GPM_NARRATIVE_GEMINI_MODEL'],
+          GEMINI_ENDPOINT:         envRecord['GEMINI_ENDPOINT'],
           GPM_REPORT_R2_PUBLIC_BASE: envRecord['GPM_REPORT_R2_PUBLIC_BASE'],
           RESEND_API_KEY:          resendKey || undefined,
           RESEND_FROM_EMAIL:       resendFrom || undefined,
@@ -200,6 +210,52 @@ export default {
         structuredError('gpm_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
+      }
+
+      // Daily benchmark recap email — gated to a single cron tick per day so the
+      // noon and midnight runs don't both fire. Skipped when no recipient or
+      // Resend key is configured.
+      const envRecord = env as unknown as Record<string, string | undefined>;
+      const recapTo = envRecord['BENCHMARK_DAILY_RECAP_TO'];
+      const recapHourRaw = envRecord['BENCHMARK_DAILY_RECAP_HOUR_UTC'];
+      const recapHour = Number.parseInt(recapHourRaw ?? '0', 10);
+      const recapHourGate = Number.isFinite(recapHour) ? recapHour : 0;
+      const recapVertical = envRecord['BENCHMARK_SCHEDULE_VERTICAL'] ?? 'marketing_firms';
+      const nowUtcHour = new Date().getUTCHours();
+
+      if (recapTo && resendKey && resendFrom && nowUtcHour === recapHourGate) {
+        try {
+          const supabase = createClient(supaUrl, supaKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const recap = await fetchAndBuildBenchmarkDailyRecap({
+            supabase,
+            vertical: recapVertical,
+            now: new Date(),
+          });
+          const result = await sendBenchmarkDailyRecap({
+            recap,
+            resendApiKey: resendKey,
+            from: resendFrom,
+            to: recapTo,
+          });
+          if (!result.ok) {
+            structuredError('benchmark_daily_recap_send_failed', { reason: result.reason });
+          } else {
+            structuredLog('benchmark_daily_recap_sent', {
+              to: recapTo,
+              vertical: recapVertical,
+              completed_runs: recap.runStatus.completed,
+              failed_runs: recap.runStatus.failed,
+              total_citations: recap.totalCitations,
+              cited_domains: recap.distinctDomainsCited,
+            });
+          }
+        } catch (err) {
+          structuredError('benchmark_daily_recap_error', {
+            error: err instanceof Error ? err.message : 'unknown',
+          });
+        }
       }
     }
   },
