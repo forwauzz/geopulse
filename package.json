@@ -41,6 +41,8 @@
     "benchmark:schedule:recurrence": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-recurrence.ts",
     "benchmark:run:diagnostic": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-run-diagnostic.ts",
     "benchmark:run": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-runner.ts",
+    "benchmark:recap:send": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-recap-send.ts",
+    "benchmark:diagnose:failures": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-diagnose-failures.ts",
     "report:layer-one:rewrite-prompt": "node ./node_modules/tsx/dist/cli.mjs scripts/layer-one-report-rewrite-prompt.ts"
   },
   "dependencies": {
