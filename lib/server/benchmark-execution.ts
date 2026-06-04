@@ -103,6 +103,14 @@ export class StubBenchmarkExecutionAdapter implements BenchmarkExecutionAdapter 
 
 type FetchLike = typeof fetch;
 
+// Cloudflare Workers' global `fetch` throws "Illegal invocation" when called
+// with a `this` other than `globalThis`. Assigning the bare global to a class
+// field (`private fetchImpl = fetch`) and calling `this.fetchImpl(...)` binds
+// `this` to the class instance and triggers that error. Wrapping in a plain
+// arrow keeps the call as a free invocation, so `fetch` sees its expected
+// `globalThis`. See https://developers.cloudflare.com/workers/observability/errors/#illegal-invocation-errors
+const defaultFetch: FetchLike = (input, init) => fetch(input, init);
+
 async function readResponseTextSafely(response: Response): Promise<string | null> {
   try {
     const text = await response.text();
@@ -200,7 +208,7 @@ export function resolveBenchmarkExecutionConfig(
 export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapter {
   constructor(
     private readonly config: BenchmarkExecutionConfig,
-    private readonly fetchImpl: FetchLike = fetch
+    private readonly fetchImpl: FetchLike = defaultFetch
   ) {}
 
   async executeQuery(
@@ -416,7 +424,7 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
   constructor(
     providerTag: 'openai' | 'perplexity',
     private readonly config: BenchmarkExecutionConfig,
-    private readonly fetchImpl: FetchLike = fetch
+    private readonly fetchImpl: FetchLike = defaultFetch
   ) {
     this.providerTag = providerTag;
   }

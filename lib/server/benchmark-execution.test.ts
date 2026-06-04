@@ -419,6 +419,50 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
     expect(result.responseMetadata['retryable']).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  // Regression: the prior `fetchImpl: FetchLike = fetch` default bound `this`
+  // to the adapter instance when called via `this.fetchImpl(...)`, which
+  // Cloudflare Workers reject with "Illegal invocation". The default must
+  // wrap fetch so it is called as a free function (this === globalThis).
+  it('default fetchImpl does not bind `this` to the adapter instance', async () => {
+    const observedThis: unknown[] = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = function patchedFetch(this: unknown) {
+      observedThis.push(this);
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        )
+      );
+    } as unknown as typeof fetch;
+
+    try {
+      const adapter = new GeminiBenchmarkExecutionAdapter({
+        provider: 'gemini',
+        apiKey: 'benchmark-key',
+        model: 'gemini-2.5-flash-lite',
+        enabledModels: ['gemini-2.5-flash-lite'],
+        endpoint: 'https://example.test/models',
+      });
+
+      await adapter.executeQuery(sampleQuery, {
+        ...sampleContext,
+        modelId: 'gemini-2.5-flash-lite',
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(observedThis.length).toBeGreaterThan(0);
+    for (const t of observedThis) {
+      // In Cloudflare Workers, `this` must be globalThis (or undefined in
+      // strict mode) for fetch to work. It must NOT be the adapter instance.
+      expect(t).not.toBeInstanceOf(GeminiBenchmarkExecutionAdapter);
+    }
+  });
 });
 
 // ─── OpenAiCompatibleBenchmarkExecutionAdapter ──────────────────────────────
