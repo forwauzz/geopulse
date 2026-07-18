@@ -8,7 +8,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
-import { type DeepAuditCheckoutMode } from '@/lib/shared/deep-audit-checkout-mode';
+import { isLegacyPaidEnabled, type DeepAuditCheckoutMode } from '@/lib/shared/deep-audit-checkout-mode';
 
 export const runtime = 'nodejs';
 
@@ -124,11 +124,13 @@ export async function GET(
           agencyClientId: scan.agency_client_id ?? null,
           viewerEmail: user.email ?? null,
           checkoutMode: (
-            canAccessAsStartupMember
-              ? 'startup_bypass'
-              : canAccessAsAgency && !agencyAccess.paymentRequired
-                ? 'agency_bypass'
-                : 'stripe'
+            !isLegacyPaidEnabled(env.LEGACY_PAID_ENABLED)
+              ? 'free'
+              : canAccessAsStartupMember
+                ? 'startup_bypass'
+                : canAccessAsAgency && !agencyAccess.paymentRequired
+                  ? 'agency_bypass'
+                  : 'stripe'
           ) as DeepAuditCheckoutMode,
           deepAuditAvailable: canAccessAsAgency ? agencyEntitlements.deepAuditEnabled : true,
         });
@@ -194,6 +196,7 @@ export async function GET(
     agencyAccountId: data.agencyAccountId,
     agencyClientId: data.agencyClientId,
     viewerEmail: data.viewerEmail,
+    checkoutMode: (isLegacyPaidEnabled(env.LEGACY_PAID_ENABLED) ? 'stripe' : 'free') as DeepAuditCheckoutMode,
     deepAuditAvailable: true,
   });
 }
