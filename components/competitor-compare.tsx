@@ -106,7 +106,7 @@ export function CompetitorCompare({
   return (
     <div className="mt-4 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 shadow-float md:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-headline text-lg text-on-background">How you stack up against competitors</h3>
+        <h3 className="font-sans text-lg font-black uppercase tracking-tight text-on-background">How you stack up against competitors</h3>
         <span className="font-label text-[0.62rem] uppercase tracking-[0.13em] text-on-surface-variant">
           {competitors.length > 0 ? 'head-to-head' : 'add a competitor'}
         </span>
@@ -162,7 +162,7 @@ export function CompetitorCompare({
                         {val == null ? (
                           <span className="text-outline-variant">—</span>
                         ) : (
-                          <span className={`font-headline text-xl ${best != null && val === best ? 'font-semibold text-green-700 dark:text-green-300' : 'text-on-background'}`}>
+                          <span className={`font-sans text-xl font-black tabular-nums ${best != null && val === best ? 'text-green-700 dark:text-green-300' : 'text-on-background'}`}>
                             {val}
                           </span>
                         )}

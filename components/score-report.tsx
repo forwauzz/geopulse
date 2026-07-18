@@ -168,7 +168,7 @@ export function ScoreReport({
         <p className="font-label text-xs font-semibold uppercase tracking-[0.18em] text-on-surface-variant">
           AI Visibility Scorecard
         </p>
-        <h1 className="mt-2 font-headline text-4xl font-medium tracking-tight text-on-background md:text-5xl">
+        <h1 className="mt-2 font-sans text-5xl font-black uppercase leading-[0.92] tracking-tighter text-on-background md:text-7xl">
           {domain}
         </h1>
         <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 font-sans text-sm text-on-surface-variant">
@@ -189,7 +189,7 @@ export function ScoreReport({
                   href={`#${s.id}`}
                   className="flex items-center gap-3 rounded-lg px-2.5 py-2 font-sans text-sm font-medium text-on-surface-variant transition hover:bg-surface-container-low hover:text-on-background"
                 >
-                  <span className="w-5 text-center font-headline text-gold tabular-nums">{idx + 1}</span>
+                  <span className="w-5 text-center font-sans font-black text-gold tabular-nums">{idx + 1}</span>
                   {s.label}
                 </a>
               </li>
@@ -213,7 +213,7 @@ export function ScoreReport({
                       />
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="font-headline text-6xl leading-none tracking-tight text-on-background tabular-nums">{score}</span>
+                      <span className="font-sans text-7xl font-black leading-none tracking-tighter text-on-background tabular-nums">{score}</span>
                       <span className="mt-1 font-label text-[0.62rem] uppercase tracking-[0.16em] text-on-surface-variant">out of 100</span>
                     </div>
                   </div>
@@ -224,8 +224,8 @@ export function ScoreReport({
                       Grade {letterGrade}
                     </span>
                   </div>
-                  <h3 className={`font-headline text-2xl font-medium leading-tight ${toneText(v.tone)}`}>{v.headline}</h3>
-                  <p className="font-headline text-lg leading-relaxed text-on-background">{v.lede}</p>
+                  <h3 className={`font-sans text-2xl font-black uppercase leading-[1.05] tracking-tight ${toneText(v.tone)}`}>{v.headline}</h3>
+                  <p className="font-sans text-base leading-relaxed text-on-surface-variant">{v.lede}</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 border-t border-outline-variant/25">
@@ -254,7 +254,7 @@ export function ScoreReport({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline justify-between gap-3">
                           <span className="font-sans font-semibold text-on-background">{p.label}</span>
-                          <span className={`font-headline text-2xl tabular-nums ${toneText(tone)}`}>{c.score}</span>
+                          <span className={`font-sans text-3xl font-black tabular-nums ${toneText(tone)}`}>{c.score}</span>
                         </div>
                         <p className="mt-0.5 font-sans text-xs text-on-surface-variant">{p.blurb}</p>
                         <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-container">
@@ -307,7 +307,7 @@ export function ScoreReport({
                 return (
                   <div key={i.checkId} className="rounded-xl border border-outline-variant/25 bg-surface-container-lowest p-4 shadow-float md:p-5">
                     <div className="flex gap-4">
-                      <span className="font-headline text-2xl leading-none text-outline-variant/50 tabular-nums">{idx + 1}</span>
+                      <span className="font-sans font-black text-2xl leading-none text-outline-variant/50 tabular-nums">{idx + 1}</span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-sans font-semibold text-on-background">{isUnconf ? c.title : c.problem}</span>
@@ -339,7 +339,7 @@ export function ScoreReport({
             {planPotential > 0 ? (
               <div className="mb-5 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 shadow-float md:p-6">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <p className="font-headline text-lg text-on-background">
+                  <p className="font-sans text-lg font-semibold text-on-background">
                     Finish your plan and you could reach{' '}
                     <span className="font-medium text-green-700 dark:text-green-300">{potential}</span> out of 100
                   </p>
@@ -373,7 +373,7 @@ export function ScoreReport({
                 const pts = potentialPts(i);
                 return (
                   <li key={i.checkId} className="flex items-center gap-4 border-b border-outline-variant/20 px-5 py-4 last:border-b-0">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-headline text-sm text-on-primary">{idx + 1}</span>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary font-sans font-black text-sm text-on-primary">{idx + 1}</span>
                     <div className="min-w-0 flex-1">
                       <p className="font-sans text-sm font-semibold text-on-background">{c.action}</p>
                     </div>
@@ -399,7 +399,7 @@ export function ScoreReport({
                   Free &amp; open source
                 </span>
               )}
-              <h3 className="mt-3 font-headline text-2xl font-medium text-on-background">Get the full site report</h3>
+              <h3 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background">Get the full site report</h3>
               <p className="mt-2 max-w-prose font-sans text-sm text-on-surface-variant">
                 This scan looked at one page. The full report checks your whole site, scores all five
                 areas — including <span className="font-semibold text-on-background">showing up in answers</span> and{' '}
@@ -438,9 +438,9 @@ function Step({ n, id, title, blurb, children }: { n: number; id: string; title:
   return (
     <section id={id} className="mb-12 scroll-mt-6">
       <div className="mb-5 flex items-baseline gap-3.5">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold font-headline text-sm text-gold tabular-nums">{n}</span>
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-gold font-sans font-black text-sm text-gold tabular-nums">{n}</span>
         <div>
-          <h2 className="font-headline text-2xl font-medium text-on-background">{title}</h2>
+          <h2 className="font-sans text-2xl font-black uppercase tracking-tight text-on-background">{title}</h2>
           <p className="mt-0.5 font-sans text-sm text-on-surface-variant">{blurb}</p>
         </div>
       </div>
@@ -467,7 +467,7 @@ export function PeerStrip({ score, benchmark }: { score: number; benchmark: Scor
   return (
     <div className="mt-4 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 shadow-float md:p-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="font-headline text-lg text-on-background">{headline}</p>
+        <p className="font-sans text-lg font-semibold text-on-background">{headline}</p>
         <span className="font-label text-[0.62rem] uppercase tracking-[0.13em] text-on-surface-variant">
           vs {sampleSize} sites scanned
         </span>
@@ -501,7 +501,7 @@ function Stat({ k, v, sub, border, tone = 'default' }: { k: string; v: string; s
   return (
     <div className={`px-5 py-4 ${border ? 'border-x border-outline-variant/25' : ''}`}>
       <p className="font-label text-[0.62rem] uppercase tracking-[0.13em] text-on-surface-variant">{k}</p>
-      <p className={`mt-1 font-headline text-2xl tabular-nums ${vColor}`}>
+      <p className={`mt-1 font-sans font-black text-2xl tabular-nums ${vColor}`}>
         {v}
         {sub ? <span className="ml-1 font-sans text-sm font-medium text-on-surface-variant">{sub}</span> : null}
       </p>
