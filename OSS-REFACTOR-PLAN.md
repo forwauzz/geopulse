@@ -130,7 +130,12 @@ Steps 1-3 (auto detect/confirm/discover) remain the enhancement, gated on **Gemi
 - [ ] Deep-audit report presentation (per principle 2): technical, per-page, copy-paste fixes.
       Builds on `workers/report/build-deep-audit-markdown.ts` + `app/results/[id]/report`.
 
-### Loop 3 — De-paywall behind a flag (per principle 3)
+### Loop 3 — De-paywall behind a flag (per principle 3)  ✅ built (PR #8)
+- [x] `LEGACY_PAID_ENABLED` flag (cf-env + wrangler var + `isLegacyPaidEnabled` + `'free'` mode).
+- [x] `/api/checkout` free branch (email + amount 0 → direct queue, no Stripe); Stripe path flagged `// LEGACY-PAID`.
+- [x] `checkoutMode='free'` resolution (auth + public); free-mode UI (email field, "Run full audit — free", "Free & open source" marker).
+- [x] wrangler.jsonc set `"true"` so getgeopulse stays paid; verified both modes locally via API.
+
 **Not a deletion — a toggle.** Default OSS behavior (`LEGACY_PAID_ENABLED=false`):
 anyone can create access and get full reports easily, free. When paid is later activated
 (`LEGACY_PAID_ENABLED=true`), users are steered to Stripe. Flag every paid surface
