@@ -31,6 +31,16 @@ Working plan for the OSS version. Source of truth for the loop-based workflow.
 - **UI:** where a paywall/upsell still renders, show a small muted marker
   ("Legacy — being removed") so it's never mistaken for the OSS path.
 
+## Design direction (inspiration: flightstory.com)
+Adopt the **Flight Story** aesthetic as the north-star look (captured 2026-07-18):
+- **Stark monochrome** — pure black on white, minimal color; semantic color used sparingly.
+- **Oversized UPPERCASE grotesk display type** — Neue Haas Grotesk Display / Helvetica-lineage
+  (Inter Tight / Neue Montreal as free substitutes), weight ~600, hero sizes ~100px+.
+- **Big statement numbers** (e.g. the score, "$400 MIL"-style stats), editorial/agency confidence,
+  generous negative space, minimal ornamentation.
+- This is a deliberate departure from the current soft Material-3 slate-blue theme. Treat as a
+  future **redesign pass** on the scorecard + marketing pages, not a Loop-1 change.
+
 ## Loops (roadmap)
 
 ### Loop 1 — Scorecard + stepped results  ✅ built (preview), ⏳ marketing-tone pass
@@ -137,6 +147,41 @@ Legacy paid surface inventory (starting point):
 - Backend: deep-audit queue trigger currently fired by the Stripe webhook → must fire
   directly from a free "Run full audit" action instead (`workers/queue`, `workers/report`)
 - Deps/env: `stripe` package, `STRIPE_*` env vars
+
+## Loop 5 — Admin-only autonomy experiments (Uzziel only)
+Two autonomous systems, gated to Uzziel's account (admin-only). The "no human in the loop"
+setting lives on his **profile** (a per-user autonomy flag), so the capability can later be
+offered to other users who opt in. These are **experiments** — keep them flexible, iterate.
+
+### 5a — Daily self-improvement loop (getgeopulse.com audits itself → auto-ships)
+Fully autonomous, **no human gate**:
+1. **Cron (daily)** → run an audit on `getgeopulse.com` (free scan or deep audit).
+2. **Email** the report to Uzziel (Resend is already wired — `RESEND_*`).
+3. Hand the report to a **local autonomous coding agent** (headless Claude Code / cron agent)
+   that: reads the report → drafts a plan → implements on a branch → **reviews, deploys, and
+   merges** — reusing the `/ship-pr` backbone but with the human confirmations removed.
+- Architecture options: the `schedule` skill / a cron cloud agent / a GitHub Action invoking a
+  headless agent. `/ship-pr` (`.claude/commands/ship-pr.md`) is the review→deploy→merge spine.
+- **Autonomy ≠ no safety.** Since a human won't gate it, the loop MUST self-gate: type-check +
+  tests + production build must pass before deploy; auto-rollback (`wrangler rollback`) if live
+  verification fails; bounded scope per run (small diffs); and a kill switch. "No human in the
+  loop" is the goal; automated safety gates are how it stays safe. (Flag for Uzziel: an
+  unattended agent with prod deploy + merge rights is powerful and genuinely risky — these gates
+  are non-negotiable, and a first phase that opens a PR + auto-merges only on green checks is the
+  safer on-ramp before true zero-touch.)
+
+### 5b — Autonomous marketing / visibility experiment (no involvement)
+Continuously grow GEO-Pulse's visibility with zero user involvement. Experimental / not rigid.
+- **Reuse existing infra:** the repo already has a **distribution engine** (`DISTRIBUTION_ENGINE_*`,
+  `auto_poster/`) with **X + LinkedIn OAuth** and **Ghost blog** admin — plus the benchmark/GPM
+  system for measuring AI-answer visibility. That's the backbone.
+- **Candidate tactics:** auto-generate GEO-optimized content (blog/llms.txt/FAQ), schedule social
+  posts, publish comparison/benchmark pieces, and measure lift via the GPM subsystem — closing the
+  loop (measure visibility → generate content to improve it → re-measure).
+- Uzziel will grant whatever MCPs/tools are needed (analytics, social, SEO). 
+- **Guardrails even in an experiment:** it publishes to public channels on his behalf, so keep
+  rate/quality caps and a review of the *first* batch before it runs unattended; avoid spammy
+  volume that would harm the brand.
 
 ## Environment / access state
 - Repo: `C:\Dev\geopulse\geopulse` (GitHub `forwauzz/geopulse`).
