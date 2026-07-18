@@ -372,9 +372,15 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
 
           {showCheckout ? (
             <section id="full-audit-checkout" className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-container-high px-2.5 py-1 font-label text-[0.62rem] font-bold uppercase tracking-widest text-on-surface-variant">
-                <span className="material-symbols-outlined text-sm">history</span>Legacy — paid (Stripe)
-              </span>
+              {data.checkoutMode === 'free' ? (
+                <span className="inline-block rounded-md bg-green-100 px-2.5 py-1 font-label text-[0.62rem] font-bold uppercase tracking-widest text-green-800 dark:bg-green-500/15 dark:text-green-200">
+                  Free &amp; open source
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-container-high px-2.5 py-1 font-label text-[0.62rem] font-bold uppercase tracking-widest text-on-surface-variant">
+                  <span className="material-symbols-outlined text-sm">history</span>Legacy — paid (Stripe)
+                </span>
+              )}
               <h2 className="mt-3 font-headline text-2xl font-medium text-on-background">
                 Get the full report
               </h2>

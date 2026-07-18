@@ -14,6 +14,7 @@ import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { structuredLog } from '@/lib/server/structured-log';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 import { buildReportUrl } from '@/lib/shared/report-route';
+import { isLegacyPaidEnabled } from '@/lib/shared/deep-audit-checkout-mode';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +22,8 @@ const bodySchema = z.object({
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1),
   anonymous_id: z.string().max(128).nullish(),
+  // Free (OSS) mode: delivery email for anonymous users (logged-in users use their session email).
+  email: z.string().email().max(320).nullish(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -116,6 +119,45 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     sessionUserId = null;
     sessionUserEmail = null;
+  }
+
+  // OSS de-paywall: when the paywall is OFF (default), the full audit is FREE for everyone —
+  // queue it directly (same path as an entitlement bypass), no Stripe. Needs a delivery email:
+  // the session email for logged-in users, otherwise one supplied in the request body.
+  if (!isLegacyPaidEnabled(env.LEGACY_PAID_ENABLED)) {
+    const freeEmail = sessionUserEmail ?? parsed.data.email ?? null;
+    if (!freeEmail) {
+      return Response.json(
+        { error: { code: 'email_required', message: 'Enter an email so we can send your report.' } },
+        { status: 400 }
+      );
+    }
+    structuredLog('deep_audit_checkout_free_started', { scanId, userId: sessionUserId }, 'info');
+    const result = await handleCheckoutSessionCompleted(
+      supabase as any,
+      {
+        id: `free:${scanId}`,
+        metadata: { scan_id: scanId },
+        customer_email: freeEmail,
+        customer_details: { email: freeEmail },
+        amount_total: 0,
+        currency: 'usd',
+      } as any,
+      `free-completed:${scanId}`,
+      env
+    );
+    if (!result.ok) {
+      return Response.json(
+        { error: { code: result.reason, message: result.reason } },
+        { status: result.status }
+      );
+    }
+    await emitMarketingEvent(supabase, 'checkout_started', {
+      anonymous_id: parsed.data.anonymous_id,
+      scan_id: scanId,
+      metadata: { mode: 'free' },
+    });
+    return Response.json({ url: buildReportUrl(baseUrl, scanId) });
   }
 
   if (sessionUserId && sessionUserEmail && scan.agency_account_id) {
@@ -228,6 +270,8 @@ export async function POST(request: Request): Promise<Response> {
     }
   }
 
+  // LEGACY-PAID: everything below is the paid Stripe checkout path, reached only when
+  // LEGACY_PAID_ENABLED="true". Removed entirely in a fully free OSS build.
   if (!env.STRIPE_SECRET_KEY || !env.STRIPE_PRICE_ID_DEEP_AUDIT) {
     return Response.json(
       { error: { code: 'server_misconfigured', message: 'Stripe is not configured' } },

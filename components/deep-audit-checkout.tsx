@@ -23,6 +23,9 @@ function turnstileUserMessage(serverMessage: string): string {
 }
 
 function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
+  if (mode === 'free') {
+    return 'Run the full multi-page audit — free. Enter your email and we’ll send the report and unlock it right here.';
+  }
   if (mode === 'startup_bypass') {
     return 'Run the expanded multi-page audit for this startup workspace without checkout. GEO-Pulse will queue the full report directly under the current workspace entitlement.';
   }
@@ -34,8 +37,11 @@ function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
 
 export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
   const [token, setToken] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const isFree = mode === 'free';
+  const isDirect = mode === 'agency_bypass' || mode === 'startup_bypass' || mode === 'free';
   const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
   const submittingRef = useRef(false);
   const router = useRouter();
@@ -65,6 +71,7 @@ export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
           scanId,
           turnstileToken: token,
           anonymous_id: getAttributionContext().anonymous_id,
+          email: isFree && email.trim() ? email.trim() : undefined,
         }),
       });
       const data: unknown = await res.json().catch(() => null);
@@ -122,6 +129,16 @@ export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
           <span className="material-symbols-outlined text-sm">code</span> Developer-ready fixes
         </li>
       </ul>
+      {isFree ? (
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@company.com — where to send the report"
+          aria-label="Delivery email"
+          className="rounded-xl border border-surface/25 bg-surface px-4 py-3 text-sm text-on-background outline-none transition placeholder:text-on-surface-variant focus:ring-2 focus:ring-surface/40"
+        />
+      ) : null}
       <Turnstile
         ref={turnstileRef}
         siteKey={siteKey}
@@ -136,12 +153,14 @@ export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
         className="rounded-xl bg-surface-container-lowest px-6 py-3.5 text-sm font-semibold text-on-background transition hover:bg-surface disabled:opacity-50"
       >
         {loading
-          ? mode === 'agency_bypass' || mode === 'startup_bypass'
+          ? isDirect
             ? 'Starting audit...'
             : 'Redirecting...'
-          : mode === 'agency_bypass' || mode === 'startup_bypass'
-            ? 'Run full audit now'
-            : 'Continue to full audit - $29'}
+          : isFree
+            ? 'Run full audit — free'
+            : mode === 'agency_bypass' || mode === 'startup_bypass'
+              ? 'Run full audit now'
+              : 'Continue to full audit - $29'}
       </button>
     </div>
   );
