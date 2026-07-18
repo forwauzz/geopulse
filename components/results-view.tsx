@@ -6,6 +6,7 @@ import { DeepAuditCheckout } from '@/components/deep-audit-checkout';
 import { EmailGate } from '@/components/email-gate';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { ScoreReport, type ReportIssue, type ScoreReportData, type ScoreBenchmark } from '@/components/score-report';
+import { CompetitorCompare } from '@/components/competitor-compare';
 import { reportLoadingJourney, resultsLoadingJourney } from '@/lib/client/loading-journeys';
 import {
   normalizeDeepAuditCheckoutMode,
@@ -256,6 +257,20 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     <ScoreReport
       data={reportData}
       benchmark={data.benchmark ?? undefined}
+      competitorSlot={
+        turnstileSiteKey ? (
+          <CompetitorCompare
+            you={{
+              domain: host,
+              score: data.score,
+              letterGrade: data.letterGrade,
+              categoryScores: data.categoryScores,
+            }}
+            siteKey={turnstileSiteKey}
+            benchmark={data.benchmark ?? undefined}
+          />
+        ) : undefined
+      }
       deepAuditSlot={
         <div className="space-y-6">
           {/* Report being generated */}

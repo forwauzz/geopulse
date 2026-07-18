@@ -82,11 +82,39 @@ Working plan for the OSS version. Source of truth for the loop-based workflow.
       copy; hidden under sampleSize 20. Verified live (anthropic 58 → 64th pct). Not yet deployed.
 - [ ] SKIP for now: pillar radar/spider (decorative with 2 empty pillars).
 
-### Loop 4 — Head-to-head competitor comparison
-Add-a-competitor → scan them too → side-by-side scorecard ("you vs them"). Strong
-conversion hook, but its own loop: needs competitor-input UI, a SECOND live scan
-(Gemini cost + service-role key), result pairing, and a compare view. Design the
-Loop-1 scorecard comparison-ready (peer marker above) so this drops in cleanly.
+### Loop 4 — Local competitor comparison (auto-discovery)
+Uzziel's vision (2026-07-18): don't compare vs all scanned sites — compare vs the
+site's ACTUAL local competitors, discovered automatically. Pipeline:
+1. **Detect** business type + city from the scanned page (Gemini / schema.org address).
+2. **Confirm** — show detected industry+city, let the user edit before searching (DECIDED).
+3. **Discover** local competitors via Gemini **Google-Search grounding** (`google_search`
+   tool; verified the API accepts it on `gemini-2.0-flash`). No SERP API wired; grounding
+   is the path.
+4. **Scan** 3-5 competitors (reuse `runFreeScan`) — N scans = real Gemini cost + latency.
+5. **Compare** — "you vs your local competitors," each named + scored.
+
+Decisions: runs as a **separate async action** ("Find my local competitors" button, not
+inline — DECIDED); confirm/edit detection first (DECIDED); keep the generic peer marker as
+a **fallback** when no competitor data (DECIDED).
+
+**v1 SHIPPED (manual entry, 2026-07-18):** `components/competitor-compare.tsx` — user adds a
+competitor URL → scans via existing `/api/scan` → side-by-side table (Overall + 3 pillars,
+winner highlighted per row), up to 3 competitors; generic peer strip is the empty-state
+fallback. Wired via `ScoreReport competitorSlot` (results-view). `PeerStrip` exported for
+reuse. Uses the repo's `NEXT_PUBLIC_E2E_BYPASS_TURNSTILE` dev flag. Verified: table renders
+(dev `?compete=1`), live scan fires + errors surface. **No billing needed** — this skips
+grounded search; a competitor scan = a normal free scan.
+> Caveat: competitor scans inherit the free-scan limitation — bot-protected sites (openai,
+> cloud providers, etc.) return 403 to the plain fetcher. Local SMB competitors (the real use
+> case) rarely block. Deep-audit browser-rendering would fix it later.
+Steps 1-3 (auto detect/confirm/discover) remain the enhancement, gated on **Gemini billing**.
+
+> **PREREQUISITE — Gemini billing.** The current key is free-tier and hit a 429 quota
+> immediately during a single grounded-search test. Grounded discovery + 3-5 competitor
+> scans per request will exhaust free tier instantly. Needs billing enabled on the Gemini
+> key (or a dedicated search API) before this works live or can be tested end-to-end.
+> Note: the existing benchmark/GPM subsystem (`benchmark-execution`, `benchmark-grounding`,
+> `geo-performance-prompt-builder`) is adjacent infra to reuse/learn from.
 
 ### Loop 2 — Full audit report (technical)
 - [ ] Deep-audit report presentation (per principle 2): technical, per-page, copy-paste fixes.

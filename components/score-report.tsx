@@ -129,6 +129,7 @@ export function ScoreReport({
   legacyPaidEnabled = false,
   deepAuditSlot,
   benchmark,
+  competitorSlot,
 }: {
   data: ScoreReportData;
   /** OSS default false = full audit is free for everyone. true = steer to Stripe (legacy paid). */
@@ -138,6 +139,8 @@ export function ScoreReport({
   deepAuditSlot?: React.ReactNode;
   /** Optional peer comparison ("how you stack up vs sites we've scanned"). */
   benchmark?: ScoreBenchmark;
+  /** Optional interactive competitor comparison; replaces the generic peer strip when given. */
+  competitorSlot?: React.ReactNode;
 }) {
   const { score, letterGrade, domain, url, categoryScores, issues } = data;
   const v = marketingVerdict(score);
@@ -231,9 +234,9 @@ export function ScoreReport({
                 <Stat k="Couldn't check" v={`${unconfirmed.length}`} tone="muted" />
               </div>
             </div>
-            {benchmark && benchmark.sampleSize >= 20 ? (
-              <PeerStrip score={score} benchmark={benchmark} tone={v.tone} />
-            ) : null}
+            {competitorSlot ?? (benchmark && benchmark.sampleSize >= 20 ? (
+              <PeerStrip score={score} benchmark={benchmark} />
+            ) : null)}
           </Step>
 
           {/* STEP 2 — PILLARS */}
@@ -446,7 +449,8 @@ function Step({ n, id, title, blurb, children }: { n: number; id: string; title:
   );
 }
 
-function PeerStrip({ score, benchmark, tone }: { score: number; benchmark: ScoreBenchmark; tone: 'good' | 'warn' | 'crit' }) {
+export function PeerStrip({ score, benchmark }: { score: number; benchmark: ScoreBenchmark }) {
+  const tone = scoreTone(score);
   const { percentile, median, top10, sampleSize } = benchmark;
   const beat = Math.max(0, Math.min(100, Math.round(percentile)));
   const headline =
