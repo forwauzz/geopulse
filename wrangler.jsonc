@@ -37,6 +37,9 @@
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
     "NEXT_PUBLIC_APP_URL": "https://getgeopulse.com/",
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACySl18X8egdbFEN",
+    // OSS de-paywall flag. Code default (unset) = full audit FREE for everyone (OSS forks).
+    // getgeopulse.com keeps the paywall by explicitly setting "true" — flip to "false" to go free.
+    "LEGACY_PAID_ENABLED": "true",
     "DISTRIBUTION_ENGINE_UI_ENABLED": "true",
     "DISTRIBUTION_ENGINE_WRITE_ENABLED": "true",
     "DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED": "true",

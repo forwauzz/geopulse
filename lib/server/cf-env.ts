@@ -8,6 +8,8 @@ export type ScanApiEnv = {
   NEXT_PUBLIC_APP_URL: string;
   NEXT_PUBLIC_SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  /** OSS de-paywall flag. "true" = legacy paid (Stripe) mode; anything else = full audit free for all. */
+  LEGACY_PAID_ENABLED: string;
   DISTRIBUTION_ENGINE_UI_ENABLED: string;
   DISTRIBUTION_ENGINE_WRITE_ENABLED: string;
   DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED?: string;
@@ -125,6 +127,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     NEXT_PUBLIC_APP_URL: String(e['NEXT_PUBLIC_APP_URL'] ?? ''),
     NEXT_PUBLIC_SUPABASE_URL: String(e['NEXT_PUBLIC_SUPABASE_URL'] ?? ''),
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
+    LEGACY_PAID_ENABLED: String(e['LEGACY_PAID_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_UI_ENABLED: String(e['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_WRITE_ENABLED: String(e['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED: String(
@@ -170,6 +173,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       NEXT_PUBLIC_SUPABASE_URL: process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
+      LEGACY_PAID_ENABLED: process.env['LEGACY_PAID_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_UI_ENABLED: process.env['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_WRITE_ENABLED: process.env['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED:
