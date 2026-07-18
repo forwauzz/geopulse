@@ -40,6 +40,10 @@ Adopt the **Flight Story** aesthetic as the north-star look (captured 2026-07-18
   generous negative space, minimal ornamentation.
 - This is a deliberate departure from the current soft Material-3 slate-blue theme. Treat as a
   future **redesign pass** on the scorecard + marketing pages, not a Loop-1 change.
+- [x] **Scorecard flightstory pass (PR #9)** — oversized UPPERCASE grotesk headers + bold grotesk
+  numbers (Inter black) replacing Newsreader serif; monochrome-forward, keeps M3 tokens + light/dark.
+  ⚠️ needs a human visual review (automated screenshots were unreliable in the build env).
+- [ ] Marketing pages (home/pricing) flightstory pass — follow-on.
 
 ## Loops (roadmap)
 
