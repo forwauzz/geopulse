@@ -1,4 +1,5 @@
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
+import { getScoreBenchmark } from '@/lib/server/get-score-benchmark';
 import {
   resolveAgencyFeatureEntitlements,
   resolveAgencyScanAccess,
@@ -103,6 +104,7 @@ export async function GET(
         const reportStatus = report?.email_delivered_at ? 'delivered' : hasPaid ? 'generating' : 'none';
 
         const fullResults = scan.full_results_json as { categoryScores?: unknown[] } | null;
+        const benchmark = await getScoreBenchmark(adminDb, scan.score);
         return Response.json({
           scanId: scan.id,
           url: scan.url,
@@ -110,6 +112,8 @@ export async function GET(
           score: scan.score,
           letterGrade: scan.letter_grade,
           topIssues: Array.isArray(scan.issues_json) ? scan.issues_json.slice(0, 3) : [],
+          issues: Array.isArray(scan.issues_json) ? scan.issues_json : [],
+          benchmark,
           categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
           hasPaidReport: hasPaid,
           reportStatus,
@@ -168,6 +172,10 @@ export async function GET(
   }
 
   const { data } = result;
+  const benchmark = await getScoreBenchmark(
+    createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY),
+    data.score
+  );
   return Response.json({
     scanId: data.scanId,
     url: data.url,
@@ -175,6 +183,8 @@ export async function GET(
     score: data.score,
     letterGrade: data.letterGrade,
     topIssues: data.topIssues,
+    issues: data.issues,
+    benchmark,
     categoryScores: data.categoryScores,
     hasPaidReport: data.hasPaidReport,
     reportStatus: data.reportStatus,
