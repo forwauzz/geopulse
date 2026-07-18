@@ -126,9 +126,12 @@ Steps 1-3 (auto detect/confirm/discover) remain the enhancement, gated on **Gemi
 > Note: the existing benchmark/GPM subsystem (`benchmark-execution`, `benchmark-grounding`,
 > `geo-performance-prompt-builder`) is adjacent infra to reuse/learn from.
 
-### Loop 2 — Full audit report (technical)
-- [ ] Deep-audit report presentation (per principle 2): technical, per-page, copy-paste fixes.
-      Builds on `workers/report/build-deep-audit-markdown.ts` + `app/results/[id]/report`.
+### Loop 2 — Full audit report (technical)  ✅ already satisfied (2026-07-18)
+- [x] The deep-audit report is ALREADY technical + per-page: `build-deep-audit-markdown.ts`
+      emits Executive Summary → Priority Action Plan → Detailed Check Reference → Per-page
+      Reference → Technical Appendix; `report-viewer.tsx` renders it with a TOC sidebar,
+      scroll-spy, section chips, PDF/markdown download, resend. No rebuild needed — verified
+      the free-audit path (item 1) feeds the same pipeline (a free audit generated a report).
 
 ### Loop 3 — De-paywall behind a flag (per principle 3)  ✅ built (PR #8)
 - [x] `LEGACY_PAID_ENABLED` flag (cf-env + wrangler var + `isLegacyPaidEnabled` + `'free'` mode).
