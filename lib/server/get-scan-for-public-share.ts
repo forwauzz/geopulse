@@ -12,6 +12,7 @@ export type PublicShareScanRow = {
   score: number | null;
   letterGrade: string | null;
   topIssues: unknown[];
+  issues: unknown[];
   categoryScores: unknown[];
   hasPaidReport: boolean;
   reportStatus: ReportStatus;
@@ -121,6 +122,7 @@ export async function getScanForPublicShare(
       score: data.score,
       letterGrade: data.letter_grade,
       topIssues: extractTopIssues(data.issues_json),
+      issues: Array.isArray(data.issues_json) ? data.issues_json : [],
       categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
       hasPaidReport: hasPaid,
       reportStatus,

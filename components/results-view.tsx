@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { DeepAuditCheckout } from '@/components/deep-audit-checkout';
 import { EmailGate } from '@/components/email-gate';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
-import { ScoreDisplay } from '@/components/score-display';
+import { ScoreReport, type ReportIssue, type ScoreReportData } from '@/components/score-report';
 import { reportLoadingJourney, resultsLoadingJourney } from '@/lib/client/loading-journeys';
 import {
   normalizeDeepAuditCheckoutMode,
@@ -23,6 +23,7 @@ type ScanData = {
   score: number;
   letterGrade: string;
   topIssues: Issue[];
+  issues: ReportIssue[];
   categoryScores: CategoryScoreData[];
   hasPaidReport: boolean;
   reportStatus: ReportStatus;
@@ -34,18 +35,6 @@ type ScanData = {
 
 type Props = { scanId: string; turnstileSiteKey: string; checkoutState?: string | null };
 type LoadError = 'not_found' | 'expired' | 'forbidden' | 'load_failed' | 'network' | null;
-type ResultsActionCard = {
-  eyebrow: string;
-  title: string;
-  body: string;
-  primaryLabel: string;
-  primaryHref?: string;
-  primaryTargetId?: string;
-  secondaryLabel?: string;
-  secondaryHref?: string;
-  secondaryTargetId?: string;
-  note?: string;
-};
 
 function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
   if (mode === 'startup_bypass') {
@@ -64,58 +53,6 @@ function domainFromUrl(url: string): string {
   } catch {
     return url;
   }
-}
-
-function buildActionCard(input: {
-  host: string;
-  reportStatus: ReportStatus;
-  hasPaidReport: boolean;
-  hasDirectReportAccess: boolean;
-  scanId: string;
-  pdfUrl: string | null;
-  markdownUrl: string | null;
-}): ResultsActionCard {
-  if (input.reportStatus === 'delivered') {
-    return {
-      eyebrow: 'Step 4',
-      title: 'Your report is ready',
-      body: input.hasDirectReportAccess
-        ? 'Open the interactive report, download the PDF, or sign in with the checkout email if you want it saved in your dashboard.'
-        : 'Your report was delivered to the Stripe checkout email. Sign in with that same email if you want to recover it in your dashboard later.',
-      primaryLabel: input.markdownUrl ? 'Open report now' : input.pdfUrl ? 'Download PDF' : 'Open dashboard',
-      primaryHref: input.markdownUrl ? buildReportPath(input.scanId) : input.pdfUrl ?? '/dashboard',
-      secondaryLabel: 'Sign in to dashboard',
-      secondaryHref: '/login?next=/dashboard',
-      note: 'Delivery email remains the source of truth for the paid report, but the same checkout email can also unlock dashboard recovery.',
-    };
-  }
-
-  if (input.reportStatus === 'generating') {
-    return {
-      eyebrow: 'Step 3',
-      title: 'Your full audit is being prepared',
-      body: `We are building the longer report for ${input.host}. Stay on this page if you want to watch for delivery, or come back from your email and dashboard later.`,
-      primaryLabel: 'Refresh status',
-      primaryHref: `/results/${input.scanId}`,
-      secondaryLabel: 'Open dashboard sign-in',
-      secondaryHref: '/login?next=/dashboard',
-      note: 'The finished report goes to the Stripe checkout email. This page also polls for delivery for a short window.',
-    };
-  }
-
-  return {
-    eyebrow: 'Step 2',
-    title: input.hasPaidReport ? 'Report queued — check back soon' : 'Choose what to do next',
-    body: input.hasPaidReport
-      ? `Your payment was received for ${input.host}. The full audit will begin shortly — you'll get an email when it's ready.`
-      : `You've seen your score for ${input.host}. Upgrade to a full audit to get prioritized recommendations, technical fixes, and a downloadable PDF report.`,
-    primaryLabel: input.hasPaidReport ? 'Check dashboard' : 'Start full audit',
-    primaryHref: input.hasPaidReport ? '/dashboard' : undefined,
-    primaryTargetId: input.hasPaidReport ? undefined : 'full-audit-checkout',
-    secondaryLabel: input.hasPaidReport ? undefined : 'Save preview',
-    secondaryHref: undefined,
-    secondaryTargetId: input.hasPaidReport ? undefined : 'preview-save',
-  };
 }
 
 const POLL_INTERVAL_MS = 10_000;
@@ -145,6 +82,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       score: number | null;
       letterGrade: string | null;
       topIssues: Issue[];
+      issues?: unknown[];
       categoryScores?: CategoryScoreData[];
       hasPaidReport?: boolean;
       reportStatus?: ReportStatus;
@@ -160,6 +98,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         score: j.score ?? 0,
         letterGrade: j.letterGrade ?? '\u2014',
         topIssues: Array.isArray(j.topIssues) ? j.topIssues : [],
+        issues: Array.isArray(j.issues) ? (j.issues as ReportIssue[]) : [],
         categoryScores: Array.isArray(j.categoryScores) ? j.categoryScores : [],
         hasPaidReport: j.hasPaidReport ?? false,
         reportStatus: j.reportStatus ?? 'none',
@@ -301,41 +240,34 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
     });
   }
 
-  const actionCard = buildActionCard({
-    host,
-    reportStatus: data.reportStatus,
-    hasPaidReport: data.hasPaidReport,
-    hasDirectReportAccess,
-    scanId: data.scanId,
-    pdfUrl: data.pdfUrl,
-    markdownUrl: data.markdownUrl,
-  });
+  const reportData: ScoreReportData = {
+    domain: host,
+    url: data.url,
+    score: data.score,
+    letterGrade: data.letterGrade,
+    categoryScores: data.categoryScores,
+    issues: data.issues,
+  };
 
   return (
-    <>
-      {/* ── Page heading ── */}
-      <section className="mb-8">
-        <span className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
-          AI search readiness diagnostic
-        </span>
-        <h1 className="mt-1 font-headline text-3xl font-bold tracking-tight text-on-background md:text-4xl">
-          Diagnostic for <span className="italic text-primary">{host}</span>
-        </h1>
-      </section>
-
-      {/* ── Two-column layout: score left, CTA right ── */}
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_340px]">
-
-        {/* LEFT — score + details */}
-        <div className="space-y-8 min-w-0">
-          <ScoreDisplay
-            score={data.score}
-            letterGrade={data.letterGrade}
-            issues={data.topIssues}
-            categoryScores={data.categoryScores}
-            snapshotAction={handleShareSnapshot}
-            snapshotState={shareState}
-          />
+    <ScoreReport
+      data={reportData}
+      deepAuditSlot={
+        <div className="space-y-6">
+          {/* Report being generated */}
+          {data.reportStatus === 'generating' && (
+            <div className="rounded-2xl border border-primary/20 bg-surface-container-lowest p-6">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined animate-spin text-2xl text-primary">progress_activity</span>
+                <div>
+                  <p className="font-headline font-semibold text-on-background">Your full report is being prepared</p>
+                  <p className="mt-1 font-sans text-sm text-on-surface-variant">
+                    This can take a few minutes. The page updates automatically, and the finished report is emailed to you.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Delivered report access */}
           {data.reportStatus === 'delivered' && (
@@ -421,11 +353,13 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
 
           {showCheckout ? (
             <section id="full-audit-checkout" className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 md:p-8">
-              <p className="font-label text-xs uppercase tracking-[0.22em] text-on-surface-variant">Step 2</p>
-              <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
-                Continue to the full audit
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-surface-container-high px-2.5 py-1 font-label text-[0.62rem] font-bold uppercase tracking-widest text-on-surface-variant">
+                <span className="material-symbols-outlined text-sm">history</span>Legacy — paid (Stripe)
+              </span>
+              <h2 className="mt-3 font-headline text-2xl font-medium text-on-background">
+                Get the full report
               </h2>
-              <p className="mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
+              <p className="mt-2 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
                 {getCheckoutModeCopy(data.checkoutMode)}
               </p>
               <div className="mt-5">
@@ -449,110 +383,29 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
             </section>
           ) : null}
 
-          <div className="pb-4 text-center">
+          {/* Share + scan another */}
+          <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+            <button
+              type="button"
+              onClick={() => void handleShareSnapshot()}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 font-sans text-sm text-on-surface-variant transition hover:bg-surface-container-low hover:text-on-background"
+            >
+              <span className="material-symbols-outlined text-base">share</span>
+              {shareState?.label ?? 'Share this scorecard'}
+            </button>
             <a
               href="/"
-              className="inline-flex items-center gap-1.5 font-body text-sm text-on-surface-variant transition hover:text-primary"
+              className="inline-flex items-center gap-1.5 font-sans text-sm text-on-surface-variant transition hover:text-primary"
             >
               <span className="material-symbols-outlined text-base">refresh</span>
               Scan another URL
             </a>
           </div>
-        </div>
-
-        {/* RIGHT — sticky CTA panel */}
-        <aside className="lg:sticky lg:top-6 flex flex-col gap-3">
-          <div className="rounded-2xl bg-on-background p-6 text-surface">
-            <p className="font-label text-[11px] uppercase tracking-[0.18em] text-surface/50 mb-1">
-              {actionCard.eyebrow}
-            </p>
-            <h2 className="font-headline text-lg font-bold text-surface leading-snug mb-2">
-              {actionCard.title}
-            </h2>
-            <p className="font-body text-sm leading-6 text-surface/65 mb-6">
-              {actionCard.body}
-            </p>
-
-            {/* Primary CTA — intentionally large */}
-            {actionCard.primaryHref ? (
-              <Link
-                href={actionCard.primaryHref}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface px-5 py-4 font-body text-base font-bold text-on-background shadow-md transition hover:bg-surface/90 active:scale-[0.98]"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {data.reportStatus === 'delivered' ? 'description' : data.reportStatus === 'generating' ? 'refresh' : 'arrow_forward'}
-                </span>
-                {actionCard.primaryLabel}
-              </Link>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  const target = actionCard.primaryTargetId
-                    ? document.getElementById(actionCard.primaryTargetId)
-                    : null;
-                  target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-surface px-5 py-4 font-body text-base font-bold text-on-background shadow-md transition hover:bg-surface/90 active:scale-[0.98]"
-              >
-                <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                {actionCard.primaryLabel}
-              </button>
-            )}
-
-            {/* Secondary action */}
-            {actionCard.secondaryLabel ? (
-              <div className="mt-3">
-                {actionCard.secondaryHref ? (
-                  <Link
-                    href={actionCard.secondaryHref}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-medium text-surface/80 transition hover:bg-surface/10"
-                  >
-                    <span className="material-symbols-outlined text-base">
-                      {data.reportStatus === 'delivered' ? 'login' : 'notifications'}
-                    </span>
-                    {actionCard.secondaryLabel}
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = actionCard.secondaryTargetId
-                        ? document.getElementById(actionCard.secondaryTargetId)
-                        : null;
-                      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-surface/20 px-5 py-3 font-body text-sm font-medium text-surface/80 transition hover:bg-surface/10"
-                  >
-                    <span className="material-symbols-outlined text-base">notifications</span>
-                    {actionCard.secondaryLabel}
-                  </button>
-                )}
-              </div>
-            ) : null}
-
-            {actionCard.note ? (
-              <p className="mt-4 font-body text-[11px] leading-5 text-surface/40">
-                {actionCard.note}
-              </p>
-            ) : null}
-          </div>
-
-          {/* Share snapshot — quiet link below the card */}
-          <button
-            type="button"
-            onClick={() => void handleShareSnapshot()}
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-3 font-body text-sm text-on-surface-variant transition hover:bg-surface-container-low hover:text-on-background"
-          >
-            <span className="material-symbols-outlined text-base">share</span>
-            {shareState?.label ?? 'Share this snapshot'}
-          </button>
           {shareState?.helper ? (
-            <p className="px-1 text-center font-body text-xs text-on-surface-variant">{shareState.helper}</p>
+            <p className="text-center font-sans text-xs text-on-surface-variant">{shareState.helper}</p>
           ) : null}
-        </aside>
-
-      </div>
-    </>
+        </div>
+      }
+    />
   );
 }

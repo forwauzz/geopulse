@@ -1,0 +1,110 @@
+# GEO Pulse — Open-Source Refactor Plan
+
+Working plan for the OSS version. Source of truth for the loop-based workflow.
+(Companion to the existing `agents/memory/PROJECT_STATE.md` ledger.)
+
+## North star
+- Open-source GEO Pulse.
+- **Remove the paywall** — the full audit becomes free, no Stripe, no account wall.
+- Work in autonomous **loops** with minimal user involvement.
+
+## Design principles (NEW — 2026-07-18)
+1. **The scorecard is marketing, not engineering.** The free-scan result a visitor first
+   sees must read like a *marketing scorecard*: benefit-led, plain-language, confidence-
+   building. Lead with what it means for their visibility and growth, not with HTTP
+   headers and JSON-LD. Minimize jargon; translate every technical check into an outcome.
+2. **The full audit report can be technical.** Once someone runs the deep audit, the
+   detailed report is allowed to be engineer-facing: exact findings, header names,
+   schema types, per-page breakdowns, copy-paste fixes. Depth lives here, not in the
+   scorecard.
+   > Rule of thumb: scorecard = "why it matters"; audit report = "exactly what to change".
+3. **Flag the paid/legacy path.** Everything tied to the old paid (Stripe) model is
+   *legacy* and on the way out. It must be clearly flagged in both code and UI during the
+   transition so the removal loop is a search away and nothing paid ships silently.
+
+### "Flag legacy paid" convention
+- **Code:** tag every paid/Stripe-coupled block with a searchable marker
+  `// LEGACY-PAID:` (+ one line on what replaces it). One `grep -r "LEGACY-PAID"` = the
+  full removal checklist.
+- **Config:** gate paid surfaces behind a single `LEGACY_PAID_ENABLED` flag (default
+  `false` in OSS) so they can be switched off before code is deleted.
+- **UI:** where a paywall/upsell still renders, show a small muted marker
+  ("Legacy — being removed") so it's never mistaken for the OSS path.
+
+## Loops (roadmap)
+
+### Loop 1 — Scorecard + stepped results  ✅ built (preview), ⏳ marketing-tone pass
+- [x] `components/score-report.tsx` — 6-step guided report, M3 tokens + Inter/Newsreader.
+- [x] Real fixture (`score-report.fixtures.ts`, immersivelabs 68/D+) + dev route `/dev/scorecard`.
+- [x] Verified live (light+dark, no console/type errors).
+- [x] **Marketing-tone rework** (per principle 1): plain-language verdict, renamed pillars
+      (Getting found / Being understood / Being trusted / Showing up in answers / Turning
+      visits into customers), problem-framed gap headlines, plain "growth plan". Technical
+      copy moved out — lives in `score-report.copy.ts` (`MARKETING_CHECKS`), original
+      finding/fix untouched for the Loop-2 report.
+- [x] Rank confirmed failures above "Couldn't check" in gaps.
+- [x] `legacyPaidEnabled` prop: default false = free CTA; true = "LEGACY — PAID" marker +
+      Stripe-steer. Preview both at `/dev/scorecard` and `/dev/scorecard?paid=1`.
+- [x] **Swapped** `<ScoreReport>` into `components/results-view.tsx` (full-width, owns the
+      page). The live Stripe checkout / email-gate / delivered-report blocks are reused
+      verbatim inside a `deepAuditSlot` (Step 6) — paid flow untouched, now UI-flagged
+      "Legacy — paid (Stripe)". Data path extended for full issues:
+      `get-scan-for-public-share.ts` + `app/api/scans/[id]/route.ts` now return `issues`.
+      tsc 0 errors; `/results/[id]` + `/api/scans/[id]` compile; error state graceful.
+      `score-display.tsx` now unused (safe to delete after live verification).
+- [x] **VERIFIED LIVE (2026-07-18)** — ran a real scan of anthropic.com (58/F, guest scan
+      `372aad30…`); the swapped `/results/[id]` rendered the full marketing scorecard on live
+      data, projection "58 → 88 (+30)", and Step 6 showed "LEGACY — PAID (STRIPE)" + the real
+      $29 DeepAuditCheckout intact. No console errors. Loop 1 DONE. Ready for `wrangler login`
+      + deploy when Uzziel chooses.
+
+> **Local dev env gotcha:** `getScanApiEnv()` reads via `getCloudflareContext` (wrangler
+> platform proxy) → server secrets for `npm run dev` MUST live in **`.dev.vars`**, NOT
+> `.env.local` (the repo's `.dev.vars.example` note is misleading). `.env.local` only feeds
+> the browser (`NEXT_PUBLIC_*`). Both are gitignored. Dev server auto-picks a free port
+> (3000→3003…); the scan API needs the Turnstile test secret in `.dev.vars` too.
+
+### Loop 1.5 — Scorecard charts (marketing)
+- [ ] **"You are here → you could be here"** projection: single bar, current score +
+      recoverable points from the growth plan (68 → 87). Highest marketing value; uses the
+      already-computed `+N pts`. In Loop-1 scope.
+- [ ] **Peer marker** (optional): thin distribution bar — you vs category typical vs top 10%.
+      Data layer exists (`benchmark_cohorts`, `benchmark_domain_metrics`, or a `scans`
+      distribution as a v0). Lightweight, no competitor input — the "how do I stack up?"
+      emotion without the head-to-head build.
+- [ ] SKIP for now: pillar radar/spider (decorative with 2 empty pillars).
+
+### Loop 4 — Head-to-head competitor comparison
+Add-a-competitor → scan them too → side-by-side scorecard ("you vs them"). Strong
+conversion hook, but its own loop: needs competitor-input UI, a SECOND live scan
+(Gemini cost + service-role key), result pairing, and a compare view. Design the
+Loop-1 scorecard comparison-ready (peer marker above) so this drops in cleanly.
+
+### Loop 2 — Full audit report (technical)
+- [ ] Deep-audit report presentation (per principle 2): technical, per-page, copy-paste fixes.
+      Builds on `workers/report/build-deep-audit-markdown.ts` + `app/results/[id]/report`.
+
+### Loop 3 — De-paywall behind a flag (per principle 3)
+**Not a deletion — a toggle.** Default OSS behavior (`LEGACY_PAID_ENABLED=false`):
+anyone can create access and get full reports easily, free. When paid is later activated
+(`LEGACY_PAID_ENABLED=true`), users are steered to Stripe. Flag every paid surface
+(LEGACY-PAID markers) + a muted UI "Legacy" marker so the two modes are never confused.
+The `<ScoreReport legacyPaidEnabled>` prop already implements this at the CTA.
+Legacy paid surface inventory (starting point):
+- API: `app/api/checkout`, `app/api/webhooks/stripe`, `app/api/billing/subscribe`,
+  `app/api/billing/portal`, `app/api/admin/reconcile-deep-audit`
+- Components: `deep-audit-checkout.tsx`, `checkout-status-banner.tsx`,
+  `subscription-status-banner.tsx`, `new-subscriber-welcome-banner.tsx`,
+  `pricing-bundle-card.tsx`, `email-gate.tsx`
+- Flow: `components/results-view.tsx` (the "Step 2" paid checkout), `app/pricing/page.tsx`,
+  `app/dashboard/billing/page.tsx`
+- Backend: deep-audit queue trigger currently fired by the Stripe webhook → must fire
+  directly from a free "Run full audit" action instead (`workers/queue`, `workers/report`)
+- Deps/env: `stripe` package, `STRIPE_*` env vars
+
+## Environment / access state
+- Repo: `C:\Dev\geopulse\geopulse` (GitHub `forwauzz/geopulse`).
+- Supabase MCP connected (project `vynrlgtxqnomxenakafn`); anon key in `.env.local`.
+- Needed for a LIVE new scan: `SUPABASE_SERVICE_ROLE_KEY` + `GEMINI_API_KEY`.
+- Cloudflare push: Uzziel runs `wrangler login` himself (interactive). No self-created
+  accounts / credential entry by the agent.
