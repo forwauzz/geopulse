@@ -39,6 +39,17 @@ export type ScoreReportData = {
   issues: ReportIssue[];
 };
 
+export type ScoreBenchmark = {
+  /** % of scanned sites this score is at or above (0-100). */
+  percentile: number;
+  /** Typical (median) score across scanned sites. */
+  median: number;
+  /** Top-10% threshold (p90). */
+  top10: number;
+  /** How many sites the comparison is drawn from. */
+  sampleSize: number;
+};
+
 const STEPS = [
   { id: 's1', label: 'Your score' },
   { id: 's2', label: 'Where you stand' },
@@ -117,6 +128,7 @@ export function ScoreReport({
   data,
   legacyPaidEnabled = false,
   deepAuditSlot,
+  benchmark,
 }: {
   data: ScoreReportData;
   /** OSS default false = full audit is free for everyone. true = steer to Stripe (legacy paid). */
@@ -124,6 +136,8 @@ export function ScoreReport({
   /** When provided, replaces the default Step-6 CTA card with this node (e.g. the live
    *  checkout flow in results-view). Lets the real paid flow be reused verbatim. */
   deepAuditSlot?: React.ReactNode;
+  /** Optional peer comparison ("how you stack up vs sites we've scanned"). */
+  benchmark?: ScoreBenchmark;
 }) {
   const { score, letterGrade, domain, url, categoryScores, issues } = data;
   const v = marketingVerdict(score);
@@ -217,6 +231,9 @@ export function ScoreReport({
                 <Stat k="Couldn't check" v={`${unconfirmed.length}`} tone="muted" />
               </div>
             </div>
+            {benchmark && benchmark.sampleSize >= 20 ? (
+              <PeerStrip score={score} benchmark={benchmark} tone={v.tone} />
+            ) : null}
           </Step>
 
           {/* STEP 2 — PILLARS */}
@@ -426,6 +443,48 @@ function Step({ n, id, title, blurb, children }: { n: number; id: string; title:
       </div>
       {children}
     </section>
+  );
+}
+
+function PeerStrip({ score, benchmark, tone }: { score: number; benchmark: ScoreBenchmark; tone: 'good' | 'warn' | 'crit' }) {
+  const { percentile, median, top10, sampleSize } = benchmark;
+  const beat = Math.max(0, Math.min(100, Math.round(percentile)));
+  const headline =
+    beat >= 90
+      ? "You're in the top 10% of sites we've scanned"
+      : beat >= 50
+        ? `You're ahead of ${beat}% of sites we've scanned`
+        : `${100 - beat}% of sites we've scanned do better — room to climb`;
+  const dot =
+    tone === 'good' ? 'bg-green-600 dark:bg-green-400'
+    : tone === 'warn' ? 'bg-amber-500 dark:bg-amber-400'
+    : 'bg-red-600 dark:bg-red-400';
+  const clamp = (n: number) => Math.max(4, Math.min(96, n));
+  return (
+    <div className="mt-4 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 shadow-float md:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <p className="font-headline text-lg text-on-background">{headline}</p>
+        <span className="font-label text-[0.62rem] uppercase tracking-[0.13em] text-on-surface-variant">
+          vs {sampleSize} sites scanned
+        </span>
+      </div>
+      {/* You label */}
+      <div className="relative mb-1 mt-4 h-4">
+        <span className="absolute -translate-x-1/2 font-label text-[0.62rem] font-bold uppercase tracking-wide text-on-background tabular-nums" style={{ left: `${clamp(score)}%` }}>
+          You · {score}
+        </span>
+      </div>
+      {/* distribution bar with ticks + you-dot */}
+      <div className="relative h-2 rounded-full bg-surface-container">
+        <span className="absolute top-1/2 h-3.5 w-px -translate-y-1/2 bg-outline-variant" style={{ left: `${median}%` }} aria-hidden />
+        <span className="absolute top-1/2 h-3.5 w-px -translate-y-1/2 bg-gold" style={{ left: `${top10}%` }} aria-hidden />
+        <span className={`absolute top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-surface-container-lowest ${dot}`} style={{ left: `${score}%` }} aria-hidden />
+      </div>
+      <div className="relative mt-2 h-4 font-label text-[0.6rem] uppercase tracking-wide text-on-surface-variant tabular-nums">
+        <span className="absolute -translate-x-1/2" style={{ left: `${clamp(median)}%` }}>Typical · {median}</span>
+        <span className="absolute -translate-x-1/2 text-gold" style={{ left: `${clamp(top10)}%` }}>Top 10% · {top10}</span>
+      </div>
+    </div>
   );
 }
 

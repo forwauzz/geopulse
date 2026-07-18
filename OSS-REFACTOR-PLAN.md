@@ -58,6 +58,13 @@ Working plan for the OSS version. Source of truth for the loop-based workflow.
       $29 DeepAuditCheckout intact. No console errors. Loop 1 DONE. Ready for `wrangler login`
       + deploy when Uzziel chooses.
 
+- [x] **DEPLOYED TO PROD (2026-07-18)** — `wrangler deploy` version `d1d85619-48a2-4ffb-8280-5201485d758f`,
+      live at getgeopulse.com. Pre-deploy: diffed prod dashboard vs `wrangler.jsonc` — all 56
+      plaintext vars + values identical, 11 secrets preserved (deploy = code only, no env change).
+      Verified: build baked prod NEXT_PUBLIC values (getgeopulse.com URL + real Turnstile key),
+      NOT the local `.env.local` test values. Confirmed the new scorecard renders live on prod.
+      Committed on branch `feat/oss-marketing-scorecard` (pushed) — **not yet merged to main**.
+
 > **Local dev env gotcha:** `getScanApiEnv()` reads via `getCloudflareContext` (wrangler
 > platform proxy) → server secrets for `npm run dev` MUST live in **`.dev.vars`**, NOT
 > `.env.local` (the repo's `.dev.vars.example` note is misleading). `.env.local` only feeds
@@ -68,10 +75,11 @@ Working plan for the OSS version. Source of truth for the loop-based workflow.
 - [ ] **"You are here → you could be here"** projection: single bar, current score +
       recoverable points from the growth plan (68 → 87). Highest marketing value; uses the
       already-computed `+N pts`. In Loop-1 scope.
-- [ ] **Peer marker** (optional): thin distribution bar — you vs category typical vs top 10%.
-      Data layer exists (`benchmark_cohorts`, `benchmark_domain_metrics`, or a `scans`
-      distribution as a v0). Lightweight, no competitor input — the "how do I stack up?"
-      emotion without the head-to-head build.
+- [x] **Peer marker** — distribution strip (You vs Typical vs Top 10%) in the score section.
+      `lib/server/get-score-benchmark.ts` computes percentile/median/p90 from the `scans`
+      score distribution (v0: JS over the score column, ~129 rows; add KV cache / SQL RPC at
+      scale). Wired through `api/scans/[id]` + results-view; honest "sites we've scanned"
+      copy; hidden under sampleSize 20. Verified live (anthropic 58 → 64th pct). Not yet deployed.
 - [ ] SKIP for now: pillar radar/spider (decorative with 2 empty pillars).
 
 ### Loop 4 — Head-to-head competitor comparison

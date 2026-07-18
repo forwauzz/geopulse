@@ -16,7 +16,11 @@ export default async function ScorecardPreviewPage({
   const { paid } = await searchParams;
   return (
     <main className="min-h-screen bg-surface">
-      <ScoreReport data={immersiveLabsScan} legacyPaidEnabled={paid === '1'} />
+      <ScoreReport
+        data={immersiveLabsScan}
+        legacyPaidEnabled={paid === '1'}
+        benchmark={{ percentile: 78, median: 49, top10: 74, sampleSize: 129 }}
+      />
     </main>
   );
 }

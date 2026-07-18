@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { DeepAuditCheckout } from '@/components/deep-audit-checkout';
 import { EmailGate } from '@/components/email-gate';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
-import { ScoreReport, type ReportIssue, type ScoreReportData } from '@/components/score-report';
+import { ScoreReport, type ReportIssue, type ScoreReportData, type ScoreBenchmark } from '@/components/score-report';
 import { reportLoadingJourney, resultsLoadingJourney } from '@/lib/client/loading-journeys';
 import {
   normalizeDeepAuditCheckoutMode,
@@ -24,6 +24,7 @@ type ScanData = {
   letterGrade: string;
   topIssues: Issue[];
   issues: ReportIssue[];
+  benchmark: ScoreBenchmark | null;
   categoryScores: CategoryScoreData[];
   hasPaidReport: boolean;
   reportStatus: ReportStatus;
@@ -83,6 +84,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       letterGrade: string | null;
       topIssues: Issue[];
       issues?: unknown[];
+      benchmark?: ScoreBenchmark | null;
       categoryScores?: CategoryScoreData[];
       hasPaidReport?: boolean;
       reportStatus?: ReportStatus;
@@ -99,6 +101,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
         letterGrade: j.letterGrade ?? '\u2014',
         topIssues: Array.isArray(j.topIssues) ? j.topIssues : [],
         issues: Array.isArray(j.issues) ? (j.issues as ReportIssue[]) : [],
+        benchmark: j.benchmark ?? null,
         categoryScores: Array.isArray(j.categoryScores) ? j.categoryScores : [],
         hasPaidReport: j.hasPaidReport ?? false,
         reportStatus: j.reportStatus ?? 'none',
@@ -252,6 +255,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
   return (
     <ScoreReport
       data={reportData}
+      benchmark={data.benchmark ?? undefined}
       deepAuditSlot={
         <div className="space-y-6">
           {/* Report being generated */}
