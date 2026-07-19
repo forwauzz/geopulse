@@ -17,6 +17,11 @@ export type ScanApiEnv = {
   SELF_IMPROVEMENT_TARGET_URL?: string;
   SELF_IMPROVEMENT_HOUR_UTC?: string;
   SELF_IMPROVEMENT_REPORT_TO?: string;
+  /** Loop 5b marketing autopilot — proposes review-gated content for weak topics. Off by default. */
+  MARKETING_AUTOPILOT_ENABLED?: string;
+  MARKETING_AUTOPILOT_DAILY_CAP?: string;
+  MARKETING_AUTOPILOT_HOUR_UTC?: string;
+  MARKETING_AUTOPILOT_KILL?: string;
   DISTRIBUTION_ENGINE_UI_ENABLED: string;
   DISTRIBUTION_ENGINE_WRITE_ENABLED: string;
   DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED?: string;
@@ -72,6 +77,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   RECONCILE_SECRET: string;
   /** Optional secret for headless (cron/CI) trigger of POST /api/admin/self-improve. */
   SELF_IMPROVEMENT_TRIGGER_SECRET?: string;
+  /** Optional secret for headless (cron/CI) trigger of POST /api/admin/marketing-autopilot. */
+  MARKETING_AUTOPILOT_TRIGGER_SECRET?: string;
   /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–1000). */
   DEEP_AUDIT_DEFAULT_PAGE_LIMIT: string;
   /** Plaintext var: off, auto, or force for optional Browser Rendering on paid deep audits. */
@@ -142,6 +149,10 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     SELF_IMPROVEMENT_TARGET_URL: String(e['SELF_IMPROVEMENT_TARGET_URL'] ?? ''),
     SELF_IMPROVEMENT_HOUR_UTC: String(e['SELF_IMPROVEMENT_HOUR_UTC'] ?? ''),
     SELF_IMPROVEMENT_REPORT_TO: String(e['SELF_IMPROVEMENT_REPORT_TO'] ?? ''),
+    MARKETING_AUTOPILOT_ENABLED: String(e['MARKETING_AUTOPILOT_ENABLED'] ?? ''),
+    MARKETING_AUTOPILOT_DAILY_CAP: String(e['MARKETING_AUTOPILOT_DAILY_CAP'] ?? ''),
+    MARKETING_AUTOPILOT_HOUR_UTC: String(e['MARKETING_AUTOPILOT_HOUR_UTC'] ?? ''),
+    MARKETING_AUTOPILOT_KILL: String(e['MARKETING_AUTOPILOT_KILL'] ?? ''),
     DISTRIBUTION_ENGINE_UI_ENABLED: String(e['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_WRITE_ENABLED: String(e['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED: String(
@@ -193,6 +204,10 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       SELF_IMPROVEMENT_TARGET_URL: process.env['SELF_IMPROVEMENT_TARGET_URL'] ?? '',
       SELF_IMPROVEMENT_HOUR_UTC: process.env['SELF_IMPROVEMENT_HOUR_UTC'] ?? '',
       SELF_IMPROVEMENT_REPORT_TO: process.env['SELF_IMPROVEMENT_REPORT_TO'] ?? '',
+      MARKETING_AUTOPILOT_ENABLED: process.env['MARKETING_AUTOPILOT_ENABLED'] ?? '',
+      MARKETING_AUTOPILOT_DAILY_CAP: process.env['MARKETING_AUTOPILOT_DAILY_CAP'] ?? '',
+      MARKETING_AUTOPILOT_HOUR_UTC: process.env['MARKETING_AUTOPILOT_HOUR_UTC'] ?? '',
+      MARKETING_AUTOPILOT_KILL: process.env['MARKETING_AUTOPILOT_KILL'] ?? '',
       DISTRIBUTION_ENGINE_UI_ENABLED: process.env['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_WRITE_ENABLED: process.env['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED:
@@ -260,6 +275,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
       SELF_IMPROVEMENT_TRIGGER_SECRET: pickEnvString(e, 'SELF_IMPROVEMENT_TRIGGER_SECRET'),
+      MARKETING_AUTOPILOT_TRIGGER_SECRET: pickEnvString(e, 'MARKETING_AUTOPILOT_TRIGGER_SECRET'),
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
       DEEP_AUDIT_BROWSER_RENDER_MODE: pickEnvString(e, 'DEEP_AUDIT_BROWSER_RENDER_MODE'),
       DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'),
@@ -294,6 +310,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
       SELF_IMPROVEMENT_TRIGGER_SECRET: process.env['SELF_IMPROVEMENT_TRIGGER_SECRET'] ?? '',
+      MARKETING_AUTOPILOT_TRIGGER_SECRET: process.env['MARKETING_AUTOPILOT_TRIGGER_SECRET'] ?? '',
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
       DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
       DEEP_AUDIT_INTERNAL_REWRITE_ENABLED:

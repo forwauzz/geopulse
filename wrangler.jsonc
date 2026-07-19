@@ -118,6 +118,14 @@
     "SELF_IMPROVEMENT_HOUR_UTC": "12",
     "SELF_IMPROVEMENT_REPORT_TO": "uzzielt@techehealthservices.com",
 
+    // Loop 5b — autonomous marketing autopilot. Proposes review-gated content briefs for weak
+    // (uncovered) topics once/day; NEVER publishes. OFF by default. Actually posting to social
+    // needs a CONNECTED distribution account (channel/tool access) — the remaining blocker.
+    // MARKETING_AUTOPILOT_TRIGGER_SECRET is a SECRET (wrangler secret put), not set here.
+    "MARKETING_AUTOPILOT_ENABLED": "",
+    "MARKETING_AUTOPILOT_DAILY_CAP": "2",
+    "MARKETING_AUTOPILOT_HOUR_UTC": "13",
+
     // GEO Performance Monitoring scheduled sweep.
     // Runtime defaults live here; provider API keys remain secrets.
     "GPM_SCHEDULE_ENABLED": "true",
