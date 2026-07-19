@@ -43,7 +43,11 @@ Adopt the **Flight Story** aesthetic as the north-star look (captured 2026-07-18
 - [x] **Scorecard flightstory pass (PR #9)** — oversized UPPERCASE grotesk headers + bold grotesk
   numbers (Inter black) replacing Newsreader serif; monochrome-forward, keeps M3 tokens + light/dark.
   ⚠️ needs a human visual review (automated screenshots were unreliable in the build env).
-- [ ] Marketing pages (home/pricing) flightstory pass — follow-on.
+- [x] **Marketing pages flightstory pass (PR #14, 2026-07-18)** — home/pricing/about headers moved
+  from Newsreader serif → oversized UPPERCASE Inter-black grotesk (`font-sans font-black uppercase
+  tracking-tight`), heroes at text-7xl/8xl `leading-[0.9] tracking-tighter`, monochrome-forward,
+  stark hero (dropped the radial glow + accent word), 7xl statement number. Verified live on
+  getgeopulse.com via computed styles (Inter 900 uppercase, 96px hero, 0 serif headers, console clean).
 
 ## Loops (roadmap)
 
