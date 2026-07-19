@@ -4,13 +4,14 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type UserFeatureKey = 'automation' | 'recurring_audits';
+export type UserFeatureKey = 'automation' | 'recurring_audits' | 'fix_agent';
 
-export const USER_FEATURE_KEYS: UserFeatureKey[] = ['automation', 'recurring_audits'];
+export const USER_FEATURE_KEYS: UserFeatureKey[] = ['automation', 'recurring_audits', 'fix_agent'];
 
 export const USER_FEATURE_LABELS: Record<UserFeatureKey, { label: string; help: string }> = {
   automation: { label: 'Automation', help: 'Access the automation controls in their dashboard.' },
   recurring_audits: { label: 'Recurring audits', help: 'Schedule their site to be re-audited automatically.' },
+  fix_agent: { label: 'Fix Agent', help: 'An AI agent that turns their audit into copy-paste fixes.' },
 };
 
 /** True if the user has an active grant for `feature`. */

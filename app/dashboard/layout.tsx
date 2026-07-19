@@ -29,13 +29,15 @@ export default async function DashboardLayout({
   const isAdmin = resolveDashboardShellIsAdmin(isPlatformAdmin);
   const flags = await loadUiFlags();
 
-  // Show the user-facing Automation area to platform admins or users granted the feature.
+  // Show the granted areas (Automation, Fix Agent) to platform admins or users granted them.
   let showAutomation = isPlatformAdmin;
-  if (!showAutomation) {
+  let showFixAgent = isPlatformAdmin;
+  if (!showAutomation || !showFixAgent) {
     const env = await getScanApiEnv();
     if (env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
       const admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-      showAutomation = await userHasFeature(admin, user.id, 'automation');
+      if (!showAutomation) showAutomation = await userHasFeature(admin, user.id, 'automation');
+      if (!showFixAgent) showFixAgent = await userHasFeature(admin, user.id, 'fix_agent');
     }
   }
 
@@ -47,6 +49,7 @@ export default async function DashboardLayout({
         signOutAction={signOut}
         navFlags={{ connectors: flags.show_connectors, billing: flags.show_billing, blog: flags.show_blog }}
         showAutomation={showAutomation}
+        showFixAgent={showFixAgent}
       >
         {children}
       </DashboardShell>

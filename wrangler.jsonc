@@ -103,8 +103,12 @@
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
     "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
     "DEEP_AUDIT_BROWSER_RENDER_MODE": "auto",
+    // Report rewrite now runs on Cloudflare Workers AI (free tier, open-source model) instead of
+    // the stale Gemini preview model that was returning HTTP 400. Set provider back to "gemini"
+    // (and a valid GEMINI model id) to A/B against the paid path.
     "DEEP_AUDIT_INTERNAL_REWRITE_ENABLED": "true",
-    "DEEP_AUDIT_INTERNAL_REWRITE_MODEL": "gemini-2.5-flash-lite-preview-06-17",
+    "DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER": "workers_ai",
+    "DEEP_AUDIT_INTERNAL_REWRITE_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 
     "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
 
@@ -153,6 +157,12 @@
 
     // Optional destination/provider defaults.
     "GHOST_ADMIN_API_VERSION": "v6.0"
+  },
+
+  // Cloudflare Workers AI — free-tier, open-source models used as the in-house "brain"
+  // (report rewrite, user agents). No API key: it's a native binding on this account.
+  "ai": {
+    "binding": "AI"
   },
 
   "r2_buckets": [
