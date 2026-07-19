@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadUserSchedule } from '@/lib/server/recurring-audits';
+import { LocalTime } from '@/components/local-time';
 import { saveMyRecurringAudit, runMyRecurringAuditNow } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -82,8 +83,6 @@ export default async function WorkspacePage({ searchParams }: Props) {
       ? createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
       : null;
   const schedule = admin ? await loadUserSchedule(admin, user.id) : null;
-  const fmtDate = (iso: string | null): string =>
-    iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
   const recurInput =
     'min-h-[42px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30';
   const recurringNotice: { ok: boolean; text: string } | null = (() => {
@@ -171,8 +170,8 @@ export default async function WorkspacePage({ searchParams }: Props) {
         ) : null}
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-outline-variant/20 pt-4 font-sans text-xs text-on-surface-variant">
           <span>Status: <strong className={schedule?.enabled ? 'text-primary' : 'text-on-surface-variant'}>{schedule?.enabled ? 'On' : 'Off'}</strong></span>
-          <span>Next run: {schedule?.enabled ? fmtDate(schedule.nextRunAt) : '—'}</span>
-          <span>Last run: {fmtDate(schedule?.lastRunAt ?? null)}</span>
+          <span>Next run: {schedule?.enabled ? <LocalTime iso={schedule.nextRunAt} /> : '—'}</span>
+          <span>Last run: <LocalTime iso={schedule?.lastRunAt ?? null} /></span>
         </div>
       </div>
 
