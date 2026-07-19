@@ -113,10 +113,13 @@
     // AND self_improvement_settings.enabled is true in the DB AND a recipient is set AND the DB
     // kill switch is off. Flip ENABLED to "true" (and toggle the DB row) to turn it on.
     // SELF_IMPROVEMENT_TRIGGER_SECRET is a SECRET (wrangler secret put), not set here.
-    "SELF_IMPROVEMENT_ENABLED": "",
+    // Learning loop armed: env ON. Still requires self_improvement_settings.enabled=true in the DB
+    // (toggle in /admin/automation) before anything runs — so this is safe. autonomous_ship stays
+    // a separate DB flag + external runtime.
+    "SELF_IMPROVEMENT_ENABLED": "true",
     "SELF_IMPROVEMENT_TARGET_URL": "https://getgeopulse.com/",
     "SELF_IMPROVEMENT_HOUR_UTC": "12",
-    "SELF_IMPROVEMENT_REPORT_TO": "uzzielt@techehealthservices.com",
+    "SELF_IMPROVEMENT_REPORT_TO": "tamonuzziel@gmail.com",
 
     // Loop 5b — autonomous marketing autopilot. Proposes review-gated content briefs for weak
     // (uncovered) topics once/day; NEVER publishes. OFF by default. Actually posting to social
