@@ -270,6 +270,7 @@ export default {
             scanned: result.scanned,
             ran: result.ran,
             failed: result.failed,
+            fed_self_improvement: result.fedSelfImprovement,
           }, 'info');
         }
       } catch (err) {
