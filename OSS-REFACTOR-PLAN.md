@@ -215,6 +215,26 @@ Fully autonomous, **no human gate**:
   safer on-ramp before true zero-touch.)
 
 ### 5b — Autonomous marketing / visibility experiment (no involvement)
+- [x] **MEASURE → PROPOSE LOOP SHIPPED (PR #12, 2026-07-18)** — deployed live (Version
+  `347177d0-278a-4e1a-88dd-494569264846`). **OFF by default.** Built on the EXISTING content
+  machine + distribution engine + 100-topic registry — **no new tables**.
+  - **Measure:** coverage gaps in `docs/13-topic-registry-v1.json` (topics with no `content_items`
+    yet) = "where are we invisible". A GPM visibility signal (citation/share-of-voice/opportunities
+    via `buildGpmReportPayload`) can layer into `selectProposalCandidates` later.
+  - **Propose:** `lib/server/marketing-autopilot.ts` creates **review-gated** `content_items` briefs
+    (`status:'brief'`) for the next weak topics, capped (`MARKETING_AUTOPILOT_DAILY_CAP`, default 2).
+    They surface in `/dashboard/content` for a human to draft — **never auto-published** (the
+    "review the first batch" guardrail). Pure selection logic unit-tested (7 tests).
+  - **Daily gate** in `workers/cloudflare-entry.ts` at `MARKETING_AUTOPILOT_HOUR_UTC` (13:00 UTC);
+    kill switch (`MARKETING_AUTOPILOT_KILL`) overrides everything.
+  - **Admin surface** `GET/POST /api/admin/marketing-autopilot` (dual auth: session OR
+    `x-marketing-autopilot-secret`). Verified live: rejects unauth 401.
+  - **BLOCKER — channel/tool access:** creating social distribution jobs needs a **connected**
+    distribution account (X/LinkedIn OAuth / Ghost). With none connected the autopilot returns
+    `channelAccess:'required'` and stops at review-gated briefs. Connect a channel + set
+    `MARKETING_AUTOPILOT_ENABLED="true"` to go live. Reuses the distribution engine's `draft`/
+    `review` statuses so nothing posts without approval.
+
 Continuously grow GEO-Pulse's visibility with zero user involvement. Experimental / not rigid.
 - **Reuse existing infra:** the repo already has a **distribution engine** (`DISTRIBUTION_ENGINE_*`,
   `auto_poster/`) with **X + LinkedIn OAuth** and **Ghost blog** admin — plus the benchmark/GPM
