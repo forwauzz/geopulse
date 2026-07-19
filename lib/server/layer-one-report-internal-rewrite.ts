@@ -1,4 +1,5 @@
 import { buildLayerOneReportRewritePrompt } from './layer-one-report-rewrite-prompt';
+import { runWorkersAiPrompt, type WorkersAiBinding } from './workers-ai';
 
 export type LayerOneInternalRewriteResult =
   | {
@@ -22,6 +23,10 @@ export type LayerOneInternalRewriteEnv = {
   readonly apiKey?: string;
   readonly model?: string;
   readonly endpoint?: string;
+  /** 'workers_ai' (free, open-source, default when an AI binding exists) or 'gemini'. */
+  readonly provider?: string;
+  /** Cloudflare Workers AI binding, when running inside the Worker. */
+  readonly ai?: WorkersAiBinding;
 };
 
 type FetchLike = typeof fetch;
@@ -76,6 +81,47 @@ export async function rewriteLayerOneReportInternal(
       executedAt,
       responseMetadata: { enabled: false },
       errorMessage: 'layer_one_internal_rewrite_disabled',
+    };
+  }
+
+  // Free, open-source path: Cloudflare Workers AI (no API key needed).
+  const provider = env.provider?.trim().toLowerCase() || 'gemini';
+  if (provider === 'workers_ai' || provider === 'workersai' || provider === 'cf') {
+    const aiPrompt = `${buildLayerOneReportRewritePrompt({ reportMarkdown })}\nRewrite the report now. Return only the rewritten report.`;
+    const res = await runWorkersAiPrompt({
+      ai: env.ai,
+      prompt: aiPrompt,
+      model: env.model,
+      maxTokens: 8192,
+      temperature: 0.1,
+    });
+    if (!res.ok) {
+      return {
+        status: 'failed',
+        rewrittenMarkdown: null,
+        modelId: res.model,
+        executedAt,
+        responseMetadata: { provider: 'workers_ai' },
+        errorMessage: `layer_one_internal_rewrite_${res.reason}`,
+      };
+    }
+    const rewritten = normalizeMarkdown(res.text);
+    if (!rewritten) {
+      return {
+        status: 'failed',
+        rewrittenMarkdown: null,
+        modelId: res.model,
+        executedAt,
+        responseMetadata: { provider: 'workers_ai' },
+        errorMessage: 'layer_one_internal_rewrite_empty_markdown',
+      };
+    }
+    return {
+      status: 'completed',
+      rewrittenMarkdown: rewritten,
+      modelId: res.model,
+      executedAt,
+      responseMetadata: { provider: 'workers_ai' },
     };
   }
 

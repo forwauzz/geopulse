@@ -101,6 +101,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   DEEP_AUDIT_BROWSER_RENDER_MODE: string;
   DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: string;
   DEEP_AUDIT_INTERNAL_REWRITE_MODEL: string;
+  /** 'workers_ai' (free/open-source) or 'gemini'. Optional — defaults to the Gemini path. */
+  DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER?: string;
 };
 
 /**
@@ -300,6 +302,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       DEEP_AUDIT_BROWSER_RENDER_MODE: pickEnvString(e, 'DEEP_AUDIT_BROWSER_RENDER_MODE'),
       DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'),
       DEEP_AUDIT_INTERNAL_REWRITE_MODEL: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_MODEL'),
+      DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER'),
     };
   } catch {
     return {
@@ -337,7 +340,24 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
         process.env['DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'] ?? '',
       DEEP_AUDIT_INTERNAL_REWRITE_MODEL:
         process.env['DEEP_AUDIT_INTERNAL_REWRITE_MODEL'] ?? '',
+      DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER:
+        process.env['DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER'] ?? '',
     };
+  }
+}
+
+/** Cloudflare Workers AI binding (free/open-source brain), when available in this runtime. */
+export async function getAiBinding(): Promise<
+  { run: (model: string, input: Record<string, unknown>) => Promise<unknown> } | undefined
+> {
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    const ai = (env as unknown as Record<string, unknown>)['AI'];
+    return ai && typeof (ai as { run?: unknown }).run === 'function'
+      ? (ai as { run: (model: string, input: Record<string, unknown>) => Promise<unknown> })
+      : undefined;
+  } catch {
+    return undefined;
   }
 }
 

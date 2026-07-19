@@ -14,6 +14,7 @@ type DashboardSidebarProps = {
   readonly navFlags?: { connectors: boolean; billing: boolean; blog: boolean };
   /** Show the Automation area (granted users / admins). */
   readonly showAutomation?: boolean;
+  readonly showFixAgent?: boolean;
   /** When true at `lg+`, nav shows icon rail (labels via tooltip / aria). */
   readonly desktopCollapsed?: boolean;
   readonly onToggleDesktopCollapse?: () => void;
@@ -123,7 +124,8 @@ const WORKSPACE_NAV: readonly NavItem[] = [
 // and add the Automation item for granted users.
 function buildWorkspaceNav(
   navFlags?: { connectors: boolean; billing: boolean; blog: boolean },
-  showAutomation?: boolean
+  showAutomation?: boolean,
+  showFixAgent?: boolean
 ): readonly NavItem[] {
   const off = new Set<string>();
   if (navFlags) {
@@ -132,10 +134,15 @@ function buildWorkspaceNav(
     if (!navFlags.blog) off.add('/blog');
   }
   const base = WORKSPACE_NAV.filter((item) => !off.has(item.href));
-  if (!showAutomation) return base;
-  // Automation goes first for granted users.
-  const item: NavItem = { href: '/dashboard/automation', label: 'Automation', icon: 'smart_toy', exact: true };
-  return [item, ...base];
+  // Granted items go first: Fix Agent, then Automation.
+  const granted: NavItem[] = [];
+  if (showFixAgent) {
+    granted.push({ href: '/dashboard/agent', label: 'Fix Agent', icon: 'auto_fix_high', exact: true });
+  }
+  if (showAutomation) {
+    granted.push({ href: '/dashboard/automation', label: 'Automation', icon: 'smart_toy', exact: true });
+  }
+  return granted.length > 0 ? [...granted, ...base] : base;
 }
 
 function NavBlocks({
@@ -245,12 +252,13 @@ export function DashboardSidebar({
   signOutAction,
   navFlags,
   showAutomation,
+  showFixAgent,
   desktopCollapsed = false,
   onToggleDesktopCollapse,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const workspaceNav = buildWorkspaceNav(navFlags, showAutomation);
+  const workspaceNav = buildWorkspaceNav(navFlags, showAutomation, showFixAgent);
 
   const closeMenu = () => setMobileOpen(false);
 

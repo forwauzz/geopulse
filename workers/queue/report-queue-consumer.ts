@@ -839,6 +839,8 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       apiKey: env.GEMINI_API_KEY,
       model: (env.DEEP_AUDIT_INTERNAL_REWRITE_MODEL ?? '').trim() || env.GEMINI_MODEL,
       endpoint: env.GEMINI_ENDPOINT,
+      provider: env.DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER,
+      ai: (env as unknown as { AI?: Parameters<typeof rewriteLayerOneReportInternal>[1]['ai'] }).AI,
     });
 
     if (rewriteResult.status === 'completed') {
