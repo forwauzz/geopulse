@@ -178,6 +178,26 @@ setting lives on his **profile** (a per-user autonomy flag), so the capability c
 offered to other users who opt in. These are **experiments** — keep them flexible, iterate.
 
 ### 5a — Daily self-improvement loop (getgeopulse.com audits itself → auto-ships)
+- [x] **CONTROL PLANE + SELF-AUDIT LOOP + SHIP SPINE SHIPPED (PR #11, 2026-07-18)** — deployed
+  live (Version `0859b503-13ea-47ad-bd21-d2a1c6d0bbeb`). **OFF by default.**
+  - **Steps 1-2 (audit → email):** `lib/server/self-improvement.ts` runs a free scan on
+    getgeopulse.com, builds a weight-ranked improvement plan (pure, unit-tested), emails it via
+    Resend, records a ledger row. Daily gate in `workers/cloudflare-entry.ts` at
+    `SELF_IMPROVEMENT_HOUR_UTC` (12:00 UTC) on an existing cron tick.
+  - **Control plane** (migration `047`, service-role-only RLS): `self_improvement_runs` (ledger),
+    `self_improvement_settings` (enable / **kill switch** / autonomous-ship gate / recipient),
+    `user_autonomy_flags` (per-user no-human-in-the-loop opt-in — the "profile" autonomy flag).
+  - **Admin surface** `POST/GET /api/admin/self-improve` — dual auth (platform-admin session OR
+    `x-self-improve-secret`), manual trigger + settings toggle. Verified live: rejects unauth 401.
+  - **Step 3 self-gated ship spine:** `scripts/autonomous-ship.mjs` = `/ship-pr` minus human
+    confirmations, gates kept (kill switch → type-check → tests → build → deploy → verify-live
+    with **auto-rollback** → merge); `.claude/commands/auto-ship.md` runbook; on-ramp
+    `.github/workflows/self-improve.yml` (phase-1 scheduled gates + secret-gated audit trigger).
+  - **Remaining to activate (operator, intentionally manual per the guardrails below):** (a) apply
+    migration `047` to prod (`supabase db push` — CI-blocked by design); (b) set
+    `SELF_IMPROVEMENT_ENABLED="true"` + toggle DB `enabled`; (c) provision the external headless
+    Claude runtime + `ANTHROPIC_API_KEY` for phase-2 autonomous code-gen. Everything else is live.
+
 Fully autonomous, **no human gate**:
 1. **Cron (daily)** → run an audit on `getgeopulse.com` (free scan or deep audit).
 2. **Email** the report to Uzziel (Resend is already wired — `RESEND_*`).
