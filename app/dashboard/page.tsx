@@ -331,7 +331,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     : selectedAgencyAccount
       ? `Scans run under ${selectedAgencyAccount.name}. Select a client to narrow scope.`
       : selectedStartupWorkspace
-        ? `Scans link to ${selectedStartupWorkspace.name}.`
+        ? `Scans are saved to your ${selectedStartupWorkspace.name} workspace.`
         : null;
 
   const startupAccessBlocked =
