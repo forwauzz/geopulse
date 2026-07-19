@@ -266,6 +266,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
               letterGrade: data.letterGrade,
               categoryScores: data.categoryScores,
             }}
+            youUrl={data.url}
             siteKey={turnstileSiteKey}
             benchmark={data.benchmark ?? undefined}
           />

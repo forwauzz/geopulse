@@ -58,6 +58,7 @@ export default async function ScorecardPreviewPage({
         competitorSlot={
           <CompetitorCompare
             you={you}
+            youUrl={immersiveLabsScan.url}
             siteKey="1x00000000000000000000AA"
             benchmark={benchmark}
             initialCompetitors={seededCompetitors}

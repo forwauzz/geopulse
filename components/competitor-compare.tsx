@@ -3,12 +3,17 @@
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { useRef, useState } from 'react';
 import { PeerStrip, type ReportCategoryScore, type ScoreBenchmark } from '@/components/score-report';
+import { CompetitorDiscovery } from '@/components/competitor-discovery';
 
 type Summary = {
   domain: string;
   score: number;
   letterGrade: string;
   categoryScores: ReportCategoryScore[];
+  /** Optional display name (from auto-discovery); falls back to the domain. */
+  name?: string;
+  /** True for clearly-labelled mock sample rows (auto-discovery, no live scan). */
+  sample?: boolean;
 };
 
 const MAX_COMPETITORS = 3;
@@ -40,11 +45,14 @@ function errText(data: unknown): string {
 
 export function CompetitorCompare({
   you,
+  youUrl,
   siteKey,
   benchmark,
   initialCompetitors,
 }: {
   you: Summary;
+  /** Full URL of the scanned site — used by auto-discovery detection. */
+  youUrl?: string;
   siteKey: string;
   benchmark?: ScoreBenchmark;
   /** Preview/testing only: seed the comparison table without a live scan. */
@@ -64,42 +72,55 @@ export function CompetitorCompare({
     ...PILLARS.map((p) => ({ label: p.label, get: (s: Summary) => pillarScore(s.categoryScores, p.key) })),
   ];
 
-  async function addCompetitor(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (atCap) return;
-    if (!token) {
-      setError('Please complete the verification below.');
-      return;
-    }
-    setBusy(true);
+  // Shared scan → append. Returns an error string on failure, or null on success. Reused by the
+  // manual form and by auto-discovery's live "Scan & compare" candidates.
+  async function scanInto(rawUrl: string): Promise<string | null> {
+    if (competitors.length >= MAX_COMPETITORS) return `Comparing the maximum of ${MAX_COMPETITORS} competitors.`;
+    if (!token) return 'Please complete the verification below.';
     try {
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, turnstileToken: token }),
+        body: JSON.stringify({ url: rawUrl, turnstileToken: token }),
       });
       const data: unknown = await res.json();
-      if (!res.ok) {
-        setError(errText(data));
-      } else {
-        const d = data as Partial<Summary> & { domain?: string; finalUrl?: string };
-        setCompetitors((list) => [
-          ...list,
-          {
-            domain: String(d.domain ?? url),
-            score: Number(d.score ?? 0),
-            letterGrade: String(d.letterGrade ?? '—'),
-            categoryScores: Array.isArray(d.categoryScores) ? d.categoryScores : [],
-          },
-        ]);
-        setUrl('');
-      }
+      if (!res.ok) return errText(data);
+      const d = data as Partial<Summary> & { domain?: string };
+      setCompetitors((list) => [
+        ...list,
+        {
+          domain: String(d.domain ?? rawUrl),
+          score: Number(d.score ?? 0),
+          letterGrade: String(d.letterGrade ?? '—'),
+          categoryScores: Array.isArray(d.categoryScores) ? d.categoryScores : [],
+        },
+      ]);
+      return null;
     } catch {
-      setError('We couldn’t reach that site. Check the URL and try again.');
+      return 'We couldn’t reach that site. Check the URL and try again.';
+    } finally {
+      // A token is single-use; reset the widget for the next scan.
+      setToken(E2E_BYPASS_TURNSTILE ? 'e2e-bypass-token' : null);
+      tsRef.current?.reset();
     }
-    setToken(null);
-    tsRef.current?.reset();
+  }
+
+  function addSample(c: { name: string; domain: string; score: number; letterGrade: string; categoryScores: ReportCategoryScore[] }) {
+    setCompetitors((list) =>
+      list.length >= MAX_COMPETITORS
+        ? list
+        : [...list, { domain: c.domain, name: c.name, score: c.score, letterGrade: c.letterGrade, categoryScores: c.categoryScores, sample: true }]
+    );
+  }
+
+  async function addCompetitor(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (atCap) return;
+    setBusy(true);
+    const err = await scanInto(url);
+    if (err) setError(err);
+    else setUrl('');
     setBusy(false);
   }
 
@@ -110,6 +131,18 @@ export function CompetitorCompare({
         <span className="font-label text-[0.62rem] uppercase tracking-[0.13em] text-on-surface-variant">
           {competitors.length > 0 ? 'head-to-head' : 'add a competitor'}
         </span>
+      </div>
+
+      {/* auto-discovery: detect → confirm → discover */}
+      <div className="mt-3">
+        <CompetitorDiscovery
+          domain={you.domain}
+          youUrl={youUrl}
+          atCap={atCap}
+          hasToken={Boolean(token)}
+          onScanUrl={scanInto}
+          onAddSample={addSample}
+        />
       </div>
 
       {/* empty state → the generic peer strip as a fallback */}
@@ -132,18 +165,23 @@ export function CompetitorCompare({
                 {cols.map((c, i) => (
                   <th key={`${c.domain}-${i}`} className="p-2 align-bottom">
                     <span className={`block text-center font-sans text-sm font-semibold ${i === 0 ? 'text-primary' : 'text-on-background'}`}>
-                      {i === 0 ? 'You' : c.domain}
+                      {i === 0 ? 'You' : c.name ?? c.domain}
                     </span>
                     {i === 0 ? (
                       <span className="block text-center font-label text-[0.6rem] text-on-surface-variant">{c.domain}</span>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setCompetitors((list) => list.filter((_, j) => j !== i - 1))}
-                        className="mx-auto mt-0.5 block font-label text-[0.6rem] text-on-surface-variant transition hover:text-error"
-                      >
-                        remove
-                      </button>
+                      <span className="mt-0.5 flex items-center justify-center gap-1">
+                        {c.sample ? (
+                          <span className="rounded bg-surface-container px-1 font-label text-[0.5rem] uppercase tracking-[0.1em] text-on-surface-variant">sample</span>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => setCompetitors((list) => list.filter((_, j) => j !== i - 1))}
+                          className="font-label text-[0.6rem] text-on-surface-variant transition hover:text-error"
+                        >
+                          remove
+                        </button>
+                      </span>
                     )}
                   </th>
                 ))}
