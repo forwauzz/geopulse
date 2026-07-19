@@ -1,0 +1,66 @@
+# Loop 5a — autonomous self-improvement on-ramp (OSS-REFACTOR-PLAN.md).
+#
+# Phase 1 (SAFE ON-RAMP, this file): on a schedule / manual dispatch, run the self-audit of
+# getgeopulse.com and run the safety gates (type-check + tests + build). This is the
+# "opens a PR + auto-merges only on green checks" on-ramp BEFORE true zero-touch.
+#
+# Phase 2 (external, NOT in this file): a headless coding agent reads the emailed improvement
+# plan, implements a bounded change on a branch, and calls `scripts/autonomous-ship.mjs`. That
+# step needs an ANTHROPIC_API_KEY + a Claude Code runtime with repo write — provisioned by the
+# operator. It is intentionally left as a documented manual `workflow_dispatch` input below so
+# nothing auto-writes to the repo until the operator opts in.
+#
+# Required repo secrets (operator-provisioned): SELF_IMPROVE_TRIGGER_SECRET (matches the Worker's
+# SELF_IMPROVEMENT_TRIGGER_SECRET). Phase 2 additionally needs ANTHROPIC_API_KEY.
+
+name: self-improve
+
+on:
+  schedule:
+    # 12:10 UTC daily — after the Worker cron self-audit (12:00) has emailed the plan.
+    - cron: "10 12 * * *"
+  workflow_dispatch:
+    inputs:
+      run_audit:
+        description: "Trigger a fresh self-audit on getgeopulse.com via the admin endpoint"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    # Phase-1 safety net: prove the tree is shippable. Never deploys.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Type-check
+        run: npm run type-check
+      - name: Tests
+        run: npm run test
+      - name: Worker build
+        run: node scripts/opennext-build.cjs
+
+  trigger-audit:
+    # Kick a fresh self-audit + email via the secret-gated admin endpoint. No repo writes.
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'schedule' || inputs.run_audit }}
+    steps:
+      - name: Trigger self-audit
+        env:
+          SECRET: ${{ secrets.SELF_IMPROVE_TRIGGER_SECRET }}
+        run: |
+          if [ -z "$SECRET" ]; then
+            echo "SELF_IMPROVE_TRIGGER_SECRET not set — skipping (audit still runs from the Worker cron)."
+            exit 0
+          fi
+          curl -sS -X POST https://getgeopulse.com/api/admin/self-improve \
+            -H "content-type: application/json" \
+            -H "x-self-improve-secret: $SECRET" \
+            -d '{"action":"run"}'
