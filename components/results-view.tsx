@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { DeepAuditCheckout } from '@/components/deep-audit-checkout';
-import { EmailGate } from '@/components/email-gate';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { ScoreReport, type ReportIssue, type ScoreReportData, type ScoreBenchmark } from '@/components/score-report';
 import { CompetitorCompare } from '@/components/competitor-compare';
@@ -207,7 +206,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
   const host = domainFromUrl(data.url);
   const hasDirectReportAccess = !!(data.pdfUrl || data.markdownUrl);
   const showCheckout = !data.hasPaidReport && turnstileSiteKey && data.deepAuditAvailable;
-  const showEmailGate = !data.hasPaidReport && turnstileSiteKey;
   async function handleShareSnapshot(): Promise<void> {
     const shareUrl = window.location.href;
     const shareData = {
@@ -254,6 +252,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
   };
 
   return (
+    <>
     <ScoreReport
       data={reportData}
       benchmark={data.benchmark ?? undefined}
@@ -398,17 +397,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
             </section>
           ) : null}
 
-          {showEmailGate ? (
-            <section id="preview-save" className="mx-auto max-w-3xl">
-              <EmailGate
-                siteKey={turnstileSiteKey}
-                scanId={data.scanId}
-                url={data.url}
-                score={data.score}
-              />
-            </section>
-          ) : null}
-
           {/* Share + scan another */}
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
             <button
@@ -433,5 +421,18 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         </div>
       }
     />
+    {showCheckout ? (
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4">
+        <button
+          type="button"
+          onClick={() => document.getElementById('full-audit-checkout')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+          className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 font-sans text-sm font-semibold text-on-primary shadow-float transition hover:bg-primary-dim"
+        >
+          <span className="material-symbols-outlined text-base" aria-hidden>bolt</span>
+          {data.checkoutMode === 'free' ? 'Run the full audit — free' : 'Get the full report'}
+        </button>
+      </div>
+    ) : null}
+    </>
   );
 }
