@@ -35,7 +35,7 @@ type ScanData = {
   deepAuditAvailable: boolean;
 };
 
-type Props = { scanId: string; turnstileSiteKey: string; checkoutState?: string | null };
+type Props = { scanId: string; turnstileSiteKey: string; checkoutState?: string | null; showCompetitorSearch?: boolean };
 type LoadError = 'not_found' | 'expired' | 'forbidden' | 'load_failed' | 'network' | null;
 
 function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
@@ -60,7 +60,7 @@ function domainFromUrl(url: string): string {
 const POLL_INTERVAL_MS = 10_000;
 const POLL_MAX_MS = 120_000;
 
-export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) {
+export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompetitorSearch = false }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError>(null);
   const [data, setData] = useState<ScanData | null>(null);
@@ -258,7 +258,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState }: Props) 
       data={reportData}
       benchmark={data.benchmark ?? undefined}
       competitorSlot={
-        turnstileSiteKey ? (
+        showCompetitorSearch && turnstileSiteKey ? (
           <CompetitorCompare
             you={{
               domain: host,

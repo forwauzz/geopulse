@@ -14,7 +14,8 @@ export type UiFlagKey =
   | 'show_free_trial'
   | 'show_connectors'
   | 'show_billing'
-  | 'show_blog';
+  | 'show_blog'
+  | 'show_competitor_search';
 
 export type UiFlags = Record<UiFlagKey, boolean>;
 
@@ -26,6 +27,8 @@ export const UI_FLAG_DEFAULTS: UiFlags = {
   show_connectors: false,
   show_billing: true,
   show_blog: true,
+  // Off by default — competitor discovery is still mock/imperfect; opt in per deployment.
+  show_competitor_search: false,
 };
 
 export const UI_FLAG_LABELS: Record<UiFlagKey, { label: string; help: string }> = {
@@ -35,6 +38,7 @@ export const UI_FLAG_LABELS: Record<UiFlagKey, { label: string; help: string }> 
   show_connectors: { label: 'Connectors', help: 'Show the Connectors section in the dashboard.' },
   show_billing: { label: 'Billing', help: 'Show the Billing section in the dashboard.' },
   show_blog: { label: 'Blog', help: 'Show the Blog link.' },
+  show_competitor_search: { label: 'Competitor search', help: 'Show the “compare against competitors” tool on the results scorecard.' },
 };
 
 export const UI_FLAG_KEYS = Object.keys(UI_FLAG_DEFAULTS) as UiFlagKey[];
