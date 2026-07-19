@@ -1,8 +1,8 @@
-import Link from 'next/link';
 import { signOut } from '@/app/dashboard/actions';
 import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { SiteHeaderShell } from '@/components/site-header-shell';
+import { loadUiFlags } from '@/lib/server/app-ui-flags';
 
 export async function SiteHeader() {
   let userEmail: string | null = null;
@@ -21,11 +21,16 @@ export async function SiteHeader() {
 
   const isSignedIn = !!userEmail;
   const isAdmin = userId ? await isUserPlatformAdmin(userId) : false;
+  const flags = await loadUiFlags();
 
   return (
     <SiteHeaderShell
       isSignedIn={isSignedIn}
       isAdmin={isAdmin}
+      showPricing={flags.show_pricing}
+      showAboutNav={flags.show_about_nav}
+      showFreeTrial={flags.show_free_trial}
+      showBlog={flags.show_blog}
       signOutButton={
         isSignedIn ? (
           <form action={signOut}>

@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
+import { loadUiFlags } from '@/lib/server/app-ui-flags';
 import { PricingBundleCard, type PricingBundleCardProps } from '@/components/pricing-bundle-card';
 import { SubscriptionStatusBanner } from '@/components/subscription-status-banner';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
@@ -152,6 +154,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function PricingPage() {
+  // Hidden by the super-admin App Settings flag → send visitors to sign-in instead of a dead page.
+  if (!(await loadUiFlags()).show_pricing) redirect('/login');
   const userSupabase = await createSupabaseServerClient();
   const {
     data: { user },
