@@ -11,6 +11,9 @@ vi.mock('@/lib/server/cf-env', () => ({
   getClientIp: vi.fn(() => '203.0.113.10'),
   getPaymentApiEnv: vi.fn(async () => ({
     SCAN_CACHE: undefined,
+    // These two cases cover the LEGACY PAID paths (Stripe + startup bypass). Without this the
+    // OSS free branch short-circuits first and they'd pass/fail for the wrong reason.
+    LEGACY_PAID_ENABLED: 'true',
     NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com',
     NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_SERVICE_ROLE_KEY: 'service-role',
