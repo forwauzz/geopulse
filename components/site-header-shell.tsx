@@ -9,12 +9,20 @@ type SiteHeaderShellProps = {
   readonly isSignedIn: boolean;
   readonly isAdmin: boolean;
   readonly signOutButton: React.ReactNode;
+  readonly showPricing?: boolean;
+  readonly showAboutNav?: boolean;
+  readonly showFreeTrial?: boolean;
+  readonly showBlog?: boolean;
 };
 
 export function SiteHeaderShell({
   isSignedIn,
   isAdmin,
   signOutButton,
+  showPricing = false,
+  showAboutNav = false,
+  showFreeTrial = false,
+  showBlog = true,
 }: SiteHeaderShellProps) {
   const pathname = usePathname();
   const isDashboardRoute = pathname.startsWith('/dashboard');
@@ -54,24 +62,21 @@ export function SiteHeaderShell({
             </>
           ) : isSignedIn ? (
             <>
-              <Link
-                href="/blog"
-                className={primaryNavLinkClassName}
-              >
-                Blog
-              </Link>
-              <Link
-                href="/pricing"
-                className={primaryNavLinkClassName}
-              >
-                Pricing
-              </Link>
-              <Link
-                href="/about"
-                className={primaryNavLinkClassName}
-              >
-                About
-              </Link>
+              {showBlog ? (
+                <Link href="/blog" className={primaryNavLinkClassName}>
+                  Blog
+                </Link>
+              ) : null}
+              {showPricing ? (
+                <Link href="/pricing" className={primaryNavLinkClassName}>
+                  Pricing
+                </Link>
+              ) : null}
+              {showAboutNav ? (
+                <Link href="/about" className={primaryNavLinkClassName}>
+                  About
+                </Link>
+              ) : null}
               <Link
                 href="/dashboard"
                 className={dashboardLinkClassName}
@@ -98,31 +103,30 @@ export function SiteHeaderShell({
             </>
           ) : (
             <>
-              <Link
-                href="/blog"
-                className={primaryNavLinkClassName}
-              >
-                Blog
-              </Link>
-              <Link
-                href="/pricing"
-                className={primaryNavLinkClassName}
-              >
-                Pricing
-              </Link>
-              <Link
-                href="/about"
-                className={primaryNavLinkClassName}
-              >
-                About
-              </Link>
-              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
-                <Link
-                  href="/pricing"
-                  className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-on-background transition hover:bg-surface-container-low sm:px-5"
-                >
-                  Start free trial
+              {showBlog ? (
+                <Link href="/blog" className={primaryNavLinkClassName}>
+                  Blog
                 </Link>
+              ) : null}
+              {showPricing ? (
+                <Link href="/pricing" className={primaryNavLinkClassName}>
+                  Pricing
+                </Link>
+              ) : null}
+              {showAboutNav ? (
+                <Link href="/about" className={primaryNavLinkClassName}>
+                  About
+                </Link>
+              ) : null}
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+                {showFreeTrial ? (
+                  <Link
+                    href="/pricing"
+                    className="rounded-xl border border-outline-variant/40 bg-surface-container-lowest px-4 py-2 text-sm font-semibold text-on-background transition hover:bg-surface-container-low sm:px-5"
+                  >
+                    Start free trial
+                  </Link>
+                ) : null}
                 <Link
                   href="/login"
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"

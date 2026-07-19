@@ -21,6 +21,7 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
     section: 'Platform',
     items: [
       { href: '/admin', label: 'Console Home', icon: 'home' },
+      { href: '/admin/settings', label: 'App Settings', icon: 'settings' },
       { href: '/admin/agencies', label: 'Agencies', icon: 'corporate_fare' },
       { href: '/admin/startups', label: 'Startups', icon: 'rocket_launch' },
       { href: '/admin/services', label: 'Services & Bundles', icon: 'tune' },

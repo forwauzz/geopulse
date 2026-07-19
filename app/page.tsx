@@ -12,6 +12,7 @@ import {
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
+import { loadUiFlags } from '@/lib/server/app-ui-flags';
 
 const features = [
   {
@@ -253,6 +254,8 @@ export default async function HomePage({
   const baseUrl = await loadBaseUrl();
   const siteKey = getTurnstileSiteKey();
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
+  // When Pricing is hidden by the App Settings flag, point CTAs at sign-in instead.
+  const gapsCtaHref = (await loadUiFlags()).show_pricing ? '/pricing' : '/login';
   const pageModifiedAt = new Date().toISOString();
   const organizationSchema = buildOrganizationStructuredData({
     url: siteUrl,
@@ -374,7 +377,7 @@ export default async function HomePage({
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
             <Link
-              href="/pricing"
+              href={gapsCtaHref}
               className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
             >
               See your AI visibility gaps
@@ -754,7 +757,7 @@ export default async function HomePage({
         </p>
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
-            href="/pricing"
+            href={gapsCtaHref}
             className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-medium text-on-primary transition-opacity hover:opacity-90"
           >
             See your AI visibility gaps

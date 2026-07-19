@@ -5,14 +5,17 @@ import { DashboardSidebar } from '@/components/dashboard-sidebar';
 
 export const DASHBOARD_SIDEBAR_COLLAPSED_KEY = 'geo-pulse-dashboard-sidebar-collapsed';
 
+export type DashboardNavFlags = { connectors: boolean; billing: boolean; blog: boolean };
+
 type Props = {
   readonly userEmail: string | null;
   readonly isAdmin: boolean;
   readonly signOutAction: () => Promise<void>;
+  readonly navFlags?: DashboardNavFlags;
   readonly children: React.ReactNode;
 };
 
-export function DashboardShell({ userEmail, isAdmin, signOutAction, children }: Props) {
+export function DashboardShell({ userEmail, isAdmin, signOutAction, navFlags, children }: Props) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useLayoutEffect(() => {
@@ -47,6 +50,7 @@ export function DashboardShell({ userEmail, isAdmin, signOutAction, children }: 
         userEmail={userEmail}
         isAdmin={isAdmin}
         signOutAction={signOutAction}
+        navFlags={navFlags}
         desktopCollapsed={sidebarCollapsed}
         onToggleDesktopCollapse={toggleSidebarCollapsed}
       />

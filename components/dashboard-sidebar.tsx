@@ -10,6 +10,8 @@ type DashboardSidebarProps = {
   readonly userEmail: string | null;
   readonly isAdmin: boolean;
   readonly signOutAction: () => Promise<void>;
+  /** Global UI flags → hide optional nav sections (connectors/billing/blog). */
+  readonly navFlags?: { connectors: boolean; billing: boolean; blog: boolean };
   /** When true at `lg+`, nav shows icon rail (labels via tooltip / aria). */
   readonly desktopCollapsed?: boolean;
   readonly onToggleDesktopCollapse?: () => void;
@@ -121,12 +123,23 @@ const WORKSPACE_NAV: readonly NavItem[] = [
   { href: '/blog', label: 'Blog', icon: 'article' },
 ];
 
+// Hide optional nav items when their global flag is off (connectors/billing/blog).
+function filterWorkspaceNav(navFlags?: { connectors: boolean; billing: boolean; blog: boolean }): readonly NavItem[] {
+  if (!navFlags) return WORKSPACE_NAV;
+  const off = new Set<string>();
+  if (!navFlags.connectors) off.add('/dashboard/connectors');
+  if (!navFlags.billing) off.add('/dashboard/billing');
+  if (!navFlags.blog) off.add('/blog');
+  return WORKSPACE_NAV.filter((item) => !off.has(item.href));
+}
+
 function NavBlocks({
   pathname,
   compact,
   userEmail,
   isAdmin,
   signOutAction,
+  workspaceNav,
   onNavigate,
 }: {
   readonly pathname: string;
@@ -134,6 +147,7 @@ function NavBlocks({
   readonly userEmail: string | null;
   readonly isAdmin: boolean;
   readonly signOutAction: () => Promise<void>;
+  readonly workspaceNav: readonly NavItem[];
   readonly onNavigate?: () => void;
 }) {
   return (
@@ -141,7 +155,7 @@ function NavBlocks({
       <div id="dashboard-sidebar-nav" className="mt-4 space-y-5 lg:mt-6">
         <NavSection
           title="Workspace"
-          items={WORKSPACE_NAV}
+          items={workspaceNav}
           pathname={pathname}
           onNavigate={onNavigate}
           compact={compact}
@@ -224,11 +238,13 @@ export function DashboardSidebar({
   userEmail,
   isAdmin,
   signOutAction,
+  navFlags,
   desktopCollapsed = false,
   onToggleDesktopCollapse,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const workspaceNav = filterWorkspaceNav(navFlags);
 
   const closeMenu = () => setMobileOpen(false);
 
@@ -303,6 +319,7 @@ export function DashboardSidebar({
           userEmail={userEmail}
           isAdmin={isAdmin}
           signOutAction={signOutAction}
+          workspaceNav={workspaceNav}
           onNavigate={closeMenu}
         />
       </div>
@@ -314,6 +331,7 @@ export function DashboardSidebar({
           userEmail={userEmail}
           isAdmin={isAdmin}
           signOutAction={signOutAction}
+          workspaceNav={workspaceNav}
         />
       </div>
     </aside>
