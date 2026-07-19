@@ -2,6 +2,20 @@
  * Resolve Cloudflare bindings for API routes (OpenNext + wrangler dev).
  */
 import { getCloudflareContext } from '@opennextjs/cloudflare';
+import { registerSelfFetch } from '@workers/lib/fetch-gate';
+
+/** Route audits of our own domain through the self-reference binding (avoids the edge→origin 525). */
+function registerSelfAuditFetch(e: Record<string, unknown>): void {
+  try {
+    const self = e['WORKER_SELF_REFERENCE'] as { fetch: (input: string) => Promise<Response> } | undefined;
+    const appUrl = typeof e['NEXT_PUBLIC_APP_URL'] === 'string' ? (e['NEXT_PUBLIC_APP_URL'] as string) : '';
+    if (self && typeof self.fetch === 'function' && appUrl) {
+      registerSelfFetch(new URL(appUrl).hostname, (url) => self.fetch(url));
+    }
+  } catch {
+    /* best effort — normal fetch path still applies */
+  }
+}
 
 export type ScanApiEnv = {
   SCAN_CACHE: KVNamespace | undefined;
@@ -194,6 +208,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
 export async function getScanApiEnv(): Promise<ScanApiEnv> {
   try {
     const { env } = await getCloudflareContext({ async: true });
+    registerSelfAuditFetch(env as unknown as Record<string, unknown>);
     return readEnvRecord(env as unknown as Record<string, unknown>);
   } catch {
     return {
@@ -250,6 +265,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
   try {
     const { env } = await getCloudflareContext({ async: true });
     const e = env as unknown as Record<string, unknown>;
+    registerSelfAuditFetch(e);
     const base = readEnvRecord(e);
     return {
       ...base,

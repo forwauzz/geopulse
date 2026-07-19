@@ -31,6 +31,26 @@ import {
   type MarketingAutopilotEnvLike,
 } from '../lib/server/marketing-autopilot';
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
+import { registerSelfFetch } from './lib/fetch-gate';
+
+/**
+ * Route audits of our OWN domain through the self-reference service binding so the scan engine
+ * invokes the Worker directly instead of looping out to the origin (which returns HTTP 525).
+ */
+function registerSelfAuditFetch(env: CloudflareEnv): void {
+  try {
+    const record = env as unknown as Record<string, unknown>;
+    const self = record['WORKER_SELF_REFERENCE'] as { fetch: (input: string) => Promise<Response> } | undefined;
+    const appUrl = env.NEXT_PUBLIC_APP_URL;
+    if (self && appUrl) {
+      registerSelfFetch(new URL(appUrl).hostname, (url) => self.fetch(url));
+    } else {
+      registerSelfFetch(null, null);
+    }
+  } catch {
+    registerSelfFetch(null, null);
+  }
+}
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -76,6 +96,7 @@ async function pingSupabaseKeepAlive(env: CloudflareEnv): Promise<void> {
 
 export default {
   async fetch(request: Request, env: CloudflareEnv, ctx: ExecutionContext): Promise<Response> {
+    registerSelfAuditFetch(env);
     const response = await next.fetch(request, env, ctx);
     return applyDefaultSecurityHeaders(response);
   },
@@ -93,6 +114,7 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: CloudflareEnv, _ctx: ExecutionContext): Promise<void> {
+    registerSelfAuditFetch(env);
     try {
       await pingSupabaseKeepAlive(env);
     } catch {

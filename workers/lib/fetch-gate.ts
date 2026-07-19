@@ -15,6 +15,28 @@ export type FetchGateTextResult =
 const DEFAULT_TIMEOUT_MS = 10_000;
 const USER_AGENT = 'GEO-PulseBot/1.0 (+https://geopulse.io)';
 
+// ── Self-fetch (fixes HTTP 525 when auditing our OWN domain) ─────────────────────
+// A Cloudflare Worker fetching its own public hostname is routed to the zone origin (to avoid
+// loops), whose SSL handshake fails → 525. For the Worker's own host we instead invoke the Worker
+// directly through the WORKER_SELF_REFERENCE service binding. Registered per-request by the Worker
+// entrypoint; only ever used for the exact self-host, so all other scans are unaffected.
+type SelfFetcher = { host: string; fetch: (url: string) => Promise<Response> };
+let selfFetcher: SelfFetcher | null = null;
+
+export function registerSelfFetch(host: string | null | undefined, fn: ((url: string) => Promise<Response>) | null): void {
+  const clean = host?.trim().replace(/^www\./i, '').toLowerCase();
+  selfFetcher = clean && fn ? { host: clean, fetch: fn } : null;
+}
+
+function matchSelfFetch(rawUrl: string): SelfFetcher | null {
+  if (!selfFetcher) return null;
+  try {
+    return new URL(rawUrl).hostname.replace(/^www\./i, '').toLowerCase() === selfFetcher.host ? selfFetcher : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readTextWithByteLimit(res: Response, maxBytes: number): Promise<string> {
   const reader = res.body?.getReader();
   if (!reader) {
@@ -64,6 +86,21 @@ export async function fetchGateText(
   options: FetchGateTextOptions
 ): Promise<FetchGateTextResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  // Own domain → invoke the Worker directly (bypasses the edge→origin 525). Safe: it's our host.
+  const self = matchSelfFetch(rawUrl);
+  if (self) {
+    try {
+      const res = await self.fetch(rawUrl);
+      if (!res.ok) return { ok: false, reason: `Target returned HTTP ${String(res.status)}` };
+      const ctype = res.headers.get('Content-Type');
+      const text = await readTextWithByteLimit(res, options.maxBytes);
+      return { ok: true, text, finalUrl: rawUrl, status: res.status, contentType: ctype };
+    } catch {
+      // Self-fetch unavailable — fall through to the normal (validated) path.
+    }
+  }
+
   const v = await validateEngineFetchUrl(rawUrl);
   if (!v.ok) return { ok: false, reason: v.reason };
 
