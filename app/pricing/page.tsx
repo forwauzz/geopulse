@@ -210,7 +210,7 @@ export default async function PricingPage() {
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
           Pricing
         </p>
-        <h1 className="mt-4 font-headline text-4xl font-bold text-on-background md:text-5xl">
+        <h1 className="mt-4 font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl">
           Start free. Subscribe when you need the full platform.
         </h1>
         <p className="mt-6 font-body text-lg leading-relaxed text-on-surface-variant">
@@ -258,7 +258,7 @@ export default async function PricingPage() {
       <section className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-10 lg:grid-cols-12">
         <div className="lg:col-span-4">
           <p className="font-label text-xs uppercase tracking-widest text-primary">Pricing questions</p>
-          <h2 className="mt-3 font-headline text-2xl font-bold text-on-background md:text-3xl">
+          <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background md:text-3xl">
             Direct answers before checkout
           </h2>
           <p className="mt-4 font-body text-sm leading-7 text-on-surface-variant">
@@ -272,7 +272,7 @@ export default async function PricingPage() {
               key={item.question}
               className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float"
             >
-              <h3 className="font-headline text-lg font-bold text-on-background">{item.question}</h3>
+              <h3 className="font-sans text-lg font-black uppercase tracking-tight text-on-background">{item.question}</h3>
               <p className="mt-3 font-body text-sm leading-7 text-on-surface-variant">
                 {item.answer}
               </p>

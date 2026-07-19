@@ -68,7 +68,7 @@ export default async function AboutPage() {
         <p className="mt-3 font-body text-sm text-on-surface-variant">
           Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
-        <h1 className="mt-4 font-headline text-4xl font-bold text-on-background md:text-5xl">
+        <h1 className="mt-4 font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl">
           GEO-Pulse is a founder-led product for AI search readiness
         </h1>
         <p className="mt-6 font-body text-lg leading-relaxed text-on-surface-variant">
@@ -82,7 +82,7 @@ export default async function AboutPage() {
       <section className="mt-12 grid gap-6 md:grid-cols-2">
         <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
           <p className="font-label text-xs uppercase tracking-widest text-primary">Founder</p>
-          <h2 className="mt-3 font-headline text-2xl font-bold text-on-background">
+          <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background">
             {SITE_AUTHOR_NAME}
           </h2>
           <p className="mt-3 font-body leading-relaxed text-on-surface-variant">
@@ -93,7 +93,7 @@ export default async function AboutPage() {
         </div>
         <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
           <p className="font-label text-xs uppercase tracking-widest text-primary">What this page is for</p>
-          <h2 className="mt-3 font-headline text-2xl font-bold text-on-background">
+          <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background">
             A trust anchor for public pages
           </h2>
           <p className="mt-3 font-body leading-relaxed text-on-surface-variant">

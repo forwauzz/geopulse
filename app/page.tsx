@@ -317,18 +317,10 @@ export default async function HomePage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppSchema) }}
       />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }} />
-      <section className="relative overflow-hidden px-6 pb-12 pt-8 text-center md:px-10 md:pb-18 md:pt-12">
-        <div
-          className="pointer-events-none absolute inset-x-0 top-0 h-[28rem] opacity-80"
-          style={{
-            background:
-              'radial-gradient(circle at 50% 0%, rgb(var(--color-tertiary) / 0.12), transparent 42%), radial-gradient(circle at 20% 24%, rgb(var(--color-gold) / 0.12), transparent 26%)',
-          }}
-          aria-hidden
-        />
+      <section className="relative overflow-hidden border-b border-outline-variant/15 px-6 pb-12 pt-10 text-center md:px-10 md:pb-20 md:pt-16">
         <div className="relative mx-auto max-w-6xl">
-          <h1 className="mx-auto max-w-5xl font-headline text-4xl font-bold leading-[1.05] tracking-tight text-on-background md:text-6xl lg:text-7xl">
-            Stop guessing whether AI is <span className="text-tertiary">surfacing</span> your company.
+          <h1 className="mx-auto max-w-5xl font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl lg:text-8xl">
+            Stop guessing whether AI is surfacing your company.
           </h1>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             {modelPlatforms.map((platform) => (
@@ -430,7 +422,7 @@ export default async function HomePage({
               <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-surface-container-lowest transition-colors duration-300 group-hover:bg-primary group-hover:text-on-primary">
                 <span className="material-symbols-outlined">{f.icon}</span>
               </div>
-              <h3 className="font-headline text-xl font-bold text-on-background">{f.title}</h3>
+              <h3 className="font-sans text-xl font-black uppercase tracking-tight text-on-background">{f.title}</h3>
               <p className="font-body text-sm leading-relaxed text-on-surface-variant">{f.body}</p>
             </div>
           ))}
@@ -443,7 +435,7 @@ export default async function HomePage({
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
               Direct answers
             </span>
-            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+            <h2 className="mt-3 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">
               A better score is not the point
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
@@ -473,7 +465,7 @@ export default async function HomePage({
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-start">
           <div className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">How it works</span>
-            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+            <h2 className="mt-3 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">
               See, fix, and prove your AI visibility
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
@@ -503,7 +495,7 @@ export default async function HomePage({
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 font-label text-xs font-bold text-primary">
                       {item.step}
                     </span>
-                    <h3 className="font-headline text-lg font-bold text-on-background">{item.title}</h3>
+                    <h3 className="font-sans text-lg font-black uppercase tracking-tight text-on-background">{item.title}</h3>
                   </div>
                   <p className="mt-4 font-body text-sm leading-relaxed text-on-surface-variant">
                     {item.body}
@@ -533,7 +525,7 @@ export default async function HomePage({
         <div className="grid grid-cols-1 items-start gap-16 lg:grid-cols-12">
           <div className="space-y-12 lg:col-span-5">
             <div>
-              <h2 className="mb-6 font-headline text-3xl font-bold text-on-background md:text-4xl">What you get</h2>
+              <h2 className="mb-6 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">What you get</h2>
               <p className="mb-12 font-body text-on-surface-variant">
                 Every scan should answer three questions clearly: where AI visibility is weak, what
                 to fix first, and how to tell whether progress is becoming real rather than cosmetic.
@@ -542,19 +534,19 @@ export default async function HomePage({
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
                 <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Visibility</h4>
-                <p className="font-headline text-lg font-bold text-on-background">AI inclusion gaps</p>
+                <p className="font-sans text-lg font-black uppercase tracking-tight text-on-background">AI inclusion gaps</p>
               </div>
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
                 <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Diagnosis</h4>
-                <p className="font-headline text-lg font-bold text-on-background">Top blockers to fix</p>
+                <p className="font-sans text-lg font-black uppercase tracking-tight text-on-background">Top blockers to fix</p>
               </div>
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
                 <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Execution</h4>
-                <p className="font-headline text-lg font-bold text-on-background">Priority implementation path</p>
+                <p className="font-sans text-lg font-black uppercase tracking-tight text-on-background">Priority implementation path</p>
               </div>
               <div className="rounded-xl bg-surface-container-lowest p-6 shadow-float">
                 <h4 className="mb-2 font-label text-xs uppercase tracking-widest text-primary">Evidence</h4>
-                <p className="font-headline text-lg font-bold text-on-background">Tracked improvement over time</p>
+                <p className="font-sans text-lg font-black uppercase tracking-tight text-on-background">Tracked improvement over time</p>
               </div>
             </div>
           </div>
@@ -565,7 +557,7 @@ export default async function HomePage({
                   <span className="font-label text-[10px] uppercase tracking-[0.2em] text-on-surface-variant opacity-70">
                     Sample report
                   </span>
-                  <h3 className="mt-1 font-headline text-2xl font-bold text-on-background">yourdomain.com</h3>
+                  <h3 className="mt-1 font-sans text-2xl font-black uppercase tracking-tight text-on-background">yourdomain.com</h3>
                 </div>
                 <span className="rounded-md bg-tertiary/10 px-3 py-1 font-label text-xs font-bold uppercase tracking-widest text-tertiary-dim">
                   Illustration
@@ -573,8 +565,8 @@ export default async function HomePage({
               </div>
               <div className="mb-10 grid grid-cols-1 gap-8 md:grid-cols-3">
                 <div>
-                  <div className="mb-2 font-sans text-5xl font-bold text-primary">—</div>
-                  <div className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+                  <div className="mb-2 font-sans text-7xl font-black leading-none tracking-tighter text-on-background tabular-nums">—</div>
+                  <div className="font-label text-[0.62rem] uppercase tracking-[0.16em] text-on-surface-variant">
                     Site Readiness Score
                   </div>
                 </div>
@@ -625,7 +617,7 @@ export default async function HomePage({
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
               Extractability
             </span>
-            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+            <h2 className="mt-3 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">
               What makes a page easier to quote and summarize
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
@@ -665,7 +657,7 @@ export default async function HomePage({
       <section className="bg-surface-container-high/40 px-6 py-16 md:px-10 md:py-24">
         <div className="mx-auto flex max-w-screen-2xl flex-col items-center justify-between gap-12 md:flex-row">
           <div className="max-w-xl">
-            <h2 className="mb-4 font-headline text-2xl font-bold text-on-background md:text-3xl">
+            <h2 className="mb-4 font-sans text-2xl font-black uppercase tracking-tight text-on-background md:text-3xl">
               Who GEO-Pulse is for
             </h2>
             <p className="font-body text-on-surface-variant">
@@ -679,7 +671,7 @@ export default async function HomePage({
                 key={item.title}
                 className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float"
               >
-                <h3 className="font-headline text-lg font-bold text-on-background">{item.title}</h3>
+                <h3 className="font-sans text-lg font-black uppercase tracking-tight text-on-background">{item.title}</h3>
                 <p className="mt-3 font-body text-sm leading-7 text-on-surface-variant">
                   {item.body}
                 </p>
@@ -693,7 +685,7 @@ export default async function HomePage({
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
           <div className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">Questions</span>
-            <h2 className="mt-3 font-headline text-3xl font-bold text-on-background md:text-4xl">
+            <h2 className="mt-3 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">
               Common questions, answered directly
             </h2>
             <p className="mt-4 max-w-sm font-body text-on-surface-variant">
@@ -705,7 +697,7 @@ export default async function HomePage({
             <div className="grid grid-cols-1 gap-4">
               {faqItems.map((item) => (
                 <div key={item.question} className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float">
-                  <h3 className="font-headline text-lg font-bold text-on-background">{item.question}</h3>
+                  <h3 className="font-sans text-lg font-black uppercase tracking-tight text-on-background">{item.question}</h3>
                   <p className="mt-3 max-w-3xl font-body text-sm leading-relaxed text-on-surface-variant">
                     {item.answer}
                   </p>
@@ -722,7 +714,7 @@ export default async function HomePage({
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
               References
             </span>
-            <h2 className="mt-3 font-headline text-2xl font-bold text-on-background md:text-3xl">
+            <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background md:text-3xl">
               We align the audit to public standards and search guidance
             </h2>
             <p className="mt-3 font-body text-sm leading-relaxed text-on-surface-variant">
@@ -753,7 +745,7 @@ export default async function HomePage({
       </section>
 
       <section className="mx-auto max-w-screen-xl px-6 py-24 text-center md:py-40">
-        <h2 className="mb-10 font-headline text-3xl font-bold text-on-background md:text-4xl lg:text-5xl">
+        <h2 className="mb-10 font-sans text-4xl font-black uppercase leading-[0.95] tracking-tighter text-on-background md:text-6xl lg:text-7xl">
           Stop treating AI visibility like guesswork
         </h2>
         <p className="mx-auto max-w-3xl font-body text-base leading-7 text-on-surface-variant">
