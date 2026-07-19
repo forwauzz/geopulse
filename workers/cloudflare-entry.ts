@@ -20,6 +20,11 @@ import {
   fetchAndBuildBenchmarkDailyRecap,
   sendBenchmarkDailyRecap,
 } from '../lib/server/benchmark-daily-recap';
+import {
+  resolveSelfImprovementEnvConfig,
+  runSelfImprovementAudit,
+  type SelfImprovementEnvLike,
+} from '../lib/server/self-improvement';
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -208,6 +213,37 @@ export default {
         });
       } catch (err) {
         structuredError('gpm_schedule_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Daily autonomous self-improvement audit (Loop 5a) — gated to fire once per day at
+      // SELF_IMPROVEMENT_HOUR_UTC (default 12:00 UTC, which maps to a real cron tick). The
+      // audit self-gates on env flag + DB `enabled` + kill switch + a configured recipient, so
+      // this is a safe no-op until explicitly turned on.
+      try {
+        const selfEnv = env as unknown as SelfImprovementEnvLike;
+        const selfCfg = resolveSelfImprovementEnvConfig(selfEnv);
+        if (new Date().getUTCHours() === selfCfg.hourUtc) {
+          const supabase = createClient(supaUrl, supaKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const result = await runSelfImprovementAudit({
+            supabase,
+            env: selfEnv,
+            triggerSource: 'worker_cron',
+          });
+          if (result.status !== 'skipped') {
+            structuredLog('self_improvement_cron_run', {
+              status: result.status,
+              score: result.score ?? null,
+              emailed: result.emailed ?? false,
+              reason: result.reason ?? null,
+            }, result.ok ? 'info' : 'error');
+          }
+        }
+      } catch (err) {
+        structuredError('self_improvement_cron_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

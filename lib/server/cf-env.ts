@@ -12,6 +12,11 @@ export type ScanApiEnv = {
   LEGACY_PAID_ENABLED: string;
   /** Local competitor discovery: 'live'/'gemini' = Google-Search grounding (needs billed key); else mock. */
   COMPETITOR_DISCOVERY_MODE: string;
+  /** Loop 5a self-improvement — daily self-audit + email. Off unless truthy AND DB settings on. */
+  SELF_IMPROVEMENT_ENABLED?: string;
+  SELF_IMPROVEMENT_TARGET_URL?: string;
+  SELF_IMPROVEMENT_HOUR_UTC?: string;
+  SELF_IMPROVEMENT_REPORT_TO?: string;
   DISTRIBUTION_ENGINE_UI_ENABLED: string;
   DISTRIBUTION_ENGINE_WRITE_ENABLED: string;
   DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED?: string;
@@ -65,6 +70,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
+  /** Optional secret for headless (cron/CI) trigger of POST /api/admin/self-improve. */
+  SELF_IMPROVEMENT_TRIGGER_SECRET?: string;
   /** Plaintext var: default `page_limit` for new `scan_runs` on paid deep audit (1–1000). */
   DEEP_AUDIT_DEFAULT_PAGE_LIMIT: string;
   /** Plaintext var: off, auto, or force for optional Browser Rendering on paid deep audits. */
@@ -131,6 +138,10 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
     LEGACY_PAID_ENABLED: String(e['LEGACY_PAID_ENABLED'] ?? ''),
     COMPETITOR_DISCOVERY_MODE: String(e['COMPETITOR_DISCOVERY_MODE'] ?? ''),
+    SELF_IMPROVEMENT_ENABLED: String(e['SELF_IMPROVEMENT_ENABLED'] ?? ''),
+    SELF_IMPROVEMENT_TARGET_URL: String(e['SELF_IMPROVEMENT_TARGET_URL'] ?? ''),
+    SELF_IMPROVEMENT_HOUR_UTC: String(e['SELF_IMPROVEMENT_HOUR_UTC'] ?? ''),
+    SELF_IMPROVEMENT_REPORT_TO: String(e['SELF_IMPROVEMENT_REPORT_TO'] ?? ''),
     DISTRIBUTION_ENGINE_UI_ENABLED: String(e['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_WRITE_ENABLED: String(e['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? ''),
     DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED: String(
@@ -178,6 +189,10 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
       LEGACY_PAID_ENABLED: process.env['LEGACY_PAID_ENABLED'] ?? '',
       COMPETITOR_DISCOVERY_MODE: process.env['COMPETITOR_DISCOVERY_MODE'] ?? '',
+      SELF_IMPROVEMENT_ENABLED: process.env['SELF_IMPROVEMENT_ENABLED'] ?? '',
+      SELF_IMPROVEMENT_TARGET_URL: process.env['SELF_IMPROVEMENT_TARGET_URL'] ?? '',
+      SELF_IMPROVEMENT_HOUR_UTC: process.env['SELF_IMPROVEMENT_HOUR_UTC'] ?? '',
+      SELF_IMPROVEMENT_REPORT_TO: process.env['SELF_IMPROVEMENT_REPORT_TO'] ?? '',
       DISTRIBUTION_ENGINE_UI_ENABLED: process.env['DISTRIBUTION_ENGINE_UI_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_WRITE_ENABLED: process.env['DISTRIBUTION_ENGINE_WRITE_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED:
@@ -244,6 +259,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       LINKEDIN_OAUTH_TOKEN_URL: pickEnvString(e, 'LINKEDIN_OAUTH_TOKEN_URL'),
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
+      SELF_IMPROVEMENT_TRIGGER_SECRET: pickEnvString(e, 'SELF_IMPROVEMENT_TRIGGER_SECRET'),
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: pickEnvString(e, 'DEEP_AUDIT_DEFAULT_PAGE_LIMIT'),
       DEEP_AUDIT_BROWSER_RENDER_MODE: pickEnvString(e, 'DEEP_AUDIT_BROWSER_RENDER_MODE'),
       DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'),
@@ -277,6 +293,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       LINKEDIN_OAUTH_TOKEN_URL: process.env['LINKEDIN_OAUTH_TOKEN_URL'] ?? '',
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
+      SELF_IMPROVEMENT_TRIGGER_SECRET: process.env['SELF_IMPROVEMENT_TRIGGER_SECRET'] ?? '',
       DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
       DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
       DEEP_AUDIT_INTERNAL_REWRITE_ENABLED:

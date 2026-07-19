@@ -108,6 +108,16 @@
 
     "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
 
+    // Loop 5a — autonomous self-improvement (getgeopulse.com audits itself daily → emails the
+    // plan). OFF by default: the daily audit runs only when SELF_IMPROVEMENT_ENABLED is truthy
+    // AND self_improvement_settings.enabled is true in the DB AND a recipient is set AND the DB
+    // kill switch is off. Flip ENABLED to "true" (and toggle the DB row) to turn it on.
+    // SELF_IMPROVEMENT_TRIGGER_SECRET is a SECRET (wrangler secret put), not set here.
+    "SELF_IMPROVEMENT_ENABLED": "",
+    "SELF_IMPROVEMENT_TARGET_URL": "https://getgeopulse.com/",
+    "SELF_IMPROVEMENT_HOUR_UTC": "12",
+    "SELF_IMPROVEMENT_REPORT_TO": "uzzielt@techehealthservices.com",
+
     // GEO Performance Monitoring scheduled sweep.
     // Runtime defaults live here; provider API keys remain secrets.
     "GPM_SCHEDULE_ENABLED": "true",
