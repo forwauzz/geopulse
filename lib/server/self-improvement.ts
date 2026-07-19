@@ -239,6 +239,65 @@ const NOOP_LLM: LLMProvider = {
  * are configured) email the improvement plan. Respects the DB kill switch. `force` bypasses the
  * DB `enabled` check (used by the admin manual-trigger route) but NOT the kill switch.
  */
+/** Is this user a no-human-in-the-loop autonomy operator? */
+export async function isAutonomyOperator(supabase: SupabaseClient, userId: string): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { data } = await supabase
+      .from('user_autonomy_flags')
+      .select('autonomy_enabled')
+      .eq('user_id', userId)
+      .maybeSingle();
+    return Boolean(data?.autonomy_enabled);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Build the improvement plan from an ALREADY-RUN scan, email it, and record a ledger row — without
+ * re-scanning. Lets the recurring-audit loop drive self-improvement directly (one loop, not two).
+ */
+export async function deliverSelfImprovementFromScan(args: {
+  supabase: SupabaseClient;
+  env: SelfImprovementEnvLike;
+  triggerSource: 'worker_cron' | 'admin_manual' | 'ci';
+  targetUrl: string;
+  output: FreeScanOutput;
+  domain: string;
+  finalUrl: string;
+  recipient: string | null;
+}): Promise<{ runId?: string; emailed: boolean; plan: ImprovementItem[] }> {
+  const plan = buildImprovementPlan(args.output);
+  let emailed = false;
+  if (args.recipient && args.env.RESEND_API_KEY?.trim() && args.env.RESEND_FROM_EMAIL?.trim()) {
+    const sent = await sendSelfImprovementReport({
+      resendApiKey: args.env.RESEND_API_KEY.trim(),
+      from: args.env.RESEND_FROM_EMAIL.trim(),
+      to: args.recipient,
+      targetUrl: args.targetUrl,
+      score: args.output.score,
+      letterGrade: args.output.letterGrade,
+      plan,
+    });
+    emailed = sent.ok;
+  }
+  const { data } = await args.supabase
+    .from('self_improvement_runs')
+    .insert({
+      trigger_source: args.triggerSource,
+      target_url: args.targetUrl,
+      status: 'audited',
+      score: args.output.score,
+      letter_grade: args.output.letterGrade,
+      summary: { plan, domain: args.domain, finalUrl: args.finalUrl, driver: 'recurring_audit' },
+      emailed_to: emailed ? args.recipient : null,
+    })
+    .select('id')
+    .single();
+  return { runId: data?.id, emailed, plan };
+}
+
 export async function runSelfImprovementAudit(args: {
   supabase: SupabaseClient;
   env: SelfImprovementEnvLike;

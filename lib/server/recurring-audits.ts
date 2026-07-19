@@ -9,8 +9,23 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
+import {
+  deliverSelfImprovementFromScan,
+  isAutonomyOperator,
+  loadSelfImprovementSettings,
+  resolveSelfImprovementEnvConfig,
+  type SelfImprovementEnvLike,
+} from './self-improvement';
 
 export type Cadence = 'daily' | 'weekly';
+
+function sameHost(a: string, b: string): boolean {
+  try {
+    return new URL(a).hostname.replace(/^www\./i, '').toLowerCase() === new URL(b).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return false;
+  }
+}
 export const CADENCE_DAYS: Record<Cadence, number> = { daily: 1, weekly: 7 };
 
 export type RecurringSchedule = {
@@ -81,11 +96,9 @@ export async function upsertUserSchedule(
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
-export type RecurringEnvLike = {
-  GEMINI_API_KEY?: string;
-  GEMINI_MODEL?: string;
-  GEMINI_ENDPOINT?: string;
-};
+// Includes GEMINI (scan) + RESEND + SELF_IMPROVEMENT_* so a recurring audit of the self-improvement
+// target can feed the improvement plan directly (one loop instead of two).
+export type RecurringEnvLike = SelfImprovementEnvLike;
 
 function buildLlm(env: RecurringEnvLike): LLMProvider {
   const key = env.GEMINI_API_KEY?.trim();
@@ -99,7 +112,7 @@ function buildLlm(env: RecurringEnvLike): LLMProvider {
   });
 }
 
-export type RecurringSweepResult = { scanned: number; ran: number; failed: number };
+export type RecurringSweepResult = { scanned: number; ran: number; failed: number; fedSelfImprovement: number };
 
 /**
  * Run all due schedules (enabled + next_run_at <= now). Bounded per tick. Persists a scan and
@@ -122,8 +135,10 @@ export async function runDueRecurringAudits(args: {
 
   const due = ((data ?? []) as ScheduleRow[]).map(toSchedule);
   const llm = buildLlm(env);
+  const selfCfg = resolveSelfImprovementEnvConfig(env);
   let ran = 0;
   let failed = 0;
+  let fedSelfImprovement = 0;
 
   for (const s of due) {
     try {
@@ -146,6 +161,29 @@ export async function runDueRecurringAudits(args: {
           .update({ last_run_at: nowIso, next_run_at: computeNextRun(s.cadence, nowMs), last_error: null, updated_at: nowIso })
           .eq('id', s.id);
         ran += 1;
+
+        // ONE LOOP: when this schedule audits the self-improvement target and the owner is an
+        // autonomy operator, feed the plan straight into self-improvement (no second scan).
+        if (sameHost(scan.finalUrl, selfCfg.targetUrl)) {
+          try {
+            const settings = await loadSelfImprovementSettings(supabase);
+            if (!settings.killSwitch && (await isAutonomyOperator(supabase, s.userId))) {
+              await deliverSelfImprovementFromScan({
+                supabase,
+                env,
+                triggerSource: 'ci',
+                targetUrl: selfCfg.targetUrl,
+                output: scan.output,
+                domain: scan.domain,
+                finalUrl: scan.finalUrl,
+                recipient: settings.reportRecipient || selfCfg.envRecipient,
+              });
+              fedSelfImprovement += 1;
+            }
+          } catch {
+            /* self-improvement feed is best-effort — never fails the audit */
+          }
+        }
       } else {
         await supabase
           .from('recurring_audit_schedules')
@@ -162,5 +200,5 @@ export async function runDueRecurringAudits(args: {
     }
   }
 
-  return { scanned: due.length, ran, failed };
+  return { scanned: due.length, ran, failed, fedSelfImprovement };
 }
