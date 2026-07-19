@@ -110,15 +110,9 @@ function NavSection({
   );
 }
 
+// Home (/dashboard) is the search box, reached via the logo — so no "Dashboard" nav item.
 const WORKSPACE_NAV: readonly NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: 'space_dashboard', exact: true },
-  {
-    href: '/dashboard/new-scan',
-    label: 'Run a Scan',
-    icon: 'add_circle',
-    exact: true,
-    highlight: true,
-  },
+  { href: '/dashboard/history', label: 'History', icon: 'history', exact: true },
   { href: '/dashboard/connectors', label: 'Connectors', icon: 'cable', exact: true },
   { href: '/dashboard/billing', label: 'Billing', icon: 'credit_card', exact: true },
   { href: '/dashboard/workspace', label: 'Settings', icon: 'settings', exact: true },
@@ -139,12 +133,9 @@ function buildWorkspaceNav(
   }
   const base = WORKSPACE_NAV.filter((item) => !off.has(item.href));
   if (!showAutomation) return base;
-  // Insert Automation right after "Run a Scan".
+  // Automation goes first for granted users.
   const item: NavItem = { href: '/dashboard/automation', label: 'Automation', icon: 'smart_toy', exact: true };
-  const idx = base.findIndex((i) => i.href === '/dashboard/new-scan');
-  const out = [...base];
-  out.splice(idx >= 0 ? idx + 1 : out.length, 0, item);
-  return out;
+  return [item, ...base];
 }
 
 function NavBlocks({
