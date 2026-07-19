@@ -5,9 +5,10 @@ void initOpenNextCloudflareForDev();
 
 /** Next.js `next dev` (Fast Refresh) requires eval; strict CSP breaks the app + Turnstile. Production build omits unsafe-eval. */
 const isDev = process.env['NODE_ENV'] === 'development';
+// https://static.cloudflareinsights.com/beacon.min.js is auto-injected by Cloudflare Web Analytics.
 const scriptSrc = isDev
-  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com"
-  : "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com";
+  ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com"
+  : "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com";
 
 function publicOrigin(value: string | undefined): string | null {
   if (!value) return null;
@@ -23,6 +24,7 @@ const connectSrc = [
   "'self'",
   'https://*.supabase.co',
   'https://generativelanguage.googleapis.com',
+  'https://cloudflareinsights.com', // Web Analytics beacon POST target
   ...(reportAssetOrigin ? [reportAssetOrigin] : []),
 ].join(' ');
 
