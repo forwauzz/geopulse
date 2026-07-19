@@ -6,7 +6,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadUserSchedule } from '@/lib/server/recurring-audits';
-import { saveMyRecurringAudit } from './actions';
+import { saveMyRecurringAudit, runMyRecurringAuditNow } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +15,7 @@ type Props = {
     agencyAccount?: string;
     agencyClient?: string;
     startupWorkspace?: string;
+    recurring?: string;
   }>;
 };
 
@@ -85,6 +86,15 @@ export default async function WorkspacePage({ searchParams }: Props) {
     iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
   const recurInput =
     'min-h-[42px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30';
+  const recurringNotice: { ok: boolean; text: string } | null = (() => {
+    switch (sp.recurring) {
+      case 'saved': return { ok: true, text: 'Saved — your recurring audit settings are updated.' };
+      case 'error': return { ok: false, text: 'Could not save. Please try again.' };
+      case 'bad_url': return { ok: false, text: 'That website URL looks invalid.' };
+      case 'run_no_schedule': return { ok: false, text: 'Save a schedule first, then run it.' };
+      default: return sp.recurring?.startsWith('run_') ? { ok: false, text: 'Test run failed. Please try again.' } : null;
+    }
+  })();
 
   return (
     <section className="space-y-6">
@@ -117,10 +127,19 @@ export default async function WorkspacePage({ searchParams }: Props) {
         <p className="mt-0.5 font-sans text-sm text-on-surface-variant">
           Re-audit your site automatically and get the report emailed to you on your schedule.
         </p>
+        {recurringNotice ? (
+          <p className={`mt-3 rounded-xl px-3 py-2 font-sans text-sm ${recurringNotice.ok ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error'}`}>
+            {recurringNotice.text}
+          </p>
+        ) : null}
         <form action={saveMyRecurringAudit} className="mt-4 space-y-3">
           <label className="block">
             <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Website to audit</span>
             <input name="url" type="url" required defaultValue={schedule?.url ?? ''} placeholder="https://yourcompany.com" className={recurInput} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Email the report to</span>
+            <input name="reportEmail" type="email" defaultValue={schedule?.reportEmail ?? user.email ?? ''} placeholder={user.email ?? 'you@company.com'} className={recurInput} />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
@@ -132,7 +151,7 @@ export default async function WorkspacePage({ searchParams }: Props) {
             </label>
             <div className="flex items-end gap-2">
               <button type="submit" name="enabled" value="true" className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-on-primary transition hover:bg-primary-dim">
-                {schedule?.enabled ? 'Save & keep on' : 'Turn on'}
+                {schedule?.enabled ? 'Save & keep on' : 'Save & turn on'}
               </button>
               {schedule?.enabled ? (
                 <button type="submit" name="enabled" value="false" className="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-surface-container px-4 text-sm font-semibold text-on-surface-variant transition hover:text-on-background">
@@ -142,6 +161,14 @@ export default async function WorkspacePage({ searchParams }: Props) {
             </div>
           </div>
         </form>
+        {schedule ? (
+          <form action={runMyRecurringAuditNow} className="mt-3">
+            <button type="submit" className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 text-sm font-semibold text-on-background transition hover:bg-surface-container">
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>play_circle</span>
+              Run now &amp; email me
+            </button>
+          </form>
+        ) : null}
         <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-outline-variant/20 pt-4 font-sans text-xs text-on-surface-variant">
           <span>Status: <strong className={schedule?.enabled ? 'text-primary' : 'text-on-surface-variant'}>{schedule?.enabled ? 'On' : 'Off'}</strong></span>
           <span>Next run: {schedule?.enabled ? fmtDate(schedule.nextRunAt) : '—'}</span>

@@ -37,6 +37,8 @@ export type RecurringSchedule = {
   enabled: boolean;
   lastRunAt: string | null;
   nextRunAt: string;
+  /** Where the report is emailed; null → the account email. */
+  reportEmail: string | null;
 };
 
 /** Next run = `from` + cadence days (pure; caller passes the clock). */
@@ -54,6 +56,7 @@ type ScheduleRow = {
   enabled: boolean;
   last_run_at: string | null;
   next_run_at: string;
+  report_email: string | null;
 };
 
 function toSchedule(r: ScheduleRow): RecurringSchedule {
@@ -66,6 +69,7 @@ function toSchedule(r: ScheduleRow): RecurringSchedule {
     enabled: Boolean(r.enabled),
     lastRunAt: r.last_run_at,
     nextRunAt: r.next_run_at,
+    reportEmail: r.report_email ?? null,
   };
 }
 
@@ -77,22 +81,26 @@ export async function loadUserSchedule(supabase: SupabaseClient, userId: string)
 /** Create/update the user's schedule. Sets next_run_at immediately when first enabled. */
 export async function upsertUserSchedule(
   supabase: SupabaseClient,
-  args: { userId: string; startupWorkspaceId: string | null; url: string; cadence: Cadence; enabled: boolean; nowMs: number }
+  args: { userId: string; startupWorkspaceId: string | null; url: string; cadence: Cadence; enabled: boolean; reportEmail?: string | null; nowMs: number }
 ): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await supabase.from('recurring_audit_schedules').upsert(
-    {
-      user_id: args.userId,
-      startup_workspace_id: args.startupWorkspaceId,
-      url: args.url,
-      cadence: args.cadence,
-      enabled: args.enabled,
-      // Enabled → due now (first run on the next cron tick). Disabled → park far out.
-      next_run_at: args.enabled ? new Date(args.nowMs).toISOString() : computeNextRun(args.cadence, args.nowMs),
-      created_by: args.userId,
-      updated_at: new Date(args.nowMs).toISOString(),
-    },
-    { onConflict: 'user_id' }
-  );
+  const reportEmail = args.reportEmail?.trim();
+  const base = {
+    user_id: args.userId,
+    startup_workspace_id: args.startupWorkspaceId,
+    url: args.url,
+    cadence: args.cadence,
+    enabled: args.enabled,
+    // Enabled → due now (first run on the next cron tick). Disabled → park far out.
+    next_run_at: args.enabled ? new Date(args.nowMs).toISOString() : computeNextRun(args.cadence, args.nowMs),
+    created_by: args.userId,
+    updated_at: new Date(args.nowMs).toISOString(),
+  };
+  const withEmail = { ...base, report_email: reportEmail && reportEmail.includes('@') ? reportEmail : null };
+  let { error } = await supabase.from('recurring_audit_schedules').upsert(withEmail, { onConflict: 'user_id' });
+  // Resilient to running before migration 052 (report_email column) is applied.
+  if (error && /report_email/i.test(error.message)) {
+    ({ error } = await supabase.from('recurring_audit_schedules').upsert(base, { onConflict: 'user_id' }));
+  }
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
@@ -216,7 +224,7 @@ export async function runDueRecurringAudits(args: {
         const scanId = (scanRow?.id as string | undefined) ?? null;
         if (scanId) {
           try {
-            const to = await resolveUserEmail(supabase, s.userId);
+            const to = s.reportEmail || (await resolveUserEmail(supabase, s.userId));
             if (to) await sendRecurringAuditEmail(env, to, scan.finalUrl, scan.output.score, scan.output.letterGrade, scanId);
           } catch {
             /* email is best-effort */
@@ -262,4 +270,51 @@ export async function runDueRecurringAudits(args: {
   }
 
   return { scanned: due.length, ran, failed, fedSelfImprovement };
+}
+
+/**
+ * Run a user's schedule ONCE, immediately (the "Run now / test" button). Scans, saves, emails the
+ * chosen recipient, and advances the schedule. Returns the new scan id on success.
+ */
+export async function runUserAuditNow(
+  supabase: SupabaseClient,
+  env: RecurringEnvLike,
+  userId: string,
+  nowMs: number
+): Promise<{ ok: true; scanId: string } | { ok: false; reason: string }> {
+  const schedule = await loadUserSchedule(supabase, userId);
+  if (!schedule) return { ok: false, reason: 'no_schedule' };
+
+  const scan = await runFreeScan(schedule.url, buildLlm(env));
+  if (!scan.ok) return { ok: false, reason: scan.reason };
+
+  const { data: scanRow } = await supabase
+    .from('scans')
+    .insert({
+      url: scan.finalUrl,
+      domain: scan.domain,
+      status: 'complete',
+      score: scan.output.score,
+      letter_grade: scan.output.letterGrade,
+      issues_json: scan.output.issues,
+      full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
+      user_id: schedule.userId,
+      startup_workspace_id: schedule.startupWorkspaceId,
+      run_source: 'recurring',
+    })
+    .select('id')
+    .single();
+
+  const nowIso = new Date(nowMs).toISOString();
+  await supabase
+    .from('recurring_audit_schedules')
+    .update({ last_run_at: nowIso, next_run_at: computeNextRun(schedule.cadence, nowMs), last_error: null, updated_at: nowIso })
+    .eq('id', schedule.id);
+
+  const scanId = (scanRow?.id as string | undefined) ?? null;
+  if (!scanId) return { ok: false, reason: 'insert_failed' };
+
+  const to = schedule.reportEmail || (await resolveUserEmail(supabase, userId));
+  if (to) await sendRecurringAuditEmail(env, to, scan.finalUrl, scan.output.score, scan.output.letterGrade, scanId);
+  return { ok: true, scanId };
 }
