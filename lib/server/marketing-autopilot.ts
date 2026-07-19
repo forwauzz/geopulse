@@ -15,12 +15,14 @@
  * SAFETY: OFF by default (needs MARKETING_AUTOPILOT_ENABLED). Kill switch (MARKETING_AUTOPILOT_KILL)
  * overrides everything. Bounded by a per-run cap. Only creates review-gated drafts.
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   buildTopicRegistrySeedItems,
   loadTopicRegistryFromDisk,
   type TopicRegistrySeedItem,
 } from './content-topic-registry-seed';
 import { getTopicRegistryProgressSummary } from './content-topic-registry-progress';
+import { configInt, loadAutomationSetting } from './automation-settings';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -120,8 +122,14 @@ export async function runMarketingAutopilot(args: {
   const { supabase, env } = args;
   const cfg = resolveMarketingAutopilotConfig(env);
 
-  if (cfg.killed) return { ok: false, status: 'skipped', reason: 'kill_switch' };
-  if (!args.force && !cfg.enabled) return { ok: false, status: 'skipped', reason: 'disabled' };
+  // DB toggle (Automation console) OR the env flag can enable/kill; the DB cap overrides the env cap.
+  const setting = await loadAutomationSetting(supabase as unknown as SupabaseClient, 'marketing_autopilot');
+  const killed = cfg.killed || setting.killSwitch;
+  const enabled = cfg.enabled || setting.enabled;
+  const dailyCap = configInt(setting.config, 'daily_cap', cfg.dailyCap);
+
+  if (killed) return { ok: false, status: 'skipped', reason: 'kill_switch' };
+  if (!args.force && !enabled) return { ok: false, status: 'skipped', reason: 'disabled' };
 
   // Whether we could post is orthogonal to whether we can PROPOSE content — report it either way.
   const channelAccess: 'available' | 'required' = (await hasConnectedChannel(supabase)) ? 'available' : 'required';
@@ -148,7 +156,7 @@ export async function runMarketingAutopilot(args: {
   const existingSlugs = new Set<string>(((bySlug.data ?? []) as { slug?: string }[]).map((r) => r.slug ?? '').filter(Boolean));
   const existingIds = new Set<string>(((byId.data ?? []) as { content_id?: string }[]).map((r) => r.content_id ?? '').filter(Boolean));
 
-  const picks = selectProposalCandidates(candidates, existingSlugs, existingIds, cfg.dailyCap);
+  const picks = selectProposalCandidates(candidates, existingSlugs, existingIds, dailyCap);
   if (picks.length === 0) return { ok: true, status: 'noop', batch, channelAccess, reason: 'no_new_topics_in_batch' };
 
   const rows = picks.map((p) => ({

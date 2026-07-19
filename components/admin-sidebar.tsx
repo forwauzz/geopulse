@@ -53,16 +53,24 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
   },
 ];
 
-export function AdminSidebar() {
+export function AdminSidebar({ automationEnabled = false }: { automationEnabled?: boolean }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const closeMenu = () => setMobileOpen(false);
 
+  // Automation console is a capability-flagged surface — hidden unless AUTOMATION_CONSOLE_ENABLED.
+  const nav: ReadonlyArray<AdminNavSection> = automationEnabled
+    ? [
+        ...ADMIN_NAV,
+        { section: 'Automation', items: [{ href: '/admin/automation', label: 'Automation', icon: 'smart_toy' }] },
+      ]
+    : ADMIN_NAV;
+
   const navBody = (
     <>
       <nav className="flex flex-col gap-4 mt-4 lg:mt-0">
-        {ADMIN_NAV.map((section) => (
+        {nav.map((section) => (
           <div key={section.section}>
             <p className="mb-1 px-2 text-[9px] font-bold uppercase tracking-widest text-amber-600/70 dark:text-amber-400/60">
               {section.section}

@@ -126,6 +126,10 @@
     "MARKETING_AUTOPILOT_DAILY_CAP": "2",
     "MARKETING_AUTOPILOT_HOUR_UTC": "13",
 
+    // Admin Automation console (Loop 5 toggles). Capability flag: shows the /admin/automation
+    // page + nav for platform admins. On for getgeopulse; leave empty in OSS forks to hide it.
+    "AUTOMATION_CONSOLE_ENABLED": "true",
+
     // GEO Performance Monitoring scheduled sweep.
     // Runtime defaults live here; provider API keys remain secrets.
     "GPM_SCHEDULE_ENABLED": "true",

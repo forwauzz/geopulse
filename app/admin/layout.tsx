@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { isUserPlatformAdmin } from '@/lib/server/require-admin';
+import { getScanApiEnv } from '@/lib/server/cf-env';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,15 @@ export default async function AdminLayout({
     redirect('/dashboard');
   }
 
+  const env = await getScanApiEnv();
+  const automationEnabled = env.AUTOMATION_CONSOLE_ENABLED?.trim().toLowerCase() === 'true';
+
   return (
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-8 sm:px-6 md:px-10">
       <div className="grid gap-6 lg:grid-cols-[256px_minmax(0,1fr)] lg:gap-8">
 
         {/* ── Admin sidebar (client component — handles mobile hamburger) */}
-        <AdminSidebar />
+        <AdminSidebar automationEnabled={automationEnabled} />
 
         {/* ── Main content ───────────────────────────────────── */}
         <div className="min-w-0">{children}</div>
