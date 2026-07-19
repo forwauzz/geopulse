@@ -104,22 +104,22 @@ export function ReportSummary({ scan }: { scan: ScanResponse }) {
   return (
     <section className="space-y-6 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 shadow-float md:p-8">
       <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-        <div className="rounded-2xl bg-surface-container-low p-6 text-center">
-          <div className="font-sans text-5xl font-bold text-primary">{score}</div>
-          <div className="mt-1 font-label text-xs uppercase tracking-widest text-on-surface-variant">
+        <div className="flex flex-col items-center justify-center rounded-2xl bg-surface-container-low p-6 text-center">
+          <div className="font-sans text-7xl font-black leading-none tracking-tighter tabular-nums text-on-background">{score}</div>
+          <div className="mt-2 font-label text-[0.62rem] uppercase tracking-[0.16em] text-on-surface-variant">
             Overall score
           </div>
-          <div className="mt-5 inline-flex rounded-full bg-primary/10 px-3 py-1 font-label text-xs font-semibold uppercase tracking-wider text-primary">
+          <div className="mt-5 inline-flex rounded-md border border-outline-variant/40 px-2.5 py-1 font-label text-xs font-bold uppercase tracking-wider text-on-background">
             {scan.letterGrade ?? '-'}
           </div>
         </div>
 
         <div className="space-y-4">
           <div>
-            <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
+            <p className="font-label text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
               Interactive summary
             </p>
-            <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">
+            <h1 className="mt-2 font-sans text-4xl font-black uppercase leading-[0.95] tracking-tighter text-on-background md:text-5xl">
               {scan.domain ?? scan.url}
             </h1>
             <p className="mt-3 max-w-2xl font-body text-sm leading-relaxed text-on-surface-variant">
@@ -161,7 +161,7 @@ export function ReportSummary({ scan }: { scan: ScanResponse }) {
                       {category.letterGrade}
                     </span>
                   </div>
-                  <div className="mt-3 font-sans text-2xl font-bold">
+                  <div className="mt-3 font-sans text-3xl font-black tabular-nums">
                     {category.score}
                   </div>
                   <div className="mt-1 font-body text-xs">{label}</div>
@@ -174,7 +174,7 @@ export function ReportSummary({ scan }: { scan: ScanResponse }) {
 
       <div>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-headline text-xl font-semibold text-on-background">
+          <h2 className="font-sans text-2xl font-black uppercase tracking-tight text-on-background">
             Top issues
           </h2>
           <span className="font-label text-xs uppercase tracking-widest text-on-surface-variant">
@@ -304,7 +304,7 @@ export function ReportSections({ sections }: { sections: MarkdownSection[] }) {
                 <p className="font-label text-[10px] uppercase tracking-widest text-on-surface-variant">
                   Report section
                 </p>
-                <h2 className="mt-1 font-headline text-xl font-semibold text-on-background">
+                <h2 className="mt-1 font-sans text-lg font-black uppercase tracking-tight text-on-background">
                   {section.title}
                 </h2>
               </div>
@@ -317,7 +317,7 @@ export function ReportSections({ sections }: { sections: MarkdownSection[] }) {
                 id={`${section.id}-panel`}
                 className="border-t border-outline-variant/10 px-5 py-5 md:px-6"
               >
-                <div className="prose prose-slate max-w-none dark:prose-invert prose-headings:font-headline prose-headings:text-on-background prose-p:text-on-surface-variant prose-a:text-primary prose-strong:text-on-background prose-th:text-on-background prose-td:text-on-surface-variant">
+                <div className="prose prose-slate max-w-none dark:prose-invert prose-headings:font-sans prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-on-background prose-p:text-on-surface-variant prose-a:text-primary prose-strong:text-on-background prose-th:text-on-background prose-td:text-on-surface-variant">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                     {section.content}
                   </ReactMarkdown>
