@@ -12,6 +12,8 @@ type DashboardSidebarProps = {
   readonly signOutAction: () => Promise<void>;
   /** Global UI flags → hide optional nav sections (connectors/billing/blog). */
   readonly navFlags?: { connectors: boolean; billing: boolean; blog: boolean };
+  /** Show the Automation area (granted users / admins). */
+  readonly showAutomation?: boolean;
   /** When true at `lg+`, nav shows icon rail (labels via tooltip / aria). */
   readonly desktopCollapsed?: boolean;
   readonly onToggleDesktopCollapse?: () => void;
@@ -123,14 +125,26 @@ const WORKSPACE_NAV: readonly NavItem[] = [
   { href: '/blog', label: 'Blog', icon: 'article' },
 ];
 
-// Hide optional nav items when their global flag is off (connectors/billing/blog).
-function filterWorkspaceNav(navFlags?: { connectors: boolean; billing: boolean; blog: boolean }): readonly NavItem[] {
-  if (!navFlags) return WORKSPACE_NAV;
+// Hide optional nav items when their global flag is off (connectors/billing/blog),
+// and add the Automation item for granted users.
+function buildWorkspaceNav(
+  navFlags?: { connectors: boolean; billing: boolean; blog: boolean },
+  showAutomation?: boolean
+): readonly NavItem[] {
   const off = new Set<string>();
-  if (!navFlags.connectors) off.add('/dashboard/connectors');
-  if (!navFlags.billing) off.add('/dashboard/billing');
-  if (!navFlags.blog) off.add('/blog');
-  return WORKSPACE_NAV.filter((item) => !off.has(item.href));
+  if (navFlags) {
+    if (!navFlags.connectors) off.add('/dashboard/connectors');
+    if (!navFlags.billing) off.add('/dashboard/billing');
+    if (!navFlags.blog) off.add('/blog');
+  }
+  const base = WORKSPACE_NAV.filter((item) => !off.has(item.href));
+  if (!showAutomation) return base;
+  // Insert Automation right after "Run a Scan".
+  const item: NavItem = { href: '/dashboard/automation', label: 'Automation', icon: 'smart_toy', exact: true };
+  const idx = base.findIndex((i) => i.href === '/dashboard/new-scan');
+  const out = [...base];
+  out.splice(idx >= 0 ? idx + 1 : out.length, 0, item);
+  return out;
 }
 
 function NavBlocks({
@@ -239,12 +253,13 @@ export function DashboardSidebar({
   isAdmin,
   signOutAction,
   navFlags,
+  showAutomation,
   desktopCollapsed = false,
   onToggleDesktopCollapse,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const workspaceNav = filterWorkspaceNav(navFlags);
+  const workspaceNav = buildWorkspaceNav(navFlags, showAutomation);
 
   const closeMenu = () => setMobileOpen(false);
 

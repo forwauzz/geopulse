@@ -4,6 +4,9 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveDashboardShellIsAdmin } from '@/lib/server/dashboard-shell-admin';
 import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
+import { getScanApiEnv } from '@/lib/server/cf-env';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { userHasFeature } from '@/lib/server/user-feature-grants';
 import { signOut } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +29,16 @@ export default async function DashboardLayout({
   const isAdmin = resolveDashboardShellIsAdmin(isPlatformAdmin);
   const flags = await loadUiFlags();
 
+  // Show the user-facing Automation area to platform admins or users granted the feature.
+  let showAutomation = isPlatformAdmin;
+  if (!showAutomation) {
+    const env = await getScanApiEnv();
+    if (env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
+      const admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+      showAutomation = await userHasFeature(admin, user.id, 'automation');
+    }
+  }
+
   return (
     <main className="mx-auto w-full max-w-screen-2xl px-4 py-8 sm:px-6 md:px-10">
       <DashboardShell
@@ -33,6 +46,7 @@ export default async function DashboardLayout({
         isAdmin={isAdmin}
         signOutAction={signOut}
         navFlags={{ connectors: flags.show_connectors, billing: flags.show_billing, blog: flags.show_blog }}
+        showAutomation={showAutomation}
       >
         {children}
       </DashboardShell>
