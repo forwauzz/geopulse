@@ -26,6 +26,9 @@ export function SiteHeaderShell({
 }: SiteHeaderShellProps) {
   const pathname = usePathname();
   const isDashboardRoute = pathname.startsWith('/dashboard');
+  // Dashboard chrome lives entirely in the left sidebar (branding, sign out, theme toggle),
+  // so there's no top header on dashboard routes.
+  if (isDashboardRoute) return null;
   const isBlogRoute = pathname.startsWith('/blog');
   const headerClassName = isBlogRoute
     ? 'blog-chrome-light sticky top-0 z-50 border-b border-outline-variant/30 bg-surface backdrop-blur'
