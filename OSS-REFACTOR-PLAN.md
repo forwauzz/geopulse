@@ -121,7 +121,19 @@ grounded search; a competitor scan = a normal free scan.
 > Caveat: competitor scans inherit the free-scan limitation — bot-protected sites (openai,
 > cloud providers, etc.) return 403 to the plain fetcher. Local SMB competitors (the real use
 > case) rarely block. Deep-audit browser-rendering would fix it later.
-Steps 1-3 (auto detect/confirm/discover) remain the enhancement, gated on **Gemini billing**.
+- [x] **Steps 1-3 SHIPPED on MOCK (PR #10, 2026-07-18)** — full detect→confirm→discover pipeline
+  deployed live (Version `77591612-293f-4812-957b-c8fc9ccc80ee`, getgeopulse.com).
+  - **Detect** (`POST /api/competitors/detect`) — deterministic heuristic (schema.org `@type` +
+    `PostalAddress` + industry keywords). No LLM, **works today**. Verified live: immersivelabs.com
+    → "IT services / Bristol", high confidence.
+  - **Confirm** — editable industry + city before searching (`components/competitor-discovery.tsx`).
+  - **Discover** (`POST /api/competitors/discover`) — **mock** default returns deterministic,
+    clearly-labelled `.example` sample competitors with sample scores (whole UI demos with zero
+    Gemini cost); **live** path (`COMPETITOR_DISCOVERY_MODE=live` + billed key) calls Gemini with
+    the `google_search` tool (`lib/server/competitor-discovery-gemini.ts`), falls back to mock on
+    quota/billing failure. Pure logic unit-tested (16 tests); DOM-verified (detect→confirm→discover
+    →add-to-table), clean console.
+  - **Only remaining blocker: Gemini billing** — flip `COMPETITOR_DISCOVERY_MODE=live` once billed.
 
 > **PREREQUISITE — Gemini billing.** The current key is free-tier and hit a 429 quota
 > immediately during a single grounded-search test. Grounded discovery + 3-5 competitor
