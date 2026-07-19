@@ -25,6 +25,11 @@ import {
   runSelfImprovementAudit,
   type SelfImprovementEnvLike,
 } from '../lib/server/self-improvement';
+import {
+  resolveMarketingAutopilotConfig,
+  runMarketingAutopilot,
+  type MarketingAutopilotEnvLike,
+} from '../lib/server/marketing-autopilot';
 
 const next = openNextWorker as {
   fetch: (request: Request, env: CloudflareEnv, ctx: ExecutionContext) => Promise<Response>;
@@ -244,6 +249,38 @@ export default {
         }
       } catch (err) {
         structuredError('self_improvement_cron_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Daily autonomous marketing autopilot (Loop 5b) — gated once per day at
+      // MARKETING_AUTOPILOT_HOUR_UTC (default 13:00 UTC). Proposes review-gated content briefs
+      // for weak (uncovered) topics; never publishes. Self-gates on env flag + kill switch, so
+      // this is a safe no-op until explicitly enabled.
+      try {
+        const mktEnv = env as unknown as MarketingAutopilotEnvLike;
+        const mktCfg = resolveMarketingAutopilotConfig(mktEnv);
+        if (new Date().getUTCHours() === mktCfg.hourUtc) {
+          const supabase = createClient(supaUrl, supaKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const result = await runMarketingAutopilot({
+            supabase,
+            env: mktEnv,
+            triggerSource: 'worker_cron',
+          });
+          if (result.status !== 'skipped') {
+            structuredLog('marketing_autopilot_cron_run', {
+              status: result.status,
+              batch: result.batch ?? null,
+              proposed: result.proposedCount ?? 0,
+              channel_access: result.channelAccess ?? null,
+              reason: result.reason ?? null,
+            }, result.ok ? 'info' : 'error');
+          }
+        }
+      } catch (err) {
+        structuredError('marketing_autopilot_cron_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }
