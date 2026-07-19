@@ -8,7 +8,10 @@ function makeFluentMock(rows: unknown[], single: unknown = null) {
   const self: any = {
     select: () => self,
     eq: () => self,
+    // `.not(col, 'is', null)` is used to filter out rows without a domain.
+    not: () => self,
     order: () => self,
+    limit: () => self,
     maybeSingle: async () => ({ data: single, error: null }),
     data: rows,
     error: null,

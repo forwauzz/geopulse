@@ -6,7 +6,8 @@ import {
 
 describe('deep-audit checkout mode contract', () => {
   it('exposes the supported runtime modes', () => {
-    expect(DEEP_AUDIT_CHECKOUT_MODES).toEqual(['stripe', 'agency_bypass', 'startup_bypass']);
+    // 'free' is the OSS de-paywall mode (LEGACY_PAID_ENABLED off → full audit free for everyone).
+    expect(DEEP_AUDIT_CHECKOUT_MODES).toEqual(['stripe', 'agency_bypass', 'startup_bypass', 'free']);
   });
 
   it('normalizes unknown values to stripe', () => {
