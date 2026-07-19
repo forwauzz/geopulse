@@ -134,6 +134,9 @@ export async function runFreeScan(url: string, llm: LLMProvider): Promise<
     useLlm: true,
     robotsTxtContent,
     llmsTxtContent,
+    // Without this the header-based checks (e.g. security headers) saw an empty map and
+    // reported "Present: none" for EVERY site — a false negative on every free scan.
+    responseHeaders: fetched.headers,
   });
 
   const domain = extractDomain(fetched.finalUrl);

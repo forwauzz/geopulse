@@ -9,8 +9,29 @@ import {
 } from './ssrf';
 
 export type FetchGateTextResult =
-  | { ok: true; text: string; finalUrl: string; status: number; contentType: string | null }
+  | {
+      ok: true;
+      text: string;
+      finalUrl: string;
+      status: number;
+      contentType: string | null;
+      /** Lower-cased response headers — needed by header-based checks (e.g. security headers). */
+      headers: Record<string, string>;
+    }
   | { ok: false; reason: string };
+
+/** Response headers as a plain lower-cased map (Headers isn't structured-cloneable across layers). */
+function toHeaderMap(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    headers.forEach((value, key) => {
+      out[key.toLowerCase()] = value;
+    });
+  } catch {
+    /* best effort */
+  }
+  return out;
+}
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const USER_AGENT = 'GEO-PulseBot/1.0 (+https://geopulse.io)';
@@ -95,7 +116,14 @@ export async function fetchGateText(
       if (!res.ok) return { ok: false, reason: `Target returned HTTP ${String(res.status)}` };
       const ctype = res.headers.get('Content-Type');
       const text = await readTextWithByteLimit(res, options.maxBytes);
-      return { ok: true, text, finalUrl: rawUrl, status: res.status, contentType: ctype };
+      return {
+        ok: true,
+        text,
+        finalUrl: rawUrl,
+        status: res.status,
+        contentType: ctype,
+        headers: toHeaderMap(res.headers),
+      };
     } catch {
       // Self-fetch unavailable — fall through to the normal (validated) path.
     }
@@ -157,7 +185,14 @@ export async function fetchGateText(
       return { ok: false, reason: 'Could not determine domain' };
     }
 
-    return { ok: true, text, finalUrl: currentUrl, status: res.status, contentType: ctype };
+    return {
+      ok: true,
+      text,
+      finalUrl: currentUrl,
+      status: res.status,
+      contentType: ctype,
+      headers: toHeaderMap(res.headers),
+    };
   }
 
   return { ok: false, reason: 'Too many redirects' };
@@ -167,7 +202,7 @@ export async function fetchGateText(
  * HTML page fetch (same caps as legacy `fetch-page.ts` for free tier).
  */
 export async function fetchHtmlPage(rawUrl: string): Promise<
-  | { ok: true; html: string; finalUrl: string }
+  | { ok: true; html: string; finalUrl: string; headers: Record<string, string> }
   | { ok: false; reason: string }
 > {
   const r = await fetchGateText(rawUrl, {
@@ -177,5 +212,5 @@ export async function fetchHtmlPage(rawUrl: string): Promise<
     requireContentTypes: ['text/html', 'application/xhtml'],
   });
   if (!r.ok) return r;
-  return { ok: true, html: r.text, finalUrl: r.finalUrl };
+  return { ok: true, html: r.text, finalUrl: r.finalUrl, headers: r.headers };
 }

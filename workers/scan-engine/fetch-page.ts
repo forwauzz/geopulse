@@ -4,7 +4,7 @@
 import { fetchHtmlPage } from '../lib/fetch-gate';
 
 export type FetchPageResult =
-  | { ok: true; html: string; finalUrl: string }
+  | { ok: true; html: string; finalUrl: string; headers: Record<string, string> }
   | { ok: false; reason: string };
 
 export async function fetchPage(rawUrl: string): Promise<FetchPageResult> {

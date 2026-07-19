@@ -1,0 +1,99 @@
+# Fix Agent — opens PRs for AI-search-readiness gaps it can fix deterministically.
+#
+# What it does: runs scripts/fix-agent-apply.mjs (idempotent, no LLM, no API key), and if that
+# changed anything, runs the safety gates and opens a PR ATTRIBUTED TO THE FIX AGENT so it is
+# obvious which work is the agent's.
+#
+# What it deliberately does NOT do:
+#   - never pushes to main (PR only; protect `main` so this is enforced, not just polite)
+#   - never merges or deploys (that's scripts/autonomous-ship.mjs, opt-in separately)
+#   - never applies model-written code (Workers AI drafts stay human-reviewed)
+#
+# No ANTHROPIC_API_KEY needed — the fixers are deterministic rules.
+
+name: fix-agent
+
+on:
+  schedule:
+    # 12:30 UTC daily — after the self-audit (12:00) and its gates job (12:10).
+    - cron: "30 12 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would change without opening a PR"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+
+      - name: Run deterministic fixers
+        id: fixers
+        run: |
+          node scripts/fix-agent-apply.mjs --json > /tmp/fix-agent.json
+          cat /tmp/fix-agent.json
+          echo "changed=$(node -e "process.stdout.write(String(require('/tmp/fix-agent.json').changed))")" >> "$GITHUB_OUTPUT"
+
+      - name: Nothing to fix
+        if: steps.fixers.outputs.changed != 'true'
+        run: echo "No deterministic fixes needed — the repo already satisfies every known check."
+
+      # ---- Safety gates: never open a PR from a tree that does not build ----
+      - name: Type-check
+        if: steps.fixers.outputs.changed == 'true'
+        run: npm run type-check
+      - name: Tests
+        if: steps.fixers.outputs.changed == 'true'
+        run: npm run test
+      - name: Worker build
+        if: steps.fixers.outputs.changed == 'true'
+        run: node scripts/opennext-build.cjs
+
+      - name: Open PR (attributed to the Fix Agent)
+        if: steps.fixers.outputs.changed == 'true' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="fix-agent/auto-$(date -u +%Y%m%d-%H%M)"
+          # Attribution: the commit + PR are clearly the agent's work.
+          git config user.name  "GEO-Pulse Fix Agent"
+          git config user.email "fix-agent@getgeopulse.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          SUMMARY=$(node -e "
+            const s=require('/tmp/fix-agent.json');
+            process.stdout.write(s.applied.map(a=>'- '+a.title).join('\n'));
+          ")
+          git commit -m "fix(agent): automated AI-readiness fixes
+
+          $SUMMARY
+
+          Applied by the GEO-Pulse Fix Agent (deterministic fixers, no model output).
+          Generated-by: GEO-Pulse Fix Agent"
+          git push -u origin "$BRANCH"
+          BODY=$(node -e "
+            const s=require('/tmp/fix-agent.json');
+            let o='## 🤖 Fix Agent\n\nI found AI-search-readiness gaps I can fix deterministically and applied them.\n\n### Applied\n';
+            o+=s.applied.map(a=>'- **'+a.title+'**  \n  _'+a.why+'_  \n  \`'+a.files.join('\`, \`')+'\`').join('\n');
+            if(s.reported.length){o+='\n\n### Needs a human (not safe to automate)\n'+s.reported.map(r=>'- **'+r.title+'** — '+r.why).join('\n');}
+            o+='\n\n### Gates\nType-check, tests and the worker build all passed before this PR was opened.\n\nI do not merge or deploy — that is yours to approve.';
+            process.stdout.write(o);
+          ")
+          gh pr create \
+            --title "🤖 Fix Agent: automated AI-readiness fixes" \
+            --body "$BODY" \
+            --head "$BRANCH" \
+            --base main
