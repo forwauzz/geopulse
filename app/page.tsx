@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ScanForm } from '@/components/scan-form';
+import { AiPlatformLogos } from '@/components/ai-platform-logos';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   buildOrganizationStructuredData,
@@ -75,100 +76,6 @@ const referenceLinks = [
     href: 'https://schema.org/FAQPage',
   },
 ] as const;
-
-const modelPlatforms = [
-  {
-    label: 'ChatGPT',
-    icon: 'chatgpt' as const,
-    iconClassName: 'text-[#10A37F]',
-  },
-  {
-    label: 'Perplexity',
-    icon: 'perplexity' as const,
-    iconClassName: 'text-[#1FB8A6]',
-  },
-  {
-    label: 'Claude',
-    icon: 'claude' as const,
-    iconClassName: 'text-[#D97757]',
-  },
-  {
-    label: 'Gemini',
-    icon: 'gemini' as const,
-    iconClassName: 'text-[#5B7CFA]',
-  },
-] as const;
-
-function ModelPlatformLogo({
-  icon,
-  className,
-}: {
-  icon: (typeof modelPlatforms)[number]['icon'];
-  className?: string;
-}) {
-  const classes = className ?? '';
-
-  if (icon === 'chatgpt') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
-        <path
-          d="M12 3.25 17.5 6.5v6L12 15.75 6.5 12.5v-6L12 3.25Z"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinejoin="round"
-        />
-        <path
-          d="m9.2 7.6 5.6 8.8M14.8 7.6l-5.6 8.8M7 12h10"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-  }
-
-  if (icon === 'perplexity') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
-        <path
-          d="M6 7.5h12M6 12h12M6 16.5h12M8 5v14M16 5v14"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-  }
-
-  if (icon === 'claude') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
-        <path
-          d="M7.5 5.5h8a3 3 0 0 1 0 6h-7a3.5 3.5 0 1 0 0 7h8"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={classes} fill="none">
-      <path
-        d="m12 4.5 1.8 4.2 4.2 1.8-4.2 1.8-1.8 4.2-1.8-4.2-4.2-1.8 4.2-1.8L12 4.5Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path
-        d="m17.2 14.8.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
 
 const howItWorks = [
   {
@@ -325,20 +232,8 @@ export default async function HomePage({
           <h1 className="mx-auto max-w-5xl font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl lg:text-8xl">
             Stop guessing whether AI is surfacing your company.
           </h1>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            {modelPlatforms.map((platform) => (
-              <span
-                key={platform.label}
-                className="inline-flex items-center gap-2 rounded-full border border-tertiary/20 bg-surface-container-lowest px-4 py-2 shadow-float"
-              >
-                <span className={`h-4 w-4 ${platform.iconClassName}`}>
-                  <ModelPlatformLogo icon={platform.icon} className="h-full w-full" />
-                </span>
-                <span className="font-label text-[11px] font-semibold uppercase tracking-[0.18em] text-tertiary">
-                  {platform.label}
-                </span>
-              </span>
-            ))}
+          <div className="mt-8">
+            <AiPlatformLogos />
           </div>
           <p className="mx-auto mt-4 max-w-2xl font-body text-sm text-on-surface-variant">
             Editorially maintained by {SITE_EDITORIAL_NAME}.
