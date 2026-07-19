@@ -28,6 +28,7 @@ export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationN
 
   const signInHref = (() => {
     const params = new URLSearchParams();
+    params.set('mode', 'signin'); // /login now defaults to sign-up; this reaches the password sign-in.
     params.set('next', nextPath);
     if (bundleKey) {
       params.set('bundle', bundleKey);
@@ -139,7 +140,7 @@ export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationN
         <p className="mt-4 font-body text-sm text-on-surface-variant">
           Already have an account?{' '}
           <Link href={signInHref} className="font-semibold text-tertiary hover:underline">
-            Or sign in
+            Sign in
           </Link>
         </p>
       </div>

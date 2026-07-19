@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ScanForm } from '@/components/scan-form';
 import { AiPlatformLogos } from '@/components/ai-platform-logos';
+import { ScrollReveal } from '@/components/scroll-reveal';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   buildOrganizationStructuredData,
@@ -210,6 +211,7 @@ export default async function HomePage({
 
   return (
     <main>
+      <ScrollReveal />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
@@ -230,7 +232,14 @@ export default async function HomePage({
       <section className="relative overflow-hidden border-b border-outline-variant/15 px-6 pb-12 pt-10 text-center md:px-10 md:pb-20 md:pt-16">
         <div className="relative mx-auto max-w-6xl">
           <h1 className="mx-auto max-w-5xl font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl lg:text-8xl">
-            Stop guessing whether AI is surfacing your company.
+            Stop guessing whether{' '}
+            <span
+              className="box-decoration-clone inline-block -rotate-1 px-[0.12em]"
+              style={{ backgroundImage: 'linear-gradient(transparent 12%, #fde047 12%, #fde047 84%, transparent 84%)' }}
+            >
+              AI
+            </span>{' '}
+            is surfacing your company.
           </h1>
           <div className="mt-8">
             <AiPlatformLogos />
@@ -307,7 +316,7 @@ export default async function HomePage({
 
       <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-4">
+          <div data-reveal className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
               Direct answers
             </span>
@@ -339,7 +348,7 @@ export default async function HomePage({
 
       <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-start">
-          <div className="lg:col-span-4">
+          <div data-reveal className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">How it works</span>
             <h2 className="mt-3 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">
               See, fix, and prove your AI visibility
@@ -350,7 +359,7 @@ export default async function HomePage({
             </p>
           </div>
           <div className="lg:col-span-8">
-            <figure className="mb-8 overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
+            <figure data-reveal className="mb-8 overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
               <img
                 src="/media/journey-cards.webp"
                 alt="Three stages side by side: an invisible, low-signal page; the same page scanned by GEO-Pulse flagging visibility gaps, citation blockers, and weak trust signals; and a structured, trusted page included in AI answers."
@@ -384,7 +393,7 @@ export default async function HomePage({
       </section>
 
       <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
-        <figure className="mb-16 overflow-hidden rounded-3xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
+        <figure data-reveal className="mb-16 overflow-hidden rounded-3xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
           <img
             src="/media/browser-journey.webp"
             alt="A site's journey across three browser mockups: an unstructured content page, the same page with gaps like citation blocked, trust low, and structure errors flagged, then the page rewritten so AI answer cards quote it as a trusted source."
@@ -426,7 +435,7 @@ export default async function HomePage({
               </div>
             </div>
           </div>
-          <div className="relative overflow-hidden rounded-xl bg-surface-container-low p-8 lg:col-span-7">
+          <div data-reveal className="relative overflow-hidden rounded-xl bg-surface-container-low p-8 lg:col-span-7">
             <div className="relative z-10 rounded-xl bg-surface-container-lowest p-8 md:p-10">
               <div className="mb-10 flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -489,7 +498,7 @@ export default async function HomePage({
 
       <section className="bg-surface-container-high/30 px-6 py-24 md:px-10 md:py-32">
         <div className="mx-auto grid max-w-screen-2xl grid-cols-1 gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-4">
+          <div data-reveal className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">
               Extractability
             </span>
@@ -502,7 +511,7 @@ export default async function HomePage({
             </p>
           </div>
           <div className="lg:col-span-8">
-            <figure className="mb-8 overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
+            <figure data-reveal className="mb-8 overflow-hidden rounded-2xl border border-outline-variant/40 bg-surface-container-lowest shadow-float">
               <img
                 src="/media/extract-flow.webp"
                 alt="Dense, hard-to-read page blocks on the left fan into clearer, structured components on the right, with a rising trust arrow showing how extractable content turns into quotable answers."
@@ -559,7 +568,7 @@ export default async function HomePage({
 
       <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
         <div className="grid grid-cols-1 gap-10 lg:grid-cols-12">
-          <div className="lg:col-span-4">
+          <div data-reveal className="lg:col-span-4">
             <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">Questions</span>
             <h2 className="mt-3 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">
               Common questions, answered directly
