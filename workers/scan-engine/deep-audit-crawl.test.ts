@@ -212,12 +212,14 @@ beforeEach(() => {
         ok: true,
         html: '<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>',
         finalUrl: 'https://example.com/',
+        headers: {},
       };
     }
     return {
       ok: true,
       html: '<html><body>detail</body></html>',
       finalUrl: url,
+      headers: {},
     };
   });
   vi.mocked(auditPageFromHtml).mockImplementation(async (url: string) => {
