@@ -3,6 +3,10 @@ import { redirect } from 'next/navigation';
 import { getAgencyDashboardData } from '@/lib/server/agency-dashboard-data';
 import { getStartupDashboardData } from '@/lib/server/startup-dashboard-data';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { getScanApiEnv } from '@/lib/server/cf-env';
+import { loadUserSchedule } from '@/lib/server/recurring-audits';
+import { saveMyRecurringAudit } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,6 +74,18 @@ export default async function WorkspacePage({ searchParams }: Props) {
   const hasAny =
     agencyDashboard.accounts.length > 0 || startupDashboard.workspaces.length > 0;
 
+  // Recurring-audit schedule (service-role table) for the self-serve card below.
+  const env = await getScanApiEnv();
+  const admin =
+    env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+      ? createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
+      : null;
+  const schedule = admin ? await loadUserSchedule(admin, user.id) : null;
+  const fmtDate = (iso: string | null): string =>
+    iso ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+  const recurInput =
+    'min-h-[42px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30';
+
   return (
     <section className="space-y-6">
 
@@ -93,6 +109,44 @@ export default async function WorkspacePage({ searchParams }: Props) {
           <span className="material-symbols-outlined text-[16px]" aria-hidden>arrow_back</span>
           Dashboard
         </Link>
+      </div>
+
+      {/* ── Recurring audit (self-serve, all users) ─────────── */}
+      <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 shadow-float md:p-6">
+        <h2 className="font-sans text-lg font-bold text-on-background">Recurring audit</h2>
+        <p className="mt-0.5 font-sans text-sm text-on-surface-variant">
+          Re-audit your site automatically and get the report emailed to you on your schedule.
+        </p>
+        <form action={saveMyRecurringAudit} className="mt-4 space-y-3">
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Website to audit</span>
+            <input name="url" type="url" required defaultValue={schedule?.url ?? ''} placeholder="https://yourcompany.com" className={recurInput} />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">How often</span>
+              <select name="cadence" defaultValue={schedule?.cadence ?? 'weekly'} className={recurInput}>
+                <option value="weekly">Weekly</option>
+                <option value="daily">Daily</option>
+              </select>
+            </label>
+            <div className="flex items-end gap-2">
+              <button type="submit" name="enabled" value="true" className="inline-flex min-h-[42px] flex-1 items-center justify-center rounded-xl bg-primary px-4 text-sm font-semibold text-on-primary transition hover:bg-primary-dim">
+                {schedule?.enabled ? 'Save & keep on' : 'Turn on'}
+              </button>
+              {schedule?.enabled ? (
+                <button type="submit" name="enabled" value="false" className="inline-flex min-h-[42px] items-center justify-center rounded-xl bg-surface-container px-4 text-sm font-semibold text-on-surface-variant transition hover:text-on-background">
+                  Turn off
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </form>
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-outline-variant/20 pt-4 font-sans text-xs text-on-surface-variant">
+          <span>Status: <strong className={schedule?.enabled ? 'text-primary' : 'text-on-surface-variant'}>{schedule?.enabled ? 'On' : 'Off'}</strong></span>
+          <span>Next run: {schedule?.enabled ? fmtDate(schedule.nextRunAt) : '—'}</span>
+          <span>Last run: {fmtDate(schedule?.lastRunAt ?? null)}</span>
+        </div>
       </div>
 
       {/* ── Personal account ────────────────────────────────── */}

@@ -97,8 +97,54 @@ export async function upsertUserSchedule(
 }
 
 // Includes GEMINI (scan) + RESEND + SELF_IMPROVEMENT_* so a recurring audit of the self-improvement
-// target can feed the improvement plan directly (one loop instead of two).
-export type RecurringEnvLike = SelfImprovementEnvLike;
+// target can feed the improvement plan directly (one loop instead of two). NEXT_PUBLIC_APP_URL is
+// used to build the results link in the per-run email.
+export type RecurringEnvLike = SelfImprovementEnvLike & { NEXT_PUBLIC_APP_URL?: string };
+
+/** Look up a user's email (for the per-run audit email). */
+async function resolveUserEmail(supabase: SupabaseClient, userId: string): Promise<string | null> {
+  try {
+    const { data } = await supabase.from('users').select('email').eq('id', userId).maybeSingle();
+    const email = (data?.email as string | undefined) ?? null;
+    return email && email.includes('@') ? email : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Email the owner their fresh recurring audit with a link to the full report. Best-effort. */
+async function sendRecurringAuditEmail(
+  env: RecurringEnvLike,
+  to: string,
+  scanUrl: string,
+  score: number,
+  letterGrade: string,
+  scanId: string
+): Promise<void> {
+  const key = env.RESEND_API_KEY?.trim();
+  const from = env.RESEND_FROM_EMAIL?.trim();
+  if (!key || !from) return;
+  const base = (env.NEXT_PUBLIC_APP_URL?.trim() || 'https://getgeopulse.com').replace(/\/$/, '');
+  const link = `${base}/results/${scanId}`;
+  const html = [
+    '<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#111">',
+    '<h2 style="font-size:18px;margin:0 0 8px">Your scheduled GEO-Pulse audit is ready</h2>',
+    `<p style="margin:0 0 4px;color:#555">${scanUrl}</p>`,
+    `<p style="font-size:40px;font-weight:800;margin:8px 0;letter-spacing:-1px">${score}<span style="font-size:16px;color:#888">/100 · ${letterGrade}</span></p>`,
+    `<p style="margin:16px 0"><a href="${link}" style="background:#111;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">View the full report</a></p>`,
+    '<p style="font-size:12px;color:#999;margin-top:20px">You’re getting this because you set up a recurring audit. Manage it in your GEO-Pulse settings.</p>',
+    '</div>',
+  ].join('');
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ from, to, subject: `GEO-Pulse audit: ${scanUrl} scored ${score}/100`, html }),
+    });
+  } catch {
+    /* best-effort */
+  }
+}
 
 function buildLlm(env: RecurringEnvLike): LLMProvider {
   const key = env.GEMINI_API_KEY?.trim();
@@ -144,23 +190,38 @@ export async function runDueRecurringAudits(args: {
     try {
       const scan = await runFreeScan(s.url, llm);
       if (scan.ok) {
-        await supabase.from('scans').insert({
-          url: scan.finalUrl,
-          domain: scan.domain,
-          status: 'complete',
-          score: scan.output.score,
-          letter_grade: scan.output.letterGrade,
-          issues_json: scan.output.issues,
-          full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
-          user_id: s.userId,
-          startup_workspace_id: s.startupWorkspaceId,
-          run_source: 'recurring',
-        });
+        const { data: scanRow } = await supabase
+          .from('scans')
+          .insert({
+            url: scan.finalUrl,
+            domain: scan.domain,
+            status: 'complete',
+            score: scan.output.score,
+            letter_grade: scan.output.letterGrade,
+            issues_json: scan.output.issues,
+            full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
+            user_id: s.userId,
+            startup_workspace_id: s.startupWorkspaceId,
+            run_source: 'recurring',
+          })
+          .select('id')
+          .single();
         await supabase
           .from('recurring_audit_schedules')
           .update({ last_run_at: nowIso, next_run_at: computeNextRun(s.cadence, nowMs), last_error: null, updated_at: nowIso })
           .eq('id', s.id);
         ran += 1;
+
+        // Email the owner their fresh audit (best-effort — never fails the run).
+        const scanId = (scanRow?.id as string | undefined) ?? null;
+        if (scanId) {
+          try {
+            const to = await resolveUserEmail(supabase, s.userId);
+            if (to) await sendRecurringAuditEmail(env, to, scan.finalUrl, scan.output.score, scan.output.letterGrade, scanId);
+          } catch {
+            /* email is best-effort */
+          }
+        }
 
         // ONE LOOP: when this schedule audits the self-improvement target and the owner is an
         // autonomy operator, feed the plan straight into self-improvement (no second scan).
