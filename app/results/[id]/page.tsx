@@ -3,6 +3,7 @@ import { ResultsView } from '@/components/results-view';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
+import { loadUiFlags } from '@/lib/server/app-ui-flags';
 
 type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<{ checkout?: string }> };
 
@@ -58,10 +59,16 @@ export default async function ResultsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const query = searchParams ? await searchParams : undefined;
   const siteKey = getTurnstileSiteKey();
+  const showCompetitorSearch = (await loadUiFlags()).show_competitor_search;
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 md:px-10 md:py-16">
-      <ResultsView scanId={id} turnstileSiteKey={siteKey} checkoutState={query?.checkout ?? null} />
+      <ResultsView
+        scanId={id}
+        turnstileSiteKey={siteKey}
+        checkoutState={query?.checkout ?? null}
+        showCompetitorSearch={showCompetitorSearch}
+      />
     </main>
   );
 }

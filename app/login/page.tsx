@@ -55,7 +55,8 @@ export default async function LoginPage({ searchParams }: Props) {
   });
   const nextPath = safeNextPath(sp.next);
   const err = sp.error;
-  const isSignUp = sp.mode === 'signup';
+  // Default to the free sign-up; returning users reach sign-in via ?mode=signin.
+  const isSignUp = sp.mode !== 'signin';
   const bundleKey = sp.bundle?.trim() || undefined;
   const organizationName = sp.organization_name?.trim() || undefined;
   const websiteUrl = sp.website_url?.trim() || undefined;
@@ -70,12 +71,12 @@ export default async function LoginPage({ searchParams }: Props) {
         {'<-'} Back to GEO-Pulse
       </Link>
       <h1 className="mt-8 font-headline text-3xl font-bold tracking-tight text-on-background md:text-4xl">
-        {isSignUp ? 'Create your account' : 'Sign in'}
+        {isSignUp ? 'Sign up for free' : 'Sign in'}
       </h1>
       <p className="mt-2 max-w-2xl font-body text-on-surface-variant">
         {isSignUp
-          ? 'Create your account for the plan you selected, then continue to checkout.'
-          : 'Customer accounts can still use a magic link. Agency and pilot accounts can also sign in with an email and password.'}
+          ? 'Create your free account to save audits, track scores over time, and set up recurring reports. No credit card.'
+          : 'Enter your email and password.'}
       </p>
       <p className="mt-3 max-w-2xl font-body text-sm text-on-surface-variant">
         Public context lives on the{' '}
@@ -100,15 +101,6 @@ export default async function LoginPage({ searchParams }: Props) {
         </a>{' '}
         on public forms.
       </p>
-      {!isSignUp && (
-        <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
-          <p className="font-body text-sm font-semibold text-on-background">Report recovery tip</p>
-          <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">
-            If you already paid for a deep audit, sign in with the Stripe checkout email first.
-            That is how past paid reports are linked into your dashboard.
-          </p>
-        </div>
-      )}
       {err ? (
         <p className="mt-4 rounded-xl border border-error/30 bg-surface-container-low px-4 py-3 font-body text-sm text-error">
           {decodeURIComponent(err)}

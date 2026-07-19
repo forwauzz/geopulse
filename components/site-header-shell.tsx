@@ -134,7 +134,7 @@ export function SiteHeaderShell({
                   href="/login"
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
                 >
-                  Sign in
+                  Sign up for free
                 </Link>
               </div>
               {/* Admin link removed — admins use /login then navigate to /admin directly */}

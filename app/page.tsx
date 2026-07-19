@@ -393,28 +393,6 @@ export default async function HomePage({
             Start with a free audit to see where AI visibility is weak, what to fix first, and whether
             the gaps are serious enough to warrant deeper implementation work.
           </p>
-          <div className="relative mx-auto mt-16 max-w-5xl">
-            <div className="relative overflow-hidden rounded-3xl border border-outline-variant/30 bg-surface-container-lowest shadow-float">
-              <video
-                className="block h-auto w-full"
-                src="/media/hero-pulse.mp4"
-                poster="/media/hero-pulse-poster.jpg"
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                aria-label="Animated visual: a connected globe lights up and a heartbeat pulse sweeps across it, illustrating AI visibility"
-              />
-              <div
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-surface-container-lowest/90 to-transparent"
-                aria-hidden
-              />
-            </div>
-            <p className="mt-4 font-label text-xs uppercase tracking-[0.2em] text-on-surface-variant">
-              The pulse of your AI visibility — rendered, not guessed
-            </p>
-          </div>
         </div>
       </section>
 
