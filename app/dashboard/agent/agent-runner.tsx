@@ -1,7 +1,12 @@
 'use client';
 
 import { useActionState, useState } from 'react';
-import { runFixAgentAction, type FixAgentState } from './actions';
+import {
+  applyFixesAsPrAction,
+  runFixAgentAction,
+  type FixAgentPrState,
+  type FixAgentState,
+} from './actions';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -31,6 +36,10 @@ export function AgentRunner() {
   const [state, formAction, pending] = useActionState<FixAgentState, FormData>(runFixAgentAction, {
     status: 'idle',
   });
+  const [prState, prAction, prPending] = useActionState<FixAgentPrState, FormData>(
+    applyFixesAsPrAction,
+    { status: 'idle' }
+  );
 
   return (
     <div className="space-y-5">
@@ -58,8 +67,45 @@ export function AgentRunner() {
           <p className="font-sans text-sm text-on-surface-variant">
             {state.fixes.length} fix{state.fixes.length === 1 ? '' : 'es'} for{' '}
             <strong className="text-on-background">{state.domain}</strong>
-            {state.score != null ? ` (score ${state.score})` : ''} — paste these in and re-run your audit.
+            {state.score != null ? ` (score ${state.score})` : ''} — paste these in, or let me open a PR.
           </p>
+
+          {/* Close the loop: open a PR on the connected repo instead of copy-pasting. */}
+          <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-4">
+            <form action={prAction} className="flex flex-wrap items-center gap-3">
+              <button
+                type="submit"
+                disabled={prPending}
+                className="inline-flex min-h-[42px] items-center gap-2 rounded-xl bg-on-background px-5 font-sans text-sm font-semibold text-surface transition hover:opacity-90 disabled:opacity-60"
+              >
+                <span className={`material-symbols-outlined text-[18px] ${prPending ? 'animate-spin' : ''}`} aria-hidden>
+                  {prPending ? 'progress_activity' : 'merge'}
+                </span>
+                {prPending ? 'Opening a PR…' : 'Open a PR on my repo'}
+              </button>
+              <span className="font-sans text-xs text-on-surface-variant">
+                Opens a pull request — never merges or deploys.
+              </span>
+            </form>
+
+            {prState.status === 'error' ? (
+              <p className="mt-3 font-sans text-sm text-error" role="alert">
+                {prState.message}{' '}
+                <a href="/dashboard/connectors" className="font-semibold underline">
+                  Open Connectors
+                </a>
+              </p>
+            ) : null}
+            {prState.status === 'ok' ? (
+              <p className="mt-3 font-sans text-sm text-on-background">
+                ✅ Opened{' '}
+                <a href={prState.url} target="_blank" rel="noreferrer" className="font-semibold text-primary underline">
+                  PR #{prState.number}
+                </a>{' '}
+                — {prState.filesWritten.length} file{prState.filesWritten.length === 1 ? '' : 's'} committed. Review and merge when ready.
+              </p>
+            ) : null}
+          </div>
           <ol className="space-y-4">
             {state.fixes.map((fix, i) => (
               <li key={`${fix.title}-${i}`} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5">
