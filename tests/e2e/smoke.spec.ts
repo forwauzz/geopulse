@@ -5,10 +5,10 @@ test.describe('public smoke flows', () => {
     await page.goto('/');
 
     await expect(
-      page.getByRole('heading', { name: /check your ai search readiness/i })
+      page.getByRole('heading', { name: /stop guessing whether/i })
     ).toBeVisible();
     await expect(page.getByLabel('Website URL')).toBeVisible();
-    await expect(page.getByRole('button', { name: /run diagnostic/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /audit website/i })).toBeVisible();
     await expect(
       page.getByRole('navigation').getByRole('link', { name: /^sign in$/i })
     ).toBeVisible();
@@ -36,7 +36,7 @@ test.describe('public smoke flows', () => {
     await page.goto('/');
 
     await page.getByLabel('Website URL').fill('https://example.com');
-    await page.getByRole('button', { name: /run diagnostic/i }).click();
+    await page.getByRole('button', { name: /audit website/i }).click();
     await page.waitForTimeout(500);
 
     expect(scanCalled).toBe(false);
@@ -80,6 +80,7 @@ test.describe('public smoke flows', () => {
             { category: 'ai_readiness', score: 0.72, letterGrade: 'B', checkCount: 4 },
           ],
           hasPaidReport: false,
+          deepAuditAvailable: true,
           reportStatus: 'none',
           pdfUrl: null,
           markdownUrl: null,
@@ -89,49 +90,19 @@ test.describe('public smoke flows', () => {
 
     await page.goto('/');
     await page.getByLabel('Website URL').fill('https://example.com');
-    await page.getByRole('button', { name: /run diagnostic/i }).click();
+    await page.getByRole('button', { name: /audit website/i }).click();
 
     await page.waitForURL('**/results/e2e-scan-id');
-    await expect(page.getByRole('heading', { name: /diagnostic for/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /example\.com/i })).toBeVisible();
     await expect(page.getByText(/example\.com/i).first()).toBeVisible();
-    await expect(page.getByText(/one path, with a preview first/i)).toBeVisible();
+    await expect(page.getByText(/get the full report/i)).toBeVisible();
   });
 
-  test('results page shows checkout return messaging before payment confirmation', async ({
-    page,
-  }) => {
-    await page.route('**/api/scans/e2e-return-state*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          scanId: 'e2e-return-state',
-          url: 'https://example.com',
-          score: 72,
-          letterGrade: 'B',
-          topIssues: [],
-          categoryScores: [
-            { category: 'ai_readiness', score: 0.72, letterGrade: 'B', checkCount: 4 },
-          ],
-          hasPaidReport: false,
-          reportStatus: 'none',
-          pdfUrl: null,
-          markdownUrl: null,
-        }),
-      });
-    });
-
-    await page.goto('/results/e2e-return-state?checkout=success');
-
-    await expect(
-      page.getByText(/waiting for payment confirmation before we start the full audit/i)
-    ).toBeVisible();
-    await expect(page.getByText(/you are back from checkout/i)).toBeVisible();
-    await expect(page.getByText(/continue from preview to the full audit/i)).toBeVisible();
-    await expect(page.getByRole('heading', { name: /choose what to do next/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /continue to full audit/i }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /save preview instead/i }).first()).toBeVisible();
-  });
+  // NOTE: the Stripe checkout-return flow was removed when the full audit became free. The
+  // "choose what to do next" action band and "continue from preview to the full audit" copy no
+  // longer exist, so this test is dropped rather than rewritten to match a de-paywalled app.
+  // The paid path still exists behind LEGACY_PAID_ENABLED; covering it again would mean running
+  // the suite with that flag on, which the E2E env does not do.
 
   test('results page surfaces the in-progress action band while the full audit is generating', async ({
     page,
@@ -159,9 +130,9 @@ test.describe('public smoke flows', () => {
 
     await page.goto('/results/e2e-generating');
 
-    await expect(page.getByText(/your full audit is being prepared/i)).toBeVisible();
-    await expect(page.getByRole('link', { name: /refresh status/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /open dashboard sign-in/i })).toBeVisible();
+    await expect(page.getByText(/your full report is being prepared/i)).toBeVisible();
+    // The "refresh status" and "open dashboard sign-in" links went with the action band — the page
+    // now polls and updates itself, so there is nothing for the reader to click.
   });
 
   test('delivered results page explains dashboard recovery with the checkout email', async ({
@@ -192,56 +163,12 @@ test.describe('public smoke flows', () => {
 
     await expect(page.getByText(/want this report in your dashboard too/i)).toBeVisible();
     await expect(page.getByText(/same email you used in stripe checkout/i)).toBeVisible();
-    await expect(page.getByRole('heading', { name: /your report is ready/i })).toBeVisible();
+    await expect(page.getByText(/your full report has been delivered/i)).toBeVisible();
     await expect(page.getByRole('link', { name: /sign in to dashboard/i }).first()).toBeVisible();
   });
 
-  test('results page share snapshot action copies the results link', async ({ page }) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(window.navigator, 'share', {
-        configurable: true,
-        value: undefined,
-      });
-      Object.defineProperty(window.navigator, 'clipboard', {
-        configurable: true,
-        value: {
-          writeText: async (value: string) => {
-            (window as Window & { __geoPulseCopiedText?: string }).__geoPulseCopiedText = value;
-          },
-        },
-      });
-    });
-
-    await page.route('**/api/scans/e2e-share*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          scanId: 'e2e-share',
-          url: 'https://example.com',
-          score: 72,
-          letterGrade: 'B',
-          topIssues: [],
-          categoryScores: [
-            { category: 'ai_readiness', score: 72, letterGrade: 'B', checkCount: 4 },
-          ],
-          hasPaidReport: false,
-          reportStatus: 'none',
-          pdfUrl: null,
-          markdownUrl: null,
-        }),
-      });
-    });
-
-    await page.goto('/results/e2e-share');
-    await page.getByRole('button', { name: /share snapshot/i }).click();
-
-    await expect(page.getByText(/link copied/i)).toBeVisible();
-    const copiedText = await page.evaluate(
-      () => (window as Window & { __geoPulseCopiedText?: string }).__geoPulseCopiedText
-    );
-    expect(copiedText).toContain('/results/e2e-share');
-  });
+  // NOTE: the "share snapshot" action was removed from the results page along with the "save
+  // this preview" block, so its test is dropped rather than rewritten.
 
   test('report page falls back to a PDF download when no web report is available', async ({
     page,
