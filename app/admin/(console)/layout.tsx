@@ -1,3 +1,15 @@
+/**
+ * Guarded shell for the admin console.
+ *
+ * This lives in a `(console)` route group — which does NOT affect URLs — so that `/admin/login`
+ * can sit at `app/admin/login` OUTSIDE this layout. Do not move the login page under here: this
+ * layout redirects unauthenticated visitors to `/admin/login`, so if that page were also wrapped
+ * by it, the redirect target would re-run the same guard and 307 to itself forever. That exact
+ * loop shipped to production on 2026-04-08 and locked every logged-out operator out of admin
+ * until 2026-07-20. `middleware.ts` already excludes `/admin/login` for the same reason.
+ *
+ * Covered by the "admin login page renders the operator password flow" smoke test.
+ */
 import { redirect } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin-sidebar';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
