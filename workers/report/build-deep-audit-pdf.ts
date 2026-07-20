@@ -729,9 +729,12 @@ export async function buildDeepAuditPdf(input: {
  * Build PDF from the canonical {@link DeepAuditReportPayload} (DA-003).
  */
 export async function buildDeepAuditPdfFromPayload(
-  payload: DeepAuditReportPayload
+  payload: DeepAuditReportPayload,
+  branding?: { brand?: BrandConfig; logoBytes?: Uint8Array | null }
 ): Promise<Uint8Array> {
   return buildDeepAuditPdf({
+    brand: branding?.brand,
+    logoBytes: branding?.logoBytes,
     url: payload.seedUrl,
     domain: payload.domain,
     score: payload.aggregateScore,

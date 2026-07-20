@@ -6,6 +6,7 @@ import { writeGeneratedReportEval } from '../../lib/server/report-eval-writer';
 import { structuredLog } from '../../lib/server/structured-log';
 import { buildDeepAuditMarkdown } from '../report/build-deep-audit-markdown';
 import { buildDeepAuditPdfFromPayload } from '../report/build-deep-audit-pdf';
+import { resolveReportBrand } from '../report/resolve-report-brand';
 import { buildDeepAuditReportPayload } from '../report/deep-audit-report-payload';
 import { DEEP_AUDIT_ATTACH_MAX_BYTES } from '../report/deep-audit-delivery-policy';
 import {
@@ -722,10 +723,20 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     throw new Error(scanUpdErr.message);
   }
 
-  const pdfBytes = await buildDeepAuditPdfFromPayload(payload);
-  const markdownText = buildDeepAuditMarkdown(payload);
-
   const bucket = env.REPORT_FILES;
+
+  const branding = await resolveReportBrand({
+    supabase: supabase as any,
+    scan: {
+      agency_client_id: scan.agency_client_id ? String(scan.agency_client_id) : null,
+      agency_account_id: scan.agency_account_id ? String(scan.agency_account_id) : null,
+      startup_workspace_id: scan.startup_workspace_id ? String(scan.startup_workspace_id) : null,
+    },
+    bucket,
+  });
+
+  const pdfBytes = await buildDeepAuditPdfFromPayload(payload, branding);
+  const markdownText = buildDeepAuditMarkdown(payload);
   const publicBase = (env.DEEP_AUDIT_R2_PUBLIC_BASE ?? '').trim();
 
   let downloadLinks: DeepAuditDownloadLinks | undefined;
