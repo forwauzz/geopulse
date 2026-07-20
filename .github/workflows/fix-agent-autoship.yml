@@ -7,9 +7,15 @@
 # There is NO MODEL IN THE WRITE PATH. Only deterministic, idempotent fixers touch code, so a
 # hallucination can never reach production. That is what makes unattended merging safe here.
 #
+# A change is merged only if the live AI-readiness score did not drop. HTTP 200 does not prove a
+# fix helped, so the merge decision is a measured before/after delta — arithmetic, not an opinion.
+# A regression rolls production back and leaves the PR open.
+#
 # ── Required one-time setup (until these exist, this workflow does nothing) ──
-#   Secret   CLOUDFLARE_API_TOKEN   — lets CI run `wrangler deploy`
-#   Variable FIX_AGENT_AUTOSHIP=true — explicit opt-in to unattended production deploys
+#   Secret   CLOUDFLARE_API_TOKEN          — lets CI run `wrangler deploy`
+#   Secret   SELF_IMPROVE_TRIGGER_SECRET   — drives the before/after audit. Without it the ship
+#                                            script refuses to merge rather than merging blind.
+#   Variable FIX_AGENT_AUTOSHIP=true       — explicit opt-in to unattended production deploys
 #
 # ── Kill switch ──
 #   Set repo variable FIX_AGENT_KILL to any non-empty value. Checked before gates AND again
@@ -114,6 +120,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           GH_TOKEN: ${{ github.token }}
           SELF_IMPROVEMENT_KILL: ${{ vars.FIX_AGENT_KILL }}
+          # Drives the before/after self-audit. Without it the script refuses to merge rather
+          # than merging on an unmeasured change.
+          SELF_IMPROVE_TRIGGER_SECRET: ${{ secrets.SELF_IMPROVE_TRIGGER_SECRET }}
         run: node scripts/autonomous-ship.mjs --pr "${{ steps.pr.outputs.number }}"
 
       - name: Dry run — gates only
