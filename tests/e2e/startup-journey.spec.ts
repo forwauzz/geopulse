@@ -2,7 +2,8 @@
  * E2E: Startup team journey
  *
  * Tests the startup workspace experience end to end:
- *   - Dashboard home: scan hero (#dashboard-scan), workspace context bar, stats, WhatNextBanner (step 3)
+ *   - /dashboard: the scan hero (#dashboard-scan) and nothing else
+ *   - /dashboard/history: workspace context bar, stats, WhatNextBanner (step 3)
  *   - Score trend and action backlog widgets
  *   - New Scan page with startup workspace context
  *   - Connectors page: heading, GitHub card, Slack card
@@ -35,27 +36,35 @@ async function signInAsStartup(page: import('@playwright/test').Page) {
 
 const WORKSPACE_ID = '00000000-0000-4000-8000-000000000101';
 
+/**
+ * Where the workspace surface lives. `/dashboard` was simplified down to the scan hero alone, and
+ * the workspace context bar, stats, widgets and scan list all moved here — so these assertions
+ * follow the content rather than the URL.
+ */
+const WORKSPACE_HOME = '/dashboard/history';
+
 // ── Dashboard home — startup section ───────────────────────────
 
 test.describe('startup dashboard home', () => {
-  test('renders dashboard heading and user email', async ({ page }) => {
+  test('renders history heading', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
-    // Scope to main content to avoid the sidebar's truncated/hidden copy
-    await expect(page.getByRole('main').getByText(/admin@example\.com/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
+    // The user email moved out of main and into the sidebar chrome, where it is truncated and
+    // viewport-dependent — asserting its visibility here would only buy flakiness.
   });
 
   test('renders dashboard scan hero — #dashboard-scan, headline, URL field, submit', async ({
     page,
   }) => {
     await signInAsStartup(page);
+    // The hero is the whole of /dashboard now, so this one stays put.
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('#dashboard-scan')).toBeVisible();
     await expect(
-      page.getByRole('heading', { name: /start with any website/i })
+      page.getByRole('heading', { name: /audit any website/i })
     ).toBeVisible();
     await expect(page.getByRole('textbox', { name: /website url/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /run diagnostic/i })).toBeVisible();
@@ -63,7 +72,7 @@ test.describe('startup dashboard home', () => {
 
   test('renders startup workspace section with workspace name', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(
       page.getByRole('heading', { name: /e2e startup workspace/i })
@@ -72,14 +81,14 @@ test.describe('startup dashboard home', () => {
 
   test('shows workspace key chip', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/e2e-startup/i)).toBeVisible();
   });
 
   test('shows canonical domain chip', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     // The chip renders exactly "example.com" — use exact match so we don't pick up "admin@example.com"
     await expect(page.getByText('example.com', { exact: true }).first()).toBeVisible();
@@ -87,7 +96,7 @@ test.describe('startup dashboard home', () => {
 
   test('shows role chip', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/role: founder/i)).toBeVisible();
   });
@@ -95,7 +104,7 @@ test.describe('startup dashboard home', () => {
   test('renders WhatNextBanner at step 3 — connect GitHub and Slack', async ({ page }) => {
     // Fixture has 1 scan + 1 recommendation → step 3
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/step 3 of 3/i)).toBeVisible();
     await expect(
@@ -105,7 +114,7 @@ test.describe('startup dashboard home', () => {
 
   test('WhatNextBanner CTA links to connectors page', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(
       page.getByRole('link', { name: /go to connectors/i })
@@ -114,7 +123,7 @@ test.describe('startup dashboard home', () => {
 
   test('renders score trend widget', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/score trend/i)).toBeVisible();
     // Fixture scan scored 74 — appears as a data point
@@ -123,7 +132,7 @@ test.describe('startup dashboard home', () => {
 
   test('renders action backlog widget', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/action backlog/i)).toBeVisible();
     // The fixture scan (score 74, report linked) produces no scan-level blockers →
@@ -135,14 +144,14 @@ test.describe('startup dashboard home', () => {
 
   test('renders recent scans section with example.com scan', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/recent scans/i)).toBeVisible();
   });
 
   test('stats row renders scan and recommendation labels', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     // StatCard labels for startup section
     await expect(page.getByText(/^scans$/i).first()).toBeVisible();
@@ -330,26 +339,22 @@ test.describe('slack section', () => {
 // ── Navigation flows ───────────────────────────────────────────
 
 test.describe('navigation flows', () => {
-  test('"Go to Connectors" CTA navigates from dashboard to connectors', async ({ page }) => {
+  test('"Go to Connectors" CTA navigates from the workspace surface to connectors', async ({
+    page,
+  }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await page.getByRole('link', { name: /go to connectors/i }).click();
 
     await expect(page).toHaveURL(/\/dashboard\/connectors/);
-    await expect(page.getByRole('heading', { name: /^connectors$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^connectors$/i }).first()).toBeVisible();
   });
 
-  test('"Run a Scan" sidebar link goes to new-scan page', async ({ page }) => {
-    await signInAsStartup(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-
-    // Get the sidebar Run a Scan link (first match — sidebar vs main content)
-    await page.getByRole('link', { name: /run a scan/i }).first().click();
-
-    await expect(page).toHaveURL(/\/dashboard\/new-scan/);
-    await expect(page.getByRole('heading', { name: /run a scan/i })).toBeVisible();
-  });
+  // NOTE: the "Run a Scan" sidebar link was deliberately removed when the dashboard was simplified
+  // (the nav is now History / Connectors / Billing / Settings / Blog, and /dashboard is itself the
+  // scan box). Its navigation test is gone with it rather than rewritten — /dashboard/new-scan is
+  // still covered directly by the "new scan page with startup context" block above.
 
   test('Admin Console link visible in sidebar for admin session', async ({ page }) => {
     // The 'admin' E2E user is the platform admin → Admin Console link shows at bottom of sidebar

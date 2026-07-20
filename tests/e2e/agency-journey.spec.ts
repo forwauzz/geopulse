@@ -2,7 +2,7 @@
  * E2E: Agency owner journey
  *
  * Tests the agency workspace experience end to end:
- *   - Dashboard renders agency section with account and client data
+ *   - /dashboard/history renders the agency section with account and client data
  *   - Client chips switch context
  *   - WhatNextBanner shows appropriate step
  *   - New Scan page shows agency context card
@@ -27,6 +27,13 @@ async function signInAsAgency(page: import('@playwright/test').Page) {
   ]);
 }
 
+/**
+ * Where the workspace surface lives. `/dashboard` was simplified down to the scan hero alone, and
+ * the agency context bar, client chips and banners all moved here — so these assertions follow the
+ * content rather than the URL.
+ */
+const WORKSPACE_HOME = '/dashboard/history';
+
 // ── Dashboard home ─────────────────────────────────────────────
 
 test.describe('agency dashboard home', () => {
@@ -36,18 +43,18 @@ test.describe('agency dashboard home', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('renders dashboard heading and agency user email', async ({ page }) => {
+  test('renders history heading and agency user email', async ({ page }) => {
     await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
     // Email appears multiple times; use first() to avoid strict mode violation
     await expect(page.getByText(/agency@example\.com/i).first()).toBeVisible();
   });
 
   test('renders agency workspace section with account name', async ({ page }) => {
     await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     // h2 inside the agency section
     await expect(
@@ -57,21 +64,21 @@ test.describe('agency dashboard home', () => {
 
   test('shows agency workspace eyebrow label', async ({ page }) => {
     await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/agency workspace/i).first()).toBeVisible();
   });
 
   test('renders "All clients" chip', async ({ page }) => {
     await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('link', { name: /^all clients$/i })).toBeVisible();
   });
 
   test('renders client chip for E2E Client Co', async ({ page }) => {
     await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(
       page.getByRole('link', { name: /e2e client co/i })
@@ -80,7 +87,7 @@ test.describe('agency dashboard home', () => {
 
   test('WhatNextBanner prompts to select a client when no client is active', async ({ page }) => {
     await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     // No client selected → "Select a client to start scanning"
     await expect(
@@ -88,14 +95,9 @@ test.describe('agency dashboard home', () => {
     ).toBeVisible();
   });
 
-  test('renders New client scan button', async ({ page }) => {
-    await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-
-    await expect(
-      page.getByRole('link', { name: /new client scan/i })
-    ).toBeVisible();
-  });
+  // NOTE: the "New client scan" button no longer exists anywhere in the app — it went with the
+  // dashboard simplification, and scanning for a client now happens through the scan box on
+  // /dashboard with the client context applied. Its test is dropped rather than rewritten.
 });
 
 // ── Client context switching ────────────────────────────────────
@@ -103,7 +105,7 @@ test.describe('agency dashboard home', () => {
 test.describe('client context switching', () => {
   test('clicking a client chip scopes the dashboard to that client', async ({ page }) => {
     await signInAsAgency(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     // Click the client chip
     await page.getByRole('link', { name: /e2e client co/i }).click();
@@ -122,7 +124,7 @@ test.describe('client context switching', () => {
 
     // Navigate with client pre-selected
     await page.goto(
-      `/dashboard?agencyAccount=00000000-0000-4000-8000-000000000201&agencyClient=00000000-0000-4000-8000-000000000202`,
+      `${WORKSPACE_HOME}?agencyAccount=00000000-0000-4000-8000-000000000201&agencyClient=00000000-0000-4000-8000-000000000202`,
       { waitUntil: 'domcontentloaded' }
     );
 

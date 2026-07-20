@@ -34,8 +34,10 @@ test.describe('startup_dev workflow', () => {
 
     await signInAsStartup(page);
 
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
+    // The workspace surface moved to /dashboard/history when /dashboard was simplified down to
+    // the scan box alone.
+    await page.goto('/dashboard/history', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: /e2e startup workspace/i })).toBeVisible();
     await capture(page, testInfo, '01-dashboard-home.png');
 
