@@ -35,7 +35,7 @@ function derFromPem(pem: string): { der: Uint8Array; pkcs1: boolean } {
 }
 
 /** Wrap a PKCS#1 RSAPrivateKey in the PKCS#8 PrivateKeyInfo envelope WebCrypto requires. */
-function pkcs1ToPkcs8(pkcs1: Uint8Array): Uint8Array {
+export function pkcs1ToPkcs8(pkcs1: Uint8Array): Uint8Array {
   // PrivateKeyInfo ::= SEQUENCE { version INTEGER 0, algorithm rsaEncryption NULL, privateKey OCTET STRING }
   const rsaOid = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00];
   const version = [0x02, 0x01, 0x00];
