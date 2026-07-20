@@ -14,7 +14,7 @@ type DashboardSidebarProps = {
   readonly navFlags?: { connectors: boolean; billing: boolean; blog: boolean };
   /** Show the Automation area (granted users / admins). */
   readonly showAutomation?: boolean;
-  readonly showFixAgent?: boolean;
+  readonly showAgents?: boolean;
   /** When true at `lg+`, nav shows icon rail (labels via tooltip / aria). */
   readonly desktopCollapsed?: boolean;
   readonly onToggleDesktopCollapse?: () => void;
@@ -125,7 +125,7 @@ const WORKSPACE_NAV: readonly NavItem[] = [
 function buildWorkspaceNav(
   navFlags?: { connectors: boolean; billing: boolean; blog: boolean },
   showAutomation?: boolean,
-  showFixAgent?: boolean
+  showAgents?: boolean
 ): readonly NavItem[] {
   const off = new Set<string>();
   if (navFlags) {
@@ -136,8 +136,9 @@ function buildWorkspaceNav(
   const base = WORKSPACE_NAV.filter((item) => !off.has(item.href));
   // Granted items go first: Fix Agent, then Automation.
   const granted: NavItem[] = [];
-  if (showFixAgent) {
-    granted.push({ href: '/dashboard/agent', label: 'Fix Agent', icon: 'auto_fix_high', exact: true });
+  if (showAgents) {
+    // One entry for every agent; the hub at /dashboard/agents lists the ones this user has.
+    granted.push({ href: '/dashboard/agents', label: 'Agents', icon: 'auto_awesome' });
   }
   if (showAutomation) {
     granted.push({ href: '/dashboard/automation', label: 'Automation', icon: 'smart_toy', exact: true });
@@ -252,13 +253,13 @@ export function DashboardSidebar({
   signOutAction,
   navFlags,
   showAutomation,
-  showFixAgent,
+  showAgents,
   desktopCollapsed = false,
   onToggleDesktopCollapse,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const workspaceNav = buildWorkspaceNav(navFlags, showAutomation, showFixAgent);
+  const workspaceNav = buildWorkspaceNav(navFlags, showAutomation, showAgents);
 
   const closeMenu = () => setMobileOpen(false);
 
