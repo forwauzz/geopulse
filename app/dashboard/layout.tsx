@@ -6,7 +6,8 @@ import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
-import { userHasFeature } from '@/lib/server/user-feature-grants';
+import { listUserFeatures, userHasFeature } from '@/lib/server/user-feature-grants';
+import { AGENT_CATALOG } from '@/lib/server/agent-catalog';
 import { signOut } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -29,15 +30,20 @@ export default async function DashboardLayout({
   const isAdmin = resolveDashboardShellIsAdmin(isPlatformAdmin);
   const flags = await loadUiFlags();
 
-  // Show the granted areas (Automation, Fix Agent) to platform admins or users granted them.
+  // Automation keeps its own nav item. Every agent lives behind one "Agents" entry, which appears
+  // as soon as the user has ANY agent grant — so adding an agent to the catalog does not mean
+  // adding another top-level nav row.
   let showAutomation = isPlatformAdmin;
-  let showFixAgent = isPlatformAdmin;
-  if (!showAutomation || !showFixAgent) {
+  let showAgents = isPlatformAdmin;
+  if (!showAutomation || !showAgents) {
     const env = await getScanApiEnv();
     if (env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
       const admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
       if (!showAutomation) showAutomation = await userHasFeature(admin, user.id, 'automation');
-      if (!showFixAgent) showFixAgent = await userHasFeature(admin, user.id, 'fix_agent');
+      if (!showAgents) {
+        const granted = await listUserFeatures(admin, user.id);
+        showAgents = AGENT_CATALOG.some((agent) => granted.has(agent.feature));
+      }
     }
   }
 
@@ -49,7 +55,7 @@ export default async function DashboardLayout({
         signOutAction={signOut}
         navFlags={{ connectors: flags.show_connectors, billing: flags.show_billing, blog: flags.show_blog }}
         showAutomation={showAutomation}
-        showFixAgent={showFixAgent}
+        showAgents={showAgents}
       >
         {children}
       </DashboardShell>
