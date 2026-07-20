@@ -1,11 +1,19 @@
+import { existsSync } from 'node:fs';
 import type { NextConfig } from 'next';
 import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
 
-// Exposes real Cloudflare bindings to `next dev` by starting a wrangler session. Workers AI has no
-// local simulation — it ALWAYS runs remotely — so once the `ai` binding exists wrangler demands a
-// Cloudflare login, which CI has none of (and must not have: public repo, and Workers AI bills even
-// in local dev). Skipped under CI; `lib/server/cf-env.ts` already falls back to `process.env`.
-if (!process.env['CI']) void initOpenNextCloudflareForDev();
+// Exposes real Cloudflare bindings to `next dev` by starting a wrangler session. The app depends
+// on these — above all the `vars` feature flags — so this must run in CI too, or every page
+// renders as if every flag were off.
+//
+// Workers AI has no local simulation (AI models always run on Cloudflare), so the `ai` binding
+// forces that session into remote mode and it demands an account login. CI has none, and must not:
+// this is a public repo, so fork PRs could not use a token, and Workers AI bills the account even
+// in local dev. So CI runs against a derived config with just that one binding stripped — see
+// scripts/wrangler-config-for-ci.mjs. Nothing in the e2e suite touches the AI path.
+const ciWranglerConfig = 'wrangler.ci.jsonc';
+const useCiConfig = Boolean(process.env['CI']) && existsSync(ciWranglerConfig);
+void initOpenNextCloudflareForDev(useCiConfig ? { configPath: ciWranglerConfig } : undefined);
 
 /** Next.js `next dev` (Fast Refresh) requires eval; strict CSP breaks the app + Turnstile. Production build omits unsafe-eval. */
 const isDev = process.env['NODE_ENV'] === 'development';
