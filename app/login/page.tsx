@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LoginForm } from './login-form';
+import { resolveAuthMode } from './auth-mode';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   buildPublicPageMetadata,
@@ -55,8 +56,8 @@ export default async function LoginPage({ searchParams }: Props) {
   });
   const nextPath = safeNextPath(sp.next);
   const err = sp.error;
-  // Default to the free sign-up; returning users reach sign-in via ?mode=signin.
-  const isSignUp = sp.mode !== 'signin';
+  // Free sign-up by default, but sign-in for anyone bounced off a protected page — see auth-mode.ts.
+  const isSignUp = resolveAuthMode({ mode: sp.mode, next: sp.next }) === 'signup';
   const bundleKey = sp.bundle?.trim() || undefined;
   const organizationName = sp.organization_name?.trim() || undefined;
   const websiteUrl = sp.website_url?.trim() || undefined;
