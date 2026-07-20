@@ -549,6 +549,140 @@ function createE2EQueryBuilder(table: string) {
         created_at: now,
       },
     ],
+    /**
+     * Mirrors the production `service_catalog` table, row for row.
+     *
+     * Not optional scaffolding: `resolveServiceEntitlement` THROWS on a missing row —
+     * `Missing service_catalog row for service key: <key>` — and
+     * `shouldFallbackToLegacyEntitlements` only rescues a missing TABLE (42P01) or the mock's
+     * 'Unexpected table', never a missing row. Unmocked tables here resolve to `[]` rather than
+     * raising, so the agency dashboard crashed instead of falling back, taking 13 specs with it.
+     *
+     * `enabled` derives from `is_active && default_access_mode !== 'off'`, so keeping these
+     * values identical to production is what makes the fixture behave like production.
+     */
+    service_catalog: [
+      {
+        id: '00000000-0000-4000-8000-000000000301',
+        service_key: 'agency_dashboard',
+        default_access_mode: 'paid',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000302',
+        service_key: 'agent_pr_execution',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000303',
+        service_key: 'api_access',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000304',
+        service_key: 'deep_audit',
+        default_access_mode: 'paid',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000305',
+        service_key: 'free_scan',
+        default_access_mode: 'free',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000306',
+        service_key: 'geo_performance_monitoring',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000307',
+        service_key: 'geo_tracker',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000308',
+        service_key: 'github_integration',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000309',
+        service_key: 'markdown_audit_export',
+        default_access_mode: 'free',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000310',
+        service_key: 'markdown_plan_generator',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000311',
+        service_key: 'skills_library',
+        default_access_mode: 'free',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000312',
+        service_key: 'slack_integration',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000313',
+        service_key: 'slack_notifications',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000314',
+        service_key: 'startup_audit_db_review',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000315',
+        service_key: 'startup_audit_execution',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000316',
+        service_key: 'startup_audit_orchestrator',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000317',
+        service_key: 'startup_audit_pr_summary',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000318',
+        service_key: 'startup_audit_repo_review',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000319',
+        service_key: 'startup_audit_risk_review',
+        default_access_mode: 'off',
+        is_active: true,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000320',
+        service_key: 'startup_dashboard',
+        default_access_mode: 'free',
+        is_active: true,
+      },
+    ],
   };
 
   let rows = [...(rowsByTable[table] ?? [])];
