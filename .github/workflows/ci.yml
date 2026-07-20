@@ -44,6 +44,11 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      # `next dev` needs local Cloudflare bindings, but the Workers AI binding cannot be emulated
+      # and would force a wrangler login CI has no credentials for. Derive a config without it.
+      - name: Wrangler config for CI (no Workers AI binding)
+        run: node scripts/wrangler-config-for-ci.mjs
+
       - name: Browser smoke tests
         run: npm run test:e2e
 

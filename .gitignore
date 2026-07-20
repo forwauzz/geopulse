@@ -69,3 +69,6 @@ test-results/
 .vscode/settings.json
 *.swp
 *.swo
+
+# Derived by scripts/wrangler-config-for-ci.mjs (CI only)
+wrangler.ci.jsonc
