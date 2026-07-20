@@ -62,7 +62,20 @@ export function computeScore(weighted: WeightedResult[]): number {
   return Math.min(100, Math.max(0, Math.round((earned / possible) * 100)));
 }
 
-const ALL_CATEGORIES: CheckCategory[] = [
+/**
+ * Category order for the report. This is presentation order only — a category appears in the
+ * output because checks produced it, NOT because it is listed here.
+ *
+ * `demand_coverage` and `conversion_readiness` are declared in the CheckCategory union and have
+ * labels in every renderer, but no check emits them. Mapping over a fixed list meant every scan
+ * shipped two permanently-empty rows — rendered as "—", "N/A", 0 checks, and in the web report
+ * badged "Full report", which advertised an upgrade that cannot fill them either. Empty cells in a
+ * paid deliverable read as broken software, and an upsell for something unbuilt is worse.
+ *
+ * Deriving from the checks that actually ran keeps that honest by construction: when those checks
+ * are built, their categories appear here on their own.
+ */
+const CATEGORY_ORDER: CheckCategory[] = [
   'ai_readiness',
   'extractability',
   'trust',
@@ -71,7 +84,8 @@ const ALL_CATEGORIES: CheckCategory[] = [
 ];
 
 export function computeCategoryScores(weighted: WeightedResult[]): CategoryScore[] {
-  return ALL_CATEGORIES.map((cat) => {
+  const present = CATEGORY_ORDER.filter((cat) => weighted.some((r) => r.category === cat));
+  return present.map((cat) => {
     const group = weighted.filter((r) => r.category === cat);
     let earned = 0;
     let possible = 0;
