@@ -152,12 +152,13 @@ export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationN
       <form action={passwordAction} className="flex flex-col gap-4 rounded-2xl bg-surface-container-low p-5">
         <input type="hidden" name="next" value={nextPath} />
         {bundleKey ? <input type="hidden" name="bundle" value={bundleKey} /> : null}
-        <div>
-          <h2 className="font-sans text-lg font-semibold text-on-background">Sign in</h2>
-          <p className="mt-1 font-body text-sm text-on-surface-variant">
-            Enter your email and password.
-          </p>
-        </div>
+        {/*
+          No heading here: the page already renders <h1>Sign in</h1> and the same "Enter your email
+          and password." line directly above this form, so repeating both showed the reader the
+          same two sentences twice and gave the page two headings with one accessible name. The
+          sign-up branch keeps its heading because "Create your account" says something the page
+          title ("Sign up for free") does not.
+        */}
         <label className="flex flex-col gap-2 font-body text-sm font-medium text-on-background">
           Email
           <input

@@ -130,6 +130,14 @@ export function SiteHeaderShell({
                     Start free trial
                   </Link>
                 ) : null}
+                {/*
+                  Returning users need a way in from the header. Without this the only "Sign in"
+                  link on the whole page was in the footer, so signing in meant scrolling past the
+                  entire landing page to find it. Sign-up keeps the primary treatment.
+                */}
+                <Link href="/login?mode=signin" className={primaryNavLinkClassName}>
+                  Sign in
+                </Link>
                 <Link
                   href="/login"
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
