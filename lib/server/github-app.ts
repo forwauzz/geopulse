@@ -137,6 +137,28 @@ async function gh<T>(
   }
 }
 
+/**
+ * Repos this installation can actually touch — GitHub is the source of truth, so the customer's
+ * selection during install is authoritative and they never re-enter it in our UI.
+ */
+export async function listInstallationRepositories(
+  token: string
+): Promise<{ ok: true; repos: Array<{ owner: string; name: string; fullName: string }> } | { ok: false; reason: string }> {
+  const res = await gh<{ repositories?: Array<{ name?: string; full_name?: string; owner?: { login?: string } }> }>(
+    token,
+    '/installation/repositories?per_page=100'
+  );
+  if (!res.ok) return res;
+  const repos = (res.data.repositories ?? [])
+    .map((r) => ({
+      owner: r.owner?.login ?? (r.full_name ?? '').split('/')[0] ?? '',
+      name: r.name ?? (r.full_name ?? '').split('/')[1] ?? '',
+      fullName: r.full_name ?? '',
+    }))
+    .filter((r) => r.owner && r.name);
+  return { ok: true, repos };
+}
+
 export async function getDefaultBranch(
   token: string,
   owner: string,
