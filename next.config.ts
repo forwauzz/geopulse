@@ -1,7 +1,11 @@
 import type { NextConfig } from 'next';
 import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
 
-void initOpenNextCloudflareForDev();
+// Exposes real Cloudflare bindings to `next dev` by starting a wrangler session. Workers AI has no
+// local simulation — it ALWAYS runs remotely — so once the `ai` binding exists wrangler demands a
+// Cloudflare login, which CI has none of (and must not have: public repo, and Workers AI bills even
+// in local dev). Skipped under CI; `lib/server/cf-env.ts` already falls back to `process.env`.
+if (!process.env['CI']) void initOpenNextCloudflareForDev();
 
 /** Next.js `next dev` (Fast Refresh) requires eval; strict CSP breaks the app + Turnstile. Production build omits unsafe-eval. */
 const isDev = process.env['NODE_ENV'] === 'development';

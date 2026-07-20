@@ -161,8 +161,12 @@
 
   // Cloudflare Workers AI — free-tier, open-source models used as the in-house "brain"
   // (report rewrite, user agents). No API key: it's a native binding on this account.
+  // "remote" is not a choice: AI models have no local simulation and always run on Cloudflare, so
+  // `wrangler dev` needs an account login. Stating it here is what the docs ask for; setting it to
+  // false is an error. This is why CI skips the wrangler dev session (see next.config.ts).
   "ai": {
-    "binding": "AI"
+    "binding": "AI",
+    "remote": true
   },
 
   "r2_buckets": [
