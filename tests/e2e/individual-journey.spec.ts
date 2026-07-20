@@ -4,7 +4,8 @@
  * Tests the full individual (non-agency, non-startup) user experience:
  *   - Unauthenticated redirects
  *   - Login page
- *   - Dashboard home while authenticated (including scan hero #dashboard-scan)
+ *   - /dashboard while authenticated: the scan hero (#dashboard-scan) and nothing else
+ *   - /dashboard/history: personal and startup sections
  *   - Run a Scan in-dashboard (/dashboard/new-scan)
  *   - Scan result flow
  *
@@ -24,6 +25,13 @@ async function signInAsIndividual(page: import('@playwright/test').Page) {
     { name: 'gp_e2e_auth', value: 'admin', url: page.url() },
   ]);
 }
+
+/**
+ * Where the workspace surface lives. `/dashboard` was simplified down to the scan hero alone, and
+ * the personal/startup sections, banners and scan lists all moved here — so these assertions follow
+ * the content rather than the URL.
+ */
+const WORKSPACE_HOME = '/dashboard/history';
 
 // ── Unauthenticated redirect tests ─────────────────────────────
 
@@ -51,41 +59,31 @@ test.describe('unauthenticated redirects', () => {
 // ── Authenticated dashboard ─────────────────────────────────────
 
 test.describe('authenticated dashboard home', () => {
-  test('renders dashboard heading', async ({ page }) => {
+  test('renders history heading', async ({ page }) => {
     await signInAsIndividual(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /^dashboard$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
   });
 
   test('dashboard home includes scan hero section and URL field', async ({ page }) => {
     await signInAsIndividual(page);
+    // The hero is the whole of /dashboard now, so this one stays put.
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
     await expect(page.locator('#dashboard-scan')).toBeVisible();
     await expect(
-      page.getByRole('heading', { name: /start with any website/i })
+      page.getByRole('heading', { name: /audit any website/i })
     ).toBeVisible();
     await expect(page.getByRole('textbox', { name: /website url/i })).toBeVisible();
   });
 
-  test('renders user email on page', async ({ page }) => {
-    await signInAsIndividual(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-
-    // Scope to main content to avoid the sidebar's truncated/hidden copy
-    await expect(page.getByRole('main').getByText(/admin@example\.com/i)).toBeVisible();
-  });
-
-  test('Run a Scan link is visible in the sidebar', async ({ page }) => {
-    await signInAsIndividual(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
-
-    // Sidebar does not use <nav> role — match by link text directly
-    await expect(
-      page.getByRole('link', { name: /run a scan/i }).first()
-    ).toBeVisible();
-  });
+  // NOTE: two tests were dropped here rather than rewritten, because what they asserted was
+  // deliberately removed when the dashboard was simplified:
+  //   - "renders user email on page" — the email left main for the sidebar chrome, where it is
+  //     truncated and viewport-dependent; asserting it there would only buy flakiness.
+  //   - "Run a Scan link is visible in the sidebar" — that nav item is gone; the nav is now
+  //     History / Connectors / Billing / Settings / Blog, and /dashboard is itself the scan box.
 
   test('Connectors link is visible for startup workspace user', async ({ page }) => {
     await signInAsIndividual(page);
@@ -98,7 +96,7 @@ test.describe('authenticated dashboard home', () => {
 
   test('personal section shows "run your first audit" banner or empty scan list', async ({ page }) => {
     await signInAsIndividual(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     // The admin E2E user has 0 personal scans → personal WhatNextBanner shows "Run your first audit"
     await expect(
@@ -108,7 +106,7 @@ test.describe('authenticated dashboard home', () => {
 
   test('startup section renders with workspace name', async ({ page }) => {
     await signInAsIndividual(page);
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     // Admin user also has a startup workspace — it renders below the personal section
     await expect(

@@ -365,12 +365,12 @@ test.describe('public smoke flows', () => {
       },
     ]);
 
-    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+    // The scan list moved here when /dashboard was simplified down to the scan box alone.
+    await page.goto('/dashboard/history', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('heading', { name: /your scans/i })).toBeVisible();
-    await expect(page.getByText(/admin@example\.com/i)).toBeVisible();
-    await expect(page.getByRole('main').getByRole('link', { name: /^benchmarks$/i })).toBeVisible();
-    await expect(page.getByRole('main').getByRole('link', { name: /^logs$/i })).toBeVisible();
+    // The email and the in-main Benchmarks/Logs admin links were removed in the same pass — those
+    // routes are reached from the sidebar now, so asserting them in main would pin dead UI.
   });
 
   test('authenticated admin session renders benchmark overview', async ({ page }) => {
