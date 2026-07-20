@@ -70,6 +70,25 @@ export function buildE2ESupabaseServerClient(user: E2EAuthUser) {
   };
 }
 
+/**
+ * Service-role stand-in for E2E: the same fixture rows, without a user session.
+ *
+ * Service gates (connectors, startup entitlements) are only resolved when a service-role client
+ * exists, which needs SUPABASE_SERVICE_ROLE_KEY — deliberately absent from the Playwright env. With
+ * no client the gates come back null and every connector renders its "not enabled" state, so the
+ * specs could never reach the connected UI they were written for.
+ *
+ * Note this is NOT `buildE2EAdminDb()`: that one seeds only benchmark tables and would resolve
+ * `service_catalog` to empty, which throws rather than degrading.
+ */
+export function buildE2EServiceRoleClient() {
+  return {
+    from(table: string) {
+      return createE2EQueryBuilder(table);
+    },
+  };
+}
+
 export function buildE2EAdminDb() {
   const runGroupCreatedAt = '2026-03-27T18:58:29.844Z';
   const runGroups = [
@@ -682,7 +701,42 @@ function createE2EQueryBuilder(table: string) {
         default_access_mode: 'free',
         is_active: true,
       },
+    ],    /**
+     * User-scoped grants for the E2E session, mirroring how a real workspace gets an agent
+     * switched on: production ships github_integration / slack_integration as `off` and grants
+     * them per scope, rather than flipping the catalog default.
+     *
+     * The fixture workspace already declares `github_agent: true` / `slack_agent: true` in its
+     * rollout flags, and the gate is rolloutFlag AND serviceEntitlement — so without these the
+     * connectors render their disabled state and the Connect buttons never appear.
+     */
+    service_entitlement_overrides: [
+      {
+        id: '00000000-0000-4000-8000-000000000401',
+        service_id: '00000000-0000-4000-8000-000000000308', // github_integration
+        scope_type: 'user',
+        user_id: E2E_ADMIN_USER_ID,
+        bundle_id: null,
+        agency_account_id: null,
+        agency_client_id: null,
+        enabled: true,
+        access_mode: 'free',
+        usage_limit: null,
+      },
+      {
+        id: '00000000-0000-4000-8000-000000000402',
+        service_id: '00000000-0000-4000-8000-000000000312', // slack_integration
+        scope_type: 'user',
+        user_id: E2E_ADMIN_USER_ID,
+        bundle_id: null,
+        agency_account_id: null,
+        agency_client_id: null,
+        enabled: true,
+        access_mode: 'free',
+        usage_limit: null,
+      },
     ],
+
   };
 
   let rows = [...(rowsByTable[table] ?? [])];

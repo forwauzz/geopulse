@@ -1,4 +1,5 @@
 import { getScanApiEnv } from '@/lib/server/cf-env';
+import { buildE2EServiceRoleClient, isE2EAuthEnabled } from '@/lib/supabase/e2e-auth';
 import { getStartupDashboardData } from '@/lib/server/startup-dashboard-data';
 import { getStartupGithubIntegrationState } from '@/lib/server/startup-github-integration';
 import {
@@ -107,8 +108,14 @@ export async function loadStartupConnectorsContext(args: {
   const workspaceId = dashboard.selectedWorkspaceId;
 
   const env = await getScanApiEnv();
-  const serviceSupabase =
-    env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+  // Service gates need a service-role client. E2E has no service-role key by design, so without
+  // this branch the gates resolve to null and every connector renders its "not enabled" state —
+  // the specs could never reach the connected UI. Same shape as `buildAdminDbOrMessage` in
+  // lib/server/admin-runtime.ts, and inert outside E2E: `isE2EAuthEnabled()` requires
+  // E2E_AUTH_SESSIONS=1 and a non-production NODE_ENV.
+  const serviceSupabase = isE2EAuthEnabled()
+    ? (buildE2EServiceRoleClient() as unknown as ReturnType<typeof createServiceRoleClient>)
+    : env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
       ? createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
       : null;
 
