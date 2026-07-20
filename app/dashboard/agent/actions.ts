@@ -6,8 +6,7 @@ import { getAiBinding, getPaymentApiEnv, getScanApiEnv } from '@/lib/server/cf-e
 import { isUserPlatformAdmin } from '@/lib/server/require-admin';
 import { userHasFeature } from '@/lib/server/user-feature-grants';
 import { runFixAgent, type AgentFix } from '@/lib/server/fix-agent';
-import { getStartupGithubIntegrationState } from '@/lib/server/startup-github-integration';
-import { getInstallationToken } from '@/lib/server/github-app';
+import { getInstallationToken, listInstallationRepositories } from '@/lib/server/github-app';
 import { openFixAgentPr } from '@/lib/server/fix-agent-pr';
 
 export type FixAgentState =
@@ -97,36 +96,63 @@ export async function applyFixesAsPrAction(
     return { status: 'error', message: PR_MESSAGES['app_not_configured'] ?? 'Not configured.' };
   }
 
-  // Resolve the user's workspace → connected installation → enabled repo.
-  const { data: membership } = await admin
+  // A user can belong to several workspaces — pick the one that actually has a connected
+  // installation rather than an arbitrary first row.
+  const { data: memberships } = await admin
     .from('startup_workspace_users')
     .select('startup_workspace_id')
-    .eq('user_id', user.id)
+    .eq('user_id', user.id);
+  const workspaceIds = ((memberships ?? []) as { startup_workspace_id: string }[]).map(
+    (m) => m.startup_workspace_id
+  );
+  if (workspaceIds.length === 0) {
+    return { status: 'error', message: PR_MESSAGES['not_connected'] ?? 'Not connected.' };
+  }
+
+  const { data: install } = await admin
+    .from('startup_github_installations')
+    .select('installation_id, startup_workspace_id')
+    .in('startup_workspace_id', workspaceIds)
+    .eq('provider', 'github')
+    .eq('status', 'connected')
+    .not('installation_id', 'is', null)
     .limit(1)
     .maybeSingle();
-  const workspaceId = (membership?.startup_workspace_id as string | undefined) ?? null;
-  if (!workspaceId) return { status: 'error', message: PR_MESSAGES['not_connected'] ?? 'Not connected.' };
+  const installationId = (install?.installation_id as number | undefined) ?? null;
+  if (!installationId) {
+    return { status: 'error', message: PR_MESSAGES['not_connected'] ?? 'Not connected.' };
+  }
 
-  let state;
-  try {
-    state = await getStartupGithubIntegrationState({ supabase: admin as never, startupWorkspaceId: workspaceId });
-  } catch {
-    return { status: 'error', message: PR_MESSAGES['not_connected'] ?? 'Not connected.' };
+  const token = await getInstallationToken(appId, privateKey, installationId);
+  if (!token.ok) return { status: 'error', message: `GitHub auth failed (${token.reason}).` };
+
+  // GitHub is the source of truth for which repos this install may touch. If the workspace has
+  // narrowed the list in our UI, respect that as a filter; otherwise use what GitHub granted.
+  const granted = await listInstallationRepositories(token.token);
+  if (!granted.ok) return { status: 'error', message: `Could not list repos (${granted.reason}).` };
+  if (granted.repos.length === 0) {
+    return { status: 'error', message: PR_MESSAGES['no_repo'] ?? 'No repo enabled.' };
   }
-  const installationId = state.installation?.installationId ?? null;
-  if (!installationId || state.installation?.status !== 'connected') {
-    return { status: 'error', message: PR_MESSAGES['not_connected'] ?? 'Not connected.' };
-  }
-  const repo = state.repositories.find((r) => r.enabled);
+
+  const { data: allowRows } = await admin
+    .from('startup_github_installation_repositories')
+    .select('repo_owner, repo_name')
+    .eq('startup_workspace_id', install?.startup_workspace_id as string)
+    .eq('is_enabled', true);
+  const allow = new Set(
+    ((allowRows ?? []) as { repo_owner: string; repo_name: string }[]).map(
+      (r) => `${r.repo_owner}/${r.repo_name}`.toLowerCase()
+    )
+  );
+  const repo =
+    granted.repos.find((r) => allow.has(r.fullName.toLowerCase())) ??
+    (allow.size === 0 ? granted.repos[0] : undefined);
   if (!repo) return { status: 'error', message: PR_MESSAGES['no_repo'] ?? 'No repo enabled.' };
 
   const fresh = await runFixAgent({ supabase: admin, ai: await getAiBinding(), userId: user.id });
   if (!fresh.ok) {
     return { status: 'error', message: MESSAGES[fresh.reason] ?? `Agent failed (${fresh.reason}).` };
   }
-
-  const token = await getInstallationToken(appId, privateKey, installationId);
-  if (!token.ok) return { status: 'error', message: `GitHub auth failed (${token.reason}).` };
 
   const pr = await openFixAgentPr({
     token: token.token,
