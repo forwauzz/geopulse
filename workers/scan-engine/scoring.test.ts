@@ -68,4 +68,27 @@ describe('scoring', () => {
     expect(ai?.score).toBe(100);
     expect(ext?.score).toBe(0);
   });
+  it('omits categories no check produced, instead of shipping empty rows', () => {
+    // `demand_coverage` and `conversion_readiness` are declared in the CheckCategory union and have
+    // labels in every renderer, but nothing emits them. They used to be rendered as "— / N/A / 0
+    // checks" on every report, and badged "Full report" in the web view — an upsell for a
+    // category the paid report cannot fill either.
+    const w = attachWeights(
+      [
+        { weight: 40, category: 'ai_readiness' as const },
+        { weight: 60, category: 'extractability' as const },
+      ],
+      [
+        { id: 'a', passed: true, status: 'PASS' as const, finding: '' },
+        { id: 'b', passed: false, status: 'FAIL' as const, finding: '' },
+      ]
+    );
+    const cats = computeCategoryScores(w);
+
+    expect(cats.map((c) => c.category)).toEqual(['ai_readiness', 'extractability']);
+    expect(cats.find((c) => c.category === 'demand_coverage')).toBeUndefined();
+    expect(cats.find((c) => c.category === 'conversion_readiness')).toBeUndefined();
+    // Every category that IS reported was actually measured.
+    expect(cats.every((c) => c.checkCount > 0)).toBe(true);
+  });
 });

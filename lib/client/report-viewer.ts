@@ -197,14 +197,52 @@ export function scoreNarrative(score: number): string {
   return 'Critical readiness gaps. Prioritize the fixes below.';
 }
 
+/**
+ * A check we could not measure is not a finding about the site.
+ *
+ * LOW_CONFIDENCE and BLOCKED mean the crawler could not read the page — the result says nothing
+ * about whether the thing is actually wrong. Ranking those by weight and calling the winner the
+ * "Top blocker" sends people off to rewrite content over a check that never ran, which is exactly
+ * what a non-specialist has no way to catch.
+ */
+const UNMEASURABLE_STATUSES = new Set(['LOW_CONFIDENCE', 'BLOCKED']);
+const NON_ISSUE_STATUSES = new Set(['PASS', 'NOT_EVALUATED']);
+
+function isUnmeasurable(issue: Issue): boolean {
+  return UNMEASURABLE_STATUSES.has(issue.status?.toUpperCase() ?? '');
+}
+
+/**
+ * Remediation that only restates the finding is noise.
+ *
+ * "Use one clear H1..." as the fix for "Heading structure" tells the reader nothing they did not
+ * just read. Better to show no first move than a circular one.
+ */
+export function isCircularFix(fix: string | undefined, checkName: string | undefined): boolean {
+  if (!fix || !checkName) return false;
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const f = normalize(fix);
+  const c = normalize(checkName);
+  if (!f || !c) return false;
+  // The fix is circular when it is essentially the check name back again.
+  return f === c || f.startsWith(c) || (c.length > 8 && f.includes(c) && f.length < c.length * 2);
+}
+
 export function buildSummaryFacts(scan: ScanResponse): SummaryFact[] {
   const issues = Array.isArray(scan.topIssues) ? [...scan.topIssues] : [];
   const sortedIssues = issues.sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
-  const topIssue = sortedIssues[0];
-  const openIssues = sortedIssues.filter((issue) => {
-    const status = issue.status?.toUpperCase();
-    return status !== 'PASS' && status !== 'NOT_EVALUATED';
-  }).length;
+
+  // Only a check that actually ran and actually failed can be the top blocker.
+  const actionable = sortedIssues.filter((issue) => {
+    const status = issue.status?.toUpperCase() ?? '';
+    return !NON_ISSUE_STATUSES.has(status) && !UNMEASURABLE_STATUSES.has(status);
+  });
+  const unmeasurable = sortedIssues.filter(isUnmeasurable);
+  const topIssue = actionable[0];
+
+  const openIssues = sortedIssues.filter(
+    (issue) => !NON_ISSUE_STATUSES.has(issue.status?.toUpperCase() ?? '')
+  ).length;
 
   const facts: SummaryFact[] = [
     {
@@ -229,7 +267,23 @@ export function buildSummaryFacts(scan: ScanResponse): SummaryFact[] {
     }
   }
 
-  if (topIssue?.fix) {
+  // Nothing measurable failed, but pages could not be read: that IS the finding, and it outranks
+  // anything else we could say — every other result is provisional until it is fixed.
+  if (!topIssue && unmeasurable.length > 0) {
+    facts.push({
+      label: 'Top blocker',
+      value: `We could not read ${unmeasurable.length} check${unmeasurable.length === 1 ? '' : 's'}`,
+      tone: 'danger',
+    });
+    facts.push({
+      label: 'First move',
+      value:
+        'Our crawler could not load enough of the page to judge these. Check that the content renders without JavaScript and is not blocked to bots — until then the rest of this report is incomplete.',
+      tone: 'default',
+    });
+  }
+
+  if (topIssue?.fix && !isCircularFix(topIssue.fix, topIssue.check ?? topIssue.checkId)) {
     facts.push({
       label: 'First move',
       value: topIssue.fix,
@@ -238,7 +292,10 @@ export function buildSummaryFacts(scan: ScanResponse): SummaryFact[] {
   }
 
   if (scan.categoryScores?.length) {
-    const weakestCategory = [...scan.categoryScores].sort((a, b) => a.score - b.score)[0];
+    // A category with no checks scores zero by default — it has not been measured, so it cannot be
+    // the weakest. Ranking it first labels an unbuilt category as the customer's biggest problem.
+    const measured = scan.categoryScores.filter((category) => (category.checkCount ?? 0) > 0);
+    const weakestCategory = [...measured].sort((a, b) => a.score - b.score)[0];
     if (weakestCategory) {
       facts.push({
         label: 'Weakest category',
