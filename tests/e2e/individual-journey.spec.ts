@@ -251,6 +251,7 @@ test.describe('scan results page', () => {
           topIssues: [],
           categoryScores: [],
           hasPaidReport: false,
+          deepAuditAvailable: true,
           reportStatus: 'none',
           pdfUrl: null,
           markdownUrl: null,

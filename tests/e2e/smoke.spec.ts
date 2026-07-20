@@ -80,6 +80,7 @@ test.describe('public smoke flows', () => {
             { category: 'ai_readiness', score: 0.72, letterGrade: 'B', checkCount: 4 },
           ],
           hasPaidReport: false,
+          deepAuditAvailable: true,
           reportStatus: 'none',
           pdfUrl: null,
           markdownUrl: null,
