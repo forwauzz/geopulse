@@ -119,7 +119,7 @@ async function fetchSideResource(baseUrl: string, path: string): Promise<string>
 }
 
 export async function runFreeScan(url: string, llm: LLMProvider): Promise<
-  | { ok: true; output: FreeScanOutput; finalUrl: string; domain: string }
+  | { ok: true; output: FreeScanOutput; finalUrl: string; domain: string; textSample: string }
   | { ok: false; reason: string }
 > {
   const fetched = await fetchPage(url);
@@ -147,5 +147,8 @@ export async function runFreeScan(url: string, llm: LLMProvider): Promise<
     finalUrl: fetched.finalUrl,
     domain,
     output,
+    // Exposed so downstream consumers (e.g. the Fix Agent) can ground generation in what the page
+    // actually says instead of inferring product facts from the domain name.
+    textSample: buildTextSample(fetched.html),
   };
 }
