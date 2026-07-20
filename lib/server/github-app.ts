@@ -190,6 +190,21 @@ export async function createBranch(
   return res.ok ? { ok: true } : { ok: false, reason: res.reason };
 }
 
+/** Blob sha for a path on a branch, or null when the file does not exist. */
+export async function getFileSha(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  path: string
+): Promise<string | null> {
+  const res = await gh<{ sha?: string }>(
+    token,
+    `/repos/${owner}/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`
+  );
+  return res.ok ? (res.data.sha ?? null) : null;
+}
+
 /** Create or update a file on a branch. Returns ok even if content is unchanged. */
 export async function putFile(
   token: string,
