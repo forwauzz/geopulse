@@ -131,6 +131,34 @@ export function readSlackStatusMessage(code: string | undefined, detail?: string
   }
 }
 
+export function readBrandStatusMessage(code: string | undefined): string | null {
+  if (!code) return null;
+  switch (code) {
+    case 'brand_saved':
+      return 'Report branding saved.';
+    case 'brand_invalid_color':
+      return 'Brand colour must be a hex value like #1a2b3c.';
+    case 'brand_logo_saved':
+      return 'Logo saved. New reports will carry it on the cover.';
+    case 'brand_logo_invalid':
+      return 'That file is not a PNG or JPEG image. SVG logos are not supported in PDF reports.';
+    case 'brand_logo_too_large':
+      return 'Logo exceeds the 2 MB limit.';
+    case 'brand_logo_fetch_failed':
+      return 'Could not fetch an image from that URL. Check the address or upload the file directly.';
+    case 'brand_logo_url_invalid':
+      return 'Enter a full http(s) URL to import a logo.';
+    case 'brand_logo_removed':
+      return 'Logo removed. Reports fall back to a text masthead.';
+    case 'brand_storage_unavailable':
+      return 'Logo storage is not configured on this deployment.';
+    case 'brand_forbidden':
+      return 'Founder or admin role required to change report branding.';
+    default:
+      return null;
+  }
+}
+
 const SLACK_STATUS_DELIVERY_TAB_CODES = new Set<string>([
   'slack_send_ok',
   'slack_send_failed',
@@ -156,9 +184,11 @@ export function inferStartupDashboardTabFromStatusParams(sp: {
   readonly pr?: string;
   readonly slack?: string;
   readonly slack_detail?: string;
+  readonly brand?: string;
 }): StartupDashboardTabIdForRouting | null {
   if (readPrStatusMessage(sp.pr)) return 'overview';
   if (readGithubStatusMessage(sp.github)) return 'settings';
+  if (readBrandStatusMessage(sp.brand)) return 'settings';
   const slack = sp.slack?.trim();
   if (slack) {
     if (SLACK_STATUS_DELIVERY_TAB_CODES.has(slack)) return 'delivery';
@@ -178,6 +208,7 @@ export function buildStartupDashboardUrl(sp: {
   readonly pr?: string;
   readonly slack?: string;
   readonly slack_detail?: string;
+  readonly brand?: string;
 }): string {
   const p = new URLSearchParams();
   if (sp.startupWorkspace) p.set('startupWorkspace', sp.startupWorkspace);
@@ -190,6 +221,7 @@ export function buildStartupDashboardUrl(sp: {
   if (sp.pr?.trim()) p.set('pr', sp.pr.trim());
   if (sp.slack?.trim()) p.set('slack', sp.slack.trim());
   if (sp.slack_detail?.trim()) p.set('slack_detail', sp.slack_detail.trim());
+  if (sp.brand?.trim()) p.set('brand', sp.brand.trim());
   const query = p.toString();
   return query.length > 0 ? `/dashboard/startup?${query}` : '/dashboard/startup';
 }

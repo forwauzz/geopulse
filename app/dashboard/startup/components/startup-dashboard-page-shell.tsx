@@ -3,6 +3,7 @@ import { isStartupSlackDeliveryStatusCode } from '@/lib/server/startup-dashboard
 import { StartupAuditsTab } from '@/app/dashboard/startup/components/startup-audits-tab';
 import { StartupDeliveryTab } from '@/app/dashboard/startup/components/startup-delivery-tab';
 import { StartupOverviewStatStrip, StartupOverviewTab } from '@/app/dashboard/startup/components/startup-overview-tab';
+import { StartupBrandingSection } from '@/app/dashboard/startup/components/startup-branding-section';
 import { StartupSettingsTab } from '@/app/dashboard/startup/components/startup-settings-tab';
 import { StartupTabBar } from '@/app/dashboard/startup/components/startup-tab-bar';
 import type {
@@ -118,6 +119,7 @@ export type StartupDashboardPageShellProps = {
   readonly activeTab: StartupDashboardTabId;
   readonly auditFilter: StartupAuditFilterState;
   readonly slackQueryCode: string | undefined;
+  readonly brandQueryCode?: string | undefined;
 };
 
 export function StartupDashboardPageShell({
@@ -125,6 +127,7 @@ export function StartupDashboardPageShell({
   activeTab,
   auditFilter,
   slackQueryCode,
+  brandQueryCode,
 }: StartupDashboardPageShellProps) {
   const { dashboard } = tabContext;
   const slackForDelivery = isStartupSlackDeliveryStatusCode(slackQueryCode)
@@ -229,11 +232,21 @@ export function StartupDashboardPageShell({
           <StartupDeliveryTab {...tabContext} slackStatusMessage={slackForDelivery} />
         ) : null}
         {activeTab === 'settings' ? (
-          <StartupSettingsTab
-            {...tabContext}
-            prStatusMessage={null}
-            slackStatusMessage={slackForSettings}
-          />
+          <>
+            <StartupSettingsTab
+              {...tabContext}
+              prStatusMessage={null}
+              slackStatusMessage={slackForSettings}
+            />
+            <StartupBrandingSection
+              workspaceId={dashboard.selectedWorkspaceId}
+              canManage={
+                tabContext.selectedWorkspace?.role === 'founder' ||
+                tabContext.selectedWorkspace?.role === 'admin'
+              }
+              statusCode={brandQueryCode}
+            />
+          </>
         ) : null}
       </section>
     </section>
