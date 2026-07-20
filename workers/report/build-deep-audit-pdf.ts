@@ -1,4 +1,10 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';import {
+  GEO_PULSE_BRAND,
+  mutedInkOn,
+  pickInk,
+  type BrandConfig,
+  type Rgb01,
+} from './report-branding';
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
   customerFacingFinding,
@@ -85,6 +91,11 @@ function enrichIssues(primary: IssueRow[], fallback: IssueRow[]): IssueRow[] {
   });
 }
 
+/** Branding speaks in plain 0..1 triples; pdf-lib wants its own RGB type. */
+function toPdfRgb(c: Rgb01): RGB {
+  return rgb(c.r, c.g, c.b);
+}
+
 const INK = rgb(0.17, 0.2, 0.21);
 const MUTED = rgb(0.35, 0.38, 0.39);
 const PRIMARY = rgb(0.34, 0.37, 0.45);
@@ -115,11 +126,32 @@ class PdfBuilder {
   private pageNum = 0;
   private footerLeft = '';
   private footerRight = '';
+  /** Customer branding; GEO-Pulse's own when they have not set one. */
+  private brand: BrandConfig = GEO_PULSE_BRAND;
+  private embeddedLogo: Awaited<ReturnType<PDFDocument['embedPng']>> | null = null;
 
-  async init(footerLeft: string, footerRight: string): Promise<void> {
+  async init(
+    footerLeft: string,
+    footerRight: string,
+    brand: BrandConfig = GEO_PULSE_BRAND,
+    logoBytes?: Uint8Array | null
+  ): Promise<void> {
     this.doc = await PDFDocument.create();
     this.font = await this.doc.embedFont(StandardFonts.Helvetica);
     this.fontBold = await this.doc.embedFont(StandardFonts.HelveticaBold);
+    this.brand = brand;
+    // A logo that will not embed must not take the report down with it — the render continues
+    // with the wordmark instead.
+    if (logoBytes && logoBytes.length > 0 && brand.logo) {
+      try {
+        this.embeddedLogo =
+          brand.logo.mime === 'image/png'
+            ? await this.doc.embedPng(logoBytes)
+            : await this.doc.embedJpg(logoBytes);
+      } catch {
+        this.embeddedLogo = null;
+      }
+    }
     this.footerLeft = footerLeft;
     this.footerRight = footerRight;
     this.newPage();
@@ -149,35 +181,64 @@ class PdfBuilder {
   }
 
   drawCoverPage(domain: string, score: number, grade: string, date: string): void {
-    this.page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: PRIMARY });
+    // Every colour on the cover derives from the brand: the background is theirs, and the ink is
+    // chosen for contrast against it rather than assumed to be white. A pale brand would make
+    // fixed white text invisible, and it would fail for that customer only.
+    const bg = toPdfRgb(this.brand.primary);
+    const ink = toPdfRgb(this.brand.onPrimary);
+    const muted = toPdfRgb(mutedInkOn(this.brand.primary));
+    const hairline = toPdfRgb(mutedInkOn(this.brand.primary, 0.55));
+
+    this.page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: bg });
 
     const logoY = PAGE_H - 80;
-    this.page.drawText('GEO-Pulse', { x: MARGIN, y: logoY, size: 28, font: this.fontBold, color: WHITE });
-    this.page.drawText('AI Search Readiness Report', { x: MARGIN, y: logoY - 30, size: 12, font: this.font, color: rgb(0.85, 0.87, 0.9) });
+    if (this.embeddedLogo) {
+      // Fit inside a fixed box so a tall or wide logo cannot blow out the masthead.
+      const maxW = 180;
+      const maxH = 48;
+      const scale = Math.min(maxW / this.embeddedLogo.width, maxH / this.embeddedLogo.height, 1);
+      const w = this.embeddedLogo.width * scale;
+      const h = this.embeddedLogo.height * scale;
+      this.page.drawImage(this.embeddedLogo, { x: MARGIN, y: logoY - h + 20, width: w, height: h });
+    } else {
+      this.page.drawText(this.brand.companyName, {
+        x: MARGIN, y: logoY, size: 28, font: this.fontBold, color: ink,
+      });
+    }
+    this.page.drawText('AI Search Readiness Report', { x: MARGIN, y: logoY - 30, size: 12, font: this.font, color: muted });
 
-    this.page.drawLine({ start: { x: MARGIN, y: logoY - 50 }, end: { x: PAGE_W - MARGIN, y: logoY - 50 }, thickness: 0.5, color: rgb(0.55, 0.58, 0.65) });
+    this.page.drawLine({ start: { x: MARGIN, y: logoY - 50 }, end: { x: PAGE_W - MARGIN, y: logoY - 50 }, thickness: 0.5, color: hairline });
 
     const domainY = PAGE_H / 2 + 40;
-    this.page.drawText(domain, { x: MARGIN, y: domainY, size: 36, font: this.fontBold, color: WHITE });
-    this.page.drawText(date, { x: MARGIN, y: domainY - 30, size: 11, font: this.font, color: rgb(0.8, 0.82, 0.85) });
+    this.page.drawText(domain, { x: MARGIN, y: domainY, size: 36, font: this.fontBold, color: ink });
+    this.page.drawText(date, { x: MARGIN, y: domainY - 30, size: 11, font: this.font, color: muted });
 
     const scoreStr = String(score);
     const scoreW = this.fontBold.widthOfTextAtSize(scoreStr, 72);
     const scoreX = PAGE_W - MARGIN - scoreW - 20;
     const scoreY = 140;
-    this.page.drawText(scoreStr, { x: scoreX, y: scoreY, size: 72, font: this.fontBold, color: WHITE });
-    this.page.drawText('/ 100', { x: scoreX + scoreW + 6, y: scoreY + 10, size: 16, font: this.font, color: rgb(0.8, 0.82, 0.85) });
+    this.page.drawText(scoreStr, { x: scoreX, y: scoreY, size: 72, font: this.fontBold, color: ink });
+    this.page.drawText('/ 100', { x: scoreX + scoreW + 6, y: scoreY + 10, size: 16, font: this.font, color: muted });
 
     const gradeR = 28;
     const gradeCX = MARGIN + gradeR + 10;
     const gradeCY = 155;
-    this.page.drawCircle({ x: gradeCX, y: gradeCY, size: gradeR, color: rgb(0.45, 0.48, 0.55) });
+    // The disc lifts slightly off the brand colour; its own ink is derived from that blend so the
+    // grade stays readable whatever the brand is.
+    const discColour = mutedInkOn(this.brand.primary, 0.72);
+    this.page.drawCircle({ x: gradeCX, y: gradeCY, size: gradeR, color: toPdfRgb(discColour) });
     const gradeW = this.fontBold.widthOfTextAtSize(grade, 22);
-    this.page.drawText(grade, { x: gradeCX - gradeW / 2, y: gradeCY - 8, size: 22, font: this.fontBold, color: WHITE });
+    this.page.drawText(grade, { x: gradeCX - gradeW / 2, y: gradeCY - 8, size: 22, font: this.fontBold, color: toPdfRgb(pickInk(discColour)) });
 
+    // Was a fixed grey at 4.2:1 on our own background — below AA even before branding.
     this.page.drawText('This report reflects technical signals relevant to AI search readiness.', {
-      x: MARGIN, y: 80, size: 8, font: this.font, color: rgb(0.7, 0.72, 0.75),
+      x: MARGIN, y: 80, size: 8, font: this.font, color: muted,
     });
+    if (this.brand.showPoweredBy && this.brand.companyName !== GEO_PULSE_BRAND.companyName) {
+      this.page.drawText('Powered by GEO-Pulse', {
+        x: MARGIN, y: 66, size: 7, font: this.font, color: muted,
+      });
+    }
 
     this.drawPageFooter();
     this.newPage();
@@ -584,6 +645,10 @@ export async function buildDeepAuditPdf(input: {
   coverageSummary?: unknown;
   technicalAppendix?: DeepAuditReportPayload['technicalAppendix'];
   scanId?: string;
+  /** Customer branding; GEO-Pulse's own when absent. */
+  brand?: BrandConfig;
+  /** Raw logo bytes, already fetched from R2 by the caller. */
+  logoBytes?: Uint8Array | null;
 }): Promise<Uint8Array> {
   const score = input.score ?? 0;
   const grade = input.letterGrade ?? '—';
@@ -605,10 +670,13 @@ export async function buildDeepAuditPdf(input: {
   const now = new Date().toISOString().split('T')[0] ?? '';
   const scanIdShort = (input.scanId ?? '').slice(0, 8);
 
+  const brand = input.brand ?? GEO_PULSE_BRAND;
   const pdf = new PdfBuilder();
   await pdf.init(
-    `GEO-Pulse | AI Search Readiness Report`,
+    `${brand.companyName} | AI Search Readiness Report`,
     scanIdShort ? `Scan ${scanIdShort} | ${now}` : now,
+    brand,
+    input.logoBytes ?? null,
   );
 
   pdf.drawCoverPage(input.domain, score, grade, now);
