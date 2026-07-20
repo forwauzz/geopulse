@@ -6,7 +6,7 @@ type RouteCase = {
 };
 
 const ROUTE_CASES: RouteCase[] = [
-  { path: '/', heading: /check your ai search readiness/i },
+  { path: '/', heading: /stop guessing whether/i },
   { path: '/dashboard', heading: /^dashboard$/i },
   { path: '/dashboard/startup', heading: /e2e startup workspace/i },
 ];
@@ -31,12 +31,13 @@ test.describe('theme parity smoke', () => {
       await expect(page.getByRole('heading', { name: routeCase.heading }).first()).toBeVisible();
       await expect(page.locator('html')).not.toHaveClass(/dark/);
 
-      const darkModeButton = page.getByRole('button', { name: /switch to dark mode/i });
+      const darkModeButton = page.getByRole('button', { name: /toggle color theme/i });
       await expect(darkModeButton).toBeVisible();
       await expect(darkModeButton).toBeEnabled();
       await darkModeButton.click();
       await expect(page.locator('html')).toHaveClass(/dark/);
-      await expect(page.getByRole('button', { name: /switch to light mode/i })).toBeVisible();
+      // The label is now static ("Toggle color theme") in both states, so the applied theme above
+      // is the assertion that carries the behaviour.
 
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.locator('html')).toHaveClass(/dark/);

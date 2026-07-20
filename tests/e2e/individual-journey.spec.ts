@@ -232,7 +232,7 @@ test.describe('scan results page', () => {
 
     await page.goto('/results/e2e-personal-result');
 
-    await expect(page.getByRole('heading', { name: /diagnostic for/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /example\.com/i })).toBeVisible();
     await expect(page.getByText(/example\.com/i).first()).toBeVisible();
     // Score "68" appears in multiple places; check for the score display
     await expect(page.getByText(/68\/100|score.*68|68.*100/i).first()).toBeVisible();
@@ -260,9 +260,10 @@ test.describe('scan results page', () => {
 
     await page.goto('/results/e2e-free-scan');
 
-    // Results page shows the "one path, with a preview first" section for free users
+    // The upsell section became the free "Get the full report" block when the audit was
+    // de-paywalled — same section, no payment step in front of it.
     await expect(
-      page.getByText(/one path, with a preview first/i)
+      page.getByText(/get the full report/i)
     ).toBeVisible();
   });
 
@@ -288,6 +289,6 @@ test.describe('scan results page', () => {
 
     await page.goto('/results/e2e-generating-indiv');
 
-    await expect(page.getByText(/your full audit is being prepared/i)).toBeVisible();
+    await expect(page.getByText(/your full report is being prepared/i)).toBeVisible();
   });
 });

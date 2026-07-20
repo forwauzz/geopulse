@@ -67,7 +67,7 @@ test.describe('startup dashboard home', () => {
       page.getByRole('heading', { name: /audit any website/i })
     ).toBeVisible();
     await expect(page.getByRole('textbox', { name: /website url/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /run diagnostic/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /audit website/i })).toBeVisible();
   });
 
   test('renders startup workspace section with workspace name', async ({ page }) => {
