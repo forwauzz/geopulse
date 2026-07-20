@@ -48,7 +48,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Guard: /admin/* (except /admin/login) requires an authenticated session.
-  // The full DB-backed admin check happens inside app/admin/layout.tsx —
+  // The full DB-backed admin check happens inside app/admin/(console)/layout.tsx —
   // this gate only prevents completely unauthenticated users from hitting admin routes.
   if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login') && !userId) {
     const adminLogin = new URL('/admin/login', request.url);
