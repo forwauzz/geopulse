@@ -91,6 +91,10 @@ export type PaymentApiEnv = ScanApiEnv & {
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
+  /** GitHub App credentials — let the Fix Agent open PRs on a customer's connected repo. */
+  GITHUB_APP_ID?: string;
+  /** PKCS#8 or PKCS#1 PEM. Store as a Worker secret, never a plaintext var. */
+  GITHUB_APP_PRIVATE_KEY?: string;
   /** Optional secret for headless (cron/CI) trigger of POST /api/admin/self-improve. */
   SELF_IMPROVEMENT_TRIGGER_SECRET?: string;
   /** Optional secret for headless (cron/CI) trigger of POST /api/admin/marketing-autopilot. */
@@ -295,6 +299,8 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       LINKEDIN_OAUTH_CLIENT_SECRET: pickEnvString(e, 'LINKEDIN_OAUTH_CLIENT_SECRET'),
       LINKEDIN_OAUTH_TOKEN_URL: pickEnvString(e, 'LINKEDIN_OAUTH_TOKEN_URL'),
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
+      GITHUB_APP_ID: pickEnvString(e, 'GITHUB_APP_ID'),
+      GITHUB_APP_PRIVATE_KEY: pickEnvString(e, 'GITHUB_APP_PRIVATE_KEY'),
       RECONCILE_SECRET: pickEnvString(e, 'RECONCILE_SECRET'),
       SELF_IMPROVEMENT_TRIGGER_SECRET: pickEnvString(e, 'SELF_IMPROVEMENT_TRIGGER_SECRET'),
       MARKETING_AUTOPILOT_TRIGGER_SECRET: pickEnvString(e, 'MARKETING_AUTOPILOT_TRIGGER_SECRET'),
