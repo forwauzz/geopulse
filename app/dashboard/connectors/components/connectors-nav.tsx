@@ -24,9 +24,16 @@ function hrefFor(workspaceQuery: string, id: ConnectorTabId): string {
 
 export function ConnectorsNav({ workspaceQuery, active, items }: Props) {
   return (
-    <aside className="flex w-full shrink-0 flex-col rounded-2xl border border-outline-variant/10 bg-surface-container-low lg:w-[min(100%,17.5rem)]">
+    // Labelled as a landmark rather than with a heading: this panel's title repeats the page's
+    // own <h1>Connectors</h1>, and two headings sharing one accessible name make "the Connectors
+    // heading" ambiguous for screen-reader users (and for any by-role query). The visible text is
+    // unchanged — only its role is.
+    <aside
+      aria-label="Connectors"
+      className="flex w-full shrink-0 flex-col rounded-2xl border border-outline-variant/10 bg-surface-container-low lg:w-[min(100%,17.5rem)]"
+    >
       <div className="flex items-center justify-between gap-2 border-b border-outline-variant/10 px-4 py-3.5">
-        <h2 className="font-headline text-sm font-semibold tracking-tight text-on-background">Connectors</h2>
+        <p className="font-headline text-sm font-semibold tracking-tight text-on-background">Connectors</p>
         <span className="material-symbols-outlined text-[20px] text-on-surface-variant" aria-hidden>
           tune
         </span>
