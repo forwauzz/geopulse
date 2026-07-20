@@ -1,0 +1,130 @@
+# Fix Agent — ZERO-TOUCH self-improvement.
+#
+# Runs the deterministic fixers, and if they changed anything: opens a PR, runs every safety gate,
+# deploys, verifies live, and merges — with no human involved. If the live check fails it rolls
+# back automatically.
+#
+# There is NO MODEL IN THE WRITE PATH. Only deterministic, idempotent fixers touch code, so a
+# hallucination can never reach production. That is what makes unattended merging safe here.
+#
+# A change is merged only if the live AI-readiness score did not drop. HTTP 200 does not prove a
+# fix helped, so the merge decision is a measured before/after delta — arithmetic, not an opinion.
+# A regression rolls production back and leaves the PR open.
+#
+# ── Required one-time setup (until these exist, this workflow does nothing) ──
+#   Secret   CLOUDFLARE_API_TOKEN          — lets CI run `wrangler deploy`
+#   Secret   SELF_IMPROVE_TRIGGER_SECRET   — drives the before/after audit. Without it the ship
+#                                            script refuses to merge rather than merging blind.
+#   Variable FIX_AGENT_AUTOSHIP=true       — explicit opt-in to unattended production deploys
+#
+# ── Kill switch ──
+#   Set repo variable FIX_AGENT_KILL to any non-empty value. Checked before gates AND again
+#   immediately before deploy, so you can stop it mid-flight.
+
+name: fix-agent-autoship
+
+on:
+  schedule:
+    # 12:45 UTC daily — after the self-audit (12:00) and the fixer report (12:30).
+    - cron: "45 12 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run fixers + gates only; never deploy or merge"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autoship:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check opt-in and kill switch
+        env:
+          ENABLED: ${{ vars.FIX_AGENT_AUTOSHIP }}
+          KILL: ${{ vars.FIX_AGENT_KILL }}
+        run: |
+          if [ -n "$KILL" ]; then
+            echo "::warning::FIX_AGENT_KILL is set — aborting."; exit 1
+          fi
+          if [ "$ENABLED" != "true" ]; then
+            echo "FIX_AGENT_AUTOSHIP is not 'true' — autoship is opt-in. Doing nothing."
+            echo "SKIP=1" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/checkout@v4
+        if: env.SKIP != '1'
+      - uses: actions/setup-node@v4
+        if: env.SKIP != '1'
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+        if: env.SKIP != '1'
+
+      - name: Run deterministic fixers
+        id: fixers
+        if: env.SKIP != '1'
+        run: |
+          node scripts/fix-agent-apply.mjs --json > /tmp/fix-agent.json
+          cat /tmp/fix-agent.json
+          echo "changed=$(node -e "process.stdout.write(String(require('/tmp/fix-agent.json').changed))")" >> "$GITHUB_OUTPUT"
+
+      - name: Nothing to do
+        if: env.SKIP != '1' && steps.fixers.outputs.changed != 'true'
+        run: echo "No deterministic fixes needed — nothing to ship. This is the expected steady state."
+
+      - name: Open the PR (attributed to the Fix Agent)
+        id: pr
+        if: env.SKIP != '1' && steps.fixers.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="fix-agent/auto-$(date -u +%Y%m%d-%H%M)"
+          git config user.name  "GEO-Pulse Fix Agent"
+          git config user.email "fix-agent@getgeopulse.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          SUMMARY=$(node -e "
+            const s=require('/tmp/fix-agent.json');
+            process.stdout.write(s.applied.map(a=>'- '+a.title).join('\n'));
+          ")
+          git commit -m "fix(agent): automated AI-readiness fixes
+
+          $SUMMARY
+
+          Deterministic fixers only — no model output. Shipped unattended after gates.
+          Generated-by: GEO-Pulse Fix Agent"
+          git push -u origin "$BRANCH"
+          NUM=$(gh pr create \
+            --title "🤖 Fix Agent: automated AI-readiness fixes" \
+            --body "Opened and shipped unattended by the GEO-Pulse Fix Agent.
+
+          $SUMMARY
+
+          Deterministic fixers only — no model wrote any of this. Gates (type-check, tests, worker
+          build) must pass, then it deploys, verifies the live site, and merges. A failed live check
+          triggers an automatic \`wrangler rollback\`." \
+            --head "$BRANCH" --base main | grep -oE '[0-9]+$')
+          echo "number=$NUM" >> "$GITHUB_OUTPUT"
+          echo "Opened PR #$NUM"
+
+      - name: Gates → deploy → verify → merge (auto-rollback on failure)
+        if: env.SKIP != '1' && steps.fixers.outputs.changed == 'true' && !inputs.dry_run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          SELF_IMPROVEMENT_KILL: ${{ vars.FIX_AGENT_KILL }}
+          # Drives the before/after self-audit. Without it the script refuses to merge rather
+          # than merging on an unmeasured change.
+          SELF_IMPROVE_TRIGGER_SECRET: ${{ secrets.SELF_IMPROVE_TRIGGER_SECRET }}
+        run: node scripts/autonomous-ship.mjs --pr "${{ steps.pr.outputs.number }}"
+
+      - name: Dry run — gates only
+        if: env.SKIP != '1' && steps.fixers.outputs.changed == 'true' && inputs.dry_run
+        run: node scripts/autonomous-ship.mjs --dry-run
