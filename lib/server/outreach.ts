@@ -10,6 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { buildAuditLlm } from './fix-agent-run';
+import { renderOutreachTemplate, resolveOutreachTemplate } from './outreach-templates';
 import { structuredLog } from './structured-log';
 
 export type OutreachCadence = 'hourly' | 'daily' | 'weekly' | 'monthly';
@@ -26,6 +27,8 @@ export type OutreachProspect = {
   readonly nextRunAt: string;
   readonly lastScanId: string | null;
   readonly lastError: string | null;
+  /** Pinned message template; null = use the default template or the built-in email. */
+  readonly templateId: string | null;
 };
 
 export type OutreachEnvLike = {
@@ -66,6 +69,7 @@ type ProspectRow = {
   next_run_at: string;
   last_scan_id: string | null;
   last_error: string | null;
+  template_id?: string | null;
 };
 
 function toProspect(row: ProspectRow): OutreachProspect {
@@ -81,6 +85,7 @@ function toProspect(row: ProspectRow): OutreachProspect {
     nextRunAt: row.next_run_at,
     lastScanId: row.last_scan_id,
     lastError: row.last_error,
+    templateId: row.template_id ?? null,
   };
 }
 
@@ -212,22 +217,43 @@ export async function runOutreachForProspect(args: {
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
     .slice(0, 3);
 
-  const emailed = sendId
-    ? await sendOutreachEmail(
-        env,
-        prospect.email,
-        `${scan.domain}: AI search readiness score ${scan.output.score}/100`,
-        buildOutreachEmailHtml({
-          recipientName: prospect.name,
-          domain: scan.domain,
-          score: scan.output.score,
-          grade: scan.output.letterGrade,
-          topIssues: topFailed,
-          resultsUrl: `${appUrl}/results/${scanId}`,
-          pixelUrl: `${appUrl}/api/outreach/open/${sendId}`,
-        })
-      )
-    : false;
+  let emailed = false;
+  if (sendId) {
+    const resultsUrl = `${appUrl}/results/${scanId}`;
+    const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
+
+    // Custom template (pinned or default) wins; the built-in scorecard email is the
+    // fallback so outreach keeps working before migration 054 is applied.
+    const template = await resolveOutreachTemplate(supabase, prospect.templateId);
+    const message = template
+      ? renderOutreachTemplate(
+          template,
+          {
+            name: prospect.name,
+            company: prospect.company,
+            domain: scan.domain,
+            score: scan.output.score,
+            grade: scan.output.letterGrade,
+            topIssues: topFailed,
+            reportUrl: resultsUrl,
+          },
+          pixelUrl
+        )
+      : {
+          subject: `${scan.domain}: AI search readiness score ${scan.output.score}/100`,
+          html: buildOutreachEmailHtml({
+            recipientName: prospect.name,
+            domain: scan.domain,
+            score: scan.output.score,
+            grade: scan.output.letterGrade,
+            topIssues: topFailed,
+            resultsUrl,
+            pixelUrl,
+          }),
+        };
+
+    emailed = await sendOutreachEmail(env, prospect.email, message.subject, message.html);
+  }
 
   await supabase
     .from('outreach_prospects')
