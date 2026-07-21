@@ -20,6 +20,7 @@ import {
   type BrowserRenderEnv,
 } from '../scan-engine/browser-rendering';
 import { validateEngineFetchUrl } from '../lib/ssrf';
+import { isAgentEnabled } from '../../lib/server/agent-flags';
 import { structuredLog } from '../../lib/server/structured-log';
 
 export const DESIGN_AGENT_FEATURE = 'report_design_agent';
@@ -38,18 +39,7 @@ export interface CoverDesign {
  * it off — that is the admin's one-click "switch it off".
  */
 export async function isDesignAgentEnabled(supabase: SupabaseClient): Promise<boolean> {
-  try {
-    const { data, error } = await supabase
-      .from('automation_settings')
-      .select('enabled, kill_switch')
-      .eq('feature', DESIGN_AGENT_FEATURE)
-      .maybeSingle();
-    if (error || !data) return true;
-    if (data.kill_switch) return false;
-    return data.enabled !== false;
-  } catch {
-    return true;
-  }
+  return isAgentEnabled(supabase, DESIGN_AGENT_FEATURE, { failOpen: true });
 }
 
 const SCREENSHOT_TIMEOUT_MS = 20_000;
