@@ -16,6 +16,7 @@ import { AccessMatrixView, BlockedScanNotice, type AccessMatrixData } from '@/co
 import { ScoringExplainer, type BucketScoreData, type EligibilityData } from '@/components/scoring-explainer';
 import { IndexationGuidanceCard } from '@/components/indexation-guidance';
 import { CadencePlanCard } from '@/components/cadence-plan';
+import { FixPackCard } from '@/components/fix-pack';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -266,6 +267,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       <div className="space-y-6">
         {data.accessMatrix && <BlockedScanNotice matrix={data.accessMatrix} url={host} />}
         {data.accessMatrix && <AccessMatrixView matrix={data.accessMatrix} />}
+        {/* The safelist artifact matters most exactly when the scan was blocked. */}
+        <FixPackCard domain={host} />
         <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
           <a
             href="/"
@@ -312,6 +315,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         <div className="space-y-6">
           {/* Access & Eligibility Matrix — the per-destination headline diagnostic */}
           {data.accessMatrix && <AccessMatrixView matrix={data.accessMatrix} />}
+
+          {/* Ready-to-use remediation artifacts (spec C10) */}
+          <FixPackCard domain={host} />
 
           {/* Published weights + bucket subtotals (spec C6) */}
           <ScoringExplainer bucketScores={data.bucketScores} eligibility={data.eligibility} />
