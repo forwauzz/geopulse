@@ -91,8 +91,10 @@ export function validateJsonLd(blocks: unknown[], visibleText: string): LdValida
         missingProps.push({ type, missing });
         continue;
       }
+      // Types with no name/headline to compare (FAQPage, BreadcrumbList, …) are not
+      // penalized for the missing comparison — required props are the bar for them.
       const name = visibleName(obj);
-      const matches = name ? lowerText.includes(name.toLowerCase().slice(0, 60)) : false;
+      const matches = name ? lowerText.includes(name.toLowerCase().slice(0, 60)) : true;
       validated.push({ type, matchesVisibleContent: matches });
     }
   }

@@ -167,9 +167,13 @@ const CATEGORY_ORDER: CheckCategory[] = [
 ];
 
 export function computeCategoryScores(weighted: WeightedResult[]): CategoryScore[] {
-  const present = CATEGORY_ORDER.filter((cat) => weighted.some((r) => r.category === cat));
+  // Hygiene checks are excluded here for the same reason they are excluded from the
+  // headline: the report promises hygiene is 0% of the AI score, so the per-category
+  // breakdown must reconcile with that.
+  const scorable = weighted.filter((r) => r.bucket !== 'hygiene');
+  const present = CATEGORY_ORDER.filter((cat) => scorable.some((r) => r.category === cat));
   return present.map((cat) => {
-    const group = weighted.filter((r) => r.category === cat);
+    const group = scorable.filter((r) => r.category === cat);
     let earned = 0;
     let possible = 0;
     for (const r of group) {
