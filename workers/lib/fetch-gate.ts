@@ -116,10 +116,19 @@ export async function fetchGateText(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   // Own domain → invoke the Worker directly (bypasses the edge→origin 525). Safe: it's our host.
+  // MUST be time-bounded: an unbounded await on a self-call hung the entire cron invocation
+  // for hours (the 2026-07-21 recurring-audit starvation) — on timeout we fall through to
+  // the normal path, which fails fast and lets the caller degrade.
   const self = matchSelfFetch(rawUrl);
   if (self) {
+    let selfTimer: ReturnType<typeof setTimeout> | undefined;
+    const selfTimeout = new Promise<never>((_, reject) => {
+      selfTimer = setTimeout(() => reject(new Error('self_fetch_timeout')), timeoutMs);
+    });
+    // The race loser must never become an unhandled rejection (fatal in Workers).
+    selfTimeout.catch(() => {});
     try {
-      const res = await self.fetch(rawUrl);
+      const res = await Promise.race([self.fetch(rawUrl), selfTimeout]);
       if (!res.ok) return { ok: false, reason: `Target returned HTTP ${String(res.status)}` };
       const ctype = res.headers.get('Content-Type');
       const text = await readTextWithByteLimit(res, options.maxBytes);
@@ -132,7 +141,9 @@ export async function fetchGateText(
         headers: toHeaderMap(res.headers),
       };
     } catch {
-      // Self-fetch unavailable — fall through to the normal (validated) path.
+      // Self-fetch unavailable or timed out — fall through to the normal (validated) path.
+    } finally {
+      clearTimeout(selfTimer);
     }
   }
 

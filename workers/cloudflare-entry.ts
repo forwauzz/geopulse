@@ -288,32 +288,6 @@ export default {
         });
       }
 
-      // Recurring per-user site audits (Phase 3) — runs any schedule that's due this tick.
-      // Self-gates on `next_run_at`, so it's a safe no-op when nothing is due.
-      try {
-        const supabase = createClient(supaUrl, supaKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        stage('recurring_audits');
-        const result = await runDueRecurringAudits({
-          supabase,
-          env: env as unknown as RecurringEnvLike,
-          nowMs: Date.now(),
-        });
-        if (result.scanned > 0) {
-          structuredLog('recurring_audits_sweep', {
-            scanned: result.scanned,
-            ran: result.ran,
-            failed: result.failed,
-            fed_self_improvement: result.fedSelfImprovement,
-          }, 'info');
-        }
-      } catch (err) {
-        structuredError('recurring_audits_sweep_error', {
-          error: err instanceof Error ? err.message : 'unknown',
-        });
-      }
-
       // Admin Research Agent (spec §8) — weekly Monday sweep of the authoritative source
       // watchlist. Draft-only: it queues proposals for human review and never touches any
       // scan, report, or config path. Quiet no-op until migration 055 is applied.
@@ -417,6 +391,34 @@ export default {
         }
       } catch (err) {
         structuredError('marketing_autopilot_cron_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Recurring per-user site audits (Phase 3) — runs any schedule that's due this tick.
+      // Self-gates on `next_run_at`. Runs AFTER outreach/research/autopilot deliberately:
+      // its self-domain audit hung an entire invocation for hours (2026-07-21), and the
+      // lead-gen sweeps must never pay for that again.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('recurring_audits');
+        const result = await runDueRecurringAudits({
+          supabase,
+          env: env as unknown as RecurringEnvLike,
+          nowMs: Date.now(),
+        });
+        if (result.scanned > 0) {
+          structuredLog('recurring_audits_sweep', {
+            scanned: result.scanned,
+            ran: result.ran,
+            failed: result.failed,
+            fed_self_improvement: result.fedSelfImprovement,
+          }, 'info');
+        }
+      } catch (err) {
+        structuredError('recurring_audits_sweep_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

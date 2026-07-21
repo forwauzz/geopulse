@@ -145,6 +145,7 @@ async function sendRecurringAuditEmail(
   ].join('');
   try {
     await fetch('https://api.resend.com/emails', {
+      signal: AbortSignal.timeout(15_000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ from, to, subject: `GEO-Pulse audit: ${scanUrl} scored ${score}/100`, html }),
