@@ -27,6 +27,7 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
       { href: '/admin/services', label: 'Services & Bundles', icon: 'tune' },
       { href: '/admin/users', label: 'Users', icon: 'group' },
       { href: '/admin/outreach', label: 'Outreach', icon: 'outgoing_mail' },
+      { href: '/admin/research', label: 'Research', icon: 'science' },
       { href: '/admin/admins', label: 'Platform Admins', icon: 'admin_panel_settings' },
     ],
   },
