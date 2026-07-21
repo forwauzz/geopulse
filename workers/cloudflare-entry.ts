@@ -33,6 +33,7 @@ import {
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
 import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
 import { buildResearchDigestHtml, runResearchSweep } from '../lib/server/research-agent';
+import { isAgentEnabled } from '../lib/server/agent-flags';
 import { registerSelfFetch } from './lib/fetch-gate';
 
 /**
@@ -81,7 +82,13 @@ function applyDefaultSecurityHeaders(response: Response): Response {
 
 async function pingSupabaseKeepAlive(env: CloudflareEnv): Promise<void> {
   const base = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, '') ?? '';
-  const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+  // Service key first: prod logged supabase_keepalive_failed 401 hourly because the
+  // anon key in worker vars no longer authenticates against /rest/v1/, while every
+  // service-role cron write works. The ping only exists to keep the project warm.
+  const key =
+    (env as unknown as Record<string, string>)['SUPABASE_SERVICE_ROLE_KEY'] ||
+    env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    '';
   if (!base || !key) {
     return;
   }
@@ -152,22 +159,11 @@ export default {
     }
 
     if (supaUrl && supaKey) {
-      try {
-        const supabase = createClient(supaUrl, supaKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        await runScheduledBenchmarkSweep({
-          supabase,
-          env,
-          adapter: createBenchmarkExecutionAdapter(env),
-          triggerSource: 'worker_cron',
-        });
-      } catch (err) {
-        structuredError('benchmark_schedule_worker_error', {
-          error: err instanceof Error ? err.message : 'unknown',
-        });
-      }
-
+      // NOTE (issue #92): the benchmark sweep used to run FIRST here. It fires dozens of
+      // external LLM calls and routinely exhausted the invocation, so every job sequenced
+      // after it (GPM, recurring audits, outreach, autopilot) silently starved on every
+      // tick. Cheap, customer-facing sweeps now run first; the benchmark long-runner and
+      // distribution dispatch moved to the END of the handler.
       try {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
@@ -307,10 +303,16 @@ export default {
       // watchlist. Draft-only: it queues proposals for human review and never touches any
       // scan, report, or config path. Quiet no-op until migration 055 is applied.
       try {
-        if (isMonday && new Date().getUTCHours() === 14) {
-          const supabase = createClient(supaUrl, supaKey, {
-            auth: { persistSession: false, autoRefreshToken: false },
-          });
+        const researchDue = isMonday && new Date().getUTCHours() === 14;
+        const researchSupabase = researchDue
+          ? createClient(supaUrl, supaKey, { auth: { persistSession: false, autoRefreshToken: false } })
+          : null;
+        if (
+          researchDue &&
+          researchSupabase &&
+          (await isAgentEnabled(researchSupabase, 'research_agent', { failOpen: true }))
+        ) {
+          const supabase = researchSupabase;
           const digestTo = (env as unknown as Record<string, string>)['MARKETING_REPORT_TO'] ?? '';
           const sweep = await runResearchSweep({
             supabase,
@@ -344,15 +346,18 @@ export default {
 
       // Outreach v1 — recurring scorecard emails to admin-added prospects (no account needed).
       // Self-gates on `next_run_at`; a tick with nothing due is a cheap no-op.
+      // Admin-flagged (fail-open): a row in automation_settings can switch it off.
       try {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
-        const result = await runDueOutreach({
-          supabase,
-          env: env as unknown as OutreachEnvLike,
-          nowMs: Date.now(),
-        });
+        const result = (await isAgentEnabled(supabase, 'outreach_sweep', { failOpen: true }))
+          ? await runDueOutreach({
+              supabase,
+              env: env as unknown as OutreachEnvLike,
+              nowMs: Date.now(),
+            })
+          : { scanned: 0, ran: 0, failed: 0 };
         if (result.scanned > 0) {
           structuredLog('outreach_sweep_tick', {
             scanned: result.scanned,
@@ -394,6 +399,24 @@ export default {
         }
       } catch (err) {
         structuredError('marketing_autopilot_cron_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Benchmark schedule sweep — the long-runner (many external LLM calls). Runs LAST
+      // deliberately (issue #92): if it exhausts the invocation, nothing else is starved.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        await runScheduledBenchmarkSweep({
+          supabase,
+          env,
+          adapter: createBenchmarkExecutionAdapter(env),
+          triggerSource: 'worker_cron',
+        });
+      } catch (err) {
+        structuredError('benchmark_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }
