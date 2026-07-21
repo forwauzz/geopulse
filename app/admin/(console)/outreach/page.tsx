@@ -1,6 +1,18 @@
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { listOutreachProspects } from '@/lib/server/outreach';
-import { addOutreachProspect, runOutreachNowAction, toggleOutreachProspect } from './actions';
+import {
+  SAMPLE_TEMPLATE_VARS,
+  listOutreachTemplates,
+  renderOutreachTemplate,
+} from '@/lib/server/outreach-templates';
+import {
+  addOutreachProspect,
+  assignProspectTemplate,
+  deleteOutreachTemplate,
+  runOutreachNowAction,
+  saveOutreachTemplate,
+  toggleOutreachProspect,
+} from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +44,7 @@ export default async function AdminOutreachPage() {
   }
 
   const prospects = await listOutreachProspects(ctx.adminDb);
+  const templates = await listOutreachTemplates(ctx.adminDb);
   const { data: sendsData } = await ctx.adminDb
     .from('outreach_sends')
     .select('prospect_id, score, sent_at, opened_at, open_count, scan_id')
@@ -83,6 +96,18 @@ export default async function AdminOutreachPage() {
               <option value="hourly">Hourly</option>
             </select>
           </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Message template</span>
+            <select name="templateId" defaultValue="" className={input}>
+              <option value="">Default template / built-in scorecard</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.isDefault ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
           <div className="flex items-end">
             <button
               type="submit"
@@ -92,6 +117,141 @@ export default async function AdminOutreachPage() {
             </button>
           </div>
         </form>
+      </section>
+
+      {/* Message template designer (spec §9): free text or HTML, branded, with variables. */}
+      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+        <h2 className="font-sans text-lg font-bold text-on-background">Message templates</h2>
+        <p className="mt-1 font-sans text-sm text-on-surface-variant">
+          Design what prospects receive. Variables:{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{name}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{company}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{domain}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{score}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{grade}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{top_issues}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{report_url}}'}</code>. GEO-Pulse
+          branding (header, footer, open tracking) is applied automatically.
+        </p>
+
+        <form action={saveOutreachTemplate} className="mt-4 grid gap-3">
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="block">
+              <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Template name</span>
+              <input name="name" required placeholder="Monthly scorecard nudge" className={input} />
+            </label>
+            <label className="block md:col-span-2">
+              <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Subject</span>
+              <input
+                name="subject"
+                required
+                placeholder="{{domain}}: your AI search readiness is {{score}}/100"
+                className={input}
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Body</span>
+            <textarea
+              name="body"
+              required
+              rows={7}
+              placeholder={
+                'Hi {{name}},\n\nWe re-audited {{domain}} — it now scores {{score}}/100 ({{grade}}).\n\n{{top_issues}}\n\nFull report: {{report_url}}'
+              }
+              className={`${input} min-h-[160px] py-2 font-mono text-xs`}
+            />
+          </label>
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="block">
+              <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Format</span>
+              <select name="bodyFormat" defaultValue="text" className={input}>
+                <option value="text">Free text (we format it)</option>
+                <option value="html">Raw HTML (advanced)</option>
+              </select>
+            </label>
+            <label className="flex min-h-[40px] items-center gap-2 font-sans text-sm text-on-background">
+              <input type="checkbox" name="makeDefault" value="true" className="h-4 w-4" />
+              Make this the default for all prospects
+            </label>
+            <button
+              type="submit"
+              className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Save template
+            </button>
+          </div>
+        </form>
+
+        {templates.length > 0 && (
+          <div className="mt-5 space-y-4">
+            {templates.map((t) => {
+              const preview = renderOutreachTemplate(t, SAMPLE_TEMPLATE_VARS, 'about:blank');
+              return (
+                <div key={t.id} className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-sans text-sm font-bold text-on-background">
+                      {t.name}
+                      {t.isDefault ? (
+                        <span className="ml-2 rounded-md bg-green-100 px-2 py-0.5 text-[0.62rem] font-bold uppercase tracking-widest text-green-800 dark:bg-green-500/15 dark:text-green-200">
+                          Default
+                        </span>
+                      ) : null}
+                      <span className="ml-2 text-xs font-normal uppercase text-on-surface-variant">{t.bodyFormat}</span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {!t.isDefault && (
+                        <form action={saveOutreachTemplate}>
+                          <input type="hidden" name="templateId" value={t.id} />
+                          <input type="hidden" name="name" value={t.name} />
+                          <input type="hidden" name="subject" value={t.subjectTemplate} />
+                          <input type="hidden" name="bodyFormat" value={t.bodyFormat} />
+                          <input type="hidden" name="body" value={t.bodyTemplate} />
+                          <input type="hidden" name="makeDefault" value="true" />
+                          <button
+                            type="submit"
+                            className="rounded-lg border border-outline-variant/30 px-2.5 py-1 text-xs font-semibold text-on-background transition hover:bg-surface-container-lowest"
+                          >
+                            Set default
+                          </button>
+                        </form>
+                      )}
+                      <form action={deleteOutreachTemplate}>
+                        <input type="hidden" name="templateId" value={t.id} />
+                        <button
+                          type="submit"
+                          className="rounded-lg border border-error/40 px-2.5 py-1 text-xs font-semibold text-error transition hover:bg-error/10"
+                        >
+                          Delete
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                  <p className="mt-1 font-sans text-xs text-on-surface-variant">
+                    Subject preview: <span className="text-on-background">{preview.subject}</span>
+                  </p>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer font-sans text-xs font-semibold text-primary">
+                      Preview with sample data
+                    </summary>
+                    <iframe
+                      title={`Preview: ${t.name}`}
+                      sandbox=""
+                      srcDoc={preview.html}
+                      className="mt-2 h-72 w-full rounded-lg border border-outline-variant/20 bg-white"
+                    />
+                  </details>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {templates.length === 0 && (
+          <p className="mt-4 font-sans text-xs text-on-surface-variant">
+            No templates yet — sends use the built-in scorecard email. (If saving fails, migration
+            054_outreach_templates.sql has not been applied to this database yet.)
+          </p>
+        )}
       </section>
 
       <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
@@ -188,6 +348,29 @@ export default async function AdminOutreachPage() {
                               {prospect.enabled ? 'Pause' : 'Resume'}
                             </button>
                           </form>
+                          {templates.length > 0 && (
+                            <form action={assignProspectTemplate} className="flex items-center gap-1">
+                              <input type="hidden" name="prospectId" value={prospect.id} />
+                              <select
+                                name="templateId"
+                                defaultValue={prospect.templateId ?? ''}
+                                className="min-h-[28px] rounded-lg border border-outline-variant/20 bg-surface-container-low px-1.5 text-xs text-on-surface"
+                              >
+                                <option value="">Default</option>
+                                {templates.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="submit"
+                                className="rounded-lg border border-outline-variant/30 px-2 py-1 text-xs font-semibold text-on-background transition hover:bg-surface-container-low"
+                              >
+                                Set
+                              </button>
+                            </form>
+                          )}
                         </div>
                       </td>
                     </tr>
