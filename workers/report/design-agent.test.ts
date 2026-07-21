@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCoverDesignCopy, captureHeroScreenshot, isDesignAgentEnabled } from './design-agent';
+import { buildCoverDesignCopy, captureHeroScreenshot, extractSiteIdentity, isDesignAgentEnabled } from './design-agent';
 import { AGENT_REGISTRY_VERSION } from '../scan-engine/agent-registry';
 import { buildDeepAuditPdf } from './build-deep-audit-pdf';
 
@@ -96,6 +96,35 @@ describe('captureHeroScreenshot', () => {
   });
 });
 
+describe('extractSiteIdentity (issue #103 — client theming)', () => {
+  it('reads theme-color and og:site_name', () => {
+    const id = extractSiteIdentity(
+      '<head><meta name="theme-color" content="#1a2b3c"><meta property="og:site_name" content="Acme IT"></head>'
+    );
+    expect(id.themeColor).toBe('#1a2b3c');
+    expect(id.siteName).toBe('Acme IT');
+  });
+
+  it('falls back to the title before the separator, and normalizes short hex', () => {
+    const id = extractSiteIdentity('<head><meta name="theme-color" content="#abc"><title>Acme IT — Managed Services | Montréal</title></head>');
+    expect(id.themeColor).toBe('#aabbcc');
+    expect(id.siteName).toBe('Acme IT');
+  });
+
+  it('returns nulls on pages without identity signals', () => {
+    const id = extractSiteIdentity('<html><body>hi</body></html>');
+    expect(id.themeColor).toBeNull();
+    expect(id.siteName).toBeNull();
+  });
+});
+
+describe('buildCoverDesignCopy with a site name', () => {
+  it('prefers "SiteName (domain)"', () => {
+    const copy = buildCoverDesignCopy({ domain: 'acme.ca', checkCount: 24, generatedDate: 'x', siteName: 'Acme IT' });
+    expect(copy.preparedForLines[0]).toBe('Prepared for the team at Acme IT (acme.ca)');
+  });
+});
+
 describe('PDF cover with design (integration smoke)', () => {
   it('renders the personalized cover without a screenshot', async () => {
     const bytes = await buildDeepAuditPdf({
@@ -106,6 +135,7 @@ describe('PDF cover with design (integration smoke)', () => {
       issuesJson: [{ check: 'Title', checkId: 'title-tag', passed: true, status: 'PASS', finding: 'ok' }],
       coverDesign: {
         ...buildCoverDesignCopy({ domain: 'example.com', checkCount: 24, generatedDate: '2026-07-21' }),
+        themePrimaryHex: null,
         heroImage: null,
       },
     });
@@ -121,6 +151,7 @@ describe('PDF cover with design (integration smoke)', () => {
       issuesJson: [{ check: 'Title', checkId: 'title-tag', passed: true, status: 'PASS', finding: 'ok' }],
       coverDesign: {
         ...buildCoverDesignCopy({ domain: 'example.com', checkCount: 24, generatedDate: '2026-07-21' }),
+        themePrimaryHex: null,
         heroImage: new Uint8Array([1, 2, 3, 4]), // not a real image
       },
     });
