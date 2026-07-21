@@ -32,6 +32,7 @@ import {
 } from '../lib/server/marketing-autopilot';
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
 import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
+import { buildResearchDigestHtml, runResearchSweep } from '../lib/server/research-agent';
 import { registerSelfFetch } from './lib/fetch-gate';
 
 /**
@@ -298,6 +299,45 @@ export default {
         }
       } catch (err) {
         structuredError('recurring_audits_sweep_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Admin Research Agent (spec §8) — weekly Monday sweep of the authoritative source
+      // watchlist. Draft-only: it queues proposals for human review and never touches any
+      // scan, report, or config path. Quiet no-op until migration 055 is applied.
+      try {
+        if (isMonday && new Date().getUTCHours() === 14) {
+          const supabase = createClient(supaUrl, supaKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const digestTo = (env as unknown as Record<string, string>)['MARKETING_REPORT_TO'] ?? '';
+          const sweep = await runResearchSweep({
+            supabase,
+            ai: (env as unknown as { AI?: { run: (m: string, i: Record<string, unknown>) => Promise<unknown> } }).AI ?? null,
+            nowMs: Date.now(),
+            notify:
+              digestTo && resendKey && resendFrom
+                ? async ({ proposals }) => {
+                    await fetch('https://api.resend.com/emails', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendKey}` },
+                      body: JSON.stringify({
+                        from: resendFrom,
+                        to: digestTo,
+                        subject: `Research agent: ${String(proposals.length)} source change(s) to review`,
+                        html: buildResearchDigestHtml(proposals),
+                      }),
+                    });
+                  }
+                : undefined,
+          });
+          if (sweep.checked > 0) {
+            structuredLog('research_sweep_tick', { ...sweep }, 'info');
+          }
+        }
+      } catch (err) {
+        structuredError('research_sweep_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }
