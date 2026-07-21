@@ -15,6 +15,7 @@ import { buildReportPath } from '@/lib/shared/report-route';
 import { AccessMatrixView, BlockedScanNotice, type AccessMatrixData } from '@/components/access-matrix';
 import { ScoringExplainer, type BucketScoreData, type EligibilityData } from '@/components/scoring-explainer';
 import { IndexationGuidanceCard } from '@/components/indexation-guidance';
+import { CadencePlanCard } from '@/components/cadence-plan';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -441,6 +442,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
               </div>
             </section>
           ) : null}
+
+          {/* Dated 90-day plan + re-scan hook (spec C11) */}
+          <CadencePlanCard />
 
           {/* Share + scan another */}
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">

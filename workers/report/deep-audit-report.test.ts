@@ -88,7 +88,7 @@ describe('buildDeepAuditReportPayload', () => {
     });
 
     expect(payload.immediateWins).toHaveLength(1);
-    expect(payload.immediateWins[0]?.who).toBe('Engineering');
+    expect(payload.immediateWins[0]?.who).toBe('Hosting/Cloudflare admin');
     expect(payload.immediateWins[0]?.checkId).toBe('ai-crawler-access');
   });
 });
@@ -149,9 +149,9 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('Start with Allow AI crawlers to fetch priority pages in robots.txt');
     expect(md).toContain('## At a Glance');
     expect(md).toContain('**Top blocker:** AI crawler access (robots.txt)');
-    expect(md).toContain('**Primary owner:** Engineering');
+    expect(md).toContain('**Primary owner:** Hosting/Cloudflare admin');
     expect(md).toContain('## Immediate Wins');
-    expect(md).toContain('**Who:** Engineering');
+    expect(md).toContain('**Who:** Hosting/Cloudflare admin');
     expect(md).toContain('**Effort:** Quick');
     expect(md).toContain('## Page-Level Reference');
     expect(md).toContain('_(no non-passing issue rows)_');
@@ -162,7 +162,7 @@ describe('buildDeepAuditMarkdown', () => {
     expect(md).toContain('| Meta | FAIL | 6 | missing |');
     expect(md).not.toContain('- **Title** [PASS]');
     expect(md).toContain('- **Meta** [FAIL]\n  - Fix: Add a meta description');
-    expect(md).toContain('**Owner:** Unassigned');
+    expect(md).toContain('**Owner:** You');
     expect(md).toContain('**Why it matters:** missing');
   });
 

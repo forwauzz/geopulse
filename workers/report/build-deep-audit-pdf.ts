@@ -20,6 +20,37 @@ import {
 import { deriveCheckCounts, describeCheckCounts, type CheckCounts } from './check-counts';
 import { truncateAtWord } from './report-qa-gate';
 import { INDEXATION_GUIDANCE } from './indexation-guidance';
+import { buildOwnerPage, type OwnerPageData } from './owner-page';
+import { buildCadencePlan, type CadencePhase } from './cadence-plan';
+import { ownerRoleFor, remediationFor } from './remediation-catalog';
+
+/**
+ * Map every string onto WinAnsi-encodable characters (Helvetica standard font).
+ * Known typographic characters get readable ASCII stand-ins; anything else outside
+ * CP1252 becomes '?' rather than an exception.
+ */
+const WINANSI_EXTRAS = new Set(
+  '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'
+);
+
+export function toWinAnsiSafe(text: string): string {
+  let out = '';
+  for (const ch of text
+    .replace(/→/g, '->')
+    .replace(/[←]/g, '<-')
+    .replace(/[↑↓]/g, '-')
+    .replace(/[×✕]/g, 'x')) {
+    const code = ch.codePointAt(0) ?? 0;
+    if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WINANSI_EXTRAS.has(ch)) {
+      out += ch;
+    } else if (code === 0x0a || code === 0x09) {
+      out += ' ';
+    } else {
+      out += '?';
+    }
+  }
+  return out;
+}
 
 function wrapLine(text: string, maxChars: number): string[] {
   const words = text.split(/\s+/);
@@ -66,8 +97,10 @@ function issueStatusColor(status: string): RGB {
   }
 }
 
+// Operational role, never a department (spec C9 bans "Engineering" labels): the reader
+// is a business owner deciding WHO to hand this to, not an org chart.
 function ownerLabel(row: IssueRow): string {
-  return row.teamOwner ?? 'Unassigned';
+  return ownerRoleFor(row.checkId ?? '');
 }
 
 function enrichIssues(primary: IssueRow[], fallback: IssueRow[]): IssueRow[] {
@@ -161,7 +194,14 @@ class PdfBuilder {
   }
 
   private newPage(): void {
-    this.page = this.doc.addPage([PAGE_W, PAGE_H]);
+    const page = this.doc.addPage([PAGE_W, PAGE_H]);
+    // Helvetica is WinAnsi-encoded: one stray glyph (→, emoji, model output) in any drawn
+    // string throws and kills the whole render. Sanitizing at THIS boundary means no call
+    // site can ever crash the report over a character.
+    const original = page.drawText.bind(page);
+    page.drawText = ((text: string, options?: Parameters<typeof original>[1]) =>
+      original(toWinAnsiSafe(String(text)), options)) as typeof page.drawText;
+    this.page = page;
     this.y = PAGE_H - MARGIN;
     this.pageNum += 1;
   }
@@ -573,6 +613,112 @@ class PdfBuilder {
     }
   }
 
+  drawOwnerPage(data: OwnerPageData): void {
+    this.drawSectionTitle('For the Owner — What This Means');
+    this.drawText(data.verdict, 10, false, INK);
+    this.y -= 6;
+
+    if (data.blockedItems.length > 0) {
+      this.drawText('Currently working against you:', 9, true, PRIMARY);
+      for (const item of data.blockedItems.slice(0, 6)) {
+        this.drawText(`- ${item}`, 8, false, INK, 12);
+      }
+      this.y -= 4;
+    }
+
+    if (data.notTestedItems.length > 0) {
+      this.drawText('Not tested (not failed — we could not check these yet):', 9, true, PRIMARY);
+      for (const item of data.notTestedItems.slice(0, 4)) {
+        this.drawText(`- ${item}`, 8, false, MUTED, 12);
+      }
+      this.y -= 4;
+    }
+
+    if (data.quickWins.length > 0) {
+      this.drawText('Your three quick wins:', 9, true, PRIMARY);
+      for (let i = 0; i < data.quickWins.length; i += 1) {
+        const w = data.quickWins[i]!;
+        this.ensureSpace(48);
+        this.drawText(`${String(i + 1)}. ${w.title} — ${w.ownerRole} | ${w.effort} | ${w.diyOrHire}`, 9, true, INK);
+        this.drawText(w.action, 8, false, INK, 12);
+        this.drawText(`Verify: ${w.verify}`, 8, false, MUTED, 12);
+        this.y -= 4;
+      }
+    }
+
+    this.drawText(data.exposure, 8, false, MUTED);
+    this.y -= 4;
+
+    if (data.deferrals.length > 0) {
+      this.drawText('Deliberately deferred (so your first month stays focused):', 9, true, PRIMARY);
+      for (const d of data.deferrals.slice(0, 5)) {
+        this.drawText(`- ${d}`, 8, false, MUTED, 12);
+      }
+    }
+    this.y -= 8;
+  }
+
+  drawDelegationAppendix(issues: IssueRow[], seedUrl: string, affectedUrlsByCheck: Map<string, string[]>): void {
+    const actionable = issues.filter((row) => {
+      const status = issueStatusLabel(row);
+      return (status === 'FAIL' || status === 'WARNING') && remediationFor(row.checkId ?? '');
+    });
+    if (actionable.length === 0) return;
+
+    this.drawSectionTitle('Delegation Appendix — Hand These Pages to Whoever Does the Work');
+    this.drawText(
+      'Each item below is self-contained: forward it as-is to the named role. No engineering team required.',
+      9,
+      false,
+      MUTED
+    );
+    this.y -= 6;
+
+    for (const row of actionable) {
+      const remedy = remediationFor(row.checkId ?? '');
+      if (!remedy) continue;
+      this.ensureSpace(120);
+      const urls = affectedUrlsByCheck.get(row.checkId ?? '') ?? [seedUrl];
+
+      this.drawText(`${row.check ?? row.checkId ?? 'Check'}  [${remedy.effortImpact}]`, 10, true, PRIMARY);
+      this.drawText(`Owner: ${remedy.ownerRole} | Effort: ${remedy.effort} | ${remedy.diy ? 'DIY-friendly' : 'Worth delegating/hiring'}`, 8, true, INK, 12);
+      this.drawText(`Affected URLs: ${urls.slice(0, 3).join(', ')}${urls.length > 3 ? ` (+${String(urls.length - 3)} more)` : ''}`, 8, false, MUTED, 12);
+      this.drawText(`Current: ${customerFacingFinding(row)}`, 8, false, INK, 12);
+      this.drawText(`Desired: ${remedy.desiredState}`, 8, false, INK, 12);
+      this.drawText(`Where: ${remedy.tool} — ${remedy.clickPath}`, 8, false, INK, 12);
+      this.drawText(`Copy-paste instruction: "${remedy.copyPaste}"`, 8, false, INK, 12);
+      this.drawText(`Verify: ${remedy.verify}`, 8, false, MUTED, 12);
+      this.drawText(`Risk/rollback: ${remedy.rollback}`, 8, false, MUTED, 12);
+      this.y -= 8;
+    }
+  }
+
+  drawCadencePlan(phases: CadencePhase[]): void {
+    this.drawSectionTitle('Your Next 90 Days');
+    this.drawText(
+      'Work the plan in order — access first, then profiles and content, then measure against this report as your baseline.',
+      9,
+      false,
+      MUTED
+    );
+    this.y -= 4;
+    for (const phase of phases) {
+      this.ensureSpace(40);
+      this.drawText(`${phase.date} — ${phase.title}`, 9, true, PRIMARY);
+      for (const action of phase.actions) {
+        this.drawText(`- ${action}`, 8, false, INK, 12);
+      }
+      this.y -= 4;
+    }
+    this.drawText(
+      'Re-scan hook: run a fresh scan at each checkpoint at getgeopulse.com — the report compares best against this baseline.',
+      8,
+      true,
+      INK
+    );
+    this.y -= 8;
+  }
+
   drawIndexationGuidance(): void {
     this.drawSectionTitle(INDEXATION_GUIDANCE.headline);
     this.drawText(INDEXATION_GUIDANCE.explanation, 9, false, MUTED);
@@ -668,6 +814,8 @@ export async function buildDeepAuditPdf(input: {
   coverageSummary?: unknown;
   technicalAppendix?: DeepAuditReportPayload['technicalAppendix'];
   scanId?: string;
+  /** ISO timestamp the report was generated — anchors the dated 90-day plan (spec C11). */
+  generatedAt?: string;
   /** Customer branding; GEO-Pulse's own when absent. */
   brand?: BrandConfig;
   /** Raw logo bytes, already fetched from R2 by the caller. */
@@ -706,6 +854,9 @@ export async function buildDeepAuditPdf(input: {
   );
 
   pdf.drawCoverPage(input.domain, score, grade, now);
+
+  // Layer 1 — the Owner Page (spec C9): plain English before any table.
+  pdf.drawOwnerPage(buildOwnerPage({ score, grade, issues: allIssues }));
 
   const narrative = scoreNarrative(score, grade, totalChecks, passedChecks, topIssueName, firstMove);
   pdf.drawExecutiveSummary(narrative, topFailed.slice(0, 3));
@@ -746,7 +897,27 @@ export async function buildDeepAuditPdf(input: {
   }
 
   pdf.drawScoreBreakdown(allIssues);
+
+  // Layer 2 — the Delegation Appendix (spec C9): every actionable item self-contained.
+  const affectedUrlsByCheck = new Map<string, string[]>();
+  for (const pg of input.pageSummaries ?? []) {
+    for (const row of parseIssues(pg.issuesJson)) {
+      const status = issueStatusLabel(row);
+      if (status !== 'FAIL' && status !== 'WARNING') continue;
+      const key = row.checkId ?? '';
+      if (!key) continue;
+      const list = affectedUrlsByCheck.get(key) ?? [];
+      if (!list.includes(pg.url)) list.push(pg.url);
+      affectedUrlsByCheck.set(key, list);
+    }
+  }
+  pdf.drawDelegationAppendix(allIssues, input.url, affectedUrlsByCheck);
+
   pdf.drawTechnicalAppendix(input.technicalAppendix, input.coverageSummary);
+
+  // The report ends with the dated plan + re-scan hook (spec C11).
+  pdf.drawCadencePlan(buildCadencePlan(input.generatedAt ?? new Date().toISOString()));
+
   pdf.drawDisclaimer();
   return pdf.save();
 }
@@ -768,6 +939,7 @@ export async function buildDeepAuditPdfFromPayload(
     issuesJson: payload.allIssues,
     highlightedIssues: payload.highlightedIssues,
     scanId: payload.scanId,
+    generatedAt: payload.generatedAt,
     categoryScores: payload.categoryScores,
     coverageSummary: payload.coverageSummary,
     technicalAppendix: payload.technicalAppendix,

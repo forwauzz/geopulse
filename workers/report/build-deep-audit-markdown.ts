@@ -8,6 +8,9 @@ import {
   summarizePageIssuePatterns,
   type IssueRow,
 } from './deep-audit-report-helpers';
+import { buildOwnerPage } from './owner-page';
+import { buildCadencePlan } from './cadence-plan';
+import { ownerRoleFor, remediationFor } from './remediation-catalog';
 
 const CATEGORY_LABELS: Record<string, string> = {
   ai_readiness: 'AI Readiness',
@@ -28,8 +31,9 @@ function severityLabel(weight: number | undefined): string {
   return 'Low';
 }
 
+// Operational role, never a department (spec C9).
 function ownerLabel(row: IssueRow): string {
-  return row.teamOwner ?? 'Unassigned';
+  return ownerRoleFor(row.checkId ?? '');
 }
 
 function issueStatusLabel(row: IssueRow): string {
@@ -95,6 +99,44 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   const repeatedPagePatterns = summarizePageIssuePatterns(payload.pages);
   const demandCoverageSignals = deriveDemandCoverageSignals(allIssues);
   const crawlTrustNotice = deriveCrawlTrustNotice(payload.coverageSummary);
+
+  // Layer 1 — the Owner Page (spec C9).
+  const ownerPage = buildOwnerPage({
+    score: payload.aggregateScore ?? 0,
+    grade: payload.aggregateLetterGrade ?? '—',
+    issues: allIssues,
+  });
+  lines.push('## For the Owner — What This Means');
+  lines.push('');
+  lines.push(ownerPage.verdict);
+  lines.push('');
+  if (ownerPage.blockedItems.length > 0) {
+    lines.push('**Currently working against you:**');
+    for (const item of ownerPage.blockedItems.slice(0, 6)) lines.push(`- ${markdownInline(item)}`);
+    lines.push('');
+  }
+  if (ownerPage.notTestedItems.length > 0) {
+    lines.push('**Not tested (not failed — we could not check these yet):**');
+    for (const item of ownerPage.notTestedItems.slice(0, 4)) lines.push(`- ${markdownInline(item)}`);
+    lines.push('');
+  }
+  if (ownerPage.quickWins.length > 0) {
+    lines.push('**Your three quick wins:**');
+    for (let i = 0; i < ownerPage.quickWins.length; i += 1) {
+      const w = ownerPage.quickWins[i]!;
+      lines.push(`${String(i + 1)}. **${w.title}** — ${w.ownerRole} | ${w.effort} | ${w.diyOrHire}`);
+      lines.push(`   - ${markdownInline(w.action)}`);
+      lines.push(`   - Verify: ${markdownInline(w.verify)}`);
+    }
+    lines.push('');
+  }
+  lines.push(ownerPage.exposure);
+  lines.push('');
+  if (ownerPage.deferrals.length > 0) {
+    lines.push('**Deliberately deferred:**');
+    for (const d of ownerPage.deferrals.slice(0, 5)) lines.push(`- ${markdownInline(d)}`);
+    lines.push('');
+  }
 
   lines.push('## Executive Summary');
   lines.push('');
@@ -307,6 +349,56 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     lines.push('_(no technical appendix recorded)_');
     lines.push('');
   }
+
+  // Layer 2 — Delegation Appendix (spec C9): each item self-contained and forwardable.
+  const actionable = allIssues.filter((row) => {
+    const st = issueStatusLabel(row);
+    return (st === 'FAIL' || st === 'WARNING') && remediationFor(row.checkId ?? '');
+  });
+  if (actionable.length > 0) {
+    lines.push('## Delegation Appendix — Hand These to Whoever Does the Work');
+    lines.push('');
+    const urlsByCheck = new Map<string, string[]>();
+    for (const pg of payload.pages) {
+      for (const row of parseIssues(pg.issuesJson)) {
+        const st = issueStatusLabel(row);
+        if (st !== 'FAIL' && st !== 'WARNING') continue;
+        const key = row.checkId ?? '';
+        if (!key) continue;
+        const list = urlsByCheck.get(key) ?? [];
+        if (!list.includes(pg.url)) list.push(pg.url);
+        urlsByCheck.set(key, list);
+      }
+    }
+    for (const row of actionable) {
+      const remedy = remediationFor(row.checkId ?? '')!;
+      const urls = urlsByCheck.get(row.checkId ?? '') ?? [payload.seedUrl];
+      lines.push(`### ${row.check ?? row.checkId ?? 'Check'} [${remedy.effortImpact}]`);
+      lines.push('');
+      lines.push(`- **Owner:** ${remedy.ownerRole} (${remedy.diy ? 'DIY-friendly' : 'worth delegating/hiring'})`);
+      lines.push(`- **Effort:** ${remedy.effort}`);
+      lines.push(`- **Affected URLs:** ${urls.slice(0, 5).join(', ')}${urls.length > 5 ? ` (+${String(urls.length - 5)} more)` : ''}`);
+      lines.push(`- **Current:** ${markdownInline(customerFacingFinding(row))}`);
+      lines.push(`- **Desired:** ${markdownInline(remedy.desiredState)}`);
+      lines.push(`- **Where:** ${markdownInline(`${remedy.tool} — ${remedy.clickPath}`)}`);
+      lines.push(`- **Copy-paste instruction:** "${markdownInline(remedy.copyPaste)}"`);
+      lines.push(`- **Verify:** ${markdownInline(remedy.verify)}`);
+      lines.push(`- **Risk/rollback:** ${markdownInline(remedy.rollback)}`);
+      lines.push('');
+    }
+  }
+
+  // The report ends with the dated plan + re-scan hook (spec C11).
+  lines.push('## Your Next 90 Days');
+  lines.push('');
+  for (const phase of buildCadencePlan(payload.generatedAt)) {
+    lines.push(`### ${phase.date} — ${phase.title}`);
+    lines.push('');
+    for (const action of phase.actions) lines.push(`- ${action}`);
+    lines.push('');
+  }
+  lines.push('**Re-scan hook:** run a fresh scan at each checkpoint at getgeopulse.com and compare against this report as your baseline.');
+  lines.push('');
 
   lines.push(
     '---',

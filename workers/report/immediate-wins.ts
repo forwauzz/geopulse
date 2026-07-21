@@ -1,11 +1,13 @@
 import type { IssueRow } from './deep-audit-report-helpers';
+import { ownerRoleFor } from './remediation-catalog';
 import type { TeamOwner } from './team-owner-map';
 
 export type ImmediateWinPayload = {
   readonly checkId: string;
   readonly checkName: string;
   readonly what: string;
-  readonly who: TeamOwner;
+  /** Operational role a business owner can delegate to — never a department (spec C9). */
+  readonly who: string;
   readonly why: string;
   readonly how: string;
   readonly effort: 'Quick' | 'Moderate';
@@ -23,7 +25,6 @@ function deriveWhat(issue: IssueRow): string {
     'ai-crawler-access': 'Allow AI crawlers to fetch priority pages in robots.txt.',
     'robots-meta': 'Remove restrictive robots meta directives from priority pages.',
     'json-ld': 'Add schema markup to describe the business, services, and key pages.',
-    'llms-txt': 'Publish an llms.txt file that points crawlers to priority content.',
     'llm-qa-pattern': 'Rewrite key service pages to answer likely buyer questions directly.',
     'llm-extractability': 'Strengthen above-the-fold summaries so the main answer is easy to extract.',
     'internal-links': 'Add stronger internal links between commercial pages and supporting proof pages.',
@@ -47,8 +48,6 @@ function deriveWhy(issue: IssueRow): string {
       'Restrictive robots directives can suppress pages before downstream retrieval systems even consider them.',
     'json-ld':
       'Without structured data, machines have less explicit evidence about your entities, services, and page purpose.',
-    'llms-txt':
-      'Without an llms.txt file, you lose a simple machine-readable way to guide AI crawlers toward priority content.',
     'llm-qa-pattern':
       'If key pages do not answer likely buyer questions directly, answer engines have less reusable text to cite.',
     'llm-extractability':
@@ -78,8 +77,6 @@ function deriveHow(issue: IssueRow): string {
       'Remove noindex or nofollow directives from pages that should be discoverable, then recheck the rendered HTML output.',
     'json-ld':
       'Start with Organization or LocalBusiness markup on core pages, then add service-specific schema where the page content supports it.',
-    'llms-txt':
-      'Publish a root-level llms.txt file with the main site sections and the highest-priority URLs for machine retrieval.',
     'llm-qa-pattern':
       'Convert weak service-page sections into direct question-and-answer blocks using the actual buyer language the page should satisfy.',
     'llm-extractability':
@@ -133,7 +130,7 @@ export function buildImmediateWins(issues: readonly IssueRow[]): ImmediateWinPay
       checkId: issue.checkId ?? issue.check ?? 'unknown-check',
       checkName: issue.check ?? issue.checkId ?? 'Check',
       what: deriveWhat(issue),
-      who: issue.teamOwner,
+      who: ownerRoleFor(issue.checkId ?? ''),
       why: deriveWhy(issue),
       how: deriveHow(issue),
       effort: deriveEffort(issue),
