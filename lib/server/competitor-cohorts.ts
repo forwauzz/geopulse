@@ -21,6 +21,9 @@ import { isAgentEnabled } from './agent-flags';
 import { structuredLog } from './structured-log';
 
 export const COHORT_METADATA_KEY = 'local_cohort';
+const ATTEMPT_KEY = `${COHORT_METADATA_KEY}_last_attempt_at`;
+/** Canonical domain actually observed after redirects (example.ca → example.com rebrands). */
+const OBSERVED_KEY = `${COHORT_METADATA_KEY}_observed_domain`;
 /** Weekly cadence with slack for hourly-cron jitter. */
 export const COHORT_STALE_MS = 6.5 * 24 * 60 * 60 * 1000;
 /** Failed attempts also wait a full cycle so a dead domain can't eat every tick's budget. */
@@ -189,7 +192,8 @@ export async function removeCohortDomain(supabase: SupabaseClient, id: string): 
   if (!data) return;
   const metadata = { ...(data.metadata as Record<string, unknown> | null) };
   delete metadata[COHORT_METADATA_KEY];
-  delete metadata[`${COHORT_METADATA_KEY}_last_attempt_at`];
+  delete metadata[ATTEMPT_KEY];
+  delete metadata[OBSERVED_KEY];
   await supabase.from('benchmark_domains').update({ metadata }).eq('id', id);
 }
 
@@ -197,16 +201,26 @@ export async function removeCohortDomain(supabase: SupabaseClient, id: string): 
 export async function scanCohortDomain(
   supabase: SupabaseClient,
   env: CohortEnvLike,
-  row: Pick<CohortDomainRow, 'id' | 'domain' | 'site_url' | 'metadata'>
+  row: Pick<CohortDomainRow, 'id' | 'domain' | 'canonical_domain' | 'site_url' | 'metadata'>
 ): Promise<{ ok: true; scanId: string } | { ok: false; reason: string }> {
   const targetUrl = row.site_url ?? `https://${row.domain}`;
   const attemptedAt = new Date().toISOString();
-  await supabase
-    .from('benchmark_domains')
-    .update({ metadata: { ...row.metadata, [`${COHORT_METADATA_KEY}_last_attempt_at`]: attemptedAt } })
-    .eq('id', row.id);
+  const stampedMetadata = { ...row.metadata, [ATTEMPT_KEY]: attemptedAt };
+  await supabase.from('benchmark_domains').update({ metadata: stampedMetadata }).eq('id', row.id);
 
   const scan = await runFreeScan(targetUrl, buildAuditLlm(env));
+
+  // A cross-domain redirect (example.ca → example.com) persists the scan under the observed
+  // host; remember it as an alias so the comparison and staleness lookups keep matching.
+  if (scan.ok) {
+    const observed = toCanonicalBenchmarkDomain(scan.domain);
+    if (observed && observed !== row.canonical_domain) {
+      await supabase
+        .from('benchmark_domains')
+        .update({ metadata: { ...stampedMetadata, [OBSERVED_KEY]: observed } })
+        .eq('id', row.id);
+    }
+  }
 
   if (!scan.ok && !scan.blocked) {
     structuredLog('competitor_cohort_scan_failed', { domainId: row.id, reason: scan.reason }, 'warning');
@@ -265,7 +279,7 @@ export function selectStaleCohortDomains<
 >(domains: T[], latestScanAtByDomain: Map<string, number>, nowMs: number, maxScans: number): T[] {
   const due = domains.filter((d) => {
     const lastScan = latestScanAtByDomain.get(d.canonical_domain);
-    const lastAttemptRaw = d.metadata?.[`${COHORT_METADATA_KEY}_last_attempt_at`];
+    const lastAttemptRaw = d.metadata?.[ATTEMPT_KEY];
     const lastAttempt = typeof lastAttemptRaw === 'string' ? Date.parse(lastAttemptRaw) : NaN;
     if (Number.isFinite(lastAttempt) && nowMs - lastAttempt < ATTEMPT_COOLDOWN_MS) return false;
     return lastScan === undefined || nowMs - lastScan > COHORT_STALE_MS;
@@ -284,8 +298,18 @@ async function latestCohortScans(
 ): Promise<Map<string, { id: string; score: number | null; full_results_json: unknown; created_at: string }>> {
   const latest = new Map<string, { id: string; score: number | null; full_results_json: unknown; created_at: string }>();
   if (domains.length === 0) return latest;
-  const wanted = new Set(domains.map((d) => d.canonical_domain));
-  const variants = domains.flatMap((d) => [d.canonical_domain, `www.${d.canonical_domain}`, d.domain]);
+
+  // Scans may be stored under a redirect-observed host — map every known alias back to the
+  // cohort row's canonical_domain, which is the key everything else joins on.
+  const aliasToCohort = new Map<string, string>();
+  for (const d of domains) {
+    aliasToCohort.set(d.canonical_domain, d.canonical_domain);
+    const observed = d.metadata?.[OBSERVED_KEY];
+    if (typeof observed === 'string' && observed) aliasToCohort.set(observed, d.canonical_domain);
+  }
+  const variants = Array.from(aliasToCohort.keys()).flatMap((a) => [a, `www.${a}`]);
+  for (const d of domains) variants.push(d.domain);
+
   const { data } = await supabase
     .from('scans')
     .select('id,domain,score,full_results_json,created_at')
@@ -295,8 +319,9 @@ async function latestCohortScans(
     .limit(400);
   for (const row of (data ?? []) as { id: string; domain: string; score: number | null; full_results_json: unknown; created_at: string }[]) {
     const canonical = toCanonicalBenchmarkDomain(row.domain);
-    if (!canonical || !wanted.has(canonical) || latest.has(canonical)) continue;
-    latest.set(canonical, row);
+    const cohortKey = canonical ? aliasToCohort.get(canonical) : undefined;
+    if (!cohortKey || latest.has(cohortKey)) continue;
+    latest.set(cohortKey, row);
   }
   return latest;
 }

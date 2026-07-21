@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import {
@@ -19,7 +20,7 @@ export async function addCohortDomainAction(formData: FormData): Promise<void> {
   const geoRegion = String(formData.get('geoRegion') ?? '').trim();
   if (!url || !vertical || !geoRegion) return;
 
-  await upsertCohortDomain(ctx.adminDb, {
+  const result = await upsertCohortDomain(ctx.adminDb, {
     url,
     displayName: String(formData.get('displayName') ?? '').trim() || null,
     vertical,
@@ -27,6 +28,9 @@ export async function addCohortDomainAction(formData: FormData): Promise<void> {
     isCustomer: String(formData.get('isCustomer') ?? '') === 'on',
   });
   revalidatePath('/admin/competitors');
+  if (!result.ok) {
+    redirect(`/admin/competitors?addError=${encodeURIComponent(result.reason.slice(0, 200))}`);
+  }
 }
 
 export async function removeCohortDomainAction(formData: FormData): Promise<void> {
@@ -48,7 +52,7 @@ export async function scanCohortDomainNowAction(formData: FormData): Promise<voi
 
   const { data } = await ctx.adminDb
     .from('benchmark_domains')
-    .select('id,domain,site_url,metadata')
+    .select('id,domain,canonical_domain,site_url,metadata')
     .eq('id', id)
     .maybeSingle();
   if (!data) return;
@@ -57,6 +61,7 @@ export async function scanCohortDomainNowAction(formData: FormData): Promise<voi
   await scanCohortDomain(ctx.adminDb, env, {
     id: data.id,
     domain: data.domain,
+    canonical_domain: data.canonical_domain,
     site_url: data.site_url ?? null,
     metadata: (data.metadata ?? {}) as Record<string, unknown>,
   });

@@ -106,7 +106,12 @@ function DomainRow({ d }: { d: DomainComparison }) {
   );
 }
 
-export default async function AdminCompetitorsPage() {
+export default async function AdminCompetitorsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ addError?: string }>;
+}) {
+  const params = searchParams ? await searchParams : undefined;
   const ctx = await loadAdminPageContext('/admin/competitors');
   if (!ctx.ok) {
     return (
@@ -147,6 +152,12 @@ export default async function AdminCompetitorsPage() {
           </>
         )}
       </div>
+
+      {params?.addError && (
+        <div className="rounded-xl border border-error/30 bg-error/5 px-4 py-3 text-sm text-error">
+          Couldn’t add that business: {params.addError}
+        </div>
+      )}
 
       <section className="rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-5">
         <h2 className="font-sans text-base font-bold text-on-background">Add a business to a cohort</h2>

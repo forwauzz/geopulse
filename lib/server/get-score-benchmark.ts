@@ -25,6 +25,8 @@ export async function getScoreBenchmark(
     .select('score')
     .eq('status', 'complete')
     .not('score', 'is', null)
+    // Admin-curated competitor-cohort scans must not shift the customer-facing peer pool.
+    .neq('run_source', 'internal_benchmark')
     .limit(5000);
 
   if (error || !Array.isArray(data)) return null;

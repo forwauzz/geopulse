@@ -369,31 +369,6 @@ export default {
         });
       }
 
-      // Local-competitor cohort sweep (issue #118) — FAIL-CLOSED flag, max 2 scans per tick so
-      // it can never starve the stages below even with a large cohort.
-      try {
-        const supabase = createClient(supaUrl, supaKey, {
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-        stage('competitor_cohort');
-        const result = await runCompetitorCohortSweep({
-          supabase,
-          env: env as unknown as CohortEnvLike,
-          nowMs: Date.now(),
-        });
-        if (result.enabled && result.due > 0) {
-          structuredLog('competitor_cohort_tick', {
-            due: result.due,
-            scanned: result.scanned,
-            failed: result.failed,
-          }, 'info');
-        }
-      } catch (err) {
-        structuredError('competitor_cohort_error', {
-          error: err instanceof Error ? err.message : 'unknown',
-        });
-      }
-
       // Daily autonomous marketing autopilot (Loop 5b) — gated once per day at
       // MARKETING_AUTOPILOT_HOUR_UTC (default 13:00 UTC). Proposes review-gated content briefs
       // for weak (uncovered) topics; never publishes. Self-gates on env flag + kill switch, so
@@ -451,6 +426,32 @@ export default {
         }
       } catch (err) {
         structuredError('recurring_audits_sweep_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Local-competitor cohort sweep (issue #118) — FAIL-CLOSED flag, max 2 scans per tick,
+      // every fetch inside runFreeScan is timeout-bounded (~65s worst case per scan). Sits with
+      // the benchmark long-runner at the tail so customer-facing stages never wait on it.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('competitor_cohort');
+        const result = await runCompetitorCohortSweep({
+          supabase,
+          env: env as unknown as CohortEnvLike,
+          nowMs: Date.now(),
+        });
+        if (result.enabled && result.due > 0) {
+          structuredLog('competitor_cohort_tick', {
+            due: result.due,
+            scanned: result.scanned,
+            failed: result.failed,
+          }, 'info');
+        }
+      } catch (err) {
+        structuredError('competitor_cohort_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }
