@@ -47,7 +47,11 @@ export class GeminiProvider implements LLMProvider {
         },
       ],
       generationConfig: {
-        temperature: 0.2,
+        // Deterministic judging (issue #109): a nonzero temperature flipped borderline
+        // PASS/FAIL verdicts run-to-run, moving the headline score with zero site
+        // changes. Greedy decoding makes the same input produce the same verdict.
+        temperature: 0,
+        topK: 1,
         maxOutputTokens: 256,
       },
     };
