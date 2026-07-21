@@ -226,7 +226,7 @@ export default async function AdminOutreachPage({
         {templates.length > 0 && (
           <div className="mt-5 space-y-4">
             {templates.map((t) => {
-              const preview = renderOutreachTemplate(t, SAMPLE_TEMPLATE_VARS, 'about:blank');
+              const preview = renderOutreachTemplate(t, SAMPLE_TEMPLATE_VARS, 'about:blank', 'about:blank#unsubscribe-preview');
               return (
                 <div key={t.id} className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">

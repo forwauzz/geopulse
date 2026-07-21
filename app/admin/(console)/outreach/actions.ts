@@ -31,6 +31,20 @@ export async function addOutreachProspect(formData: FormData): Promise<void> {
     return;
   }
 
+  // CASL (issue #97): an unsubscribed contact must never be silently re-enabled.
+  {
+    const { data: existing, error } = await ctx.adminDb
+      .from('outreach_prospects')
+      .select('unsubscribed_at')
+      .eq('email', email)
+      .eq('url', url)
+      .maybeSingle();
+    if (!error && existing?.unsubscribed_at) {
+      structuredLog('outreach_prospect_add_blocked_unsubscribed', { email_domain: email.split('@')[1] ?? '' }, 'info');
+      return;
+    }
+  }
+
   const row: Record<string, unknown> = {
     email,
     url,
@@ -91,7 +105,24 @@ export async function importOutreachProspects(formData: FormData): Promise<void>
   let imported = 0;
   let failed = 0;
 
+  // CASL (issue #97): a re-imported list must never resurrect unsubscribed contacts.
+  // Fail-soft pre-migration-056: the select errors, the set stays empty, imports proceed.
+  let unsubscribed = new Set<string>();
+  {
+    const { data, error } = await ctx.adminDb
+      .from('outreach_prospects')
+      .select('email,url,unsubscribed_at')
+      .not('unsubscribed_at', 'is', null);
+    if (!error && Array.isArray(data)) {
+      unsubscribed = new Set(data.map((r: { email: string; url: string }) => `${r.email}|${r.url}`));
+    }
+  }
+
   for (const row of parsed.rows) {
+    if (unsubscribed.has(`${row.email}|${row.url}`)) {
+      failed += 1; // surfaces in the "skipped" count; the contact opted out
+      continue;
+    }
     const base: Record<string, unknown> = {
       email: row.email,
       url: row.url,

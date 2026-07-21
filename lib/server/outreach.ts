@@ -106,6 +106,7 @@ export function buildOutreachEmailHtml(args: {
   readonly topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
   readonly resultsUrl: string;
   readonly pixelUrl: string;
+  readonly unsubscribeUrl: string;
 }): string {
   const greeting = args.recipientName ? `Hi ${args.recipientName},` : 'Hi,';
   const issuesHtml = args.topIssues
@@ -130,7 +131,9 @@ export function buildOutreachEmailHtml(args: {
     issuesHtml ? `<p style="margin-bottom:6px;"><strong>The biggest opportunities we found:</strong></p><ul style="padding-left:18px;">${issuesHtml}</ul>` : '',
     `<p style="margin:24px 0;"><a href="${args.resultsUrl}" style="background:#565e74;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;">See your full report</a></p>`,
     `<p style="color:#777;font-size:13px;">The full report shows every check, what it means, and exactly what to change. No account needed to view it.</p>`,
-    `<p style="color:#999;font-size:12px;">— GEO-Pulse · editorial intelligence for AI search readiness</p>`,
+    `<p style="color:#999;font-size:12px;">— GEO-Pulse · editorial intelligence for AI search readiness<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:#999;">getgeopulse.com</a></p>`,
+    // CASL: every commercial email carries a working unsubscribe (issue #97).
+    `<p style="color:#999;font-size:11px;">No longer want these audits? <a href="${args.unsubscribeUrl}" style="color:#999;">Unsubscribe</a> — one click, effective immediately.</p>`,
     `<img src="${args.pixelUrl}" width="1" height="1" alt="" style="display:block;" />`,
     '</div>',
   ].join('\n');
@@ -221,6 +224,7 @@ export async function runOutreachForProspect(args: {
   if (sendId) {
     const resultsUrl = `${appUrl}/results/${scanId}`;
     const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
+    const unsubscribeUrl = `${appUrl}/api/outreach/unsubscribe/${prospect.id}`;
 
     // Custom template (pinned or default) wins; the built-in scorecard email is the
     // fallback so outreach keeps working before migration 054 is applied.
@@ -237,7 +241,8 @@ export async function runOutreachForProspect(args: {
             topIssues: topFailed,
             reportUrl: resultsUrl,
           },
-          pixelUrl
+          pixelUrl,
+          unsubscribeUrl
         )
       : {
           subject: `${scan.domain}: AI search readiness score ${scan.output.score}/100`,
@@ -249,6 +254,7 @@ export async function runOutreachForProspect(args: {
             topIssues: topFailed,
             resultsUrl,
             pixelUrl,
+            unsubscribeUrl,
           }),
         };
 
