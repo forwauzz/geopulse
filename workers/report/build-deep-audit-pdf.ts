@@ -1032,7 +1032,13 @@ export async function buildDeepAuditPdf(input: {
   // and paid white-label branding is never overridden.
   let brand = input.brand ?? GEO_PULSE_BRAND;
   const themeHex = input.coverDesign?.themePrimaryHex;
-  if (themeHex && brand.companyName === GEO_PULSE_BRAND.companyName && !brand.logo) {
+  const brandIsDefault =
+    brand.companyName === GEO_PULSE_BRAND.companyName &&
+    !brand.logo &&
+    brand.primary.r === GEO_PULSE_BRAND.primary.r &&
+    brand.primary.g === GEO_PULSE_BRAND.primary.g &&
+    brand.primary.b === GEO_PULSE_BRAND.primary.b;
+  if (themeHex && brandIsDefault) {
     const themed = hexToRgb01(themeHex);
     if (themed && relativeLuminance(themed) < 0.82) {
       brand = { ...GEO_PULSE_BRAND, primary: themed, onPrimary: pickInk(themed) };
