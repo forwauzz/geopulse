@@ -12,6 +12,7 @@ import {
   type DeepAuditCheckoutMode,
 } from '@/lib/shared/deep-audit-checkout-mode';
 import { buildReportPath } from '@/lib/shared/report-route';
+import { AccessMatrixView, BlockedScanNotice, type AccessMatrixData } from '@/components/access-matrix';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -22,6 +23,8 @@ type ScanData = {
   url: string;
   score: number;
   letterGrade: string;
+  scoreState: 'measured' | 'not_tested';
+  accessMatrix: AccessMatrixData | null;
   topIssues: Issue[];
   issues: ReportIssue[];
   benchmark: ScoreBenchmark | null;
@@ -87,6 +90,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       issues?: unknown[];
       benchmark?: ScoreBenchmark | null;
       categoryScores?: CategoryScoreData[];
+      accessMatrix?: AccessMatrixData | null;
+      scoreState?: string;
       hasPaidReport?: boolean;
       reportStatus?: ReportStatus;
       pdfUrl?: string | null;
@@ -100,6 +105,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         url: j.url,
         score: j.score ?? 0,
         letterGrade: j.letterGrade ?? '\u2014',
+        scoreState: j.scoreState === 'not_tested' ? 'not_tested' : 'measured',
+        accessMatrix: j.accessMatrix ?? null,
         topIssues: Array.isArray(j.topIssues) ? j.topIssues : [],
         issues: Array.isArray(j.issues) ? (j.issues as ReportIssue[]) : [],
         benchmark: j.benchmark ?? null,
@@ -243,6 +250,26 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
     });
   }
 
+  // Scanner-blocked scan: a diagnosis page, not a graded scorecard (spec C4 — never
+  // present an unretrieved page as a content failure or a 0 score).
+  if (data.scoreState === 'not_tested') {
+    return (
+      <div className="space-y-6">
+        {data.accessMatrix && <BlockedScanNotice matrix={data.accessMatrix} url={host} />}
+        {data.accessMatrix && <AccessMatrixView matrix={data.accessMatrix} />}
+        <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+          <a
+            href="/"
+            className="inline-flex items-center gap-1.5 font-sans text-sm text-on-surface-variant transition hover:text-primary"
+          >
+            <span className="material-symbols-outlined text-base">refresh</span>
+            Re-scan after safelisting
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   const reportData: ScoreReportData = {
     domain: host,
     url: data.url,
@@ -274,6 +301,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       }
       deepAuditSlot={
         <div className="space-y-6">
+          {/* Access & Eligibility Matrix — the per-destination headline diagnostic */}
+          {data.accessMatrix && <AccessMatrixView matrix={data.accessMatrix} />}
+
           {/* Report being generated */}
           {data.reportStatus === 'generating' && (
             <div className="rounded-2xl border border-primary/20 bg-surface-container-lowest p-6">

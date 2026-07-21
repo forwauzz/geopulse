@@ -104,7 +104,11 @@ export async function GET(
         const report = reportRes.data;
         const reportStatus = report?.email_delivered_at ? 'delivered' : hasPaid ? 'generating' : 'none';
 
-        const fullResults = scan.full_results_json as { categoryScores?: unknown[] } | null;
+        const fullResults = scan.full_results_json as {
+          categoryScores?: unknown[];
+          accessMatrix?: unknown;
+          scoreState?: string;
+        } | null;
         const benchmark = await getScoreBenchmark(adminDb, scan.score);
         return Response.json({
           scanId: scan.id,
@@ -116,6 +120,8 @@ export async function GET(
           issues: fullIssueListFromScan(scan.issues_json, scan.full_results_json),
           benchmark,
           categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
+          accessMatrix: fullResults?.accessMatrix ?? null,
+          scoreState: fullResults?.scoreState === 'not_tested' ? 'not_tested' : 'measured',
           hasPaidReport: hasPaid,
           reportStatus,
           pdfUrl: report?.pdf_url ?? null,
@@ -189,6 +195,8 @@ export async function GET(
     issues: data.issues,
     benchmark,
     categoryScores: data.categoryScores,
+    accessMatrix: data.accessMatrix,
+    scoreState: data.scoreState,
     hasPaidReport: data.hasPaidReport,
     reportStatus: data.reportStatus,
     pdfUrl: data.pdfUrl,

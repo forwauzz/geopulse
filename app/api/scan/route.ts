@@ -197,6 +197,64 @@ export async function POST(request: Request): Promise<Response> {
 
   const scan = await runFreeScan(url, llm);
   if (!scan.ok) {
+    // The target blocked our fetch (WAF/challenge/timeout). That is a diagnosis, not a crash:
+    // persist a NOT-TESTED scan carrying the access matrix + root cause + safelist steps.
+    if (scan.blocked) {
+      const b = scan.blocked;
+      const blockedRunSource = agencyContext
+        ? 'agency_dashboard'
+        : startupContext
+          ? 'startup_dashboard'
+          : 'public_self_serve';
+      const { data: row, error } = await supabase
+        .from('scans')
+        .insert({
+          url: b.requestedUrl,
+          domain: b.domain,
+          status: 'complete',
+          score: null,
+          letter_grade: null,
+          issues_json: b.issues,
+          full_results_json: {
+            issues: b.issues,
+            categoryScores: [],
+            accessMatrix: b.accessMatrix,
+            scoreState: 'not_tested',
+          },
+          user_id: agencyContext || startupContext ? sessionUserId : null,
+          agency_account_id: agencyContext?.agencyAccountId ?? null,
+          agency_client_id: agencyContext?.agencyClientId ?? null,
+          startup_workspace_id: startupContext?.startupWorkspaceId ?? null,
+          run_source: blockedRunSource,
+        })
+        .select('id')
+        .single();
+
+      if (error || !row?.id) {
+        return Response.json(
+          { error: { code: 'scan_failed', message: scan.reason } },
+          { status: 400 }
+        );
+      }
+
+      await emitMarketingEvent(supabaseForAttr, 'scan_completed', {
+        ...attrCtx,
+        scan_id: row.id,
+        metadata: { url: b.requestedUrl, domain: b.domain, blocked: true },
+      });
+
+      return Response.json({
+        scanId: row.id,
+        score: null,
+        letterGrade: null,
+        scoreState: 'not_tested',
+        accessMatrix: b.accessMatrix,
+        topIssues: [],
+        categoryScores: [],
+        finalUrl: b.requestedUrl,
+        domain: b.domain,
+      });
+    }
     return Response.json({ error: { code: 'scan_failed', message: scan.reason } }, { status: 400 });
   }
 
@@ -218,6 +276,8 @@ export async function POST(request: Request): Promise<Response> {
       full_results_json: {
         issues: scan.output.issues,
         categoryScores: scan.output.categoryScores,
+        accessMatrix: scan.output.accessMatrix,
+        scoreState: 'measured',
         // The page's own words, kept so agents can ground generation in what the site actually
         // says rather than inferring from the domain name.
         pageSample: scan.textSample.slice(0, 6000),
@@ -264,6 +324,8 @@ export async function POST(request: Request): Promise<Response> {
     scanId: row.id,
     score: scan.output.score,
     letterGrade: scan.output.letterGrade,
+    scoreState: 'measured',
+    accessMatrix: scan.output.accessMatrix,
     topIssues: scan.output.topIssues,
     categoryScores: scan.output.categoryScores,
     finalUrl: scan.finalUrl,
