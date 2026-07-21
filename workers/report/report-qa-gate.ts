@@ -29,7 +29,10 @@ export interface QaViolation {
 
 export interface QaGateResult {
   ok: boolean;
+  /** Fatal violations — the report must not render. */
   violations: QaViolation[];
+  /** Heuristic concerns worth logging but never worth losing a customer report over. */
+  warnings: QaViolation[];
   counts: CheckCounts;
 }
 
@@ -125,21 +128,30 @@ export function resolveReportContradictions(issues: readonly GateIssue[]): {
   let working = issues.map((i) => ({ ...i }));
   const resolutions: string[] = [];
 
-  for (const rule of CONTRADICTION_RULES) {
-    const hit = rule.detect(working);
-    if (!hit || !hit.dropId) continue;
-    working = working.map((i) =>
-      i.checkId === hit.dropId
-        ? {
-            ...i,
-            status: 'NOT_EVALUATED',
-            passed: false,
-            finding: `${hit.reason}`,
-            fix: undefined,
-          }
-        : i
-    );
-    resolutions.push(`${rule.name}: ${hit.dropId} — ${hit.reason}`);
+  // Resolve to a fixpoint: a rule can fire more than once when several checkIds match
+  // its pattern; a single pass would leave the second contradiction for the gate to
+  // reject — and rejecting means a lost customer report.
+  const MAX_PASSES = 10;
+  for (let pass = 0; pass < MAX_PASSES; pass += 1) {
+    let changed = false;
+    for (const rule of CONTRADICTION_RULES) {
+      const hit = rule.detect(working);
+      if (!hit || !hit.dropId) continue;
+      working = working.map((i) =>
+        i.checkId === hit.dropId
+          ? {
+              ...i,
+              status: 'NOT_EVALUATED',
+              passed: false,
+              finding: `${hit.reason}`,
+              fix: undefined,
+            }
+          : i
+      );
+      resolutions.push(`${rule.name}: ${hit.dropId} — ${hit.reason}`);
+      changed = true;
+    }
+    if (!changed) break;
   }
 
   return { issues: working, resolutions };
@@ -151,6 +163,7 @@ export function runReportQaGate(input: {
   renderedCounts?: { passed: number; total: number };
 }): QaGateResult {
   const violations: QaViolation[] = [];
+  const warnings: QaViolation[] = [];
   const counts = deriveCheckCounts(input.issues);
 
   if (counts.passed + counts.warning + counts.failed + counts.notTested !== counts.total) {
@@ -171,14 +184,30 @@ export function runReportQaGate(input: {
 
   for (const issue of input.issues) {
     const id = issue.checkId ?? issue.check ?? '?';
-    const finding = issue.finding ?? '';
-    if (!finding.trim()) {
-      violations.push({ rule: 'empty_finding', detail: `Check ${id} has no finding text.` });
+    const status = (issue.status ?? '').toUpperCase();
+    const finding = (issue.finding ?? '').trim();
+
+    // Empty finding is fatal only where the renderer has no fallback AND the reader
+    // needs an explanation: a failing/warning check with nothing to say. Passed rows
+    // and NOT_EVALUATED/BLOCKED/LOW_CONFIDENCE rows get renderer fallback copy, and
+    // DLQing a paid report over them would be worse than the blemish.
+    if (!finding) {
+      const fatal = status === 'FAIL' || status === 'WARNING';
+      (fatal ? violations : warnings).push({
+        rule: 'empty_finding',
+        detail: `Check ${id} (${status || 'no status'}) has no finding text.`,
+      });
       continue;
     }
+
     for (const text of [finding, issue.fix ?? '']) {
-      if (text && looksGarbled(text)) {
-        violations.push({ rule: 'garbled_text', detail: `Check ${id} contains garbled/clipped text: "${text.slice(-40)}"` });
+      if (!text) continue;
+      // Deterministic garble (broken encoding / control bytes) is fatal; the mid-word
+      // cut heuristic can misfire on free-form LLM prose, so it only warns.
+      if (/�/.test(text) || /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(text)) {
+        violations.push({ rule: 'garbled_text', detail: `Check ${id} contains broken characters: "${text.slice(-40)}"` });
+      } else if (looksGarbled(text)) {
+        warnings.push({ rule: 'garbled_text', detail: `Check ${id} may contain clipped text: "${text.slice(-40)}"` });
       }
     }
   }
@@ -193,5 +222,5 @@ export function runReportQaGate(input: {
     }
   }
 
-  return { ok: violations.length === 0, violations, counts };
+  return { ok: violations.length === 0, violations, warnings, counts };
 }

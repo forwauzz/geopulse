@@ -385,12 +385,6 @@ class PdfBuilder {
 
     for (let i = 0; i < issues.length; i += 1) {
       const row = issues[i]!;
-      const rowH = 16;
-      this.ensureSpace(rowH + 4);
-
-      if (i % 2 === 0) {
-        this.page.drawRectangle({ x: MARGIN, y: this.y - 2, width: MAX_W, height: rowH, color: ROW_ALT });
-      }
 
       // Word-boundary truncation + wrapped findings — a hard slice mid-word ("…AI crawle")
       // is exactly the credibility bug the QA gate exists to block (spec C1).
@@ -399,6 +393,13 @@ class PdfBuilder {
       const statusClr = issueStatusColor(status);
       const weight = String(row.weight ?? 0);
       const findingLines = wrapLine(customerFacingFinding(row), 48).slice(0, 3);
+      const extraLines = Math.max(0, findingLines.length - 1);
+      const rowH = 16 + extraLines * 9;
+      this.ensureSpace(rowH + 4);
+
+      if (i % 2 === 0) {
+        this.page.drawRectangle({ x: MARGIN, y: this.y - 2 - extraLines * 9, width: MAX_W, height: rowH, color: ROW_ALT });
+      }
 
       this.page.drawText(name, { x: MARGIN + 4, y: this.y, size: 8, font: this.font, color: INK });
       this.page.drawText(status, { x: MARGIN + 220, y: this.y, size: 8, font: this.fontBold, color: statusClr });
@@ -406,8 +407,7 @@ class PdfBuilder {
       for (let li = 0; li < findingLines.length; li += 1) {
         this.page.drawText(findingLines[li] ?? '', { x: MARGIN + 330, y: this.y - li * 9, size: 7, font: this.font, color: MUTED });
       }
-      const extraLines = Math.max(0, findingLines.length - 1);
-      this.y -= rowH + 2 + extraLines * 9;
+      this.y -= rowH + 2;
     }
     this.y -= 8;
   }

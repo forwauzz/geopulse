@@ -104,10 +104,41 @@ describe('runReportQaGate', () => {
     expect(gate.violations[0]?.rule).toBe('count_mismatch');
   });
 
-  it('blocks on empty findings', () => {
-    const gate = runReportQaGate({ issues: [issue({ finding: '' })] });
+  it('blocks on empty findings only for FAIL/WARNING rows', () => {
+    const gate = runReportQaGate({ issues: [issue({ status: 'FAIL', passed: false, finding: '' })] });
     expect(gate.ok).toBe(false);
     expect(gate.violations[0]?.rule).toBe('empty_finding');
+  });
+
+  it('never DLQs a report over an empty finding on a PASSED or excluded row (paid-path safety)', () => {
+    const gate = runReportQaGate({
+      issues: [
+        issue({ status: 'PASS', finding: '' }), // LLM check passing with empty reasoning
+        issue({ checkId: 'y', status: 'NOT_EVALUATED', passed: false, finding: '' }), // renderer has fallback copy
+        issue({ checkId: 'z', status: 'LOW_CONFIDENCE', finding: '' }),
+      ],
+    });
+    expect(gate.ok).toBe(true);
+    expect(gate.warnings.length).toBe(3);
+  });
+
+  it('treats the mid-word-cut heuristic as a warning, not a fatal violation', () => {
+    const cut = `${'x'.repeat(63)} crawle`;
+    const gate = runReportQaGate({ issues: [issue({ finding: cut })] });
+    expect(gate.ok).toBe(true);
+    expect(gate.warnings[0]?.rule).toBe('garbled_text');
+  });
+
+  it('resolves repeated contradictions to a fixpoint', () => {
+    const { issues, resolutions } = resolveReportContradictions([
+      issue({ checkId: 'ai-crawler-access', status: 'PASS', finding: 'robots.txt allows all AI search agents.' }),
+      issue({ checkId: 'other-a', status: 'FAIL', passed: false, finding: 'robots.txt blocks OAI-SearchBot from the site.' }),
+      issue({ checkId: 'other-b', status: 'FAIL', passed: false, finding: 'robots.txt blocks PerplexityBot entirely.' }),
+    ]);
+    expect(resolutions.length).toBe(2);
+    expect(issues.filter((i) => i.status === 'NOT_EVALUATED')).toHaveLength(2);
+    const gate = runReportQaGate({ issues });
+    expect(gate.violations.filter((v) => v.rule === 'contradiction')).toHaveLength(0);
   });
 
   it('blocks on unresolved contradictions', () => {

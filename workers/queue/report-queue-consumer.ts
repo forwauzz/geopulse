@@ -121,31 +121,6 @@ function issuesAsWeightedResults(pages: readonly { issues_json: unknown }[]): We
   return results;
 }
 
-function topFailedIssuesFromPages(
-  pages: readonly { issues_json: unknown }[]
-): Record<string, unknown>[] {
-  const seen = new Set<string>();
-  const allFailed: Record<string, unknown>[] = [];
-
-  for (const p of pages) {
-    if (!Array.isArray(p.issues_json)) continue;
-    for (const x of p.issues_json) {
-      if (x === null || typeof x !== 'object') continue;
-      const rec = x as Record<string, unknown>;
-      if (rec['passed'] !== false) continue;
-      const key = String(rec['checkId'] ?? rec['check'] ?? '');
-      if (key && seen.has(key)) continue;
-      if (key) seen.add(key);
-      allFailed.push(rec);
-    }
-  }
-
-  allFailed.sort(
-    (a, b) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0)
-  );
-  return allFailed.slice(0, 3);
-}
-
 function statusRank(status: string | undefined): number {
   switch (status) {
     case 'FAIL':
@@ -656,11 +631,11 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   const aggregateScore = averageScores(scores);
   const aggLetter = letterGrade(aggregateScore);
 
-  const issuesForScan = topFailedIssuesFromPages(pages);
   const allIssuesRaw = buildSitewideIssueSummaryFromPages(pages);
 
-  // Spec C1: resolve contradictory finding pairs before anything renders, then hold the
-  // report at the QA gate — a PDF with irreconcilable numbers or garbled text never ships.
+  // Spec C1: resolve contradictory finding pairs before ANY surface derives from the
+  // issues — email top-3, scans.issues_json, PDF highlights, and the full report must
+  // all see the same resolved set, then the QA gate holds the render on violations.
   const contradictionResult = resolveReportContradictions(allIssuesRaw as GateIssue[]);
   const allIssuesForReport = contradictionResult.issues as Record<string, unknown>[];
   if (contradictionResult.resolutions.length > 0) {
@@ -669,6 +644,14 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       resolutions: contradictionResult.resolutions.join(' | '),
     });
   }
+
+  const issuesForScan = allIssuesForReport
+    .filter((r) => {
+      const status = String(r['status'] ?? '').toUpperCase();
+      return r['passed'] === false && status !== 'NOT_EVALUATED' && status !== 'BLOCKED';
+    })
+    .sort((a, b) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0))
+    .slice(0, 3);
 
   const { data: runCoverage } = await supabase
     .from('scan_runs')
@@ -752,6 +735,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   });
 
   const gate = runReportQaGate({ issues: payload.allIssues as GateIssue[] });
+  if (gate.warnings.length > 0) {
+    structuredLog('report_qa_gate_warnings', {
+      scanId: job.scanId,
+      warnings: gate.warnings.map((v) => `${v.rule}: ${v.detail}`).join(' | '),
+    });
+  }
   if (!gate.ok) {
     structuredLog('report_qa_gate_failed', {
       scanId: job.scanId,
