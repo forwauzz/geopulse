@@ -35,7 +35,7 @@ describe('buildImmediateWins', () => {
 
     expect(wins).toHaveLength(2);
     expect(wins[0]?.checkId).toBe('ai-crawler-access');
-    expect(wins[0]?.who).toBe('Engineering');
+    expect(wins[0]?.who).toBe('Hosting/Cloudflare admin');
     expect(wins[0]?.what).toBe('Allow AI crawlers to fetch priority pages in robots.txt.');
     expect(wins[0]?.why).toContain('less likely to be reused');
     expect(wins[0]?.how).toContain('Update robots.txt');
