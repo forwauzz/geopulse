@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { DeepAuditCheckout } from '@/components/deep-audit-checkout';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { ScoreReport, type ReportIssue, type ScoreReportData, type ScoreBenchmark } from '@/components/score-report';
 import { CompetitorCompare } from '@/components/competitor-compare';
-import { reportLoadingJourney, resultsLoadingJourney } from '@/lib/client/loading-journeys';
+import { reportLoadingJourneyFor, resultsLoadingJourney } from '@/lib/client/loading-journeys';
 import {
   normalizeDeepAuditCheckoutMode,
   type DeepAuditCheckoutMode,
@@ -66,8 +66,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
   const [shareState, setShareState] = useState<{ label: string; helper: string } | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollStart = useRef<number>(0);
+  const generatingJourney = useMemo(() => reportLoadingJourneyFor(scanId), [scanId]);
   useLongWaitEffect(loading, resultsLoadingJourney);
-  useLongWaitEffect(data?.reportStatus === 'generating', reportLoadingJourney);
+  useLongWaitEffect(data?.reportStatus === 'generating', generatingJourney);
 
   const fetchScan = useCallback(async (): Promise<{ data: ScanData | null; error: LoadError }> => {
     const res = await fetch(`/api/scans/${scanId}`, { cache: 'no-store' });

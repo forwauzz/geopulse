@@ -49,7 +49,15 @@ export const adminLoginLoadingJourney: LongWaitConfig = {
 };
 
 export const reportLoadingJourney: LongWaitConfig = {
-  title: 'Audit status',
-  description: 'We are using the same audit pipeline as the preview, then finishing the full report and delivery steps.',
-  steps: ['Checking payment status', 'Assembling the full audit', 'Preparing report delivery'],
+  title: 'Building your full audit',
+  description: 'We are crawling your site page by page, scoring each one, and assembling the report.',
+  steps: ['Checking the request', 'Assembling the full audit', 'Preparing report delivery'],
 };
+
+/**
+ * Same journey, but bound to a scan so the overlay shows REAL progress — the percentage and the
+ * exact page being reviewed come from `/api/scans/{id}/progress`, not an animation.
+ */
+export function reportLoadingJourneyFor(scanId: string): LongWaitConfig {
+  return { ...reportLoadingJourney, progressUrl: `/api/scans/${scanId}/progress` };
+}

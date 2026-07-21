@@ -5,17 +5,17 @@ import Link from 'next/link';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import {
   ReportSections,
-  ReportSummary,
   SectionChips,
   TocSidebar,
 } from '@/components/report-viewer-sections';
+import { ReportStory } from '@/components/report-story';
 import {
   extractToc,
   splitMarkdownSections,
   type ScanResponse,
   type ViewState,
 } from '@/lib/client/report-viewer';
-import { reportLoadingJourney } from '@/lib/client/loading-journeys';
+import { reportLoadingJourneyFor } from '@/lib/client/loading-journeys';
 
 const REPORT_POLL_INTERVAL_MS = 4000;
 const REPORT_POLL_MAX_MS = 120000;
@@ -26,7 +26,8 @@ export function ReportViewer({ scanId }: { scanId: string }) {
     { status: 'idle' | 'sending' | 'sent' | 'error'; message: string | null }
   >({ status: 'idle', message: null });
   const [activeId, setActiveId] = useState('');
-  useLongWaitEffect(state.phase === 'loading', reportLoadingJourney);
+  const loadingJourney = useMemo(() => reportLoadingJourneyFor(scanId), [scanId]);
+  useLongWaitEffect(state.phase === 'loading', loadingJourney);
 
   useEffect(() => {
     let cancelled = false;
@@ -312,7 +313,7 @@ export function ReportViewer({ scanId }: { scanId: string }) {
               </p>
             </div>
           ) : null}
-          <ReportSummary scan={state.scan} />
+          <ReportStory scan={state.scan} />
           <SectionChips sections={sections} />
           <article>
             <ReportSections sections={sections} />
