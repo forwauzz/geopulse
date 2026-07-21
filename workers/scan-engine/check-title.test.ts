@@ -14,6 +14,8 @@ describe('titleTagCheck', () => {
         jsonLdSnippetCount: 0,
         jsonLdTypes: [],
         jsonLdBlocks: [],
+        htmlLang: null,
+        hreflangEntries: [],
         h1Count: 1,
         h2Count: 0,
         hasViewportMeta: true,

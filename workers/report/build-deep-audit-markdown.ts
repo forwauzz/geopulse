@@ -10,6 +10,8 @@ import {
 } from './deep-audit-report-helpers';
 import { buildOwnerPage } from './owner-page';
 import { OFFSITE_MODULE } from '../../lib/shared/offsite-guidance';
+import { classifyPageTier, sortPagesByTier, TIER_LABELS } from './page-tiers';
+import { assessBuyerQuestionCoverage } from './buyer-question-coverage';
 import { buildCadencePlan } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
 
@@ -284,14 +286,30 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
 
   lines.push('## Pages Scanned');
   lines.push('');
-  for (const pg of payload.pages) {
+  // Money pages first (spec C12).
+  for (const pg of sortPagesByTier(payload.pages)) {
     const sc =
       pg.score !== null && pg.score !== undefined
         ? `${String(pg.score)}/100 (${pg.letterGrade ?? '—'})`
         : '—';
-    lines.push(`- **${pg.url}** — ${sc}${pg.section ? ` — _section ${pg.section}_` : ''}`);
+    lines.push(`- **${pg.url}** — ${sc} — _${TIER_LABELS[classifyPageTier(pg.url)]}_${pg.section ? ` — _section ${pg.section}_` : ''}`);
   }
   lines.push('');
+
+  if (payload.pages.length > 1) {
+    const coverage = assessBuyerQuestionCoverage(payload.pages);
+    lines.push('## Buyer-Question Coverage');
+    lines.push('');
+    lines.push('Prospects ask AI engines four kinds of questions. This is whether your site gives engines anything to answer with.');
+    lines.push('');
+    for (const gap of coverage.gaps) {
+      const label = gap.category.charAt(0).toUpperCase() + gap.category.slice(1);
+      lines.push(`- **${label} coverage: ${gap.covered ? 'Covered' : 'GAP'}** — ${markdownInline(gap.evidence)}${gap.covered ? '' : ` Do: ${markdownInline(gap.action)}`}`);
+    }
+    lines.push('');
+    lines.push(`_${coverage.note}_`);
+    lines.push('');
+  }
 
   if (repeatedPagePatterns.length > 0) {
     lines.push('## Repeated Page Patterns');

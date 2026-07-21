@@ -131,6 +131,18 @@ export const CHECK_CATALOG: readonly CatalogEntry[] = [
     weight: 2,
     whyItMatters: 'Citing real sources signals researched, trustworthy content.',
   },
+  {
+    id: 'information-gain',
+    bucket: 'understanding',
+    weight: 3,
+    whyItMatters: 'Engines cite what is distinct: original numbers, case studies, and specifics beat templated agency copy every time.',
+  },
+  {
+    id: 'hreflang-parity',
+    bucket: 'understanding',
+    weight: 2,
+    whyItMatters: 'For bilingual audiences (EN/FR), coherent hreflang decides which language version engines show — broken annotations split your identity.',
+  },
   // ── Bucket C — Website Hygiene (reported, NOT in the AI score) ──────────────
   {
     id: 'meta-description',

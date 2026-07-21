@@ -147,6 +147,17 @@ export function parsePageSignals(html: string): PageSignals {
     }
   }
 
+  const htmlLang = firstMatch(h, /<html[^>]+lang=["']([^"']+)["']/i);
+  const hreflangEntries: { lang: string; href: string }[] = [];
+  const altRe = /<link[^>]+rel=["']alternate["'][^>]*>/gi;
+  let altMatch: RegExpExecArray | null;
+  while ((altMatch = altRe.exec(h)) !== null) {
+    const tag = altMatch[0];
+    const lang = /hreflang=["']([^"']+)["']/i.exec(tag)?.[1];
+    const href = /href=["']([^"']+)["']/i.exec(tag)?.[1];
+    if (lang && href) hreflangEntries.push({ lang: lang.toLowerCase(), href });
+  }
+
   return {
     title,
     metaDescription,
@@ -170,5 +181,7 @@ export function parsePageSignals(html: string): PageSignals {
     imagesWithoutAlt,
     publishedDate,
     modifiedDate,
+    htmlLang,
+    hreflangEntries,
   };
 }
