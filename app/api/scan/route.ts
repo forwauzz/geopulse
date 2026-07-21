@@ -276,6 +276,9 @@ export async function POST(request: Request): Promise<Response> {
       full_results_json: {
         issues: scan.output.issues,
         categoryScores: scan.output.categoryScores,
+        bucketScores: scan.output.bucketScores,
+        checkCatalogVersion: scan.output.checkCatalogVersion,
+        eligibility: scan.output.eligibility,
         accessMatrix: scan.output.accessMatrix,
         scoreState: 'measured',
         // The page's own words, kept so agents can ground generation in what the site actually
@@ -326,6 +329,8 @@ export async function POST(request: Request): Promise<Response> {
     letterGrade: scan.output.letterGrade,
     scoreState: 'measured',
     accessMatrix: scan.output.accessMatrix,
+    bucketScores: scan.output.bucketScores,
+    eligibility: scan.output.eligibility,
     topIssues: scan.output.topIssues,
     categoryScores: scan.output.categoryScores,
     finalUrl: scan.finalUrl,

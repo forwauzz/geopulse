@@ -11,7 +11,7 @@ import type { FreeScanOutput, ScanIssueJson } from '../../workers/scan-engine/ru
 function issue(partial: Partial<ScanIssueJson>): ScanIssueJson {
   return {
     check: 'Check', checkId: 'c', weight: 10, passed: false, status: 'FAIL',
-    category: 'ai_readiness', finding: 'missing', fix: 'add it', ...partial,
+    category: 'ai_readiness', bucket: 'eligibility', finding: 'missing', fix: 'add it', ...partial,
   };
 }
 
@@ -48,6 +48,8 @@ describe('buildImprovementPlan', () => {
     score: 60,
     letterGrade: 'D',
     categoryScores: [],
+    bucketScores: [],
+    checkCatalogVersion: 'test',
     topIssues: [],
     issues: [
       issue({ checkId: 'pass1', passed: true, weight: 20 }),

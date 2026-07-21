@@ -15,6 +15,8 @@ export type PublicShareScanRow = {
   topIssues: unknown[];
   issues: unknown[];
   categoryScores: unknown[];
+  bucketScores: unknown[];
+  eligibility: unknown | null;
   accessMatrix: unknown | null;
   scoreState: 'measured' | 'not_tested';
   hasPaidReport: boolean;
@@ -117,6 +119,8 @@ export async function getScanForPublicShare(
 
   const fullResults = data.full_results_json as {
     categoryScores?: unknown[];
+    bucketScores?: unknown[];
+    eligibility?: unknown;
     accessMatrix?: unknown;
     scoreState?: string;
   } | null;
@@ -132,6 +136,8 @@ export async function getScanForPublicShare(
       issues: fullIssueListFromScan(data.issues_json, data.full_results_json),
       categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
       accessMatrix: fullResults?.accessMatrix ?? null,
+      bucketScores: Array.isArray(fullResults?.bucketScores) ? fullResults.bucketScores : [],
+      eligibility: fullResults?.eligibility ?? null,
       scoreState: fullResults?.scoreState === 'not_tested' ? 'not_tested' : 'measured',
       hasPaidReport: hasPaid,
       reportStatus,

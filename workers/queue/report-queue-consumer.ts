@@ -21,6 +21,7 @@ import { MAX_DEEP_AUDIT_PAGE_LIMIT } from '../../lib/server/deep-audit-page-limi
 import { browserRenderConfigFromEnv } from '../scan-engine/browser-rendering';
 import { parseCrawlPending, runDeepAuditCrawl } from '../scan-engine/deep-audit-crawl';
 import { computeCategoryScores, letterGrade, type WeightedResult } from '../scan-engine/scoring';
+import { bucketOf } from '../scan-engine/check-catalog';
 import { replayReportJobFromDlq } from './dlq-replay';
 import { resolveStartupRolloutFlagsFromMetadata } from '../../lib/server/startup-rollout-flags';
 import { resolveStartupWorkspaceBundleKey } from '../../lib/server/startup-github-integration';
@@ -102,13 +103,15 @@ function issuesAsWeightedResults(pages: readonly { issues_json: unknown }[]): We
     for (const x of p.issues_json) {
       if (x === null || typeof x !== 'object') continue;
       const rec = x as Record<string, unknown>;
+      const id = String(rec['checkId'] ?? rec['check'] ?? '');
       results.push({
-        id: String(rec['checkId'] ?? rec['check'] ?? ''),
+        id,
         passed: rec['passed'] === true,
         status: (rec['status'] as WeightedResult['status']) ?? (rec['passed'] === true ? 'PASS' : 'FAIL'),
         finding: String(rec['finding'] ?? ''),
         weight: typeof rec['weight'] === 'number' ? rec['weight'] : 0,
         category: (rec['category'] as WeightedResult['category']) ?? 'ai_readiness',
+        bucket: (rec['bucket'] as WeightedResult['bucket']) ?? bucketOf(id),
         confidence: rec['confidence'] as WeightedResult['confidence'],
       });
     }

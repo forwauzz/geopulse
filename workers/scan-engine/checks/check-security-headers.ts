@@ -38,8 +38,8 @@ export const securityHeadersCheck: AuditCheck = {
       id: 'security-headers',
       passed,
       status: passed ? 'WARNING' : 'FAIL',
-      finding: `Missing security headers: ${missing.join(', ')}. Present: ${present.length > 0 ? present.join(', ') : 'none'}.`,
-      fix: `Add the missing security headers (${missing.join(', ')}) to strengthen your site's trust profile.`,
+      finding: `Missing security headers: ${missing.join(', ')}. Present: ${present.length > 0 ? present.join(', ') : 'none'}. This is website hygiene — worth fixing, but it does not affect whether AI engines cite you.`,
+      fix: `Add the missing security headers (${missing.join(', ')}). Good practice for visitors and browsers; not a citation lever.`,
     };
   },
 };

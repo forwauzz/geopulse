@@ -106,6 +106,8 @@ export async function GET(
 
         const fullResults = scan.full_results_json as {
           categoryScores?: unknown[];
+          bucketScores?: unknown[];
+          eligibility?: unknown;
           accessMatrix?: unknown;
           scoreState?: string;
         } | null;
@@ -121,6 +123,8 @@ export async function GET(
           benchmark,
           categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
           accessMatrix: fullResults?.accessMatrix ?? null,
+          bucketScores: Array.isArray(fullResults?.bucketScores) ? fullResults.bucketScores : [],
+          eligibility: fullResults?.eligibility ?? null,
           scoreState: fullResults?.scoreState === 'not_tested' ? 'not_tested' : 'measured',
           hasPaidReport: hasPaid,
           reportStatus,
@@ -196,6 +200,8 @@ export async function GET(
     benchmark,
     categoryScores: data.categoryScores,
     accessMatrix: data.accessMatrix,
+    bucketScores: data.bucketScores,
+    eligibility: data.eligibility,
     scoreState: data.scoreState,
     hasPaidReport: data.hasPaidReport,
     reportStatus: data.reportStatus,

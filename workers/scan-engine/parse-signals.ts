@@ -70,11 +70,17 @@ export function parsePageSignals(html: string): PageSignals {
   const jsonLdSnippetCount = countMatches(h, /<script[^>]+type=["']application\/ld\+json["'][^>]*>/gi);
 
   const jsonLdTypes: string[] = [];
+  const jsonLdBlocks: unknown[] = [];
+  const MAX_LD_BLOCKS = 12;
   const ldBlockRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let ldMatch: RegExpExecArray | null;
   while ((ldMatch = ldBlockRe.exec(h)) !== null) {
     try {
       const parsed: unknown = JSON.parse(ldMatch[1] ?? '');
+      if (jsonLdBlocks.length < MAX_LD_BLOCKS) {
+        if (Array.isArray(parsed)) jsonLdBlocks.push(...parsed.slice(0, MAX_LD_BLOCKS - jsonLdBlocks.length));
+        else jsonLdBlocks.push(parsed);
+      }
       const extractType = (obj: unknown): void => {
         if (obj && typeof obj === 'object' && '@type' in (obj as Record<string, unknown>)) {
           const t = (obj as Record<string, unknown>)['@type'];
@@ -146,6 +152,7 @@ export function parsePageSignals(html: string): PageSignals {
     ogDescription,
     jsonLdSnippetCount,
     jsonLdTypes,
+    jsonLdBlocks,
     h1Count,
     h2Count,
     hasViewportMeta,
