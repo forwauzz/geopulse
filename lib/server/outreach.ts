@@ -10,6 +10,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { buildAuditLlm } from './fix-agent-run';
+import { ctaButton, emailShell, escapeEmailHtml, issueListHtml, scoreBlock } from './email-theme';
 import { renderOutreachTemplate, resolveOutreachTemplate } from './outreach-templates';
 import { structuredLog } from './structured-log';
 
@@ -108,35 +109,21 @@ export function buildOutreachEmailHtml(args: {
   readonly pixelUrl: string;
   readonly unsubscribeUrl: string;
 }): string {
-  const greeting = args.recipientName ? `Hi ${args.recipientName},` : 'Hi,';
-  const issuesHtml = args.topIssues
-    .slice(0, 3)
-    .map(
-      (issue) =>
-        `<li style="margin-bottom:8px;"><strong>${issue.check ?? 'Check'}</strong>${
-          issue.fix ? `<br/><span style="color:#555;">${issue.fix}</span>` : ''
-        }</li>`
-    )
-    .join('');
-
-  return [
-    '<div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#1a1a1a;">',
-    `<p style="letter-spacing:0.2em;font-size:11px;color:#8a7a4a;">GEO-PULSE · AI SEARCH READINESS</p>`,
-    `<p>${greeting}</p>`,
-    `<p>We ran an AI-readiness audit of <strong>${args.domain}</strong> — how clearly AI engines like ChatGPT and Gemini can read, understand and cite your site.</p>`,
-    `<div style="border:1px solid #e5e0d5;border-radius:12px;padding:20px;text-align:center;margin:20px 0;">`,
-    `<div style="font-size:44px;font-weight:bold;">${args.score}<span style="font-size:18px;color:#777;">/100</span></div>`,
-    `<div style="font-size:13px;letter-spacing:0.15em;color:#777;">GRADE ${args.grade}</div>`,
-    `</div>`,
-    issuesHtml ? `<p style="margin-bottom:6px;"><strong>The biggest opportunities we found:</strong></p><ul style="padding-left:18px;">${issuesHtml}</ul>` : '',
-    `<p style="margin:24px 0;"><a href="${args.resultsUrl}" style="background:#565e74;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;">See your full report</a></p>`,
-    `<p style="color:#777;font-size:13px;">The full report shows every check, what it means, and exactly what to change. No account needed to view it.</p>`,
-    `<p style="color:#999;font-size:12px;">— GEO-Pulse · editorial intelligence for AI search readiness<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:#999;">getgeopulse.com</a></p>`,
-    // CASL: every commercial email carries a working unsubscribe (issue #97).
-    `<p style="color:#999;font-size:11px;">No longer want these audits? <a href="${args.unsubscribeUrl}" style="color:#999;">Unsubscribe</a> — one click, effective immediately.</p>`,
-    `<img src="${args.pixelUrl}" width="1" height="1" alt="" style="display:block;" />`,
-    '</div>',
-  ].join('\n');
+  const greeting = args.recipientName ? `Hi ${escapeEmailHtml(args.recipientName)},` : 'Hi,';
+  return emailShell({
+    kicker: 'AI search readiness · complimentary audit',
+    mastheadNote: 'Prepared for your team',
+    bodyHtml: [
+      `<p style="margin:0 0 10px;">${greeting}</p>`,
+      `<p style="margin:0 0 14px;">We ran an AI-readiness audit of <strong>${escapeEmailHtml(args.domain)}</strong> — how clearly AI engines like ChatGPT, Gemini and Perplexity can read, understand and cite your site.</p>`,
+      scoreBlock(args.score, args.grade, 'Your AI search readiness'),
+      issueListHtml(args.topIssues),
+      ctaButton('See your full report', args.resultsUrl),
+      `<p style="margin:0;color:#586162;font-size:13px;">The full report shows every check, what it means for your business, and exactly what to change — with copy-paste fixes. No account needed to view it.</p>`,
+    ].join('\n'),
+    unsubscribeUrl: args.unsubscribeUrl,
+    pixelUrl: args.pixelUrl,
+  });
 }
 
 async function sendOutreachEmail(

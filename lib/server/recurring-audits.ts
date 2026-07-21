@@ -6,6 +6,7 @@
  * 'recurring'), and advances the schedule. Pure schedule math is unit-tested.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ctaButton, emailShell, escapeEmailHtml, scoreBlock } from './email-theme';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
@@ -134,15 +135,17 @@ async function sendRecurringAuditEmail(
   if (!key || !from) return;
   const base = (env.NEXT_PUBLIC_APP_URL?.trim() || 'https://getgeopulse.com').replace(/\/$/, '');
   const link = `${base}/results/${scanId}`;
-  const html = [
-    '<div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:0 auto;color:#111">',
-    '<h2 style="font-size:18px;margin:0 0 8px">Your scheduled GEO-Pulse audit is ready</h2>',
-    `<p style="margin:0 0 4px;color:#555">${scanUrl}</p>`,
-    `<p style="font-size:40px;font-weight:800;margin:8px 0;letter-spacing:-1px">${score}<span style="font-size:16px;color:#888">/100 · ${letterGrade}</span></p>`,
-    `<p style="margin:16px 0"><a href="${link}" style="background:#111;color:#fff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">View the full report</a></p>`,
-    '<p style="font-size:12px;color:#999;margin-top:20px">You’re getting this because you set up a recurring audit. Manage it in your GEO-Pulse settings.</p>',
-    '</div>',
-  ].join('');
+  const html = emailShell({
+    kicker: 'Scheduled audit · AI search readiness',
+    mastheadNote: 'Recurring audit',
+    bodyHtml: [
+      `<p style="margin:0 0 6px;">Your scheduled audit of <strong>${escapeEmailHtml(scanUrl)}</strong> just finished.</p>`,
+      scoreBlock(score, letterGrade, 'AI search readiness'),
+      ctaButton('View the full report', link),
+      `<p style="margin:0;color:#586162;font-size:13px;">The full report shows every check, what it means for your business, and exactly what to change.</p>`,
+    ].join('\n'),
+    footerNote: 'You are getting this because you set up a recurring audit. Manage it in your GEO-Pulse dashboard.',
+  });
   try {
     await fetch('https://api.resend.com/emails', {
       signal: AbortSignal.timeout(15_000),

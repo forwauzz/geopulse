@@ -12,6 +12,7 @@
  * Pure helpers (config/plan/report) are unit-tested; the orchestration touches Supabase + Resend.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { EMAIL_COLORS, emailShell, issueListHtml, scoreBlock } from './email-theme';
 import { runFreeScan, type FreeScanOutput, type ScanIssueJson } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
@@ -138,40 +139,24 @@ export function buildSelfImprovementReportHtml(input: {
   plan: ImprovementItem[];
   dateStr: string;
 }): string {
-  const rows = input.plan.length === 0
-    ? '<p style="color:#586162;">No actionable failures — the site is in good shape today.</p>'
-    : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E5E9E9;border-radius:6px;border-collapse:collapse;">
-        <tr style="background:#F1F4F4;">
-          <th style="padding:6px 8px;text-align:left;font-size:12px;">Priority</th>
-          <th style="padding:6px 8px;text-align:left;font-size:12px;">Check</th>
-          <th style="padding:6px 8px;text-align:left;font-size:12px;">Fix</th>
-        </tr>
-        ${input.plan.map((p, i) => `<tr>
-          <td style="padding:4px 8px;font-size:13px;font-weight:700;">${String(i + 1)}</td>
-          <td style="padding:4px 8px;font-size:13px;">${esc(p.check)}</td>
-          <td style="padding:4px 8px;font-size:13px;color:#2C3435;">${esc(p.fix)}</td>
-        </tr>`).join('')}
-      </table>`;
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
-<body style="margin:0;padding:0;background:#F1F4F4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F1F4F4;padding:32px 0;"><tr><td align="center">
-<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:12px;overflow:hidden;max-width:640px;">
-  <tr><td style="background:#565E74;padding:24px 32px;">
-    <span style="color:#fff;font-size:20px;font-weight:700;">GEO-Pulse</span>
-    <span style="color:rgba(255,255,255,0.7);font-size:13px;margin-left:12px;">Daily Self-Improvement Report</span>
-  </td></tr>
-  <tr><td style="padding:24px 32px 8px;">
-    <h2 style="margin:0;color:#2C3435;font-size:18px;">${esc(input.targetUrl)}</h2>
-    <p style="margin:6px 0 0;color:#586162;font-size:14px;">AI visibility score: <strong style="font-size:22px;color:#2C3435;">${String(input.score)}</strong> / 100 · Grade ${esc(input.letterGrade)}</p>
-  </td></tr>
-  <tr><td style="padding:8px 32px 24px;">
-    <h3 style="margin:0 0 8px;color:#565E74;font-size:14px;text-transform:uppercase;letter-spacing:1px;">Improvement Plan</h3>
-    ${rows}
-  </td></tr>
-  <tr><td style="padding:24px 32px;border-top:1px solid #F1F4F4;">
-    <p style="color:#ABB4B5;font-size:11px;margin:0;">Generated ${esc(input.dateStr)} · Autonomous self-improvement loop (Loop 5a)</p>
-  </td></tr>
-</table></td></tr></table></body></html>`;
+  const planHtml =
+    input.plan.length === 0
+      ? '<p style="margin:16px 0 0;color:#586162;">No actionable failures — the site is in good shape today. The loop keeps watching.</p>'
+      : issueListHtml(
+          input.plan.map((p) => ({ check: p.check, fix: p.fix })),
+          'Improvement plan'
+        );
+
+  return emailShell({
+    kicker: 'Daily self-audit · getgeopulse.com watches itself',
+    mastheadNote: 'Self-improvement loop',
+    bodyHtml: [
+      `<p style="margin:0 0 6px;"><a href="${input.targetUrl}" style="color:${EMAIL_COLORS.primary};font-weight:700;text-decoration:none;">${esc(input.targetUrl)}</a></p>`,
+      scoreBlock(input.score, input.letterGrade, 'AI visibility score'),
+      planHtml,
+    ].join('\n'),
+    footerNote: `Generated ${input.dateStr} · Autonomous self-improvement loop (Loop 5a)`,
+  });
 }
 
 export type SendResult = { ok: true; id?: string } | { ok: false; reason: string };
