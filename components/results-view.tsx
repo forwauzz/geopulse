@@ -17,6 +17,7 @@ import { ScoringExplainer, type BucketScoreData, type EligibilityData } from '@/
 import { IndexationGuidanceCard } from '@/components/indexation-guidance';
 import { CadencePlanCard } from '@/components/cadence-plan';
 import { FixPackCard } from '@/components/fix-pack';
+import { OffsiteModuleCard } from '@/components/offsite-module';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -324,6 +325,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
 
           {/* Eligible vs actually indexed (spec C5) */}
           <IndexationGuidanceCard />
+
+          {/* Off-site / local / entity levers, per engine (spec C8) */}
+          <OffsiteModuleCard />
 
           {/* Report being generated */}
           {data.reportStatus === 'generating' && (

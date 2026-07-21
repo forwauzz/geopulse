@@ -9,6 +9,7 @@ import {
   type IssueRow,
 } from './deep-audit-report-helpers';
 import { buildOwnerPage } from './owner-page';
+import { OFFSITE_MODULE } from '../../lib/shared/offsite-guidance';
 import { buildCadencePlan } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
 
@@ -387,6 +388,23 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
       lines.push('');
     }
   }
+
+  // Off-site / local / entity levers, per engine (spec C8).
+  lines.push(`## ${OFFSITE_MODULE.headline}`);
+  lines.push('');
+  lines.push(OFFSITE_MODULE.intro);
+  lines.push('');
+  for (const lever of OFFSITE_MODULE.levers) {
+    lines.push(`### ${lever.title} — helps: ${lever.engines.join(', ')}`);
+    lines.push('');
+    lines.push(`- **Owner:** ${lever.ownerRole}`);
+    lines.push(`- **Do:** ${markdownInline(lever.what)}`);
+    lines.push(`- **Why:** ${markdownInline(lever.why)}`);
+    if (lever.stat) lines.push(`- **Evidence:** ${markdownInline(lever.stat.claim)} — _${lever.stat.source}_`);
+    lines.push('');
+  }
+  lines.push(`_${OFFSITE_MODULE.reviewsNote}_`);
+  lines.push('');
 
   // The report ends with the dated plan + re-scan hook (spec C11).
   lines.push('## Your Next 90 Days');

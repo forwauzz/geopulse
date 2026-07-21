@@ -21,6 +21,7 @@ import { deriveCheckCounts, describeCheckCounts, type CheckCounts } from './chec
 import { truncateAtWord } from './report-qa-gate';
 import { INDEXATION_GUIDANCE } from './indexation-guidance';
 import { buildOwnerPage, type OwnerPageData } from './owner-page';
+import { OFFSITE_MODULE } from '../../lib/shared/offsite-guidance';
 import { buildCadencePlan, type CadencePhase } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
 
@@ -719,6 +720,25 @@ class PdfBuilder {
     this.y -= 8;
   }
 
+  drawOffsiteModule(): void {
+    this.drawSectionTitle(OFFSITE_MODULE.headline);
+    this.drawText(OFFSITE_MODULE.intro, 9, false, MUTED);
+    this.y -= 4;
+    for (const lever of OFFSITE_MODULE.levers) {
+      this.ensureSpace(50);
+      this.drawText(`${lever.title}  [helps: ${lever.engines.join(', ')}]`, 9, true, PRIMARY);
+      this.drawText(`Owner: ${lever.ownerRole}`, 8, false, MUTED, 12);
+      this.drawText(lever.what, 8, false, INK, 12);
+      this.drawText(lever.why, 8, false, MUTED, 12);
+      if (lever.stat) {
+        this.drawText(`${lever.stat.claim} — ${lever.stat.source}`, 7, false, MUTED, 12);
+      }
+      this.y -= 4;
+    }
+    this.drawText(OFFSITE_MODULE.reviewsNote, 8, false, MUTED);
+    this.y -= 8;
+  }
+
   drawIndexationGuidance(): void {
     this.drawSectionTitle(INDEXATION_GUIDANCE.headline);
     this.drawText(INDEXATION_GUIDANCE.explanation, 9, false, MUTED);
@@ -875,6 +895,7 @@ export async function buildDeepAuditPdf(input: {
   }
   pdf.drawActionPlan(failedSorted);
   pdf.drawIndexationGuidance();
+  pdf.drawOffsiteModule();
   pdf.drawDemandCoverage(allIssues);
   pdf.drawCoverageSummary(input.coverageSummary);
 
