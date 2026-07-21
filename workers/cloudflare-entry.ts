@@ -124,6 +124,15 @@ export default {
 
   async scheduled(_event: ScheduledEvent, env: CloudflareEnv, _ctx: ExecutionContext): Promise<void> {
     registerSelfAuditFetch(env);
+
+    // Stage heartbeat (issue #92 follow-up): the hourly handler has died mid-sequence
+    // before, silently starving everything after the killer stage. One info log per
+    // stage means the LAST heartbeat in app_logs names the stage that ate the tick.
+    const cronStartMs = Date.now();
+    const stage = (name: string): void => {
+      structuredLog('cron_stage', { stage: name, msElapsed: Date.now() - cronStartMs }, 'info');
+    };
+
     try {
       await pingSupabaseKeepAlive(env);
     } catch {
@@ -168,6 +177,7 @@ export default {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
+        stage('distribution');
         await runScheduledDistributionDispatch(supabase as any, env as any);
       } catch (err) {
         structuredError('distribution_schedule_worker_error', {
@@ -179,6 +189,7 @@ export default {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
+        stage('startup_slack');
         await runScheduledStartupSlackAutoPost({
           supabase: supabase as any,
           env: env as any,
@@ -193,6 +204,7 @@ export default {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
+        stage('startup_execution');
         await runScheduledStartupExecutionDispatch({
           supabase: supabase as any,
           env: env as any,
@@ -208,6 +220,7 @@ export default {
           auth: { persistSession: false, autoRefreshToken: false },
         });
         const envRecord = env as unknown as Record<string, string | undefined>;
+        stage('gpm');
         const gpmEnv = {
           GPM_SCHEDULE_ENABLED:    envRecord['GPM_SCHEDULE_ENABLED'],
           GPM_CHATGPT_MODEL_ID:    envRecord['GPM_CHATGPT_MODEL_ID'],
@@ -250,6 +263,7 @@ export default {
       try {
         const selfEnv = env as unknown as SelfImprovementEnvLike;
         const selfCfg = resolveSelfImprovementEnvConfig(selfEnv);
+        stage('self_improvement');
         if (new Date().getUTCHours() === selfCfg.hourUtc) {
           const supabase = createClient(supaUrl, supaKey, {
             auth: { persistSession: false, autoRefreshToken: false },
@@ -280,6 +294,7 @@ export default {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
+        stage('recurring_audits');
         const result = await runDueRecurringAudits({
           supabase,
           env: env as unknown as RecurringEnvLike,
@@ -303,6 +318,7 @@ export default {
       // watchlist. Draft-only: it queues proposals for human review and never touches any
       // scan, report, or config path. Quiet no-op until migration 055 is applied.
       try {
+        stage('research');
         const researchDue = isMonday && new Date().getUTCHours() === 14;
         const researchSupabase = researchDue
           ? createClient(supaUrl, supaKey, { auth: { persistSession: false, autoRefreshToken: false } })
@@ -351,6 +367,7 @@ export default {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
+        stage('outreach');
         const result = (await isAgentEnabled(supabase, 'outreach_sweep', { failOpen: true }))
           ? await runDueOutreach({
               supabase,
@@ -382,6 +399,7 @@ export default {
           const supabase = createClient(supaUrl, supaKey, {
             auth: { persistSession: false, autoRefreshToken: false },
           });
+          stage('marketing_autopilot');
           const result = await runMarketingAutopilot({
             supabase,
             env: mktEnv,
@@ -409,6 +427,7 @@ export default {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
+        stage('benchmark');
         await runScheduledBenchmarkSweep({
           supabase,
           env,
@@ -426,6 +445,7 @@ export default {
       // covers all UTC offsets that map to that local hour year-round; this gate
       // picks the right one. Skipped when no recipient or Resend key is configured.
       const envRecord = env as unknown as Record<string, string | undefined>;
+      stage('recap');
       const recapTo = envRecord['BENCHMARK_DAILY_RECAP_TO'];
       const recapHourRaw = envRecord['BENCHMARK_DAILY_RECAP_HOUR_LOCAL'];
       const recapHour = Number.parseInt(recapHourRaw ?? '19', 10);

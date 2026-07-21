@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
-import { parseProspectImport } from '@/lib/server/outreach-import';
+import { normalizeProspectUrl, parseProspectImport } from '@/lib/server/outreach-import';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import {
   normalizeOutreachCadence,
@@ -17,18 +17,30 @@ export async function addOutreachProspect(formData: FormData): Promise<void> {
   if (!ctx.ok) return;
 
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
-  const url = String(formData.get('url') ?? '').trim();
+  // Same normalization as the importer, so the same site always stores identically —
+  // a raw-vs-normalized mismatch would let a re-add slip past the consent guard.
+  const url = normalizeProspectUrl(String(formData.get('url') ?? ''));
   const name = String(formData.get('name') ?? '').trim() || null;
   const company = String(formData.get('company') ?? '').trim() || null;
   const cadence = normalizeOutreachCadence(String(formData.get('cadence') ?? ''));
   const templateId = String(formData.get('templateId') ?? '').trim() || null;
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
-  } catch {
-    return;
+  if (!url) return;
+
+  // CASL (issue #97): withdrawal of consent belongs to the EMAIL ADDRESS, not to one
+  // (email, url) pair — an opted-out person must not be re-added under a different site.
+  {
+    const { data: existing, error } = await ctx.adminDb
+      .from('outreach_prospects')
+      .select('id')
+      .eq('email', email)
+      .not('unsubscribed_at', 'is', null)
+      .limit(1);
+    if (!error && Array.isArray(existing) && existing.length > 0) {
+      structuredLog('outreach_prospect_add_blocked_unsubscribed', { email_domain: email.split('@')[1] ?? '' }, 'info');
+      return;
+    }
   }
 
   const row: Record<string, unknown> = {
@@ -91,7 +103,26 @@ export async function importOutreachProspects(formData: FormData): Promise<void>
   let imported = 0;
   let failed = 0;
 
+  // CASL (issue #97): a re-imported list must never resurrect unsubscribed contacts.
+  // Consent withdrawal belongs to the EMAIL — any unsubscribed row blocks that address
+  // under every URL. Fail-soft pre-migration-056: the select errors, the set stays
+  // empty, imports proceed.
+  let unsubscribedEmails = new Set<string>();
+  {
+    const { data, error } = await ctx.adminDb
+      .from('outreach_prospects')
+      .select('email,unsubscribed_at')
+      .not('unsubscribed_at', 'is', null);
+    if (!error && Array.isArray(data)) {
+      unsubscribedEmails = new Set(data.map((r: { email: string }) => r.email.toLowerCase()));
+    }
+  }
+
   for (const row of parsed.rows) {
+    if (unsubscribedEmails.has(row.email)) {
+      failed += 1; // surfaces in the "skipped" count; the contact opted out
+      continue;
+    }
     const base: Record<string, unknown> = {
       email: row.email,
       url: row.url,

@@ -77,6 +77,18 @@ describe('renderOutreachTemplate (spec §9)', () => {
     expect(out.html).toContain('https://x.com/api/outreach/open/abc');
   });
 
+  it('carries the CASL unsubscribe link and sender identification in every templated send (issue #97)', () => {
+    const out = renderOutreachTemplate(
+      { subjectTemplate: 's', bodyFormat: 'html', bodyTemplate: '<h1>fully custom</h1>' },
+      SAMPLE_TEMPLATE_VARS,
+      'px',
+      'https://x.com/api/outreach/unsubscribe/p-1'
+    );
+    expect(out.html).toContain('https://x.com/api/outreach/unsubscribe/p-1');
+    expect(out.html).toContain('Unsubscribe');
+    expect(out.html).toContain('Montréal, Québec, Canada');
+  });
+
   it('paragraphizes plain-text bodies on blank lines', () => {
     const out = renderOutreachTemplate(
       { subjectTemplate: 's', bodyFormat: 'text', bodyTemplate: 'One.\n\nTwo.\nStill two.' },

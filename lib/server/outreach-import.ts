@@ -33,6 +33,11 @@ export interface ImportParseResult {
 const MAX_ROWS = 500;
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+/** Shared by the importer AND the add-prospect form so the same site always stores identically. */
+export function normalizeProspectUrl(raw: string): string | null {
+  return normalizeUrl(raw);
+}
+
 function normalizeUrl(raw: string): string | null {
   let candidate = raw.trim();
   if (!candidate) return null;

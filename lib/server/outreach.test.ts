@@ -38,6 +38,7 @@ describe('buildOutreachEmailHtml', () => {
     ],
     resultsUrl: 'https://getgeopulse.com/results/abc',
     pixelUrl: 'https://getgeopulse.com/api/outreach/open/send-1',
+    unsubscribeUrl: 'https://getgeopulse.com/api/outreach/unsubscribe/p-1',
   };
 
   it('includes the score, greeting, report link and tracking pixel', () => {
@@ -54,5 +55,12 @@ describe('buildOutreachEmailHtml', () => {
     const html = buildOutreachEmailHtml({ ...args, recipientName: null, topIssues: [] });
     expect(html).toContain('Hi,');
     expect(html).not.toContain('biggest opportunities');
+  });
+
+  it('carries the CASL unsubscribe link and sender identification (issue #97)', () => {
+    const html = buildOutreachEmailHtml(args);
+    expect(html).toContain('https://getgeopulse.com/api/outreach/unsubscribe/p-1');
+    expect(html).toContain('Unsubscribe');
+    expect(html).toContain('Montréal, Québec, Canada');
   });
 });

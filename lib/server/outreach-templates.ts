@@ -70,12 +70,19 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
 }
 
 /** GEO-Pulse brand shell — the same visual identity as the built-in scorecard email. */
-export function brandShell(innerHtml: string, pixelUrl: string): string {
+export function brandShell(innerHtml: string, pixelUrl: string, unsubscribeUrl?: string): string {
   return [
     '<div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#1a1a1a;">',
     `<p style="letter-spacing:0.2em;font-size:11px;color:#8a7a4a;">GEO-PULSE · AI SEARCH READINESS</p>`,
     innerHtml,
-    `<p style="color:#999;font-size:12px;">— GEO-Pulse · editorial intelligence for AI search readiness</p>`,
+    `<p style="color:#999;font-size:12px;">— GEO-Pulse · editorial intelligence for AI search readiness<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:#999;">getgeopulse.com</a></p>`,
+    // CASL: the footer is part of the shell so no template — however custom — can ship
+    // a commercial email without a working unsubscribe (issue #97).
+    ...(unsubscribeUrl
+      ? [
+          `<p style="color:#999;font-size:11px;">No longer want these audits? <a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a> — one click, effective immediately.</p>`,
+        ]
+      : []),
     `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:block;" />`,
     '</div>',
   ].join('\n');
@@ -85,7 +92,8 @@ export function brandShell(innerHtml: string, pixelUrl: string): string {
 export function renderOutreachTemplate(
   template: Pick<OutreachTemplate, 'subjectTemplate' | 'bodyFormat' | 'bodyTemplate'>,
   vars: OutreachTemplateVars,
-  pixelUrl: string
+  pixelUrl: string,
+  unsubscribeUrl?: string
 ): { subject: string; html: string } {
   const subject = substitute(template.subjectTemplate, vars, { escape: false });
 
@@ -104,7 +112,7 @@ export function renderOutreachTemplate(
       .join('\n');
   }
 
-  return { subject, html: brandShell(body, pixelUrl) };
+  return { subject, html: brandShell(body, pixelUrl, unsubscribeUrl) };
 }
 
 type TemplateRow = {
