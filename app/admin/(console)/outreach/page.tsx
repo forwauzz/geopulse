@@ -9,6 +9,7 @@ import {
   addOutreachProspect,
   assignProspectTemplate,
   deleteOutreachTemplate,
+  importOutreachProspects,
   runOutreachNowAction,
   saveOutreachTemplate,
   toggleOutreachProspect,
@@ -33,7 +34,12 @@ type SendRow = {
   scan_id: string | null;
 };
 
-export default async function AdminOutreachPage() {
+export default async function AdminOutreachPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ imported?: string; invalid?: string }>;
+}) {
+  const importSummary = searchParams ? await searchParams : undefined;
   const ctx = await loadAdminPageContext('/admin/outreach');
   if (!ctx.ok) {
     return (
@@ -114,6 +120,40 @@ export default async function AdminOutreachPage() {
               className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-on-primary transition hover:opacity-90"
             >
               Add & run on next tick
+            </button>
+          </div>
+        </form>
+      </section>
+
+      {/* Bulk import (issue #94): the simplest possible UI — one box, one button. */}
+      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+        <h2 className="font-sans text-lg font-bold text-on-background">Import a prospect list</h2>
+        <p className="mt-1 font-sans text-sm text-on-surface-variant">
+          Paste (or upload a .csv of) the companies you have already been in contact with — one per
+          line: <code className="rounded bg-surface-container-low px-1">email, website, name, company, cadence</code>.
+          Only email and website are required; cadence defaults to monthly. Existing prospects are
+          updated, not duplicated. Audits start on the next hourly tick, 10 per hour.
+        </p>
+        {importSummary?.imported !== undefined && (
+          <p className="mt-3 rounded-xl bg-green-100 px-4 py-2 font-sans text-sm font-semibold text-green-800 dark:bg-green-500/15 dark:text-green-200">
+            Imported {importSummary.imported} prospect{importSummary.imported === '1' ? '' : 's'}
+            {Number(importSummary.invalid ?? 0) > 0 ? ` · ${importSummary.invalid} line(s) skipped (invalid or duplicate)` : ''}.
+          </p>
+        )}
+        <form action={importOutreachProspects} className="mt-4 grid gap-3">
+          <textarea
+            name="text"
+            rows={5}
+            placeholder={'jane@acme-it.ca, acme-it.ca, Jane, Acme IT, monthly\nmark@nordit.ca, nordit.ca'}
+            className={`${input} min-h-[120px] py-2 font-mono text-xs`}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <input type="file" name="file" accept=".csv,.txt" className="font-sans text-xs text-on-surface-variant" />
+            <button
+              type="submit"
+              className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Import &amp; schedule audits
             </button>
           </div>
         </form>

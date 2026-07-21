@@ -1,7 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
+import { parseProspectImport } from '@/lib/server/outreach-import';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import {
   normalizeOutreachCadence,
@@ -66,6 +68,57 @@ export async function toggleOutreachProspect(formData: FormData): Promise<void> 
     .update({ enabled: enable, updated_at: new Date().toISOString() })
     .eq('id', id);
   revalidatePath('/admin/outreach');
+}
+
+/**
+ * Bulk import (issue #94): paste or upload the list of companies already contacted.
+ * The existing (email,url) upsert dedupes; the cadence sweep (10 per tick) paces the
+ * audits without any new machinery.
+ */
+export async function importOutreachProspects(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  let text = String(formData.get('text') ?? '');
+  const file = formData.get('file');
+  if (file instanceof File && file.size > 0 && file.size < 1_000_000) {
+    text = `${text}\n${await file.text()}`;
+  }
+  if (!text.trim()) return;
+
+  const parsed = parseProspectImport(text);
+  const nowIso = new Date().toISOString();
+  let imported = 0;
+  let failed = 0;
+
+  for (const row of parsed.rows) {
+    const base: Record<string, unknown> = {
+      email: row.email,
+      url: row.url,
+      name: row.name,
+      company: row.company,
+      cadence: row.cadence,
+      enabled: true,
+      next_run_at: nowIso,
+      created_by: ctx.user.id,
+      updated_at: nowIso,
+    };
+    const { error } = await ctx.adminDb
+      .from('outreach_prospects')
+      .upsert(base, { onConflict: 'email,url' });
+    if (error) failed += 1;
+    else imported += 1;
+  }
+
+  structuredLog(
+    'outreach_import',
+    { imported, failed, invalid: parsed.invalid.length },
+    'info'
+  );
+  revalidatePath('/admin/outreach');
+  redirect(
+    `/admin/outreach?imported=${String(imported)}&invalid=${String(parsed.invalid.length + failed)}`
+  );
 }
 
 export async function saveOutreachTemplate(formData: FormData): Promise<void> {
