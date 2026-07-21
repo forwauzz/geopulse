@@ -54,6 +54,33 @@ export default async function AdminOutreachPage({
 
   const prospects = await listOutreachProspects(ctx.adminDb);
   const templates = await listOutreachTemplates(ctx.adminDb);
+
+  // Funnel signals (issue #116): which delivered scans were VIEWED (served to a
+  // browser) and which converted to a FULL deep-audit report.
+  const scanIds = prospects.map((p) => p.lastScanId).filter((id): id is string => Boolean(id));
+  let viewedScanIds = new Set<string>();
+  let fullAuditScanIds = new Set<string>();
+  if (scanIds.length > 0) {
+    const [viewsRes, reportsRes] = await Promise.all([
+      ctx.adminDb
+        .from('app_logs')
+        .select('data')
+        .eq('event', 'outreach_report_viewed')
+        .in('data->>scanId', scanIds)
+        // Every serve logs a row, so heavily-viewed scans can crowd a small cap
+        // and hide other prospects' badges. 2000 covers years at current volume.
+        .limit(2000),
+      ctx.adminDb.from('reports').select('scan_id').eq('type', 'deep_audit').in('scan_id', scanIds),
+    ]);
+    viewedScanIds = new Set(
+      ((viewsRes.data ?? []) as { data: { scanId?: string } }[])
+        .map((r) => r.data?.scanId)
+        .filter((id): id is string => Boolean(id))
+    );
+    fullAuditScanIds = new Set(
+      ((reportsRes.data ?? []) as { scan_id: string }[]).map((r) => r.scan_id)
+    );
+  }
   const { data: sendsData } = await ctx.adminDb
     .from('outreach_sends')
     .select('prospect_id, score, sent_at, opened_at, open_count, scan_id')
@@ -388,6 +415,19 @@ export default async function AdminOutreachPage({
                                 report
                               </a>
                             ) : null}
+                            {/* Funnel badges (issue #116): served-to-a-browser beats the pixel. */}
+                            {prospect.lastScanId && viewedScanIds.has(prospect.lastScanId) && (
+                              <span className="ml-2 inline-flex items-center gap-0.5 rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-800 dark:bg-sky-500/15 dark:text-sky-200">
+                                <span className="material-symbols-outlined text-[12px]" aria-hidden>visibility</span>
+                                Viewed
+                              </span>
+                            )}
+                            {prospect.lastScanId && fullAuditScanIds.has(prospect.lastScanId) && (
+                              <span className="ml-1 inline-flex items-center gap-0.5 rounded-md bg-green-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-800 dark:bg-green-500/15 dark:text-green-200">
+                                <span className="material-symbols-outlined text-[12px]" aria-hidden>task_alt</span>
+                                Full audit
+                              </span>
+                            )}
                           </>
                         ) : (
                           <span className="text-xs text-on-surface-variant">not sent yet</span>

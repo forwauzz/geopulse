@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { fullIssueListFromScan } from '@/lib/server/scan-issue-list';
+import { structuredLog } from '@/lib/server/structured-log';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const uuid = z.string().uuid();
@@ -93,6 +94,12 @@ export async function getScanForPublicShare(
   const maxAge = data.run_source === 'recurring' ? RECURRING_MAX_AGE_MS : MAX_AGE_MS;
   if (Number.isFinite(created.getTime()) && Date.now() - created.getTime() > maxAge) {
     return { ok: false, code: 'expired' };
+  }
+
+  // Funnel visibility (issue #116): a cadence-delivered report being SERVED is the
+  // strongest engagement signal we have (beats the pixel, which images-off kills).
+  if (data.run_source === 'recurring') {
+    structuredLog('outreach_report_viewed', { scanId: data.id }, 'info');
   }
 
   const [paymentRes, reportRes] = await Promise.all([
