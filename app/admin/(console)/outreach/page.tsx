@@ -67,7 +67,9 @@ export default async function AdminOutreachPage({
         .select('data')
         .eq('event', 'outreach_report_viewed')
         .in('data->>scanId', scanIds)
-        .limit(500),
+        // Every serve logs a row, so heavily-viewed scans can crowd a small cap
+        // and hide other prospects' badges. 2000 covers years at current volume.
+        .limit(2000),
       ctx.adminDb.from('reports').select('scan_id').eq('type', 'deep_audit').in('scan_id', scanIds),
     ]);
     viewedScanIds = new Set(
