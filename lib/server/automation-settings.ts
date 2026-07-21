@@ -9,7 +9,8 @@ export type AutomationFeature =
   | 'marketing_autopilot'
   | 'report_design_agent'
   | 'outreach_sweep'
-  | 'research_agent';
+  | 'research_agent'
+  | 'competitor_benchmark';
 
 export type AutomationSetting = {
   feature: string;

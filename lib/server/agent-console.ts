@@ -40,6 +40,18 @@ async function tableExists(supabase: SupabaseClient, table: string): Promise<boo
   }
 }
 
+async function countCohortDomains(supabase: SupabaseClient): Promise<number> {
+  try {
+    const { count } = await supabase
+      .from('benchmark_domains')
+      .select('id', { head: true, count: 'exact' })
+      .eq('metadata->>local_cohort', 'true');
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function hasConnectedChannel(supabase: SupabaseClient): Promise<boolean> {
   try {
     const { data } = await supabase.from('distribution_accounts').select('id').eq('status', 'connected').limit(1);
@@ -54,26 +66,32 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     outreachEnabled,
     researchEnabled,
     designEnabled,
+    cohortEnabled,
     outreachSetting,
     researchSetting,
     designSetting,
     marketingSetting,
+    cohortSetting,
     selfImprove,
     templatesTable,
     researchTable,
     channelConnected,
+    cohortDomainCount,
   ] = await Promise.all([
     isAgentEnabled(supabase, 'outreach_sweep', { failOpen: true }),
     isAgentEnabled(supabase, 'research_agent', { failOpen: true }),
     isAgentEnabled(supabase, 'report_design_agent', { failOpen: true }),
+    isAgentEnabled(supabase, 'competitor_benchmark', { failOpen: false }),
     loadAutomationSetting(supabase, 'outreach_sweep'),
     loadAutomationSetting(supabase, 'research_agent'),
     loadAutomationSetting(supabase, 'report_design_agent'),
     loadAutomationSetting(supabase, 'marketing_autopilot'),
+    loadAutomationSetting(supabase, 'competitor_benchmark'),
     loadSelfImprovementSettings(supabase),
     tableExists(supabase, 'outreach_templates'),
     tableExists(supabase, 'research_watchlist'),
     hasConnectedChannel(supabase),
+    countCohortDomains(supabase),
   ]);
 
   const resendReady = Boolean(env['RESEND_API_KEY']?.trim() && env['RESEND_FROM_EMAIL']?.trim());
@@ -124,6 +142,20 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       enabled: designEnabled,
       killSwitch: designSetting.killSwitch,
       blockers: browserRenderReady ? [] : ['Browser Rendering credentials/mode not set — covers render without the screenshot'],
+    },
+    {
+      key: 'competitor_benchmark',
+      name: 'Competitor cohort benchmark',
+      audience: 'internal',
+      description:
+        'Weekly re-scan of curated local-competitor cohorts; observable on-page signals only, compared in /admin/competitors. FAIL-CLOSED: off until switched on.',
+      control: 'flag',
+      flagFeature: 'competitor_benchmark',
+      enabled: cohortEnabled,
+      killSwitch: cohortSetting.killSwitch,
+      blockers:
+        cohortDomainCount > 0 ? [] : ['No cohort domains yet — add the customer and competitors in /admin/competitors'],
+      manageHint: 'Cohorts, manual scans and the comparison table live in /admin/competitors.',
     },
     {
       key: 'marketing_autopilot',
