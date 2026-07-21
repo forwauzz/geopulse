@@ -324,7 +324,9 @@
     // dispatch in workers/cloudflare-entry.ts gates on Toronto local hour so
     // exactly one recap fires per day regardless of DST. Benchmark schedule
     // sweeps dedup via schedule_run_key, so the extra tick is a no-op for them.
-    "crons": ["0 0,12,23 * * *"]
+    // Hourly: enables hourly outreach/recurring cadences. Every scheduled job self-gates
+    // (next_run_at, window keys, or an hour check), so extra ticks are cheap no-ops.
+    "crons": ["0 * * * *"]
   },
 
   "observability": {

@@ -1,0 +1,207 @@
+import { loadAdminPageContext } from '@/lib/server/admin-runtime';
+import { listOutreachProspects } from '@/lib/server/outreach';
+import { addOutreachProspect, runOutreachNowAction, toggleOutreachProspect } from './actions';
+
+export const dynamic = 'force-dynamic';
+
+const input =
+  'min-h-[40px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30';
+
+function fmt(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+type SendRow = {
+  prospect_id: string;
+  score: number | null;
+  sent_at: string;
+  opened_at: string | null;
+  open_count: number;
+  scan_id: string | null;
+};
+
+export default async function AdminOutreachPage() {
+  const ctx = await loadAdminPageContext('/admin/outreach');
+  if (!ctx.ok) {
+    return (
+      <main className="mx-auto max-w-6xl px-6 py-16">
+        <p className="text-error">{ctx.message}</p>
+      </main>
+    );
+  }
+
+  const prospects = await listOutreachProspects(ctx.adminDb);
+  const { data: sendsData } = await ctx.adminDb
+    .from('outreach_sends')
+    .select('prospect_id, score, sent_at, opened_at, open_count, scan_id')
+    .order('sent_at', { ascending: false })
+    .limit(400);
+  const sendsByProspect = new Map<string, SendRow[]>();
+  for (const send of (sendsData ?? []) as SendRow[]) {
+    const list = sendsByProspect.get(send.prospect_id) ?? [];
+    list.push(send);
+    sendsByProspect.set(send.prospect_id, list);
+  }
+
+  return (
+    <div className="space-y-6">
+      <header>
+        <p className="font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Admin</p>
+        <h1 className="mt-1 font-sans text-2xl font-black uppercase tracking-tight text-on-background">Outreach</h1>
+        <p className="mt-1 max-w-2xl font-sans text-sm text-on-surface-variant">
+          Add a prospect and we audit their site on a cadence and email them the scorecard — no account on
+          their side. The full report link is public; the report page carries the sign-up CTA.
+        </p>
+      </header>
+
+      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+        <h2 className="font-sans text-lg font-bold text-on-background">Add prospect</h2>
+        <form action={addOutreachProspect} className="mt-4 grid gap-3 md:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Email</span>
+            <input name="email" type="email" required placeholder="owner@company.com" className={input} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Website</span>
+            <input name="url" type="url" required placeholder="https://company.com" className={input} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Name (optional)</span>
+            <input name="name" placeholder="Ernesto" className={input} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Company (optional)</span>
+            <input name="company" placeholder="MIPS Media" className={input} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Cadence</span>
+            <select name="cadence" defaultValue="monthly" className={input}>
+              <option value="monthly">Monthly</option>
+              <option value="weekly">Weekly</option>
+              <option value="daily">Daily</option>
+              <option value="hourly">Hourly</option>
+            </select>
+          </label>
+          <div className="flex items-end">
+            <button
+              type="submit"
+              className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-on-primary transition hover:opacity-90"
+            >
+              Add & run on next tick
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+        <h2 className="font-sans text-lg font-bold text-on-background">Prospects</h2>
+        {prospects.length === 0 ? (
+          <p className="mt-3 font-sans text-sm text-on-surface-variant">None yet — add the first one above.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-outline-variant/20 text-[11px] uppercase tracking-widest text-on-surface-variant">
+                  <th className="py-2 pr-3 font-semibold">Prospect</th>
+                  <th className="py-2 pr-3 font-semibold">Cadence</th>
+                  <th className="py-2 pr-3 font-semibold">Last send</th>
+                  <th className="py-2 pr-3 font-semibold">Opened</th>
+                  <th className="py-2 pr-3 font-semibold">Next run</th>
+                  <th className="py-2 pr-3 font-semibold">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/15">
+                {prospects.map((prospect) => {
+                  const sends = sendsByProspect.get(prospect.id) ?? [];
+                  const latest = sends[0] ?? null;
+                  const openedCount = sends.filter((s) => s.opened_at).length;
+                  return (
+                    <tr key={prospect.id} className={prospect.enabled ? '' : 'opacity-50'}>
+                      <td className="py-2.5 pr-3">
+                        <p className="font-medium text-on-background">{prospect.email}</p>
+                        <p className="text-xs text-on-surface-variant">
+                          {[prospect.name, prospect.company].filter(Boolean).join(' · ') || '—'} · {prospect.url}
+                        </p>
+                        {prospect.lastError ? (
+                          <p className="text-xs text-error">Last error: {prospect.lastError}</p>
+                        ) : null}
+                      </td>
+                      <td className="py-2.5 pr-3 capitalize text-on-background">{prospect.cadence}</td>
+                      <td className="py-2.5 pr-3 text-on-background">
+                        {latest ? (
+                          <>
+                            <span className="font-sans font-bold tabular-nums">{latest.score ?? '—'}</span>
+                            <span className="text-xs text-on-surface-variant"> · {fmt(latest.sent_at)}</span>
+                            {latest.scan_id ? (
+                              <a
+                                href={`/results/${latest.scan_id}`}
+                                className="ml-2 text-xs font-semibold text-primary underline"
+                                target="_blank"
+                              >
+                                report
+                              </a>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="text-xs text-on-surface-variant">not sent yet</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-3">
+                        {sends.length === 0 ? (
+                          <span className="text-xs text-on-surface-variant">—</span>
+                        ) : openedCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800 dark:bg-green-500/15 dark:text-green-200">
+                            <span className="material-symbols-outlined text-[13px]" aria-hidden>drafts</span>
+                            {openedCount}/{sends.length} opened
+                          </span>
+                        ) : (
+                          <span
+                            className="text-xs text-on-surface-variant"
+                            title="Pixel-based opens undercount when images are blocked — treat as a floor."
+                          >
+                            no opens recorded
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-3 text-xs text-on-surface-variant">
+                        {prospect.enabled ? fmt(prospect.nextRunAt) : 'paused'}
+                      </td>
+                      <td className="py-2.5 pr-3">
+                        <div className="flex items-center gap-2">
+                          <form action={runOutreachNowAction}>
+                            <input type="hidden" name="prospectId" value={prospect.id} />
+                            <button
+                              type="submit"
+                              className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-on-primary transition hover:opacity-90"
+                            >
+                              Run now
+                            </button>
+                          </form>
+                          <form action={toggleOutreachProspect}>
+                            <input type="hidden" name="prospectId" value={prospect.id} />
+                            <input type="hidden" name="enable" value={prospect.enabled ? 'false' : 'true'} />
+                            <button
+                              type="submit"
+                              className="rounded-lg border border-outline-variant/30 px-2.5 py-1 text-xs font-semibold text-on-background transition hover:bg-surface-container-low"
+                            >
+                              {prospect.enabled ? 'Pause' : 'Resume'}
+                            </button>
+                          </form>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="mt-3 text-[11px] text-on-surface-variant">
+          Opens are measured with a first-party pixel and undercount when images are blocked — treat them as
+          a floor, not the truth.
+        </p>
+      </section>
+    </div>
+  );
+}
