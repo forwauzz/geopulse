@@ -18,7 +18,14 @@ export type FetchGateTextResult =
       /** Lower-cased response headers — needed by header-based checks (e.g. security headers). */
       headers: Record<string, string>;
     }
-  | { ok: false; reason: string };
+  | {
+      ok: false;
+      reason: string;
+      /** HTTP status when a response arrived (lets callers distinguish WAF blocks from network failures). */
+      status?: number;
+      /** Response headers on failure — WAF/CDN markers (cf-mitigated, server) live here. */
+      headers?: Record<string, string>;
+    };
 
 /** Response headers as a plain lower-cased map (Headers isn't structured-cloneable across layers). */
 function toHeaderMap(headers: Headers): Record<string, string> {
@@ -176,7 +183,12 @@ export async function fetchGateText(
     }
 
     if (!res.ok) {
-      return { ok: false, reason: `Target returned HTTP ${String(res.status)}` };
+      return {
+        ok: false,
+        reason: `Target returned HTTP ${String(res.status)}`,
+        status: res.status,
+        headers: toHeaderMap(res.headers),
+      };
     }
 
     const text = await readTextWithByteLimit(res, options.maxBytes);
@@ -338,7 +350,7 @@ export async function fetchGateBytes(
  */
 export async function fetchHtmlPage(rawUrl: string): Promise<
   | { ok: true; html: string; finalUrl: string; headers: Record<string, string> }
-  | { ok: false; reason: string }
+  | { ok: false; reason: string; status?: number; headers?: Record<string, string> }
 > {
   const r = await fetchGateText(rawUrl, {
     maxBytes: 750_000,

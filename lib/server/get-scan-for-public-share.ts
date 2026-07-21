@@ -15,6 +15,8 @@ export type PublicShareScanRow = {
   topIssues: unknown[];
   issues: unknown[];
   categoryScores: unknown[];
+  accessMatrix: unknown | null;
+  scoreState: 'measured' | 'not_tested';
   hasPaidReport: boolean;
   reportStatus: ReportStatus;
   pdfUrl: string | null;
@@ -113,7 +115,11 @@ export async function getScanForPublicShare(
     reportStatus = 'generating';
   }
 
-  const fullResults = data.full_results_json as { categoryScores?: unknown[] } | null;
+  const fullResults = data.full_results_json as {
+    categoryScores?: unknown[];
+    accessMatrix?: unknown;
+    scoreState?: string;
+  } | null;
   return {
     ok: true,
     data: {
@@ -125,6 +131,8 @@ export async function getScanForPublicShare(
       topIssues: extractTopIssues(data.issues_json),
       issues: fullIssueListFromScan(data.issues_json, data.full_results_json),
       categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
+      accessMatrix: fullResults?.accessMatrix ?? null,
+      scoreState: fullResults?.scoreState === 'not_tested' ? 'not_tested' : 'measured',
       hasPaidReport: hasPaid,
       reportStatus,
       pdfUrl: report?.pdf_url ?? null,
