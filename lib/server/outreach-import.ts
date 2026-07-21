@@ -59,8 +59,9 @@ export function parseProspectImport(text: string): ImportParseResult {
     const parts = raw.split(/[,;\t]/).map((p) => p.trim().replace(/^["']|["']$/g, ''));
     const first = (parts[0] ?? '').toLowerCase();
 
-    // Header row: skip once, silently.
-    if (i === 0 && first === 'email') {
+    // Header row: skip silently wherever it appears — an uploaded CSV's header lands
+    // mid-text when pasted text precedes it, and "email" can never be a real address.
+    if (first === 'email') {
       result.skippedHeader = true;
       continue;
     }

@@ -23,6 +23,12 @@ describe('parseProspectImport (issue #94)', () => {
     expect(r.invalid).toHaveLength(0);
   });
 
+  it('skips an uploaded-file header that lands mid-text after pasted lines', () => {
+    const r = parseProspectImport('jane@acme.ca, acme.ca\nemail,website,name,company\nmark@nord.ca, nord.ca');
+    expect(r.rows).toHaveLength(2);
+    expect(r.invalid).toHaveLength(0);
+  });
+
   it('flags invalid emails/urls with the line number and reason', () => {
     const r = parseProspectImport('not-an-email, acme.ca\njane@acme.ca, not a url at all');
     expect(r.rows).toHaveLength(0);
