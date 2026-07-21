@@ -13,6 +13,7 @@
  * yet) or empty, callers fall back to the built-in scorecard email.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { emailShell } from './email-theme';
 
 export type OutreachTemplateFormat = 'text' | 'html';
 
@@ -69,23 +70,18 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
     .replaceAll('{{top_issues}}', topIssuesHtml(vars.topIssues));
 }
 
-/** GEO-Pulse brand shell — the same visual identity as the built-in scorecard email. */
+/**
+ * GEO-Pulse brand shell — delegates to the ONE email design system (issue #106).
+ * CASL: the footer is part of the shell so no template — however custom — can ship
+ * a commercial email without identification and a working unsubscribe (issue #97).
+ */
 export function brandShell(innerHtml: string, pixelUrl: string, unsubscribeUrl?: string): string {
-  return [
-    '<div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#1a1a1a;">',
-    `<p style="letter-spacing:0.2em;font-size:11px;color:#8a7a4a;">GEO-PULSE · AI SEARCH READINESS</p>`,
-    innerHtml,
-    `<p style="color:#999;font-size:12px;">— GEO-Pulse · editorial intelligence for AI search readiness<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:#999;">getgeopulse.com</a></p>`,
-    // CASL: the footer is part of the shell so no template — however custom — can ship
-    // a commercial email without a working unsubscribe (issue #97).
-    ...(unsubscribeUrl
-      ? [
-          `<p style="color:#999;font-size:11px;">No longer want these audits? <a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a> — one click, effective immediately.</p>`,
-        ]
-      : []),
-    `<img src="${pixelUrl}" width="1" height="1" alt="" style="display:block;" />`,
-    '</div>',
-  ].join('\n');
+  return emailShell({
+    kicker: 'AI search readiness',
+    bodyHtml: innerHtml,
+    unsubscribeUrl,
+    pixelUrl,
+  });
 }
 
 /** Render a template into { subject, html } ready for sending. */
@@ -177,6 +173,89 @@ export async function resolveOutreachTemplate(
     return null;
   }
 }
+
+/**
+ * Preset template library (issue #106) — professional, lively starting points the
+ * admin installs with one click. All variables resolve at send time; the brand shell
+ * (masthead, Montréal footer, unsubscribe) wraps every one automatically.
+ */
+export const PRESET_OUTREACH_TEMPLATES: ReadonlyArray<{
+  key: string;
+  name: string;
+  description: string;
+  subject: string;
+  bodyFormat: OutreachTemplateFormat;
+  body: string;
+}> = [
+  {
+    key: 'first-scorecard',
+    name: 'First scorecard — the gift opener',
+    description: 'Warm first touch: we did real work for you before asking for anything.',
+    subject: 'We audited {{domain}} — your AI search readiness is {{score}}/100',
+    bodyFormat: 'text',
+    body: `Hi {{name}},
+
+Quick heads-up from a fellow Montréal company: we ran {{company}} through our AI search readiness audit — the same checks ChatGPT, Gemini and Perplexity effectively apply when they decide whether to cite a business like yours.
+
+{{domain}} scored {{score}}/100 (grade {{grade}}). Here is what is holding it back the most:
+
+{{top_issues}}
+
+The full report explains every check in plain English, with copy-paste fixes your web person can apply — no account, no strings: {{report_url}}
+
+We re-run this on a schedule so you can watch the score move as things get fixed.`,
+  },
+  {
+    key: 'monthly-pulse',
+    name: 'Monthly pulse — the returning cadence',
+    description: 'For prospects already receiving audits: this month’s standings, brief and confident.',
+    subject: '{{domain}} this month: {{score}}/100 on AI search readiness',
+    bodyFormat: 'text',
+    body: `Hi {{name}},
+
+Your monthly AI-visibility pulse for {{domain}} is in: {{score}}/100 ({{grade}}).
+
+Where the easiest points are sitting right now:
+
+{{top_issues}}
+
+Full breakdown, matrix of which AI engines can see you, and the fixes: {{report_url}}
+
+Same time next month — unless the score jumps first.`,
+  },
+  {
+    key: 'quick-wins',
+    name: 'Quick wins — the nudge',
+    description: 'Short and surgical: three fixes, one link, no fluff.',
+    subject: '3 fixes that would move {{domain}} up in AI search',
+    bodyFormat: 'text',
+    body: `Hi {{name}},
+
+Three things on {{domain}} are costing you visibility in AI search results right now:
+
+{{top_issues}}
+
+Each one has a copy-paste fix in your report ({{score}}/100 today): {{report_url}}
+
+Most of these are under 30 minutes for whoever manages your site.`,
+  },
+  {
+    key: 'plain-personal',
+    name: 'Plain & personal — the founder note',
+    description: 'Reads like a one-to-one email; the brand shell keeps it credible.',
+    subject: 'Noticed something about {{domain}}',
+    bodyFormat: 'text',
+    body: `Hi {{name}},
+
+I run GEO-Pulse here in Montréal — we measure how visible businesses are when people ask AI assistants for recommendations instead of Googling.
+
+I ran {{domain}} through it. You came out at {{score}}/100. Some of what is in the way is genuinely quick to fix.
+
+The full report is here, free, no sign-up: {{report_url}}
+
+Happy to point your web person at the two changes that matter most — just reply.`,
+  },
+];
 
 /** Sample variables for the admin preview. */
 export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {

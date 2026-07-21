@@ -73,7 +73,7 @@ describe('renderOutreachTemplate (spec §9)', () => {
       SAMPLE_TEMPLATE_VARS,
       'https://x.com/api/outreach/open/abc'
     );
-    expect(out.html).toContain('GEO-PULSE');
+    expect(out.html).toContain('GEO-Pulse');
     expect(out.html).toContain('https://x.com/api/outreach/open/abc');
   });
 

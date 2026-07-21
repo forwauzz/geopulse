@@ -45,7 +45,7 @@ describe('buildOutreachEmailHtml', () => {
     const html = buildOutreachEmailHtml(args);
     expect(html).toContain('Hi Ernesto,');
     expect(html).toContain('67');
-    expect(html).toContain('GRADE C+');
+    expect(html).toContain('Grade C+');
     expect(html).toContain('https://getgeopulse.com/results/abc');
     expect(html).toContain('https://getgeopulse.com/api/outreach/open/send-1');
     expect(html).toContain('JSON-LD');

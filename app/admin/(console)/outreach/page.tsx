@@ -1,6 +1,7 @@
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { listOutreachProspects } from '@/lib/server/outreach';
 import {
+  PRESET_OUTREACH_TEMPLATES,
   SAMPLE_TEMPLATE_VARS,
   listOutreachTemplates,
   renderOutreachTemplate,
@@ -173,6 +174,37 @@ export default async function AdminOutreachPage({
           <code className="rounded bg-surface-container-low px-1">{'{{report_url}}'}</code>. GEO-Pulse
           branding (header, footer, open tracking) is applied automatically.
         </p>
+
+        {/* Preset library (issue #106): one click installs a professional starting point. */}
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {PRESET_OUTREACH_TEMPLATES.map((preset) => {
+            const installed = templates.some((t) => t.name === preset.name);
+            return (
+              <div key={preset.key} className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+                <p className="font-sans text-sm font-bold text-on-background">{preset.name}</p>
+                <p className="mt-1 font-sans text-xs leading-5 text-on-surface-variant">{preset.description}</p>
+                <p className="mt-1.5 font-mono text-[11px] text-on-surface-variant/80">{preset.subject}</p>
+                <form action={saveOutreachTemplate} className="mt-3">
+                  <input type="hidden" name="name" value={preset.name} />
+                  <input type="hidden" name="subject" value={preset.subject} />
+                  <input type="hidden" name="bodyFormat" value={preset.bodyFormat} />
+                  <input type="hidden" name="body" value={preset.body} />
+                  <button
+                    type="submit"
+                    disabled={installed}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      installed
+                        ? 'cursor-default bg-surface-container text-on-surface-variant'
+                        : 'bg-primary text-on-primary hover:opacity-90'
+                    }`}
+                  >
+                    {installed ? 'Installed' : 'Use this preset'}
+                  </button>
+                </form>
+              </div>
+            );
+          })}
+        </div>
 
         <form action={saveOutreachTemplate} className="mt-4 grid gap-3">
           <div className="grid gap-3 md:grid-cols-3">
