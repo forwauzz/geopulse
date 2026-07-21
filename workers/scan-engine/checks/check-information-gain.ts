@@ -6,7 +6,8 @@
  * to ~40% (Princeton GEO study, KDD 2024).
  *
  * Deterministic heuristic over the visible text: boilerplate density vs specificity
- * density. It flags, it does not condemn — WARNING is the worst outcome for prose.
+ * density. Heavily templated copy with no concrete specifics fails; borderline
+ * pages get a WARNING; anything with real substance passes.
  */
 import type { AuditCheck, CheckContext, CheckResult } from '../../lib/interfaces/audit';
 
