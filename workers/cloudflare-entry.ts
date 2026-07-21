@@ -31,6 +31,7 @@ import {
   type MarketingAutopilotEnvLike,
 } from '../lib/server/marketing-autopilot';
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
+import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
 import { registerSelfFetch } from './lib/fetch-gate';
 
 /**
@@ -297,6 +298,30 @@ export default {
         }
       } catch (err) {
         structuredError('recurring_audits_sweep_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Outreach v1 — recurring scorecard emails to admin-added prospects (no account needed).
+      // Self-gates on `next_run_at`; a tick with nothing due is a cheap no-op.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const result = await runDueOutreach({
+          supabase,
+          env: env as unknown as OutreachEnvLike,
+          nowMs: Date.now(),
+        });
+        if (result.scanned > 0) {
+          structuredLog('outreach_sweep_tick', {
+            scanned: result.scanned,
+            ran: result.ran,
+            failed: result.failed,
+          }, 'info');
+        }
+      } catch (err) {
+        structuredError('outreach_sweep_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }
