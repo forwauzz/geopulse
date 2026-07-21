@@ -62,6 +62,21 @@ export async function setMarketingFlag(formData: FormData): Promise<void> {
   revalidatePath(AUTOMATION_PATH);
 }
 
+export async function setDesignAgentFlag(formData: FormData): Promise<void> {
+  const ctx = await requireConsole();
+  if ('error' in ctx) return;
+  const field = String(formData.get('field') ?? '');
+  const value = String(formData.get('value') ?? '') === 'true';
+  if (field !== 'enabled' && field !== 'kill_switch') return;
+  await updateAutomationSetting(
+    ctx.supabase,
+    'report_design_agent',
+    field === 'enabled' ? { enabled: value } : { killSwitch: value },
+    ctx.userId
+  );
+  revalidatePath(AUTOMATION_PATH);
+}
+
 export async function setMarketingCap(formData: FormData): Promise<void> {
   const ctx = await requireConsole();
   if ('error' in ctx) return;
