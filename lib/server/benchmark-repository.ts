@@ -303,6 +303,18 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
       return data ?? null;
     },
 
+    async getQuerySetByName(name: string): Promise<BenchmarkQuerySetRow | null> {
+      const { data, error } = await supabase
+        .from('benchmark_query_sets')
+        .select('id,name,vertical,version,description,status,metadata,created_at')
+        .eq('name', name)
+        .eq('status', 'active')
+        .maybeSingle<BenchmarkQuerySetRow>();
+
+      if (error) throw error;
+      return data ?? null;
+    },
+
     async upsertQuerySet(input: {
       readonly name: string;
       readonly version: string;

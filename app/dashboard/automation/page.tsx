@@ -55,6 +55,18 @@ export default async function DashboardAutomationPage() {
             <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">Website to audit</span>
             <input name="url" type="url" required defaultValue={schedule?.url ?? ''} placeholder="https://yourcompany.com" className={input} />
           </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">
+              Send reports to (optional — defaults to your account email)
+            </span>
+            <input
+              name="reportEmail"
+              type="email"
+              defaultValue={schedule?.reportEmail ?? ''}
+              placeholder={user.email ?? 'you@company.com'}
+              className={input}
+            />
+          </label>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">How often</span>

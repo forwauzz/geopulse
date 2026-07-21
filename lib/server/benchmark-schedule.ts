@@ -292,7 +292,8 @@ export async function executeBenchmarkScheduleSweep(args: {
   readonly repo: Pick<
     BenchmarkScheduleRepo,
     'getQuerySetById' | 'listDomainsForBenchmarkScheduling' | 'getRunGroupByScheduleKey'
-  >;
+  > &
+    Partial<Pick<BenchmarkScheduleRepo, 'getQuerySetByName'>>;
   readonly runBenchmarkGroup: typeof runBenchmarkGroupSkeleton;
   readonly supabase: unknown;
   readonly adapter: BenchmarkExecutionAdapter;
@@ -339,7 +340,39 @@ export async function executeBenchmarkScheduleSweep(args: {
     schedule_version: args.config.scheduleVersion,
   });
 
+  const querySetCache = new Map<string, typeof querySet>([[querySet.id, querySet]]);
+
   outer: for (const domain of domains) {
+    // A domain can carry its own question set (metadata.schedule_query_set_id) — e.g. an MSP
+    // domain runs MSP buyer questions while the law-firm lane keeps its own. Falls back to the
+    // schedule's configured set. On top of that, the domain's user-added prompts ride the same
+    // sweep, so "add a prompt" needs no extra scheduling machinery.
+    let primarySet = querySet;
+    const ownSetId = (domain.metadata as Record<string, unknown> | null)?.['schedule_query_set_id'];
+    if (typeof ownSetId === 'string' && ownSetId) {
+      try {
+        const cached = querySetCache.get(ownSetId) ?? (await args.repo.getQuerySetById(ownSetId));
+        if (cached) {
+          querySetCache.set(ownSetId, cached);
+          primarySet = cached;
+        }
+      } catch {
+        /* fall back to the configured set */
+      }
+    }
+    const domainQuerySets = [primarySet];
+    if (args.repo.getQuerySetByName) {
+      try {
+        const userSet = await args.repo.getQuerySetByName(
+          `user-prompts-${domain.canonical_domain.toLowerCase().replace(/^www\./, '')}`
+        );
+        if (userSet) domainQuerySets.push(userSet);
+      } catch {
+        /* user prompts are additive — never fail the sweep over them */
+      }
+    }
+
+    for (const domainQuerySet of domainQuerySets)
     for (const runMode of args.config.runModes) {
       for (const modelId of args.config.modelIds) {
         if (launchedRuns >= args.config.maxRuns) {
@@ -374,7 +407,7 @@ export async function executeBenchmarkScheduleSweep(args: {
           windowDate,
           scheduleVersion: args.config.scheduleVersion,
           domainId: domain.id,
-          querySetId: querySet.id,
+          querySetId: domainQuerySet.id,
           modelId,
           runMode,
         });
@@ -387,7 +420,7 @@ export async function executeBenchmarkScheduleSweep(args: {
         const runLabel = buildScheduledBenchmarkRunLabel({
           windowDate,
           domain,
-          querySet,
+          querySet: domainQuerySet,
           modelId,
           runMode,
         });
@@ -397,7 +430,7 @@ export async function executeBenchmarkScheduleSweep(args: {
             args.supabase,
             {
               domainId: domain.id,
-              querySetId: querySet.id,
+              querySetId: domainQuerySet.id,
               modelId,
               runMode,
               runLabel,
@@ -412,8 +445,8 @@ export async function executeBenchmarkScheduleSweep(args: {
                 schedule_seed_priorities: args.config.seedPriorities,
                 schedule_domains: args.config.canonicalDomains,
                 schedule_run_key: scheduleRunKey,
-                schedule_query_set_name: querySet.name,
-                schedule_query_set_version: querySet.version,
+                schedule_query_set_name: domainQuerySet.name,
+                schedule_query_set_version: domainQuerySet.version,
               },
             },
             args.adapter
@@ -424,7 +457,7 @@ export async function executeBenchmarkScheduleSweep(args: {
           structuredError('benchmark_schedule_run_failed', {
             domain_id: domain.id,
             canonical_domain: domain.canonical_domain,
-            query_set_id: querySet.id,
+            query_set_id: domainQuerySet.id,
             model_id: modelId,
             run_mode: runMode,
             schedule_version: args.config.scheduleVersion,

@@ -207,7 +207,11 @@ export async function runDueRecurringAudits(args: {
             score: scan.output.score,
             letter_grade: scan.output.letterGrade,
             issues_json: scan.output.issues,
-            full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
+            full_results_json: {
+              issues: scan.output.issues,
+              categoryScores: scan.output.categoryScores,
+              pageSample: scan.textSample.slice(0, 6000),
+            },
             user_id: s.userId,
             startup_workspace_id: s.startupWorkspaceId,
             run_source: 'recurring',

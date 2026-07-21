@@ -87,13 +87,17 @@
     // Comma-separated: each model is its own daily lane (domain × run-mode × model).
     // gpt-4o-mini needs the OPENAI_API_KEY secret set or its runs record as skipped.
     "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite,gpt-4o-mini",
-    "BENCHMARK_SCHEDULE_RUN_MODES": "ungrounded_inference,grounded_site",
-    "BENCHMARK_SCHEDULE_VERTICAL": "law_firms",
+    // blind_discovery first: it is the headline number (the prompt never names the target), and
+    // putting it first means the cap can never starve it in favor of the assisted modes.
+    "BENCHMARK_SCHEDULE_RUN_MODES": "blind_discovery,ungrounded_inference,grounded_site",
+    // Empty = all schedule-enabled priority-1 domains, whatever their vertical; each domain can
+    // carry its own question set via benchmark_domains.metadata.schedule_query_set_id.
+    "BENCHMARK_SCHEDULE_VERTICAL": "",
     "BENCHMARK_SCHEDULE_SEED_PRIORITIES": "1",
     "BENCHMARK_SCHEDULE_DOMAINS": "",
     "BENCHMARK_SCHEDULE_DOMAIN_LIMIT": "20",
-    // Doubled with the second model lane so late-ordered domains still get both models.
-    "BENCHMARK_SCHEDULE_MAX_RUNS": "80",
+    // domains x 3 modes x 2 models, plus per-domain user-prompt sets where they exist.
+    "BENCHMARK_SCHEDULE_MAX_RUNS": "160",
     "BENCHMARK_SCHEDULE_MAX_FAILURES": "5",
     "BENCHMARK_SCHEDULE_WINDOW_HOURS": "12",
     "BENCHMARK_SCHEDULE_VERSION": "v1",
