@@ -83,6 +83,9 @@ export async function captureHeroScreenshot(
       },
       body: JSON.stringify({
         url: validation.safeUrl,
+        // Keep this a fixed-viewport capture: the cover reserves exactly 250x156pt for the
+        // hero (6pt under the masthead hairline). fullPage:true would produce a taller image
+        // and push the frame through the masthead.
         screenshotOptions: { type: 'png' },
         viewport: { width: 1280, height: 800 },
         gotoOptions: { waitUntil: 'networkidle2', timeout: 15_000 },
