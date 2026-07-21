@@ -113,7 +113,7 @@ export function AuditDashboardOverview({ view }: { view: AuditDashboardView }) {
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6" data-testid="audit-dashboard-overview">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Overview</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Your AI visibility</p>
         <h2 className="mt-1 font-headline text-lg font-semibold text-on-background">
           {latest ? (
             <>
@@ -121,7 +121,7 @@ export function AuditDashboardOverview({ view }: { view: AuditDashboardView }) {
               <span className="ml-2 text-sm font-normal text-on-surface-variant">{formatDate(latest.createdAt)}</span>
             </>
           ) : (
-            'Run your first audit to light up this dashboard'
+            'Run your first audit to see how AI reads your site'
           )}
         </h2>
       </div>
@@ -213,26 +213,38 @@ export function AuditDashboardOverview({ view }: { view: AuditDashboardView }) {
       </div>
 
       {/* Not measured for self-serve yet — say so instead of faking it */}
-      <article className="rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-lowest p-5">
+      <article className="rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-lowest p-5 md:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="font-headline text-sm font-semibold text-on-background">AI engine visibility</h3>
-            <p className="mt-1 max-w-2xl text-sm text-on-surface-variant">
-              Whether ChatGPT, Perplexity and Claude actually cite your site when people ask. Your audit measures
-              readiness; citation tracking is the next layer.
+            <h3 className="font-headline text-base font-semibold text-on-background">
+              Know when the AI engines start citing you
+            </h3>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
+              Citation tracking measures whether ChatGPT, Perplexity, Claude and Gemini actually name your site
+              when people ask. Your readiness score today is what moves those numbers tomorrow.
             </p>
           </div>
           <span className="rounded-md bg-surface-container-high px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
             Coming soon
           </span>
         </div>
-        <div className="mt-4 grid gap-3 opacity-60 sm:grid-cols-3">
-          {['ChatGPT', 'Perplexity', 'Claude'].map((engine) => (
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { name: 'ChatGPT', logo: '/ai-engines/chatgpt.jpg' },
+            { name: 'Perplexity', logo: '/ai-engines/perplexity.jpg' },
+            { name: 'Claude', logo: '/ai-engines/claude.jpg' },
+            { name: 'Gemini', logo: '/ai-engines/gemini.jpg' },
+          ].map((engine) => (
             <div
-              key={engine}
-              className="flex items-center justify-between rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3"
+              key={engine.name}
+              className="flex flex-col items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4"
             >
-              <span className="text-sm font-medium text-on-background">{engine}</span>
+              {/* eslint-disable-next-line @next/next/no-img-element -- small static brand lockups */}
+              <img
+                src={engine.logo}
+                alt={`${engine.name} logo`}
+                className="h-9 w-auto rounded-md object-contain"
+              />
               <span className="text-xs text-on-surface-variant">Not tracked yet</span>
             </div>
           ))}
