@@ -24,6 +24,34 @@ import { buildOwnerPage, type OwnerPageData } from './owner-page';
 import { buildCadencePlan, type CadencePhase } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
 
+/**
+ * Map every string onto WinAnsi-encodable characters (Helvetica standard font).
+ * Known typographic characters get readable ASCII stand-ins; anything else outside
+ * CP1252 becomes '?' rather than an exception.
+ */
+const WINANSI_EXTRAS = new Set(
+  '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ'
+);
+
+export function toWinAnsiSafe(text: string): string {
+  let out = '';
+  for (const ch of text
+    .replace(/→/g, '->')
+    .replace(/[←]/g, '<-')
+    .replace(/[↑↓]/g, '-')
+    .replace(/[×✕]/g, 'x')) {
+    const code = ch.codePointAt(0) ?? 0;
+    if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WINANSI_EXTRAS.has(ch)) {
+      out += ch;
+    } else if (code === 0x0a || code === 0x09) {
+      out += ' ';
+    } else {
+      out += '?';
+    }
+  }
+  return out;
+}
+
 function wrapLine(text: string, maxChars: number): string[] {
   const words = text.split(/\s+/);
   const lines: string[] = [];
@@ -166,7 +194,14 @@ class PdfBuilder {
   }
 
   private newPage(): void {
-    this.page = this.doc.addPage([PAGE_W, PAGE_H]);
+    const page = this.doc.addPage([PAGE_W, PAGE_H]);
+    // Helvetica is WinAnsi-encoded: one stray glyph (→, emoji, model output) in any drawn
+    // string throws and kills the whole render. Sanitizing at THIS boundary means no call
+    // site can ever crash the report over a character.
+    const original = page.drawText.bind(page);
+    page.drawText = ((text: string, options?: Parameters<typeof original>[1]) =>
+      original(toWinAnsiSafe(String(text)), options)) as typeof page.drawText;
+    this.page = page;
     this.y = PAGE_H - MARGIN;
     this.pageNum += 1;
   }

@@ -61,7 +61,7 @@ export function buildOwnerPage(input: {
       `Your site scored ${String(input.score)}/100 (${input.grade}) on the checks we could run. ` +
       `${String(counts.notTested)} ${counts.notTested === 1 ? 'check was' : 'checks were'} not testable ` +
       '(see Not Tested below) — resolve the access question, then re-scan for a complete picture.';
-  } else if (input.score >= 80) {
+  } else if (input.score >= 80 || counts.failed === 0) {
     verdict = `Your site scored ${String(input.score)}/100 (${input.grade}). The machinery is in good shape — the remaining items below are refinements, not repairs.`;
   } else {
     verdict =
@@ -79,9 +79,10 @@ export function buildOwnerPage(input: {
   const withRemedy = failed
     .map((r) => ({ row: r, remedy: remediationFor(r.checkId ?? '') }))
     .filter((x): x is { row: IssueRow; remedy: RemediationEntry } => Boolean(x.remedy));
+  // Only genuinely quick items may appear under "quick wins" — showing fewer than three
+  // is more honest than dressing a Big Project up as one.
   const quickWinPool = withRemedy.filter((x) => x.remedy.effortImpact === 'Quick Win');
-  const pool = quickWinPool.length >= 3 ? quickWinPool : withRemedy;
-  const quickWins: QuickWin[] = pool
+  const quickWins: QuickWin[] = quickWinPool
     .sort((a, b) => (b.row.weight ?? 0) - (a.row.weight ?? 0))
     .slice(0, 3)
     .map((x) => ({

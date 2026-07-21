@@ -10,7 +10,9 @@ type Phase = { date: string; title: string; actions: string[] };
 function addDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0] ?? '';
+  // Format from local getters — toISOString() flips to UTC and can show tomorrow's date.
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 const PHASES: Phase[] = [
