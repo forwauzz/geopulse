@@ -9,8 +9,10 @@ import {
 import {
   addOutreachProspect,
   assignProspectTemplate,
+  deleteOutreachProspect,
   deleteOutreachTemplate,
   importOutreachProspects,
+  rescheduleOutreachProspect,
   runOutreachNowAction,
   saveOutreachTemplate,
   toggleOutreachProspect,
@@ -115,6 +117,12 @@ export default async function AdminOutreachPage({
               ))}
             </select>
           </label>
+          <label className="block">
+            <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">
+              First send (Montréal time — blank = next hourly run)
+            </span>
+            <input name="startAt" type="datetime-local" className={input} />
+          </label>
           <div className="flex items-end">
             <button
               type="submit"
@@ -148,8 +156,14 @@ export default async function AdminOutreachPage({
             placeholder={'jane@acme-it.ca, acme-it.ca, Jane, Acme IT, monthly\nmark@nordit.ca, nordit.ca'}
             className={`${input} min-h-[120px] py-2 font-mono text-xs`}
           />
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-end gap-3">
             <input type="file" name="file" accept=".csv,.txt" className="font-sans text-xs text-on-surface-variant" />
+            <label className="block">
+              <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">
+                First send for this batch (Montréal time, optional)
+              </span>
+              <input name="startAt" type="datetime-local" className={input} />
+            </label>
             <button
               type="submit"
               className="inline-flex min-h-[40px] items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-on-primary transition hover:opacity-90"
@@ -418,6 +432,31 @@ export default async function AdminOutreachPage({
                               className="rounded-lg border border-outline-variant/30 px-2.5 py-1 text-xs font-semibold text-on-background transition hover:bg-surface-container-low"
                             >
                               {prospect.enabled ? 'Pause' : 'Resume'}
+                            </button>
+                          </form>
+                          <form action={rescheduleOutreachProspect} className="flex items-center gap-1">
+                            <input type="hidden" name="prospectId" value={prospect.id} />
+                            <input
+                              name="startAt"
+                              type="datetime-local"
+                              className="min-h-[28px] rounded-lg border border-outline-variant/20 bg-surface-container-low px-1.5 text-xs text-on-surface"
+                            />
+                            <button
+                              type="submit"
+                              className="rounded-lg border border-outline-variant/30 px-2 py-1 text-xs font-semibold text-on-background transition hover:bg-surface-container-low"
+                              title="Reschedule the next send (Montréal time)"
+                            >
+                              Schedule
+                            </button>
+                          </form>
+                          <form action={deleteOutreachProspect}>
+                            <input type="hidden" name="prospectId" value={prospect.id} />
+                            <button
+                              type="submit"
+                              className="rounded-lg border border-error/40 px-2.5 py-1 text-xs font-semibold text-error transition hover:bg-error/10"
+                              title="Delete this prospect and its send history"
+                            >
+                              Delete
                             </button>
                           </form>
                           {templates.length > 0 && (

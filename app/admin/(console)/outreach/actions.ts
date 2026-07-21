@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
+import { resolveFirstRunAt } from '@/lib/server/montreal-time';
 import { normalizeProspectUrl, parseProspectImport } from '@/lib/server/outreach-import';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import {
@@ -43,6 +44,10 @@ export async function addOutreachProspect(formData: FormData): Promise<void> {
     }
   }
 
+  // Brevo-style scheduling (issue #108): the first send goes out at the admin's chosen
+  // Montréal date/time; blank = the next hourly tick. Cadence anchors from there.
+  const firstRunAt = resolveFirstRunAt(String(formData.get('startAt') ?? ''), Date.now());
+
   const row: Record<string, unknown> = {
     email,
     url,
@@ -50,7 +55,7 @@ export async function addOutreachProspect(formData: FormData): Promise<void> {
     company,
     cadence,
     enabled: true,
-    next_run_at: new Date().toISOString(),
+    next_run_at: firstRunAt,
     created_by: ctx.user.id,
     updated_at: new Date().toISOString(),
   };
@@ -100,6 +105,8 @@ export async function importOutreachProspects(formData: FormData): Promise<void>
 
   const parsed = parseProspectImport(text);
   const nowIso = new Date().toISOString();
+  // One scheduled first-send applies to the whole imported batch (issue #108).
+  const firstRunAt = resolveFirstRunAt(String(formData.get('startAt') ?? ''), Date.now());
   let imported = 0;
   let failed = 0;
 
@@ -130,7 +137,7 @@ export async function importOutreachProspects(formData: FormData): Promise<void>
       company: row.company,
       cadence: row.cadence,
       enabled: true,
-      next_run_at: nowIso,
+      next_run_at: firstRunAt,
       created_by: ctx.user.id,
       updated_at: nowIso,
     };
@@ -221,6 +228,36 @@ export async function assignProspectTemplate(formData: FormData): Promise<void> 
     .from('outreach_prospects')
     .update({ template_id: templateId, updated_at: new Date().toISOString() })
     .eq('id', prospectId);
+  revalidatePath('/admin/outreach');
+}
+
+/** Hard delete (issue #108): removes the prospect AND its send history. */
+export async function deleteOutreachProspect(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const id = String(formData.get('prospectId') ?? '').trim();
+  if (!id) return;
+
+  await ctx.adminDb.from('outreach_sends').delete().eq('prospect_id', id);
+  await ctx.adminDb.from('outreach_prospects').delete().eq('id', id);
+  structuredLog('outreach_prospect_deleted', {}, 'info');
+  revalidatePath('/admin/outreach');
+}
+
+/** Reschedule an existing prospect's next send (issue #108). */
+export async function rescheduleOutreachProspect(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const id = String(formData.get('prospectId') ?? '').trim();
+  const startAt = String(formData.get('startAt') ?? '');
+  if (!id || !startAt.trim()) return;
+
+  await ctx.adminDb
+    .from('outreach_prospects')
+    .update({ next_run_at: resolveFirstRunAt(startAt, Date.now()), updated_at: new Date().toISOString() })
+    .eq('id', id);
   revalidatePath('/admin/outreach');
 }
 
