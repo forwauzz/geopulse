@@ -26,6 +26,7 @@ import { classifyPageTier, sortPagesByTier, TIER_LABELS } from './page-tiers';
 import { assessBuyerQuestionCoverage } from './buyer-question-coverage';
 import { buildCadencePlan, type CadencePhase } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
+import { formatReportTimestamp } from './report-timestamp';
 
 /**
  * Map every string onto WinAnsi-encodable characters (Helvetica standard font).
@@ -953,7 +954,8 @@ export async function buildDeepAuditPdf(input: {
   const firstMove = topFailed[0]?.fix ?? '';
   const crawlTrustNotice = deriveCrawlTrustNotice(input.coverageSummary);
 
-  const now = new Date().toISOString().split('T')[0] ?? '';
+  // Date AND time on the cover (issue #94) — the recipient must know when this was generated.
+  const now = formatReportTimestamp(input.generatedAt ?? new Date().toISOString());
   const scanIdShort = (input.scanId ?? '').slice(0, 8);
 
   const brand = input.brand ?? GEO_PULSE_BRAND;

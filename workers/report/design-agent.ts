@@ -21,6 +21,7 @@ import {
 } from '../scan-engine/browser-rendering';
 import { validateEngineFetchUrl } from '../lib/ssrf';
 import { isAgentEnabled } from '../../lib/server/agent-flags';
+import { formatReportTimestamp } from './report-timestamp';
 import { structuredLog } from '../../lib/server/structured-log';
 
 export const DESIGN_AGENT_FEATURE = 'report_design_agent';
@@ -106,7 +107,7 @@ export function buildCoverDesignCopy(input: {
     preparedByLines: [
       'Prepared by the GEO-Pulse team',
       'getgeopulse.com · Montréal, Québec',
-      `Audited ${input.generatedDate}`,
+      `Generated ${input.generatedDate}`,
     ],
     credibilityLines: [
       `${String(input.checkCount)} checks across retrieval eligibility, AI understanding & trust, and site hygiene`,
@@ -128,11 +129,11 @@ export async function buildCoverDesign(args: {
   const enabled = await isDesignAgentEnabled(args.supabase);
   if (!enabled) return null;
 
-  const generatedDate = args.generatedAt.split('T')[0] ?? args.generatedAt;
   const copy = buildCoverDesignCopy({
     domain: args.domain,
     checkCount: CHECK_CATALOG.length,
-    generatedDate,
+    // Full date + time (issue #94): the recipient sees exactly when this was produced.
+    generatedDate: formatReportTimestamp(args.generatedAt),
   });
 
   const heroImage = await captureHeroScreenshot(args.env, args.seedUrl);
