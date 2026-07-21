@@ -30,7 +30,10 @@ type ScheduleEnvLike = {
 type ScheduledRunConfig = {
   readonly enabled: true;
   readonly querySetId: string;
+  /** Primary model lane — kept for logs/health reports that track one lane. */
   readonly modelId: string;
+  /** All model lanes the sweep iterates (BENCHMARK_SCHEDULE_MODEL_ID is comma-separable). */
+  readonly modelIds: readonly string[];
   readonly runModes: readonly BenchmarkRunMode[];
   readonly vertical: string | null;
   readonly seedPriorities: readonly number[];
@@ -64,6 +67,7 @@ export type BenchmarkSchedulePreview = {
   readonly querySetName: string;
   readonly querySetVersion: string;
   readonly modelId: string;
+  readonly modelIds: readonly string[];
   readonly scheduleVersion: string;
   readonly windowDate: string;
   readonly vertical: string | null;
@@ -147,7 +151,16 @@ export function parseBenchmarkScheduleConfig(
   if (!enabled) return null;
 
   const querySetId = normalizeText(env?.BENCHMARK_SCHEDULE_QUERY_SET_ID);
-  const modelId = normalizeText(env?.BENCHMARK_SCHEDULE_MODEL_ID);
+  const rawModelIds = normalizeText(env?.BENCHMARK_SCHEDULE_MODEL_ID);
+  const modelIds = Array.from(
+    new Set(
+      (rawModelIds ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    )
+  );
+  const modelId = modelIds[0];
   if (!querySetId || !modelId) return null;
 
   const rawRunModes =
@@ -169,6 +182,7 @@ export function parseBenchmarkScheduleConfig(
     enabled: true,
     querySetId,
     modelId,
+    modelIds,
     runModes: uniqueRunModes,
     vertical: normalizeText(env?.BENCHMARK_SCHEDULE_VERTICAL),
     seedPriorities: parsePositiveIntList(normalizeText(env?.BENCHMARK_SCHEDULE_SEED_PRIORITIES)),
@@ -254,6 +268,7 @@ export async function previewBenchmarkScheduleSweep(args: {
     querySetName: querySet.name,
     querySetVersion: querySet.version,
     modelId: args.config.modelId,
+    modelIds: args.config.modelIds,
     scheduleVersion: args.config.scheduleVersion,
     windowDate,
     vertical: args.config.vertical,
@@ -312,6 +327,7 @@ export async function executeBenchmarkScheduleSweep(args: {
   structuredLog('benchmark_schedule_started', {
     query_set_id: args.config.querySetId,
     model_id: args.config.modelId,
+    model_ids: args.config.modelIds.join(','),
     run_mode_count: args.config.runModes.length,
     vertical: args.config.vertical,
     seed_priorities: args.config.seedPriorities.join(','),
@@ -325,96 +341,98 @@ export async function executeBenchmarkScheduleSweep(args: {
 
   outer: for (const domain of domains) {
     for (const runMode of args.config.runModes) {
-      if (launchedRuns >= args.config.maxRuns) {
-        stoppedEarly = true;
-        structuredLog('benchmark_schedule_cap_reached', {
-          query_set_id: args.config.querySetId,
-          model_id: args.config.modelId,
-          launched_runs: launchedRuns,
-          max_runs: args.config.maxRuns,
-          window_hours: args.config.windowHours,
-          schedule_version: args.config.scheduleVersion,
-          schedule_domains: args.config.canonicalDomains.join(','),
+      for (const modelId of args.config.modelIds) {
+        if (launchedRuns >= args.config.maxRuns) {
+          stoppedEarly = true;
+          structuredLog('benchmark_schedule_cap_reached', {
+            query_set_id: args.config.querySetId,
+            model_id: modelId,
+            launched_runs: launchedRuns,
+            max_runs: args.config.maxRuns,
+            window_hours: args.config.windowHours,
+            schedule_version: args.config.scheduleVersion,
+            schedule_domains: args.config.canonicalDomains.join(','),
+          });
+          break outer;
+        }
+
+        if (failedRuns >= args.config.maxFailures) {
+          stoppedEarly = true;
+          structuredError('benchmark_schedule_failure_cap_reached', {
+            query_set_id: args.config.querySetId,
+            model_id: modelId,
+            failed_runs: failedRuns,
+            max_failures: args.config.maxFailures,
+            window_hours: args.config.windowHours,
+            schedule_version: args.config.scheduleVersion,
+            schedule_domains: args.config.canonicalDomains.join(','),
+          });
+          break outer;
+        }
+
+        const scheduleRunKey = buildBenchmarkScheduleRunKey({
+          windowDate,
+          scheduleVersion: args.config.scheduleVersion,
+          domainId: domain.id,
+          querySetId: querySet.id,
+          modelId,
+          runMode,
         });
-        break outer;
-      }
+        const existing = await args.repo.getRunGroupByScheduleKey(scheduleRunKey);
+        if (existing) {
+          skippedExistingRuns += 1;
+          continue;
+        }
 
-      if (failedRuns >= args.config.maxFailures) {
-        stoppedEarly = true;
-        structuredError('benchmark_schedule_failure_cap_reached', {
-          query_set_id: args.config.querySetId,
-          model_id: args.config.modelId,
-          failed_runs: failedRuns,
-          max_failures: args.config.maxFailures,
-          window_hours: args.config.windowHours,
-          schedule_version: args.config.scheduleVersion,
-          schedule_domains: args.config.canonicalDomains.join(','),
+        const runLabel = buildScheduledBenchmarkRunLabel({
+          windowDate,
+          domain,
+          querySet,
+          modelId,
+          runMode,
         });
-        break outer;
-      }
 
-      const scheduleRunKey = buildBenchmarkScheduleRunKey({
-        windowDate,
-        scheduleVersion: args.config.scheduleVersion,
-        domainId: domain.id,
-        querySetId: querySet.id,
-        modelId: args.config.modelId,
-        runMode,
-      });
-      const existing = await args.repo.getRunGroupByScheduleKey(scheduleRunKey);
-      if (existing) {
-        skippedExistingRuns += 1;
-        continue;
-      }
-
-      const runLabel = buildScheduledBenchmarkRunLabel({
-        windowDate,
-        domain,
-        querySet,
-        modelId: args.config.modelId,
-        runMode,
-      });
-
-      try {
-        await args.runBenchmarkGroup(
-          args.supabase,
-          {
-            domainId: domain.id,
-            querySetId: querySet.id,
-            modelId: args.config.modelId,
-            runMode,
-            runLabel,
-            runScope: 'scheduled_internal_benchmark',
-            notes: `Scheduled benchmark sweep (${windowDate})`,
-            runMetadata: {
-              trigger_source: args.triggerSource ?? 'worker_cron',
-              schedule_version: args.config.scheduleVersion,
-              schedule_window_utc: windowDate,
-              schedule_window_hours: args.config.windowHours,
-              schedule_vertical: args.config.vertical,
-              schedule_seed_priorities: args.config.seedPriorities,
-              schedule_domains: args.config.canonicalDomains,
-              schedule_run_key: scheduleRunKey,
-              schedule_query_set_name: querySet.name,
-              schedule_query_set_version: querySet.version,
+        try {
+          await args.runBenchmarkGroup(
+            args.supabase,
+            {
+              domainId: domain.id,
+              querySetId: querySet.id,
+              modelId,
+              runMode,
+              runLabel,
+              runScope: 'scheduled_internal_benchmark',
+              notes: `Scheduled benchmark sweep (${windowDate})`,
+              runMetadata: {
+                trigger_source: args.triggerSource ?? 'worker_cron',
+                schedule_version: args.config.scheduleVersion,
+                schedule_window_utc: windowDate,
+                schedule_window_hours: args.config.windowHours,
+                schedule_vertical: args.config.vertical,
+                schedule_seed_priorities: args.config.seedPriorities,
+                schedule_domains: args.config.canonicalDomains,
+                schedule_run_key: scheduleRunKey,
+                schedule_query_set_name: querySet.name,
+                schedule_query_set_version: querySet.version,
+              },
             },
-          },
-          args.adapter
-        );
-        launchedRuns += 1;
-      } catch (error) {
-        failedRuns += 1;
-        structuredError('benchmark_schedule_run_failed', {
-          domain_id: domain.id,
-          canonical_domain: domain.canonical_domain,
-          query_set_id: querySet.id,
-          model_id: args.config.modelId,
-          run_mode: runMode,
-          schedule_version: args.config.scheduleVersion,
-          schedule_window_utc: windowDate,
-          error: error instanceof Error ? error.message : 'unknown',
-          schedule_domains: args.config.canonicalDomains.join(','),
-        });
+            args.adapter
+          );
+          launchedRuns += 1;
+        } catch (error) {
+          failedRuns += 1;
+          structuredError('benchmark_schedule_run_failed', {
+            domain_id: domain.id,
+            canonical_domain: domain.canonical_domain,
+            query_set_id: querySet.id,
+            model_id: modelId,
+            run_mode: runMode,
+            schedule_version: args.config.scheduleVersion,
+            schedule_window_utc: windowDate,
+            error: error instanceof Error ? error.message : 'unknown',
+            schedule_domains: args.config.canonicalDomains.join(','),
+          });
+        }
       }
     }
   }

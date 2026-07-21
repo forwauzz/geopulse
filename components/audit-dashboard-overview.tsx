@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ActionSeverity, AuditDashboardView } from '@/lib/server/audit-dashboard-data';
+import type { EngineCitationMetric, EngineKey } from '@/lib/server/dashboard-citation-metrics';
 
 /**
  * The signed-in overview under the scan hero: every tile is backed by measurements the user's own
@@ -107,8 +108,15 @@ function NoDataHint({ children }: { children: React.ReactNode }) {
   return <p className="text-sm text-on-surface-variant">{children}</p>;
 }
 
-export function AuditDashboardOverview({ view }: { view: AuditDashboardView }) {
+export function AuditDashboardOverview({
+  view,
+  engineCitations = {},
+}: {
+  view: AuditDashboardView;
+  engineCitations?: Partial<Record<EngineKey, EngineCitationMetric>>;
+}) {
   const { latest } = view;
+  const anyEngineTracked = Object.keys(engineCitations).length > 0;
 
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6" data-testid="audit-dashboard-overview">
@@ -212,7 +220,7 @@ export function AuditDashboardOverview({ view }: { view: AuditDashboardView }) {
         </Card>
       </div>
 
-      {/* Not measured for self-serve yet — say so instead of faking it */}
+      {/* Engines with benchmark data show the real citation rate; the rest say so honestly. */}
       <article className="rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-lowest p-5 md:p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -225,29 +233,46 @@ export function AuditDashboardOverview({ view }: { view: AuditDashboardView }) {
             </p>
           </div>
           <span className="rounded-md bg-surface-container-high px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
-            Coming soon
+            {anyEngineTracked ? 'Early data' : 'Coming soon'}
           </span>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {[
-            { name: 'ChatGPT', logo: '/ai-engines/chatgpt.jpg' },
-            { name: 'Perplexity', logo: '/ai-engines/perplexity.jpg' },
-            { name: 'Claude', logo: '/ai-engines/claude.jpg' },
-            { name: 'Gemini', logo: '/ai-engines/gemini.jpg' },
-          ].map((engine) => (
-            <div
-              key={engine.name}
-              className="flex flex-col items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- small static brand lockups */}
-              <img
-                src={engine.logo}
-                alt={`${engine.name} logo`}
-                className="h-9 w-auto rounded-md object-contain"
-              />
-              <span className="text-xs text-on-surface-variant">Not tracked yet</span>
-            </div>
-          ))}
+          {(
+            [
+              { key: 'chatgpt', name: 'ChatGPT', logo: '/ai-engines/chatgpt.jpg' },
+              { key: 'perplexity', name: 'Perplexity', logo: '/ai-engines/perplexity.jpg' },
+              { key: 'claude', name: 'Claude', logo: '/ai-engines/claude.jpg' },
+              { key: 'gemini', name: 'Gemini', logo: '/ai-engines/gemini.jpg' },
+            ] as ReadonlyArray<{ key: EngineKey; name: string; logo: string }>
+          ).map((engine) => {
+            const metric = engineCitations[engine.key];
+            return (
+              <div
+                key={engine.name}
+                className="flex flex-col items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-4"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- small static brand lockups */}
+                <img
+                  src={engine.logo}
+                  alt={`${engine.name} logo`}
+                  className="h-9 w-auto rounded-md object-contain"
+                />
+                {metric ? (
+                  <div className="text-center">
+                    <p className="font-sans text-xl font-black tabular-nums text-on-background">
+                      {Math.round(metric.citationRate * 100)}
+                      <span className="text-xs font-semibold text-on-surface-variant">%</span>
+                    </p>
+                    <p className="text-[11px] text-on-surface-variant">
+                      citation rate{metric.runMode === 'grounded_site' ? ' (grounded)' : ''}
+                    </p>
+                  </div>
+                ) : (
+                  <span className="text-xs text-on-surface-variant">Not tracked yet</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </article>
 

@@ -5,6 +5,11 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { AuditDashboardOverview } from '@/components/audit-dashboard-overview';
 import { DashboardScanHero } from '@/components/dashboard-scan-hero';
 import { buildAuditDashboardView, type AuditScanRow } from '@/lib/server/audit-dashboard-data';
+import {
+  loadEngineCitationMetrics,
+  type EngineCitationMetric,
+  type EngineKey,
+} from '@/lib/server/dashboard-citation-metrics';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 export const dynamic = 'force-dynamic';
@@ -25,10 +30,11 @@ export default async function DashboardHomePage({
 
   // Attribute scans to the user's first startup workspace, if any.
   let startupWorkspaceId: string | null = null;
+  let admin: ReturnType<typeof createServiceRoleClient> | null = null;
   const env = await getScanApiEnv();
   if (env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
     try {
-      const admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+      admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
       const { data } = await admin
         .from('startup_workspace_users')
         .select('startup_workspace_id')
@@ -59,6 +65,15 @@ export default async function DashboardHomePage({
 
   const view = buildAuditDashboardView(scanRows);
 
+  // Real citation data where the audited domain is in the benchmark system; {} otherwise.
+  let engineCitations: Partial<Record<EngineKey, EngineCitationMetric>> = {};
+  if (admin && view.latest?.domain) {
+    engineCitations = await loadEngineCitationMetrics({
+      supabase: admin,
+      domain: view.latest.domain,
+    });
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 py-8">
       <div className="mx-auto w-full max-w-2xl">
@@ -73,7 +88,7 @@ export default async function DashboardHomePage({
           contextLine={null}
         />
       </div>
-      <AuditDashboardOverview view={view} />
+      <AuditDashboardOverview view={view} engineCitations={engineCitations} />
     </div>
   );
 }

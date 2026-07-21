@@ -48,11 +48,15 @@
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
 
-    // Benchmark execution defaults. API key remains a secret.
-    "BENCHMARK_EXECUTION_PROVIDER": "gemini",
+    // Benchmark execution defaults. API keys remain secrets.
+    // "multi" routes by model id: gemini-* lanes to the Gemini adapter, gpt-* to OpenAI.
+    // A lane whose secret is missing (e.g. PERPLEXITY_API_KEY) simply is not registered,
+    // so its runs record as skipped rather than failing the sweep.
+    "BENCHMARK_EXECUTION_PROVIDER": "multi",
     "BENCHMARK_EXECUTION_MODEL": "gemini-2.5-flash-lite",
     "BENCHMARK_EXECUTION_ENABLED_MODELS": "gemini-2.5-flash-lite",
     "BENCHMARK_EXECUTION_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
+    "OPENAI_MODEL": "gpt-4o-mini",
 
     // Startup rollout defaults (can be overridden per workspace in metadata rollout_flags).
     "STARTUP_DASHBOARD_ENABLED": "true",
@@ -80,13 +84,16 @@
     // copy the printed UUID into QUERY_SET_ID below, and flip VERTICAL to "marketing_firms".
     "BENCHMARK_SCHEDULE_ENABLED": "true",
     "BENCHMARK_SCHEDULE_QUERY_SET_ID": "9910b5ac-ade6-42be-9dca-9b85c04e4469",
-    "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite",
+    // Comma-separated: each model is its own daily lane (domain × run-mode × model).
+    // gpt-4o-mini needs the OPENAI_API_KEY secret set or its runs record as skipped.
+    "BENCHMARK_SCHEDULE_MODEL_ID": "gemini-2.5-flash-lite,gpt-4o-mini",
     "BENCHMARK_SCHEDULE_RUN_MODES": "ungrounded_inference,grounded_site",
     "BENCHMARK_SCHEDULE_VERTICAL": "law_firms",
     "BENCHMARK_SCHEDULE_SEED_PRIORITIES": "1",
     "BENCHMARK_SCHEDULE_DOMAINS": "",
     "BENCHMARK_SCHEDULE_DOMAIN_LIMIT": "20",
-    "BENCHMARK_SCHEDULE_MAX_RUNS": "40",
+    // Doubled with the second model lane so late-ordered domains still get both models.
+    "BENCHMARK_SCHEDULE_MAX_RUNS": "80",
     "BENCHMARK_SCHEDULE_MAX_FAILURES": "5",
     "BENCHMARK_SCHEDULE_WINDOW_HOURS": "12",
     "BENCHMARK_SCHEDULE_VERSION": "v1",
@@ -140,10 +147,9 @@
     // GEO Performance Monitoring scheduled sweep.
     // Runtime defaults live here; provider API keys remain secrets.
     "GPM_SCHEDULE_ENABLED": "true",
-    // Platform feature flag: only these platforms run. Gemini is the only provider
-    // with a key today. To enable the others, add OPENAI_API_KEY / PERPLEXITY_API_KEY,
-    // set BENCHMARK_EXECUTION_PROVIDER=multi, then set this to "gemini,chatgpt,perplexity".
-    "GPM_ENABLED_PLATFORMS": "gemini",
+    // Platform feature flag: only these platforms run. Gemini + ChatGPT have keys
+    // (OPENAI_API_KEY secret). To add Perplexity: add PERPLEXITY_API_KEY and append it here.
+    "GPM_ENABLED_PLATFORMS": "gemini,chatgpt",
     "GPM_CHATGPT_MODEL_ID": "gpt-4o-mini",
     // Must be one of BENCHMARK_EXECUTION_ENABLED_MODELS or the Gemini adapter skips the
     // run as "model lane not enabled". Aligned with the benchmark lane model.
