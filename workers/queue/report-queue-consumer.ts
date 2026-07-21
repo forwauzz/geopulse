@@ -24,6 +24,7 @@ import { computeCategoryScores, letterGrade, type WeightedResult } from '../scan
 import { bucketOf } from '../scan-engine/check-catalog';
 import { deriveCheckCounts } from '../report/check-counts';
 import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../report/report-qa-gate';
+import { buildCoverDesign } from '../report/design-agent';
 import { replayReportJobFromDlq } from './dlq-replay';
 import { resolveStartupRolloutFlagsFromMetadata } from '../../lib/server/startup-rollout-flags';
 import { resolveStartupWorkspaceBundleKey } from '../../lib/server/startup-github-integration';
@@ -751,7 +752,22 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     );
   }
 
-  const pdfBytes = await buildDeepAuditPdfFromPayload(payload, branding);
+  // Design agent (issue #90): personalized cover, admin-killable, every piece optional.
+  let coverDesign = null;
+  try {
+    coverDesign = await buildCoverDesign({
+      supabase: supabase as unknown as Parameters<typeof buildCoverDesign>[0]['supabase'],
+      env: env as unknown as Parameters<typeof buildCoverDesign>[0]['env'],
+      domain: scan.domain,
+      seedUrl: scan.url,
+      generatedAt: payload.generatedAt,
+      scanId: job.scanId,
+    });
+  } catch {
+    coverDesign = null;
+  }
+
+  const pdfBytes = await buildDeepAuditPdfFromPayload(payload, branding, coverDesign);
   const markdownText = buildDeepAuditMarkdown(payload);
   const publicBase = (env.DEEP_AUDIT_R2_PUBLIC_BASE ?? '').trim();
 

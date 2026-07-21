@@ -4,11 +4,13 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { loadSelfImprovementSettings } from '@/lib/server/self-improvement';
 import { loadAutomationSetting, configInt } from '@/lib/server/automation-settings';
 import { resolveDiscoveryMode } from '@/lib/server/competitor-discovery';
+import { isDesignAgentEnabled } from '@/workers/report/design-agent';
 import {
   setSelfImprovementFlag,
   setSelfImprovementRecipient,
   setMarketingFlag,
   setMarketingCap,
+  setDesignAgentFlag,
   runSelfImprovementNow,
   runMarketingNow,
 } from './actions';
@@ -64,15 +66,18 @@ export default async function AutomationConsolePage() {
   }
   const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-  const [self, marketing, runsRes, proposalsRes, channelsRes] = await Promise.all([
+  const [self, marketing, designSetting, designAgentEnabled, runsRes, proposalsRes, channelsRes] = await Promise.all([
     loadSelfImprovementSettings(supabase),
     loadAutomationSetting(supabase, 'marketing_autopilot'),
+    loadAutomationSetting(supabase, 'report_design_agent'),
+    isDesignAgentEnabled(supabase),
     supabase.from('self_improvement_runs').select('id, created_at, trigger_source, status, score, letter_grade, emailed_to').order('created_at', { ascending: false }).limit(8),
     supabase.from('content_items').select('slug, title, status, created_at').eq('metadata->>proposed_by', 'marketing_autopilot').order('created_at', { ascending: false }).limit(8),
     supabase.from('distribution_accounts').select('id').eq('status', 'connected').limit(1),
   ]);
 
   const runs = (runsRes.data ?? []) as Array<{ id: string; created_at: string; trigger_source: string; status: string; score: number | null; letter_grade: string | null; emailed_to: string | null }>;
+  const designAgentKilled = designSetting.killSwitch;
   const proposals = (proposalsRes.data ?? []) as Array<{ slug: string; title: string; status: string; created_at: string }>;
   const channelConnected = Array.isArray(channelsRes.data) && channelsRes.data.length > 0;
 
@@ -165,6 +170,40 @@ export default async function AutomationConsolePage() {
             ))}
           </ul>
         ) : <p className="mt-4 font-sans text-xs text-on-surface-variant">No proposals yet.</p>}
+      </section>
+
+      {/* Report design agent (issue #90) — personalized PDF covers, ON by default */}
+      <section className={card}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-sans text-lg font-bold text-on-background">Report design agent</h2>
+            <p className="mt-0.5 font-sans text-xs text-on-surface-variant">
+              Personalizes the deep-audit PDF cover: &quot;Prepared for&quot; block, GEO-Pulse team +
+              Montréal provenance, credibility strip, and a homepage screenshot when Browser
+              Rendering is configured. Presentation only — no effect on scores or findings.
+            </p>
+          </div>
+        </div>
+        <div className="mt-3">
+          <StatusChip
+            ok={designAgentEnabled}
+            label={designAgentEnabled ? 'Active — covers are personalized' : 'Off — classic cover'}
+          />
+        </div>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="font-sans text-sm text-on-surface-variant">Enabled (default on)</dt>
+            <dd><Toggle action={setDesignAgentFlag} field="enabled" current={designAgentEnabled} /></dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="font-sans text-sm text-on-surface-variant">Kill switch</dt>
+            <dd><Toggle action={setDesignAgentFlag} field="kill_switch" current={designAgentKilled} onLabel="Killed" offLabel="Live" /></dd>
+          </div>
+        </dl>
+        <p className="mt-3 font-sans text-xs text-on-surface-variant">
+          Screenshot capture requires the same Browser Rendering credentials as deep-audit JS
+          rendering; without them the cover simply omits the image.
+        </p>
       </section>
 
       {/* Competitor discovery (read-only, env-driven) */}

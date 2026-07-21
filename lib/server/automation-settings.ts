@@ -5,7 +5,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export type AutomationFeature = 'marketing_autopilot';
+export type AutomationFeature = 'marketing_autopilot' | 'report_design_agent';
 
 export type AutomationSetting = {
   feature: string;

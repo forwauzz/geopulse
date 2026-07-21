@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';import {
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';import {
   GEO_PULSE_BRAND,
   mutedInkOn,
   pickInk,
@@ -226,7 +226,26 @@ class PdfBuilder {
     this.page.drawText(this.footerRight, { x: PAGE_W - MARGIN - rW, y, size: 7, font: this.font, color: MUTED });
   }
 
-  drawCoverPage(domain: string, score: number, grade: string, date: string): void {
+  async embedHeroImage(bytes: Uint8Array): Promise<PDFImage | null> {
+    // A screenshot that will not embed must not take the report down with it.
+    try {
+      return await this.doc.embedPng(bytes);
+    } catch {
+      try {
+        return await this.doc.embedJpg(bytes);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  drawCoverPage(
+    domain: string,
+    score: number,
+    grade: string,
+    date: string,
+    design?: { preparedForLines: string[]; preparedByLines: string[]; credibilityLines: string[]; hero: PDFImage | null } | null
+  ): void {
     // Every colour on the cover derives from the brand: the background is theirs, and the ink is
     // chosen for contrast against it rather than assumed to be white. A pale brand would make
     // fixed white text invisible, and it would fail for that customer only.
@@ -256,8 +275,50 @@ class PdfBuilder {
     this.page.drawLine({ start: { x: MARGIN, y: logoY - 50 }, end: { x: PAGE_W - MARGIN, y: logoY - 50 }, thickness: 0.5, color: hairline });
 
     const domainY = PAGE_H / 2 + 40;
+    if (design) {
+      this.page.drawText(design.preparedForLines[0] ?? '', {
+        x: MARGIN, y: domainY + 34, size: 11, font: this.font, color: muted,
+      });
+    }
     this.page.drawText(domain, { x: MARGIN, y: domainY, size: 36, font: this.fontBold, color: ink });
     this.page.drawText(date, { x: MARGIN, y: domainY - 30, size: 11, font: this.font, color: muted });
+
+    if (design) {
+      // The audited site's own homepage, framed on the right — the "we actually looked
+      // at YOUR site" signal. Skipped silently when capture/embedding failed.
+      if (design.hero) {
+        const maxW = 250;
+        const maxH = 156;
+        const scale = Math.min(maxW / design.hero.width, maxH / design.hero.height);
+        const w = design.hero.width * scale;
+        const h = design.hero.height * scale;
+        const hx = PAGE_W - MARGIN - w;
+        const hy = domainY + 60;
+        this.page.drawRectangle({
+          x: hx - 4, y: hy - 4, width: w + 8, height: h + 8,
+          color: toPdfRgb(mutedInkOn(this.brand.primary, 0.85)),
+        });
+        this.page.drawImage(design.hero, { x: hx, y: hy, width: w, height: h });
+      }
+
+      // Prepared-by provenance under the date.
+      let by = domainY - 58;
+      for (const line of design.preparedByLines) {
+        this.page.drawText(line, { x: MARGIN, y: by, size: 9, font: this.font, color: muted });
+        by -= 14;
+      }
+
+      // Credibility strip above the disclaimer, separated by a hairline.
+      let cy = by - 14;
+      this.page.drawLine({
+        start: { x: MARGIN, y: cy + 8 }, end: { x: PAGE_W / 2 + 60, y: cy + 8 },
+        thickness: 0.5, color: hairline,
+      });
+      for (const line of design.credibilityLines) {
+        this.page.drawText(line, { x: MARGIN, y: cy - 4, size: 7.5, font: this.font, color: muted });
+        cy -= 12;
+      }
+    }
 
     const scoreStr = String(score);
     const scoreW = this.fontBold.widthOfTextAtSize(scoreStr, 72);
@@ -860,6 +921,13 @@ export async function buildDeepAuditPdf(input: {
   scanId?: string;
   /** ISO timestamp the report was generated — anchors the dated 90-day plan (spec C11). */
   generatedAt?: string;
+  /** Personalized cover from the design agent (issue #90); null/absent = classic cover. */
+  coverDesign?: {
+    preparedForLines: string[];
+    preparedByLines: string[];
+    credibilityLines: string[];
+    heroImage: Uint8Array | null;
+  } | null;
   /** Customer branding; GEO-Pulse's own when absent. */
   brand?: BrandConfig;
   /** Raw logo bytes, already fetched from R2 by the caller. */
@@ -897,7 +965,23 @@ export async function buildDeepAuditPdf(input: {
     input.logoBytes ?? null,
   );
 
-  pdf.drawCoverPage(input.domain, score, grade, now);
+  const heroEmbedded = input.coverDesign?.heroImage
+    ? await pdf.embedHeroImage(input.coverDesign.heroImage)
+    : null;
+  pdf.drawCoverPage(
+    input.domain,
+    score,
+    grade,
+    now,
+    input.coverDesign
+      ? {
+          preparedForLines: input.coverDesign.preparedForLines,
+          preparedByLines: input.coverDesign.preparedByLines,
+          credibilityLines: input.coverDesign.credibilityLines,
+          hero: heroEmbedded,
+        }
+      : null
+  );
 
   // Layer 1 — the Owner Page (spec C9): plain English before any table.
   pdf.drawOwnerPage(buildOwnerPage({ score, grade, issues: allIssues }));
@@ -977,11 +1061,18 @@ export async function buildDeepAuditPdf(input: {
  */
 export async function buildDeepAuditPdfFromPayload(
   payload: DeepAuditReportPayload,
-  branding?: { brand?: BrandConfig; logoBytes?: Uint8Array | null }
+  branding?: { brand?: BrandConfig; logoBytes?: Uint8Array | null },
+  coverDesign?: {
+    preparedForLines: string[];
+    preparedByLines: string[];
+    credibilityLines: string[];
+    heroImage: Uint8Array | null;
+  } | null
 ): Promise<Uint8Array> {
   return buildDeepAuditPdf({
     brand: branding?.brand,
     logoBytes: branding?.logoBytes,
+    coverDesign: coverDesign ?? null,
     url: payload.seedUrl,
     domain: payload.domain,
     score: payload.aggregateScore,
