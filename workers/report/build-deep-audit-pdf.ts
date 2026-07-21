@@ -1,10 +1,15 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';import {
+import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
+import {
   GEO_PULSE_BRAND,
+  hexToRgb01,
   mutedInkOn,
+  relativeLuminance,
   pickInk,
   type BrandConfig,
   type Rgb01,
 } from './report-branding';
+import { computeBucketScores, type WeightedResult } from '../scan-engine/scoring';
+import { bucketOf } from '../scan-engine/check-catalog';
 import type { CategoryScorePayload, DeepAuditReportPayload } from './deep-audit-report-payload';
 import {
   customerFacingFinding,
@@ -252,104 +257,152 @@ class PdfBuilder {
     // fixed white text invisible, and it would fail for that customer only.
     const bg = toPdfRgb(this.brand.primary);
     const ink = toPdfRgb(this.brand.onPrimary);
-    const muted = toPdfRgb(mutedInkOn(this.brand.primary));
-    const hairline = toPdfRgb(mutedInkOn(this.brand.primary, 0.55));
+    // 0.35/0.5 instead of the old 0.28/0.55 — user-reported "not every text is visible":
+    // the secondary ink was below comfortable contrast on dark brand colours.
+    const muted = toPdfRgb(mutedInkOn(this.brand.primary, 0.35));
+    const hairline = toPdfRgb(mutedInkOn(this.brand.primary, 0.5));
 
     this.page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: bg });
 
-    const logoY = PAGE_H - 80;
+    // ── Masthead ────────────────────────────────────────────────────────────
+    const logoY = PAGE_H - 70;
     if (this.embeddedLogo) {
-      // Fit inside a fixed box so a tall or wide logo cannot blow out the masthead.
       const maxW = 180;
-      const maxH = 48;
+      const maxH = 44;
       const scale = Math.min(maxW / this.embeddedLogo.width, maxH / this.embeddedLogo.height, 1);
       const w = this.embeddedLogo.width * scale;
       const h = this.embeddedLogo.height * scale;
-      this.page.drawImage(this.embeddedLogo, { x: MARGIN, y: logoY - h + 20, width: w, height: h });
+      this.page.drawImage(this.embeddedLogo, { x: MARGIN, y: logoY - h + 18, width: w, height: h });
     } else {
-      this.page.drawText(this.brand.companyName, {
-        x: MARGIN, y: logoY, size: 28, font: this.fontBold, color: ink,
-      });
+      this.page.drawText(this.brand.companyName, { x: MARGIN, y: logoY, size: 26, font: this.fontBold, color: ink });
     }
-    this.page.drawText('AI Search Readiness Report', { x: MARGIN, y: logoY - 30, size: 12, font: this.font, color: muted });
+    this.page.drawText('AI SEARCH READINESS REPORT', { x: MARGIN, y: logoY - 24, size: 10, font: this.font, color: muted });
+    this.page.drawLine({ start: { x: MARGIN, y: logoY - 40 }, end: { x: PAGE_W - MARGIN, y: logoY - 40 }, thickness: 0.75, color: hairline });
 
-    this.page.drawLine({ start: { x: MARGIN, y: logoY - 50 }, end: { x: PAGE_W - MARGIN, y: logoY - 50 }, thickness: 0.5, color: hairline });
-
-    const domainY = PAGE_H / 2 + 40;
-    if (design) {
-      this.page.drawText(design.preparedForLines[0] ?? '', {
-        x: MARGIN, y: domainY + 34, size: 11, font: this.font, color: muted,
+    // ── Hero banner — THEIR site, full content width, front and centre ──────
+    const bannerTop = logoY - 52; // 670
+    let bannerBottom = bannerTop; // collapses gracefully when no hero
+    if (design?.hero) {
+      const w = MAX_W;
+      const h = Math.min(260, (design.hero.height * w) / design.hero.width);
+      bannerBottom = bannerTop - h;
+      this.page.drawRectangle({
+        x: MARGIN - 3, y: bannerBottom - 3, width: w + 6, height: h + 6,
+        color: toPdfRgb(mutedInkOn(this.brand.primary, 0.6)),
       });
+      this.page.drawImage(design.hero, { x: MARGIN, y: bannerBottom, width: w, height: h });
     }
-    this.page.drawText(domain, { x: MARGIN, y: domainY, size: 36, font: this.fontBold, color: ink });
-    this.page.drawText(date, { x: MARGIN, y: domainY - 30, size: 11, font: this.font, color: muted });
+
+    // ── Identity block (left) + score block (right), one visual band ────────
+    const bandTop = Math.min(bannerBottom - 34, 400);
+    if (design) {
+      this.page.drawText(design.preparedForLines[0] ?? '', { x: MARGIN, y: bandTop, size: 12, font: this.font, color: muted });
+    }
+    this.page.drawText(truncateAtWord(domain, 26), { x: MARGIN, y: bandTop - 34, size: 34, font: this.fontBold, color: ink });
+    this.page.drawText(`Generated ${date}`, { x: MARGIN, y: bandTop - 58, size: 10, font: this.font, color: muted });
 
     if (design) {
-      // The audited site's own homepage, framed on the right — the "we actually looked
-      // at YOUR site" signal. Skipped silently when capture/embedding failed.
-      if (design.hero) {
-        const maxW = 250;
-        const maxH = 156;
-        const scale = Math.min(maxW / design.hero.width, maxH / design.hero.height);
-        const w = design.hero.width * scale;
-        const h = design.hero.height * scale;
-        const hx = PAGE_W - MARGIN - w;
-        const hy = domainY + 60;
-        this.page.drawRectangle({
-          x: hx - 4, y: hy - 4, width: w + 8, height: h + 8,
-          color: toPdfRgb(mutedInkOn(this.brand.primary, 0.85)),
-        });
-        this.page.drawImage(design.hero, { x: hx, y: hy, width: w, height: h });
-      }
-
-      // Prepared-by provenance under the date.
-      let by = domainY - 58;
+      let by = bandTop - 82;
       for (const line of design.preparedByLines) {
-        this.page.drawText(line, { x: MARGIN, y: by, size: 9, font: this.font, color: muted });
+        this.page.drawText(line, { x: MARGIN, y: by, size: 9.5, font: this.font, color: muted });
         by -= 14;
       }
+    }
 
-      // Credibility strip above the disclaimer, separated by a hairline.
-      let cy = by - 14;
-      this.page.drawLine({
-        start: { x: MARGIN, y: cy + 8 }, end: { x: PAGE_W / 2 + 60, y: cy + 8 },
-        thickness: 0.5, color: hairline,
-      });
+    // Score block, right-aligned: number, gauge, grade.
+    const scoreStr = String(score);
+    const scoreSize = 58;
+    const scoreW = this.fontBold.widthOfTextAtSize(scoreStr, scoreSize);
+    const suffixW = this.font.widthOfTextAtSize(' / 100', 14);
+    const scoreRight = PAGE_W - MARGIN;
+    const scoreBase = bandTop - 44;
+    this.page.drawText(scoreStr, { x: scoreRight - suffixW - scoreW, y: scoreBase, size: scoreSize, font: this.fontBold, color: ink });
+    this.page.drawText(' / 100', { x: scoreRight - suffixW, y: scoreBase + 6, size: 14, font: this.font, color: muted });
+
+    // Gauge: track + fill, honest zero-to-hundred.
+    const gaugeW = 190;
+    const gaugeX = scoreRight - gaugeW;
+    const gaugeY = scoreBase - 20;
+    this.page.drawRectangle({ x: gaugeX, y: gaugeY, width: gaugeW, height: 8, color: toPdfRgb(mutedInkOn(this.brand.primary, 0.75)) });
+    this.page.drawRectangle({ x: gaugeX, y: gaugeY, width: Math.max(2, (gaugeW * Math.max(0, Math.min(100, score))) / 100), height: 8, color: ink });
+    const gradeLabel = `Grade ${grade}`;
+    const gradeW = this.fontBold.widthOfTextAtSize(gradeLabel, 12);
+    this.page.drawText(gradeLabel, { x: scoreRight - gradeW, y: gaugeY - 18, size: 12, font: this.fontBold, color: ink });
+
+    // ── Credibility strip ───────────────────────────────────────────────────
+    if (design) {
+      let cy = 216;
+      this.page.drawLine({ start: { x: MARGIN, y: cy + 12 }, end: { x: PAGE_W - MARGIN, y: cy + 12 }, thickness: 0.5, color: hairline });
       for (const line of design.credibilityLines) {
-        this.page.drawText(line, { x: MARGIN, y: cy - 4, size: 7.5, font: this.font, color: muted });
-        cy -= 12;
+        this.page.drawText(line, { x: MARGIN, y: cy - 4, size: 8, font: this.font, color: muted });
+        cy -= 13;
       }
     }
 
-    const scoreStr = String(score);
-    const scoreW = this.fontBold.widthOfTextAtSize(scoreStr, 72);
-    const scoreX = PAGE_W - MARGIN - scoreW - 20;
-    const scoreY = 140;
-    this.page.drawText(scoreStr, { x: scoreX, y: scoreY, size: 72, font: this.fontBold, color: ink });
-    this.page.drawText('/ 100', { x: scoreX + scoreW + 6, y: scoreY + 10, size: 16, font: this.font, color: muted });
-
-    const gradeR = 28;
-    const gradeCX = MARGIN + gradeR + 10;
-    const gradeCY = 155;
-    // The disc lifts slightly off the brand colour; its own ink is derived from that blend so the
-    // grade stays readable whatever the brand is.
-    const discColour = mutedInkOn(this.brand.primary, 0.72);
-    this.page.drawCircle({ x: gradeCX, y: gradeCY, size: gradeR, color: toPdfRgb(discColour) });
-    const gradeW = this.fontBold.widthOfTextAtSize(grade, 22);
-    this.page.drawText(grade, { x: gradeCX - gradeW / 2, y: gradeCY - 8, size: 22, font: this.fontBold, color: toPdfRgb(pickInk(discColour)) });
-
-    // Was a fixed grey at 4.2:1 on our own background — below AA even before branding.
     this.page.drawText('This report reflects technical signals relevant to AI search readiness.', {
       x: MARGIN, y: 80, size: 8, font: this.font, color: muted,
     });
     if (this.brand.showPoweredBy && this.brand.companyName !== GEO_PULSE_BRAND.companyName) {
-      this.page.drawText('Powered by GEO-Pulse', {
-        x: MARGIN, y: 66, size: 7, font: this.font, color: muted,
-      });
+      this.page.drawText('Powered by GEO-Pulse', { x: MARGIN, y: 66, size: 7, font: this.font, color: muted });
     }
 
     this.drawPageFooter();
     this.newPage();
+  }
+
+  // ── Chart primitives (rect/line based — deterministic, WinAnsi-safe) ──────
+
+  /** One horizontal bar row: label | track+fill | value. */
+  drawHBar(label: string, pct: number, fill: RGB, valueLabel: string): void {
+    this.ensureSpace(20);
+    const labelW = 170;
+    const valueW = 70;
+    const trackX = MARGIN + labelW;
+    const trackW = MAX_W - labelW - valueW;
+    const clamped = Math.max(0, Math.min(100, pct));
+    this.page.drawText(truncateAtWord(label, 34), { x: MARGIN, y: this.y, size: 9, font: this.font, color: INK });
+    this.page.drawRectangle({ x: trackX, y: this.y - 1, width: trackW, height: 10, color: SURFACE });
+    if (clamped > 0) {
+      this.page.drawRectangle({ x: trackX, y: this.y - 1, width: Math.max(2, (trackW * clamped) / 100), height: 10, color: fill });
+    }
+    this.page.drawText(valueLabel, { x: trackX + trackW + 8, y: this.y, size: 9, font: this.fontBold, color: INK });
+    this.y -= 18;
+  }
+
+  /** Single stacked outcome bar with legend — the report's "donut" without arc math. */
+  drawOutcomeStack(counts: CheckCounts): void {
+    this.ensureSpace(46);
+    const segments = [
+      { n: counts.passed, color: PASS_GREEN, label: 'Passed' },
+      { n: counts.warning, color: rgb(0.72, 0.53, 0.13), label: 'Warnings' },
+      { n: counts.failed, color: FAIL_RED, label: 'Failed' },
+      { n: counts.notTested, color: MUTED, label: 'Not tested' },
+    ].filter((s) => s.n > 0);
+    const total = Math.max(1, counts.total);
+    let x = MARGIN;
+    for (const s of segments) {
+      const w = (MAX_W * s.n) / total;
+      this.page.drawRectangle({ x, y: this.y - 4, width: Math.max(2, w), height: 14, color: s.color });
+      x += w;
+    }
+    this.y -= 24;
+    // Legend row.
+    let lx = MARGIN;
+    for (const s of segments) {
+      this.page.drawRectangle({ x: lx, y: this.y - 1, width: 8, height: 8, color: s.color });
+      const text = `${s.label} ${String(s.n)}`;
+      this.page.drawText(text, { x: lx + 12, y: this.y, size: 8.5, font: this.font, color: INK });
+      lx += 12 + this.font.widthOfTextAtSize(text, 8.5) + 18;
+    }
+    this.y -= 20;
+  }
+
+  /** Accent colour for chart fills — the brand primary, darkened if too pale for white. */
+  private chartAccent(): RGB {
+    const p = this.brand.primary;
+    const luminance = 0.2126 * p.r + 0.7152 * p.g + 0.0722 * p.b;
+    if (luminance > 0.7) return rgb(p.r * 0.55, p.g * 0.55, p.b * 0.55);
+    return toPdfRgb(p);
   }
 
   drawSectionTitle(title: string): void {
@@ -446,27 +499,43 @@ class PdfBuilder {
     score: number;
     grade: string;
     counts: CheckCounts;
+    bucketScores: readonly { label: string; score: number; excludedFromHeadline: boolean }[];
     topIssue?: IssueRow;
     firstMove?: string;
   }): void {
     this.drawSectionTitle('At a Glance');
-    const rows: string[] = [
-      `Overall score: ${String(input.score)}/100 (${input.grade})`,
-      `Checks: ${describeCheckCounts(input.counts)}`,
-    ];
+
+    // Score gauge + grade — the dashboard read.
+    this.ensureSpace(30);
+    this.page.drawText(`${String(input.score)} / 100`, { x: MARGIN, y: this.y, size: 16, font: this.fontBold, color: INK });
+    this.page.drawText(`Grade ${input.grade}`, { x: MARGIN + 100, y: this.y + 1, size: 10, font: this.fontBold, color: MUTED });
+    const gaugeX = MARGIN + 180;
+    const gaugeW = MAX_W - 180;
+    this.page.drawRectangle({ x: gaugeX, y: this.y, width: gaugeW, height: 12, color: SURFACE });
+    this.page.drawRectangle({ x: gaugeX, y: this.y, width: Math.max(2, (gaugeW * Math.max(0, Math.min(100, input.score))) / 100), height: 12, color: this.chartAccent() });
+    this.y -= 28;
+
+    // Check outcomes as a stacked bar with legend — sums to the true total by construction.
+    this.drawText(describeCheckCounts(input.counts), 9, false, MUTED);
+    this.drawOutcomeStack(input.counts);
+
+    // Bucket subtotals as bars (headline buckets solid, hygiene muted — it is 0% of the score).
+    for (const b of input.bucketScores) {
+      if (b.score < 0) continue;
+      this.drawHBar(
+        b.excludedFromHeadline ? `${b.label}` : b.label,
+        b.score,
+        b.excludedFromHeadline ? MUTED : this.chartAccent(),
+        b.excludedFromHeadline ? `${String(b.score)} (not scored)` : `${String(b.score)}/100`
+      );
+    }
+    this.y -= 6;
+
     if (input.topIssue) {
-      rows.push(`Top blocker: ${input.topIssue.check ?? input.topIssue.checkId ?? 'Check'}`);
-      rows.push(`Primary owner: ${ownerLabel(input.topIssue)}`);
+      this.drawText(`Top blocker: ${input.topIssue.check ?? input.topIssue.checkId ?? 'Check'}  —  owner: ${ownerLabel(input.topIssue)}`, 9, true, INK);
     }
     if (input.firstMove) {
-      rows.push(`First recommended move: ${input.firstMove}`);
-    }
-
-    for (const row of rows) {
-      this.ensureSpace(24);
-      this.page.drawRectangle({ x: MARGIN, y: this.y - 4, width: MAX_W, height: 18, color: ROW_ALT });
-      this.page.drawText(row, { x: MARGIN + 8, y: this.y, size: 9, font: this.font, color: INK });
-      this.y -= 24;
+      this.drawText(`First recommended move: ${input.firstMove}`, 9, false, INK);
     }
     this.y -= 8;
   }
@@ -766,7 +835,28 @@ class PdfBuilder {
       false,
       MUTED
     );
-    this.y -= 4;
+    this.y -= 8;
+
+    // Visual timeline: axis, milestone dots, dates above, day labels below.
+    if (phases.length > 1) {
+      this.ensureSpace(56);
+      const axisY = this.y - 18;
+      const spacing = MAX_W / (phases.length - 1);
+      const accent = this.chartAccent();
+      this.page.drawLine({ start: { x: MARGIN, y: axisY }, end: { x: PAGE_W - MARGIN, y: axisY }, thickness: 1.5, color: SURFACE });
+      for (let i = 0; i < phases.length; i += 1) {
+        const phase = phases[i]!;
+        const cx = MARGIN + spacing * i;
+        this.page.drawCircle({ x: cx, y: axisY, size: 5, color: i === 0 ? accent : SURFACE, borderColor: accent, borderWidth: 1.5 });
+        const dateW = this.font.widthOfTextAtSize(phase.date, 7.5);
+        this.page.drawText(phase.date, { x: Math.min(Math.max(MARGIN, cx - dateW / 2), PAGE_W - MARGIN - dateW), y: axisY + 10, size: 7.5, font: this.fontBold, color: INK });
+        const dayLabel = i === 0 ? 'Now' : `Day ${String(phase.offsetDays)}`;
+        const dayW = this.font.widthOfTextAtSize(dayLabel, 7.5);
+        this.page.drawText(dayLabel, { x: Math.min(Math.max(MARGIN, cx - dayW / 2), PAGE_W - MARGIN - dayW), y: axisY - 16, size: 7.5, font: this.font, color: MUTED });
+      }
+      this.y = axisY - 34;
+    }
+
     for (const phase of phases) {
       this.ensureSpace(40);
       this.drawText(`${phase.date} — ${phase.title}`, 9, true, PRIMARY);
@@ -854,37 +944,13 @@ class PdfBuilder {
       conversion_readiness: 'Conversion Readiness',
     };
 
-    this.ensureSpace(16);
-    this.page.drawRectangle({ x: MARGIN, y: this.y - 2, width: MAX_W, height: 16, color: PRIMARY });
-    const cols = [
-      { text: 'Category', x: MARGIN + 4 },
-      { text: 'Score', x: MARGIN + 220 },
-      { text: 'Grade', x: MARGIN + 280 },
-      { text: 'Checks', x: MARGIN + 340 },
-    ];
-    for (const c of cols) {
-      this.page.drawText(c.text, { x: c.x, y: this.y + 1, size: 8, font: this.fontBold, color: WHITE });
-    }
-    this.y -= 20;
-
-    for (let i = 0; i < cats.length; i += 1) {
-      const cs = cats[i]!;
-      const rowH = 16;
-      this.ensureSpace(rowH + 4);
-      if (i % 2 === 0) {
-        this.page.drawRectangle({ x: MARGIN, y: this.y - 2, width: MAX_W, height: rowH, color: ROW_ALT });
-      }
+    // Bars, not a table — the score IS the visual (design agent v2, issue #103).
+    for (const cs of cats) {
       const label = labels[cs.category] ?? cs.category;
       const hasScore = cs.score >= 0 && cs.checkCount > 0;
-      const scoreStr = hasScore ? String(cs.score) : '—';
-      const gradeStr = hasScore ? cs.letterGrade : 'N/A';
-      const scoreClr = hasScore ? (cs.score >= 75 ? PASS_GREEN : cs.score >= 45 ? rgb(0.6, 0.45, 0.15) : FAIL_RED) : MUTED;
-
-      this.page.drawText(label, { x: MARGIN + 4, y: this.y, size: 8, font: this.font, color: INK });
-      this.page.drawText(scoreStr, { x: MARGIN + 220, y: this.y, size: 8, font: this.fontBold, color: scoreClr });
-      this.page.drawText(gradeStr, { x: MARGIN + 280, y: this.y, size: 8, font: this.fontBold, color: scoreClr });
-      this.page.drawText(String(cs.checkCount), { x: MARGIN + 340, y: this.y, size: 8, font: this.font, color: MUTED });
-      this.y -= rowH + 2;
+      if (!hasScore) continue;
+      const fill = cs.score >= 75 ? PASS_GREEN : cs.score >= 45 ? rgb(0.72, 0.53, 0.13) : FAIL_RED;
+      this.drawHBar(`${label} (${String(cs.checkCount)} checks)`, cs.score, fill, `${String(cs.score)} · ${cs.letterGrade}`);
     }
     this.y -= 8;
   }
@@ -928,6 +994,8 @@ export async function buildDeepAuditPdf(input: {
     preparedByLines: string[];
     credibilityLines: string[];
     heroImage: Uint8Array | null;
+    /** The audited site's meta theme-color — themes the whole report (issue #103). */
+    themePrimaryHex?: string | null;
   } | null;
   /** Customer branding; GEO-Pulse's own when absent. */
   brand?: BrandConfig;
@@ -958,7 +1026,18 @@ export async function buildDeepAuditPdf(input: {
   const now = formatReportTimestamp(input.generatedAt ?? new Date().toISOString());
   const scanIdShort = (input.scanId ?? '').slice(0, 8);
 
-  const brand = input.brand ?? GEO_PULSE_BRAND;
+  // Client theming (issue #103): when no white-label brand applies, derive the report's
+  // accent palette from THEIR site's declared theme-color — the whole report reads as
+  // designed around them. Guarded: near-white/unusable colours fall back to our brand,
+  // and paid white-label branding is never overridden.
+  let brand = input.brand ?? GEO_PULSE_BRAND;
+  const themeHex = input.coverDesign?.themePrimaryHex;
+  if (themeHex && brand.companyName === GEO_PULSE_BRAND.companyName && !brand.logo) {
+    const themed = hexToRgb01(themeHex);
+    if (themed && relativeLuminance(themed) < 0.82) {
+      brand = { ...GEO_PULSE_BRAND, primary: themed, onPrimary: pickInk(themed) };
+    }
+  }
   const pdf = new PdfBuilder();
   await pdf.init(
     `${brand.companyName} | AI Search Readiness Report`,
@@ -993,10 +1072,21 @@ export async function buildDeepAuditPdf(input: {
   if (crawlTrustNotice) {
     pdf.drawCoverageNotice(crawlTrustNotice.summary);
   }
+  // Bucket subtotals for the dashboard bars — same catalog arithmetic as the web report.
+  const weightedForBuckets = allIssues.map((row) => ({
+    id: row.checkId ?? row.check ?? '',
+    passed: row.passed === true,
+    status: (row.status ?? (row.passed === true ? 'PASS' : 'FAIL')) as WeightedResult['status'],
+    finding: row.finding ?? '',
+    weight: row.weight ?? 0,
+    category: (row.category ?? 'ai_readiness') as WeightedResult['category'],
+    bucket: ((row as Record<string, unknown>)['bucket'] as WeightedResult['bucket']) ?? bucketOf(row.checkId ?? ''),
+  }));
   pdf.drawAtAGlance({
     score,
     grade,
     counts,
+    bucketScores: computeBucketScores(weightedForBuckets),
     topIssue: strongestFailed,
     firstMove: topFailed[0]?.fix ?? '',
   });
@@ -1069,6 +1159,7 @@ export async function buildDeepAuditPdfFromPayload(
     preparedByLines: string[];
     credibilityLines: string[];
     heroImage: Uint8Array | null;
+    themePrimaryHex?: string | null;
   } | null
 ): Promise<Uint8Array> {
   return buildDeepAuditPdf({

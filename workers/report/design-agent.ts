@@ -20,6 +20,7 @@ import {
   type BrowserRenderEnv,
 } from '../scan-engine/browser-rendering';
 import { validateEngineFetchUrl } from '../lib/ssrf';
+import { fetchGateText } from '../lib/fetch-gate';
 import { isAgentEnabled } from '../../lib/server/agent-flags';
 import { formatReportTimestamp } from './report-timestamp';
 import { structuredLog } from '../../lib/server/structured-log';
@@ -32,6 +33,42 @@ export interface CoverDesign {
   credibilityLines: string[];
   /** PNG bytes of the audited site's homepage, when capture succeeded. */
   heroImage: Uint8Array | null;
+  /** The audited site's declared meta theme-color — themes the report (issue #103). */
+  themePrimaryHex: string | null;
+}
+
+/** Pull the audited site's identity signals for theming/personalization (issue #103). */
+export function extractSiteIdentity(html: string): { themeColor: string | null; siteName: string | null } {
+  const attr = (re: RegExp): string | null => re.exec(html)?.[1]?.trim() || null;
+
+  const themeColor =
+    attr(/<meta[^>]+name=["']theme-color["'][^>]+content=["'](#[0-9a-fA-F]{3,8})["']/i) ??
+    attr(/<meta[^>]+content=["'](#[0-9a-fA-F]{3,8})["'][^>]+name=["']theme-color["']/i);
+
+  let siteName =
+    attr(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i) ??
+    attr(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i);
+  if (!siteName) {
+    const title = attr(/<title[^>]*>([\s\S]{1,200}?)<\/title>/i);
+    if (title) {
+      // "Acme IT — Managed Services | Montréal" → "Acme IT"
+      siteName = title.split(/\s+[|\-–—·]\s+/)[0]?.trim() || null;
+    }
+  }
+  if (siteName && (siteName.length < 2 || siteName.length > 48)) siteName = null;
+
+  // Normalize 3/4/8-digit hex to 6 digits for pdf parsing (drop alpha).
+  let normalizedTheme = themeColor;
+  if (normalizedTheme) {
+    const h = normalizedTheme.replace('#', '');
+    if (h.length === 4 || h.length === 8) normalizedTheme = `#${h.slice(0, h.length === 4 ? 3 : 6)}`;
+    if (normalizedTheme.replace('#', '').length === 3) {
+      const s = normalizedTheme.replace('#', '');
+      normalizedTheme = `#${s[0]}${s[0]}${s[1]}${s[1]}${s[2]}${s[2]}`;
+    }
+  }
+
+  return { themeColor: normalizedTheme, siteName };
 }
 
 /**
@@ -74,11 +111,11 @@ export async function captureHeroScreenshot(
       },
       body: JSON.stringify({
         url: validation.safeUrl,
-        // Keep this a fixed-viewport capture: the cover reserves exactly 250x156pt for the
-        // hero (6pt under the masthead hairline). fullPage:true would produce a taller image
-        // and push the frame through the masthead.
+        // Fixed 2:1 banner capture (issue #103): the cover renders the hero full content
+        // width, so a wide cinematic crop of the top of their page IS the design.
+        // fullPage:true would blow past the reserved band — never add it.
         screenshotOptions: { type: 'png' },
-        viewport: { width: 1280, height: 800 },
+        viewport: { width: 1280, height: 640 },
         gotoOptions: { waitUntil: 'networkidle2', timeout: 15_000 },
       }),
       signal: AbortSignal.timeout(SCREENSHOT_TIMEOUT_MS),
@@ -101,9 +138,13 @@ export function buildCoverDesignCopy(input: {
   domain: string;
   checkCount: number;
   generatedDate: string;
-}): Omit<CoverDesign, 'heroImage'> {
+  siteName?: string | null;
+}): Omit<CoverDesign, 'heroImage' | 'themePrimaryHex'> {
+  const who = input.siteName && input.siteName.toLowerCase() !== input.domain.toLowerCase()
+    ? `${input.siteName} (${input.domain})`
+    : input.domain;
   return {
-    preparedForLines: [`Prepared for the team at ${input.domain}`],
+    preparedForLines: [`Prepared for the team at ${who}`],
     preparedByLines: [
       'Prepared by the GEO-Pulse team',
       'getgeopulse.com · Montréal, Québec',
@@ -129,19 +170,39 @@ export async function buildCoverDesign(args: {
   const enabled = await isDesignAgentEnabled(args.supabase);
   if (!enabled) return null;
 
+  // Their site's own identity signals — theme colour + display name (issue #103).
+  // One bounded fetch; every failure degrades to the un-themed default.
+  let themeColor: string | null = null;
+  let siteName: string | null = null;
+  try {
+    const page = await fetchGateText(args.seedUrl, {
+      maxBytes: 300_000,
+      timeoutMs: 10_000,
+      acceptHeader: 'text/html,*/*',
+    });
+    if (page.ok) {
+      const identity = extractSiteIdentity(page.text);
+      themeColor = identity.themeColor;
+      siteName = identity.siteName;
+    }
+  } catch {
+    /* un-themed cover is a fine cover */
+  }
+
   const copy = buildCoverDesignCopy({
     domain: args.domain,
     checkCount: CHECK_CATALOG.length,
     // Full date + time (issue #94): the recipient sees exactly when this was produced.
     generatedDate: formatReportTimestamp(args.generatedAt),
+    siteName,
   });
 
   const heroImage = await captureHeroScreenshot(args.env, args.seedUrl);
   structuredLog(
     'report_design_agent',
-    { scanId: args.scanId, heroCaptured: Boolean(heroImage) },
+    { scanId: args.scanId, heroCaptured: Boolean(heroImage), themed: Boolean(themeColor) },
     'info'
   );
 
-  return { ...copy, heroImage };
+  return { ...copy, heroImage, themePrimaryHex: themeColor };
 }
