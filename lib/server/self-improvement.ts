@@ -188,6 +188,7 @@ export async function sendSelfImprovementReport(input: {
   const dateStr = new Date().toISOString().split('T')[0] ?? '';
   const html = buildSelfImprovementReportHtml({ ...input, dateStr });
   const res = await fetch('https://api.resend.com/emails', {
+    signal: AbortSignal.timeout(15_000),
     method: 'POST',
     headers: { Authorization: `Bearer ${input.resendApiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

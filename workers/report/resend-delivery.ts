@@ -188,6 +188,7 @@ export async function sendDeepAuditEmail(input: {
   }
 
   const res = await fetch('https://api.resend.com/emails', {
+    signal: AbortSignal.timeout(30_000),
     method: 'POST',
     headers: {
       Authorization: `Bearer ${input.apiKey}`,

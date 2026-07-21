@@ -150,6 +150,7 @@ async function sendOutreachEmail(
   if (!key || !from) return false;
   try {
     const res = await fetch('https://api.resend.com/emails', {
+      signal: AbortSignal.timeout(15_000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ from, to, subject, html }),

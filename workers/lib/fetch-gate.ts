@@ -116,10 +116,18 @@ export async function fetchGateText(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   // Own domain → invoke the Worker directly (bypasses the edge→origin 525). Safe: it's our host.
+  // MUST be time-bounded: an unbounded await on a self-call hung the entire cron invocation
+  // for hours (the 2026-07-21 recurring-audit starvation) — on timeout we fall through to
+  // the normal path, which fails fast and lets the caller degrade.
   const self = matchSelfFetch(rawUrl);
   if (self) {
     try {
-      const res = await self.fetch(rawUrl);
+      const res = await Promise.race([
+        self.fetch(rawUrl),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('self_fetch_timeout')), timeoutMs)
+        ),
+      ]);
       if (!res.ok) return { ok: false, reason: `Target returned HTTP ${String(res.status)}` };
       const ctype = res.headers.get('Content-Type');
       const text = await readTextWithByteLimit(res, options.maxBytes);
