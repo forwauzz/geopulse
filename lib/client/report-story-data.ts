@@ -4,7 +4,7 @@
  */
 import type { CategoryScore, Issue, ScanResponse } from './report-viewer';
 
-export type CheckOutcome = 'passed' | 'warning' | 'failed';
+export type CheckOutcome = 'passed' | 'warning' | 'failed' | 'not_tested';
 
 export type OutcomeSlice = {
   readonly outcome: CheckOutcome;
@@ -60,10 +60,12 @@ export function categoryLabel(category: string): string {
   );
 }
 
-function outcomeOf(issue: Issue): CheckOutcome | null {
+function outcomeOf(issue: Issue): CheckOutcome {
+  // Same arithmetic as workers/report/check-counts.ts (spec C1): every check lands in
+  // exactly one bucket so the story's numbers always sum to the true total.
   const status = (issue.status ?? '').toUpperCase();
-  if (status === 'NOT_EVALUATED' || status === 'BLOCKED') return null;
-  if (status === 'PASS' || issue.passed === true) return 'passed';
+  if (status === 'NOT_EVALUATED' || status === 'BLOCKED') return 'not_tested';
+  if (status === 'PASS' || (status === '' && issue.passed === true)) return 'passed';
   if (status === 'WARNING' || status === 'LOW_CONFIDENCE') return 'warning';
   return 'failed';
 }
@@ -106,13 +108,15 @@ export function buildReportStoryData(scan: ScanResponse): ReportStoryData | null
   let passed = 0;
   let warning = 0;
   let failed = 0;
+  let notTested = 0;
   for (const issue of allIssues) {
     const outcome = outcomeOf(issue);
     if (outcome === 'passed') passed += 1;
     else if (outcome === 'warning') warning += 1;
     else if (outcome === 'failed') failed += 1;
+    else notTested += 1;
   }
-  const total = passed + warning + failed;
+  const total = passed + warning + failed + notTested;
 
   const outcomes: OutcomeSlice[] =
     total > 0
@@ -121,8 +125,11 @@ export function buildReportStoryData(scan: ScanResponse): ReportStoryData | null
             { outcome: 'passed' as const, label: 'Passing', count: passed },
             { outcome: 'warning' as const, label: 'Warnings', count: warning },
             { outcome: 'failed' as const, label: 'Failing', count: failed },
+            { outcome: 'not_tested' as const, label: 'Not tested', count: notTested },
           ]
-        ).map((slice) => ({ ...slice, share: slice.count / total }))
+        )
+          .filter((slice) => slice.count > 0)
+          .map((slice) => ({ ...slice, share: slice.count / total }))
       : [];
 
   const categories: CategoryBarRow[] = (scan.categoryScores ?? [])

@@ -22,6 +22,8 @@ import { browserRenderConfigFromEnv } from '../scan-engine/browser-rendering';
 import { parseCrawlPending, runDeepAuditCrawl } from '../scan-engine/deep-audit-crawl';
 import { computeCategoryScores, letterGrade, type WeightedResult } from '../scan-engine/scoring';
 import { bucketOf } from '../scan-engine/check-catalog';
+import { deriveCheckCounts } from '../report/check-counts';
+import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../report/report-qa-gate';
 import { replayReportJobFromDlq } from './dlq-replay';
 import { resolveStartupRolloutFlagsFromMetadata } from '../../lib/server/startup-rollout-flags';
 import { resolveStartupWorkspaceBundleKey } from '../../lib/server/startup-github-integration';
@@ -117,31 +119,6 @@ function issuesAsWeightedResults(pages: readonly { issues_json: unknown }[]): We
     }
   }
   return results;
-}
-
-function topFailedIssuesFromPages(
-  pages: readonly { issues_json: unknown }[]
-): Record<string, unknown>[] {
-  const seen = new Set<string>();
-  const allFailed: Record<string, unknown>[] = [];
-
-  for (const p of pages) {
-    if (!Array.isArray(p.issues_json)) continue;
-    for (const x of p.issues_json) {
-      if (x === null || typeof x !== 'object') continue;
-      const rec = x as Record<string, unknown>;
-      if (rec['passed'] !== false) continue;
-      const key = String(rec['checkId'] ?? rec['check'] ?? '');
-      if (key && seen.has(key)) continue;
-      if (key) seen.add(key);
-      allFailed.push(rec);
-    }
-  }
-
-  allFailed.sort(
-    (a, b) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0)
-  );
-  return allFailed.slice(0, 3);
 }
 
 function statusRank(status: string | undefined): number {
@@ -654,8 +631,27 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   const aggregateScore = averageScores(scores);
   const aggLetter = letterGrade(aggregateScore);
 
-  const issuesForScan = topFailedIssuesFromPages(pages);
-  const allIssuesForReport = buildSitewideIssueSummaryFromPages(pages);
+  const allIssuesRaw = buildSitewideIssueSummaryFromPages(pages);
+
+  // Spec C1: resolve contradictory finding pairs before ANY surface derives from the
+  // issues — email top-3, scans.issues_json, PDF highlights, and the full report must
+  // all see the same resolved set, then the QA gate holds the render on violations.
+  const contradictionResult = resolveReportContradictions(allIssuesRaw as GateIssue[]);
+  const allIssuesForReport = contradictionResult.issues as Record<string, unknown>[];
+  if (contradictionResult.resolutions.length > 0) {
+    structuredLog('report_contradictions_resolved', {
+      scanId: job.scanId,
+      resolutions: contradictionResult.resolutions.join(' | '),
+    });
+  }
+
+  const issuesForScan = allIssuesForReport
+    .filter((r) => {
+      const status = String(r['status'] ?? '').toUpperCase();
+      return r['passed'] === false && status !== 'NOT_EVALUATED' && status !== 'BLOCKED';
+    })
+    .sort((a, b) => ((b['weight'] as number) ?? 0) - ((a['weight'] as number) ?? 0))
+    .slice(0, 3);
 
   const { data: runCoverage } = await supabase
     .from('scan_runs')
@@ -738,6 +734,23 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     bucket,
   });
 
+  const gate = runReportQaGate({ issues: payload.allIssues as GateIssue[] });
+  if (gate.warnings.length > 0) {
+    structuredLog('report_qa_gate_warnings', {
+      scanId: job.scanId,
+      warnings: gate.warnings.map((v) => `${v.rule}: ${v.detail}`).join(' | '),
+    });
+  }
+  if (!gate.ok) {
+    structuredLog('report_qa_gate_failed', {
+      scanId: job.scanId,
+      violations: gate.violations.map((v) => `${v.rule}: ${v.detail}`).join(' | '),
+    });
+    throw new Error(
+      `report_qa_gate_failed: ${gate.violations.map((v) => `${v.rule}: ${v.detail}`).join(' | ')}`
+    );
+  }
+
   const pdfBytes = await buildDeepAuditPdfFromPayload(payload, branding);
   const markdownText = buildDeepAuditMarkdown(payload);
   const publicBase = (env.DEEP_AUDIT_R2_PUBLIC_BASE ?? '').trim();
@@ -789,8 +802,8 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     grade: aggLetter,
     topIssues: failedForEmail,
     appUrl: (env.NEXT_PUBLIC_APP_URL ?? '').trim() || undefined,
-    totalChecks: allIssueRows.length,
-    passedChecks: allIssueRows.filter((r: Record<string, unknown>) => String(r['status'] ?? '') === 'PASS').length,
+    totalChecks: deriveCheckCounts(allIssueRows as GateIssue[]).total,
+    passedChecks: deriveCheckCounts(allIssueRows as GateIssue[]).passed,
     scanId: job.scanId,
   });
 
