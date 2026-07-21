@@ -131,10 +131,10 @@ async function sendOutreachEmail(
   to: string,
   subject: string,
   html: string
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; detail: string }> {
   const key = env.RESEND_API_KEY?.trim();
   const from = env.RESEND_FROM_EMAIL?.trim();
-  if (!key || !from) return false;
+  if (!key || !from) return { ok: false, detail: 'resend_credentials_missing' };
   try {
     const res = await fetch('https://api.resend.com/emails', {
       signal: AbortSignal.timeout(15_000),
@@ -142,9 +142,23 @@ async function sendOutreachEmail(
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ from, to, subject, html }),
     });
-    return res.ok;
-  } catch {
-    return false;
+    if (res.ok) return { ok: true };
+    // The real reason must reach the admin UI — a bare boolean cost us a debugging
+    // round-trip on the first live send (issue #112).
+    let detail = `http_${String(res.status)}`;
+    try {
+      const body = (await res.json()) as { message?: string; name?: string };
+      const message = [body.name, body.message].filter(Boolean).join(': ');
+      if (message) detail = `${detail} ${message}`.slice(0, 300);
+    } catch {
+      /* keep the status-only detail */
+    }
+    structuredLog('outreach_email_send_failed', { detail }, 'warning');
+    return { ok: false, detail };
+  } catch (err) {
+    const detail = err instanceof Error && err.name === 'TimeoutError' ? 'send_timeout' : 'network_error';
+    structuredLog('outreach_email_send_failed', { detail }, 'warning');
+    return { ok: false, detail };
   }
 }
 
@@ -208,7 +222,7 @@ export async function runOutreachForProspect(args: {
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
     .slice(0, 3);
 
-  let emailed = false;
+  let sendOutcome: { ok: true } | { ok: false; detail: string } = { ok: false, detail: 'send_row_insert_failed' };
   if (sendId) {
     const resultsUrl = `${appUrl}/results/${scanId}`;
     const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
@@ -246,7 +260,7 @@ export async function runOutreachForProspect(args: {
           }),
         };
 
-    emailed = await sendOutreachEmail(env, prospect.email, message.subject, message.html);
+    sendOutcome = await sendOutreachEmail(env, prospect.email, message.subject, message.html);
   }
 
   await supabase
@@ -255,7 +269,7 @@ export async function runOutreachForProspect(args: {
       last_run_at: nowIso,
       next_run_at: computeNextOutreachRun(prospect.cadence, nowMs),
       last_scan_id: scanId,
-      last_error: emailed ? null : 'email_send_failed',
+      last_error: sendOutcome.ok ? null : `email_send_failed: ${sendOutcome.detail}`,
       updated_at: nowIso,
     })
     .eq('id', prospect.id);
