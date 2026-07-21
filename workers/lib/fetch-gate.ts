@@ -198,6 +198,141 @@ export async function fetchGateText(
   return { ok: false, reason: 'Too many redirects' };
 }
 
+export type FetchGateBytesResult =
+  | {
+      ok: true;
+      bytes: Uint8Array;
+      finalUrl: string;
+      status: number;
+      contentType: string | null;
+    }
+  | { ok: false; reason: string };
+
+export type FetchGateBytesOptions = {
+  /** Hard cap — a body that exceeds it FAILS the fetch rather than being truncated. */
+  readonly maxBytes: number;
+  readonly timeoutMs?: number;
+  readonly acceptHeader: string;
+};
+
+/**
+ * Read the full body, failing when it exceeds `maxBytes`.
+ *
+ * Unlike {@link readTextWithByteLimit} this never truncates: a cut-off HTML page still parses, but
+ * a cut-off image is a corrupt file — and for binary fetches the cap is a rejection of oversized
+ * payloads, not a trim.
+ */
+async function readBytesWithByteCap(
+  res: Response,
+  maxBytes: number
+): Promise<{ ok: true; bytes: Uint8Array } | { ok: false }> {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength > maxBytes) return { ok: false };
+    return { ok: true, bytes: new Uint8Array(buf) };
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.length;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return { ok: false };
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    merged.set(c, offset);
+    offset += c.length;
+  }
+  return { ok: true, bytes: merged };
+}
+
+/**
+ * BINARY variant of {@link fetchGateText} — same URL validation and manual redirect handling,
+ * returning raw bytes. Exists so image fetches (e.g. a customer logo referenced from their own
+ * HTML) go through the gate instead of a raw `fetch`; the URL is attacker-influencable, so it gets
+ * the same SSRF treatment as every other engine fetch.
+ *
+ * Content-Type is reported but never enforced here — it is attacker-controlled. Callers must
+ * validate the bytes themselves (magic bytes, e.g. `detectImageType`).
+ */
+export async function fetchGateBytes(
+  rawUrl: string,
+  options: FetchGateBytesOptions
+): Promise<FetchGateBytesResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  const v = await validateEngineFetchUrl(rawUrl);
+  if (!v.ok) return { ok: false, reason: v.reason };
+
+  let currentUrl = v.safeUrl;
+  let redirectCount = 0;
+
+  while (redirectCount <= ENGINE_FETCH_MAX_REDIRECTS) {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(currentUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: ac.signal,
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: options.acceptHeader,
+        },
+      });
+    } catch {
+      clearTimeout(t);
+      return { ok: false, reason: 'Failed to fetch URL (timeout or network error)' };
+    }
+    clearTimeout(t);
+
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get('Location');
+      const next = await validateEngineRedirect(loc, currentUrl, redirectCount);
+      if (!next.ok) return { ok: false, reason: next.reason };
+      currentUrl = next.safeUrl;
+      redirectCount += 1;
+      continue;
+    }
+
+    if (!res.ok) {
+      return { ok: false, reason: `Target returned HTTP ${String(res.status)}` };
+    }
+
+    // Reject early on a declared oversize body; the stream cap below is the real enforcement.
+    const declared = Number(res.headers.get('Content-Length') ?? '');
+    if (Number.isFinite(declared) && declared > options.maxBytes) {
+      return { ok: false, reason: 'Response exceeds the size limit' };
+    }
+
+    const body = await readBytesWithByteCap(res, options.maxBytes);
+    if (!body.ok) {
+      return { ok: false, reason: 'Response exceeds the size limit' };
+    }
+
+    return {
+      ok: true,
+      bytes: body.bytes,
+      finalUrl: currentUrl,
+      status: res.status,
+      contentType: res.headers.get('Content-Type'),
+    };
+  }
+
+  return { ok: false, reason: 'Too many redirects' };
+}
+
 /**
  * HTML page fetch (same caps as legacy `fetch-page.ts` for free tier).
  */

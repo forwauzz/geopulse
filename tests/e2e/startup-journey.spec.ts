@@ -218,13 +218,15 @@ test.describe('connectors page', () => {
 
     await expect(page.getByRole('heading', { name: /^github$/i })).toBeVisible();
     await expect(
-      page.getByText(/automate pr creation from scan recommendations/i)
+      page.getByText(/open pull requests from scan recommendations/i)
     ).toBeVisible();
   });
 
   test('renders Slack connector card header', async ({ page }) => {
+    // The page shows one connector panel at a time; Slack needs its tab selected explicitly
+    // (GitHub is the default tab when enabled).
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('heading', { name: /^slack$/i })).toBeVisible();
   });
@@ -253,17 +255,19 @@ test.describe('connectors page', () => {
   test('Slack card body shows Connect Slack button when not connected', async ({ page }) => {
     // No fixture Slack installation → disconnected state → "Connect Slack" button renders
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     await expect(
       page.getByRole('button', { name: /connect slack/i })
     ).toBeVisible();
   });
 
-  test('renders LinkedIn and Twitter future placeholder cards', async ({ page }) => {
+  test('renders LinkedIn and Twitter future placeholder entries', async ({ page }) => {
     await signInAsStartup(page);
     await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
 
+    // The placeholders moved into a collapsed "Coming soon" group in the connectors nav.
+    await page.getByText(/coming soon/i).click();
     await expect(page.getByText(/linkedin/i).first()).toBeVisible();
     await expect(page.getByText(/twitter/i).first()).toBeVisible();
   });
@@ -284,7 +288,7 @@ test.describe('connectors page', () => {
 test.describe('slack section', () => {
   test('shows "No Slack workspaces connected" empty state', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     await expect(
       page.getByText(/no slack workspaces connected/i)
@@ -294,14 +298,14 @@ test.describe('slack section', () => {
   test('recurring audits section renders for founder role', async ({ page }) => {
     // canManageSlackAutoPost = true when role is founder/admin AND slackEnabled = true
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/recurring audits/i)).toBeVisible();
   });
 
   test('auto-post toggle checkbox is present', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     // Label: "Enable recurring auto-scan + Slack delivery"
     await expect(
@@ -311,7 +315,7 @@ test.describe('slack section', () => {
 
   test('cadence selector renders with monthly default (30 days)', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     // Workspace fixture has no audit_cadence_days set → auditCadenceDays = 30
     const cadenceSelect = page.locator('select[name="cadenceDays"]');
@@ -321,7 +325,7 @@ test.describe('slack section', () => {
 
   test('cadence selector has 5 options', async ({ page }) => {
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     const options = page.locator('select[name="cadenceDays"] option');
     await expect(options).toHaveCount(5);
@@ -330,7 +334,7 @@ test.describe('slack section', () => {
   test('delivery log section is absent when no events exist', async ({ page }) => {
     // Fixture has 0 delivery events → section only renders when length > 0
     await signInAsStartup(page);
-    await page.goto('/dashboard/connectors', { waitUntil: 'domcontentloaded' });
+    await page.goto('/dashboard/connectors?connector=slack', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByText(/recent deliveries/i)).not.toBeVisible();
   });

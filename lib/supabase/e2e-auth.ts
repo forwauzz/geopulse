@@ -246,6 +246,12 @@ export function buildE2EAdminDb() {
     query_citations: citations,
     benchmark_cohorts: cohorts,
     benchmark_cohort_members: cohortMembers,
+    // The DB-backed admin check (`isUserPlatformAdmin`) replaced the old email allowlist; without
+    // this row the 'admin' E2E session is not an admin anywhere, and every admin surface the
+    // specs cover (benchmarks pages, the sidebar Admin Console link) silently disappears.
+    platform_admin_users: [
+      { id: '00000000-0000-4000-8000-000000000501', user_id: E2E_ADMIN_USER_ID },
+    ],
   };
 
   return {
@@ -264,6 +270,8 @@ function createE2EAdminQueryBuilder(seedRows: unknown[]) {
     limit: (count: number) => typeof builder;
     eq: (column: string, value: unknown) => typeof builder;
     in: (column: string, values: unknown[]) => typeof builder;
+    maybeSingle: () => Promise<{ data: unknown; error: null }>;
+    single: () => Promise<{ data: unknown; error: null }>;
     then: <TResult1 = { data: unknown[]; error: null }, TResult2 = never>(
       onfulfilled?:
         | ((value: { data: unknown[]; error: null }) => TResult1 | PromiseLike<TResult1>)
@@ -300,6 +308,14 @@ function createE2EAdminQueryBuilder(seedRows: unknown[]) {
       const allowed = new Set(values);
       rows = rows.filter((row) => allowed.has((row as Record<string, unknown>)[column]));
       return builder;
+    },
+    // `isUserPlatformAdmin` ends its chain with maybeSingle(); without these the admin check
+    // throws instead of answering, which reads as "not an admin" at best and a 500 at worst.
+    async maybeSingle() {
+      return { data: rows[0] ?? null, error: null };
+    },
+    async single() {
+      return { data: rows[0] ?? null, error: null };
     },
     then(onfulfilled, onrejected) {
       return Promise.resolve(result()).then(onfulfilled, onrejected);
@@ -350,10 +366,32 @@ function createE2EQueryBuilder(table: string) {
         startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
         agency_account_id: null,
         agency_client_id: null,
+        // A real founder-run workspace scan carries both ids; user_id also feeds the /dashboard
+        // overview (which shows the signed-in user's own audits regardless of workspace).
+        user_id: E2E_ADMIN_USER_ID,
+        status: 'complete',
         url: 'https://example.com',
         domain: 'example.com',
         score: 74,
         letter_grade: 'B',
+        issues_json: [
+          {
+            checkId: 'ai-crawler-access',
+            check: 'AI crawler access (robots.txt)',
+            passed: true,
+            weight: 10,
+            finding: 'robots.txt does not block any known AI crawler user-agents.',
+          },
+          {
+            checkId: 'jsonld',
+            check: 'JSON-LD structured data',
+            passed: false,
+            weight: 9,
+            finding: 'No JSON-LD blocks found.',
+            fix: 'Add an Organization JSON-LD block to the <head>.',
+          },
+          { checkId: 'open-graph', check: 'Open Graph tags', passed: true, weight: 4, finding: 'og tags present.' },
+        ],
         run_source: 'startup_dashboard',
         created_at: now,
       },

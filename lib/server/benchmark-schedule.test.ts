@@ -29,6 +29,7 @@ describe('benchmark schedule helpers', () => {
       enabled: true,
       querySetId: 'set-1',
       modelId: 'gemini-2.5-flash-lite',
+      modelIds: ['gemini-2.5-flash-lite'],
       runModes: ['ungrounded_inference', 'grounded_site'],
       vertical: 'law_firms',
       seedPriorities: [1, 2],
@@ -148,6 +149,7 @@ describe('benchmark schedule helpers', () => {
         enabled: true,
         querySetId: 'set-1',
         modelId: 'gemini-2.5-flash-lite',
+        modelIds: ['gemini-2.5-flash-lite'],
         runModes: ['ungrounded_inference', 'grounded_site'],
         vertical: 'law_firms',
         seedPriorities: [1],
@@ -181,6 +183,76 @@ describe('benchmark schedule helpers', () => {
       canonicalDomains: ['lw.com'],
       requireScheduleEnabled: true,
     });
+  });
+
+  it('runs every configured model lane per domain and run mode', async () => {
+    const runBenchmarkGroup = vi.fn().mockResolvedValue({
+      runGroupId: 'run-1',
+      queryRunCount: 6,
+      skippedQueryCount: 0,
+    });
+    const repo = {
+      getQuerySetById: vi.fn().mockResolvedValue({
+        id: 'set-1',
+        name: 'brand-baseline',
+        vertical: null,
+        version: 'v1',
+        description: null,
+        status: 'active',
+        metadata: {},
+        created_at: '2026-03-28T00:00:00.000Z',
+      }),
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+        {
+          id: 'domain-1',
+          domain: 'www.geopulse.ai',
+          canonical_domain: 'geopulse.ai',
+          site_url: 'https://www.geopulse.ai/',
+          display_name: 'GeoPulse',
+          vertical: null,
+          subvertical: null,
+          geo_region: null,
+          is_customer: true,
+          is_competitor: false,
+          metadata: {},
+          created_at: '2026-03-28T00:00:00.000Z',
+          updated_at: '2026-03-28T00:00:00.000Z',
+        },
+      ]),
+      getRunGroupByScheduleKey: vi.fn().mockResolvedValue(null),
+    };
+
+    const summary = await executeBenchmarkScheduleSweep({
+      repo,
+      runBenchmarkGroup: runBenchmarkGroup as any,
+      supabase: {},
+      adapter: {} as any,
+      config: {
+        enabled: true,
+        querySetId: 'set-1',
+        modelId: 'gemini-2.5-flash-lite',
+        modelIds: ['gemini-2.5-flash-lite', 'gpt-4o-mini'],
+        runModes: ['ungrounded_inference', 'grounded_site'],
+        vertical: null,
+        seedPriorities: [],
+        canonicalDomains: [],
+        domainLimit: 10,
+        maxRuns: 10,
+        maxFailures: 3,
+        windowHours: 12,
+        scheduleVersion: 'v1',
+      },
+      now: new Date('2026-03-28T12:00:00.000Z'),
+    });
+
+    // 1 domain × 2 run modes × 2 models
+    expect(summary.launchedRuns).toBe(4);
+    const launchedModels = runBenchmarkGroup.mock.calls.map((call) => call[1].modelId);
+    expect(launchedModels.filter((m) => m === 'gpt-4o-mini')).toHaveLength(2);
+    expect(launchedModels.filter((m) => m === 'gemini-2.5-flash-lite')).toHaveLength(2);
+    // Idempotency keys stay distinct per model lane.
+    const keys = runBenchmarkGroup.mock.calls.map((call) => call[1].runMetadata.schedule_run_key);
+    expect(new Set(keys).size).toBe(4);
   });
 
   it('persists the provided trigger source in scheduled run metadata', async () => {
@@ -229,6 +301,7 @@ describe('benchmark schedule helpers', () => {
         enabled: true,
         querySetId: 'set-1',
         modelId: 'gemini-2.5-flash-lite',
+        modelIds: ['gemini-2.5-flash-lite'],
         runModes: ['ungrounded_inference'],
         vertical: null,
         seedPriorities: [],
@@ -291,6 +364,7 @@ describe('benchmark schedule helpers', () => {
         enabled: true,
         querySetId: 'set-1',
         modelId: 'gemini-2.5-flash-lite',
+        modelIds: ['gemini-2.5-flash-lite'],
         runModes: ['ungrounded_inference', 'grounded_site'],
         vertical: 'law_firms',
         seedPriorities: [1],
@@ -310,6 +384,7 @@ describe('benchmark schedule helpers', () => {
       querySetName: 'law-firms-p1-core',
       querySetVersion: 'v1',
       modelId: 'gemini-2.5-flash-lite',
+      modelIds: ['gemini-2.5-flash-lite'],
       scheduleVersion: 'law-firms-p1-v1',
       windowDate: '2026-03-28T12',
       vertical: 'law_firms',
@@ -380,6 +455,7 @@ describe('benchmark schedule helpers', () => {
         enabled: true,
         querySetId: 'set-1',
         modelId: 'gemini-2.5-flash-lite',
+        modelIds: ['gemini-2.5-flash-lite'],
         runModes: ['ungrounded_inference', 'grounded_site'],
         vertical: 'law_firms',
         seedPriorities: [1],
@@ -469,6 +545,7 @@ describe('benchmark schedule helpers', () => {
         enabled: true,
         querySetId: 'set-1',
         modelId: 'gemini-2.5-flash-lite',
+        modelIds: ['gemini-2.5-flash-lite'],
         runModes: ['ungrounded_inference', 'grounded_site'],
         vertical: 'law_firms',
         seedPriorities: [1],

@@ -56,7 +56,10 @@ function buildDashboardHref(args: {
   if (args.agencyClientId) params.set('agencyClient', args.agencyClientId);
   if (args.startupWorkspaceId) params.set('startupWorkspace', args.startupWorkspaceId);
   const query = params.toString();
-  return query.length > 0 ? `/dashboard?${query}` : '/dashboard';
+  // This page IS the workspace surface — account switcher and client chips must stay here.
+  // (`/dashboard` was simplified down to the scan hero; linking there dropped the user on a page
+  // with no chips, banner, or history, losing the context they just selected.)
+  return query.length > 0 ? `/dashboard/history?${query}` : '/dashboard/history';
 }
 
 function buildNewScanHref(args: {

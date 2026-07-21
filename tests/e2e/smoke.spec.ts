@@ -95,7 +95,8 @@ test.describe('public smoke flows', () => {
     await page.waitForURL('**/results/e2e-scan-id');
     await expect(page.getByRole('heading', { name: /example\.com/i })).toBeVisible();
     await expect(page.getByText(/example\.com/i).first()).toBeVisible();
-    await expect(page.getByText(/get the full report/i)).toBeVisible();
+    // Both the checkout heading and the floating CTA carry this text — assert the heading.
+    await expect(page.getByRole('heading', { name: /get the full report/i })).toBeVisible();
   });
 
   // NOTE: the Stripe checkout-return flow was removed when the full audit became free. The
@@ -189,6 +190,10 @@ test.describe('public smoke flows', () => {
           ],
           pdfUrl: 'https://example.com/report.pdf',
           markdownUrl: null,
+          // Without an explicit 'none' the viewer treats a pdf-only scan as "report still
+          // generating" and polls past the assertion timeout instead of showing the fallback.
+          hasPaidReport: false,
+          reportStatus: 'none',
         }),
       });
     });
@@ -230,7 +235,10 @@ test.describe('public smoke flows', () => {
       });
     });
 
-    await page.route('**/__e2e/report.md', async (route) => {
+    // The viewer always fetches its own API path for content (`markdownUrl` is only a truthiness
+    // signal). A `*` glob does not cross `/`, so this needs its own route — the scan mock above
+    // never matches it.
+    await page.route('**/api/scans/e2e-report/report-markdown*', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'text/markdown',
@@ -256,14 +264,22 @@ test.describe('public smoke flows', () => {
     await expect(page.getByRole('button', { name: /executive summary/i })).toBeVisible();
   });
 
-  test('customer login page renders the magic-link flow', async ({ page }) => {
-    await page.goto('/login');
+  test('customer login page renders the password auth flow', async ({ page }) => {
+    // Magic-link auth was replaced by password auth, and a bare /login now defaults to free
+    // sign-up — the sign-in variant is reached via mode=signin.
+    await page.goto('/login?mode=signin');
 
     await expect(page.getByRole('heading', { name: /^sign in$/i })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: /email/i })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: /email/i }).first()).toBeVisible();
     await expect(
-      page.getByRole('button', { name: /email me a sign-in link/i })
+      page.getByRole('button', { name: /sign in with password/i })
     ).toBeVisible();
+  });
+
+  test('bare login page defaults to free sign-up', async ({ page }) => {
+    await page.goto('/login');
+
+    await expect(page.getByRole('heading', { name: /sign up for free/i })).toBeVisible();
   });
 
   test('admin login page renders the operator password flow', async ({ page }) => {

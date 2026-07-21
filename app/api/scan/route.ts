@@ -215,7 +215,13 @@ export async function POST(request: Request): Promise<Response> {
       score: scan.output.score,
       letter_grade: scan.output.letterGrade,
       issues_json: scan.output.issues,
-      full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
+      full_results_json: {
+        issues: scan.output.issues,
+        categoryScores: scan.output.categoryScores,
+        // The page's own words, kept so agents can ground generation in what the site actually
+        // says rather than inferring from the domain name.
+        pageSample: scan.textSample.slice(0, 6000),
+      },
       user_id: agencyContext || startupContext ? sessionUserId : null,
       agency_account_id: agencyContext?.agencyAccountId ?? null,
       agency_client_id: agencyContext?.agencyClientId ?? null,

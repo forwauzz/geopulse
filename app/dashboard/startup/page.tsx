@@ -27,6 +27,7 @@ type Props = {
     pr?: string;
     slack?: string;
     slack_detail?: string;
+    brand?: string;
   }>;
 };
 
@@ -56,6 +57,7 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
         pr: sp.pr,
         slack: sp.slack,
         slack_detail: sp.slack_detail,
+        brand: sp.brand,
       })
     );
   }
@@ -147,6 +149,7 @@ export default async function StartupDashboardPage({ searchParams }: Props) {
       activeTab={activeTab}
       auditFilter={auditFilter}
       slackQueryCode={sp.slack}
+      brandQueryCode={sp.brand}
     />
   );
 }

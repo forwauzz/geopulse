@@ -48,8 +48,9 @@ test.describe('agency dashboard home', () => {
     await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
-    // Email appears multiple times; use first() to avoid strict mode violation
-    await expect(page.getByText(/agency@example\.com/i).first()).toBeVisible();
+    // The email renders in both the (hidden) mobile drawer and the desktop sidebar — the first
+    // DOM match can be the hidden copy, so assert on a visible instance.
+    await expect(page.getByText(/agency@example\.com/i).filter({ visible: true }).first()).toBeVisible();
   });
 
   test('renders agency workspace section with account name', async ({ page }) => {
@@ -198,6 +199,9 @@ test.describe('new scan page with agency context', () => {
       `/dashboard/new-scan?agencyAccount=00000000-0000-4000-8000-000000000201&agencyClient=00000000-0000-4000-8000-000000000202`,
       { waitUntil: 'domcontentloaded' }
     );
+    // Clicking before the client component hydrates falls back to a native GET submit that never
+    // reaches the mocked API — wait for the page to settle first.
+    await page.waitForLoadState('networkidle');
 
     await page.getByRole('textbox').fill('https://client.example');
     await page.getByRole('button', { name: /run diagnostic/i }).click();

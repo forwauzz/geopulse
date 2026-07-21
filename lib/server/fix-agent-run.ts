@@ -117,7 +117,13 @@ export async function runFixAgentAudit(args: {
         score: scan.output.score,
         letter_grade: scan.output.letterGrade,
         issues_json: scan.output.issues,
-        full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
+        full_results_json: {
+          issues: scan.output.issues,
+          categoryScores: scan.output.categoryScores,
+          // Grounds the Fix Agent: without the page's own words the model infers product facts
+          // from the domain name, which is how PRs #39/#48 shipped hallucinated FAQ content.
+          pageSample: scan.textSample.slice(0, 6000),
+        },
         user_id: args.userId,
         startup_workspace_id: args.startupWorkspaceId ?? null,
         run_source: args.startupWorkspaceId ? 'startup_dashboard' : 'public_self_serve',

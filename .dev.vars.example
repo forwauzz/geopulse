@@ -44,10 +44,16 @@ STARTUP_SLACK_CLIENT_SECRET=your-slack-client-secret
 GEMINI_API_KEY=your-gemini-api-key-here
 
 # Optional: internal benchmark execution lane. Defaults to stub unless enabled.
-# BENCHMARK_EXECUTION_PROVIDER=gemini
+# "multi" routes by model id (gemini-* -> Gemini, gpt-* -> OpenAI, *sonar* -> Perplexity).
+# BENCHMARK_EXECUTION_PROVIDER=multi
 # BENCHMARK_EXECUTION_API_KEY=your-benchmark-api-key-here
 # BENCHMARK_EXECUTION_MODEL=gemini-2.0-flash
 # BENCHMARK_EXECUTION_ENDPOINT=https://generativelanguage.googleapis.com/v1beta/models
+
+# OpenAI — ChatGPT benchmark/citation lane (BENCHMARK_EXECUTION_PROVIDER=multi or openai).
+# Production: `wrangler secret put OPENAI_API_KEY`
+# OPENAI_API_KEY=sk-your-openai-api-key
+# OPENAI_MODEL=gpt-4o-mini
 
 # Resend — transactional email
 # Get key: https://resend.com/api-keys

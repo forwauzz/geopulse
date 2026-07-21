@@ -14,6 +14,13 @@ export type WorkersAiBinding = {
 /** Solid general-purpose default; override per call site via env. */
 export const DEFAULT_WORKERS_AI_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
+/**
+ * Default for calls whose output must be machine-parseable JSON. Hermes 2 Pro is tuned for
+ * function calling / JSON mode, so it holds a schema far more reliably than a general chat model.
+ * It is only 7B — keep {@link DEFAULT_WORKERS_AI_MODEL} for prose and reasoning-heavy work.
+ */
+export const STRUCTURED_WORKERS_AI_MODEL = '@hf/nousresearch/hermes-2-pro-mistral-7b';
+
 /** Pull the assistant text out of the various shapes Workers AI returns. */
 export function extractWorkersAiText(result: unknown): string | null {
   if (typeof result === 'string') return result.trim() || null;

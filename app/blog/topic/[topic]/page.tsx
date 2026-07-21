@@ -59,19 +59,25 @@ async function loadArticles() {
 }
 
 async function loadTopicPageMetadata(topic: string): Promise<Record<string, unknown> | null> {
-  const supabase = await createPublicContentClient();
-  const { data, error } = await supabase
-    .from('content_items')
-    .select('metadata')
-    .eq('content_type', 'research_note')
-    .eq('status', 'published')
-    .eq('topic_cluster', topic)
-    .eq('slug', `topic-${topic}`)
-    .maybeSingle();
+  // Fail-soft: this metadata only overrides the default topic copy (`readTopicPageField` has
+  // fallbacks for every field). A failed read must degrade to defaults, not 500 a public page.
+  try {
+    const supabase = await createPublicContentClient();
+    const { data, error } = await supabase
+      .from('content_items')
+      .select('metadata')
+      .eq('content_type', 'research_note')
+      .eq('status', 'published')
+      .eq('topic_cluster', topic)
+      .eq('slug', `topic-${topic}`)
+      .maybeSingle();
 
-  if (error) throw error;
-  const row = data as { metadata?: Record<string, unknown> | null } | null;
-  return row?.metadata ?? null;
+    if (error) return null;
+    const row = data as { metadata?: Record<string, unknown> | null } | null;
+    return row?.metadata ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function readTopicPageField(
