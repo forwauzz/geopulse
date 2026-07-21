@@ -15,7 +15,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export type AgentFlagFeature =
   | 'report_design_agent'
   | 'outreach_sweep'
-  | 'research_agent';
+  | 'research_agent'
+  | 'competitor_benchmark';
 
 export async function isAgentEnabled(
   supabase: SupabaseClient,

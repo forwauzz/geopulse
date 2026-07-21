@@ -32,6 +32,7 @@ import {
 } from '../lib/server/marketing-autopilot';
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
 import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
+import { runCompetitorCohortSweep, type CohortEnvLike } from '../lib/server/competitor-cohorts';
 import { buildResearchDigestHtml, runResearchSweep } from '../lib/server/research-agent';
 import { isAgentEnabled } from '../lib/server/agent-flags';
 import { registerSelfFetch } from './lib/fetch-gate';
@@ -364,6 +365,31 @@ export default {
         }
       } catch (err) {
         structuredError('outreach_sweep_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // Local-competitor cohort sweep (issue #118) — FAIL-CLOSED flag, max 2 scans per tick so
+      // it can never starve the stages below even with a large cohort.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('competitor_cohort');
+        const result = await runCompetitorCohortSweep({
+          supabase,
+          env: env as unknown as CohortEnvLike,
+          nowMs: Date.now(),
+        });
+        if (result.enabled && result.due > 0) {
+          structuredLog('competitor_cohort_tick', {
+            due: result.due,
+            scanned: result.scanned,
+            failed: result.failed,
+          }, 'info');
+        }
+      } catch (err) {
+        structuredError('competitor_cohort_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

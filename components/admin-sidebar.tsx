@@ -28,6 +28,7 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
       { href: '/admin/users', label: 'Users', icon: 'group' },
       { href: '/admin/agents', label: 'Agents', icon: 'smart_toy' },
       { href: '/admin/outreach', label: 'Outreach', icon: 'outgoing_mail' },
+      { href: '/admin/competitors', label: 'Competitors', icon: 'compare_arrows' },
       { href: '/admin/research', label: 'Research', icon: 'science' },
       { href: '/admin/admins', label: 'Platform Admins', icon: 'admin_panel_settings' },
     ],
