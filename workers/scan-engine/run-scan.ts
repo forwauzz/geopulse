@@ -28,6 +28,40 @@ import {
   type EligibilityBand,
 } from './scoring';
 
+// ── LLM verdict cache (issue #109) ────────────────────────────────────────────
+// The two LLM checks judge ONLY the page's text sample. When that sample is
+// byte-identical to a previous audit, we reuse the stored verdicts — so a site
+// that has not changed produces an IDENTICAL score by construction (and repeat
+// audits cost zero Gemini tokens). Registered per-invocation like the self-fetch.
+
+type LlmVerdictCache = {
+  get(key: string, type: 'text'): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+};
+
+let llmVerdictCache: LlmVerdictCache | null = null;
+
+export function registerLlmVerdictCache(cache: LlmVerdictCache | null): void {
+  llmVerdictCache = cache;
+}
+
+const LLM_CACHE_VERSION = 'llmv1';
+const LLM_CACHE_TTL_SECONDS = 30 * 24 * 60 * 60;
+const LLM_CHECK_IDS = new Set(['llm-qa-pattern', 'llm-extractability']);
+
+async function llmCacheKey(textSample: string): Promise<string> {
+  const bytes = new TextEncoder().encode(textSample);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return `${LLM_CACHE_VERSION}:${hash}`;
+}
+
+function isCacheableVerdict(r: CheckResult): boolean {
+  // Transient provider failures must not stick for 30 days.
+  if (r.confidence === 'low' && /^(http_|unparseable|GEMINI_API_KEY)/i.test(r.finding)) return false;
+  return true;
+}
+
 export interface ScanIssueJson {
   check: string;
   checkId: string;
@@ -93,9 +127,55 @@ export async function auditPageFromHtml(
   };
 
   const checks = options.useLlm ? buildFreeTierChecks(llm) : buildDeterministicChecks();
+
+  // Deterministic repeat audits (issue #109): identical text sample → identical verdicts.
+  let cachedLlmResults: Map<string, CheckResult> | null = null;
+  let cacheKey: string | null = null;
+  if (options.useLlm && llmVerdictCache) {
+    try {
+      cacheKey = await llmCacheKey(textSample);
+      const hit = await llmVerdictCache.get(cacheKey, 'text');
+      if (hit) {
+        const parsed: unknown = JSON.parse(hit);
+        if (Array.isArray(parsed)) {
+          cachedLlmResults = new Map(
+            parsed
+              .filter((r): r is CheckResult => Boolean(r && typeof r === 'object' && LLM_CHECK_IDS.has((r as CheckResult).id)))
+              .map((r) => [r.id, r])
+          );
+        }
+      }
+    } catch {
+      cachedLlmResults = null;
+    }
+  }
+
   const results: CheckResult[] = [];
+  const freshLlmResults: CheckResult[] = [];
   for (const c of checks) {
-    results.push(await c.run(ctx));
+    const cached = LLM_CHECK_IDS.has(c.id) ? cachedLlmResults?.get(c.id) : undefined;
+    if (cached) {
+      results.push(cached);
+      continue;
+    }
+    const result = await c.run(ctx);
+    results.push(result);
+    if (LLM_CHECK_IDS.has(c.id)) freshLlmResults.push(result);
+  }
+
+  if (
+    llmVerdictCache &&
+    cacheKey &&
+    freshLlmResults.length === LLM_CHECK_IDS.size &&
+    freshLlmResults.every(isCacheableVerdict)
+  ) {
+    try {
+      await llmVerdictCache.put(cacheKey, JSON.stringify(freshLlmResults), {
+        expirationTtl: LLM_CACHE_TTL_SECONDS,
+      });
+    } catch {
+      /* caching is an optimization, never a failure */
+    }
   }
 
   const weighted = attachWeights(

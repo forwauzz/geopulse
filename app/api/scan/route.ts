@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { GeminiProvider } from '@workers/providers/gemini';
 import type { LLMProvider } from '@workers/lib/interfaces/providers';
-import { runFreeScan } from '@workers/scan-engine/run-scan';
+import { registerLlmVerdictCache, runFreeScan } from '@workers/scan-engine/run-scan';
 import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
 import { checkScanRateLimit } from '@/lib/server/rate-limit-kv';
 import { resolveAgencyFeatureEntitlements, validateAgencyContext } from '@/lib/server/agency-access';
@@ -33,6 +33,9 @@ class UnconfiguredLlm implements LLMProvider {
 export async function POST(request: Request): Promise<Response> {
   const env = await getScanApiEnv();
   const ip = getClientIp(request);
+
+  // Deterministic repeat audits (issue #109): reuse LLM verdicts for unchanged pages.
+  registerLlmVerdictCache((env.SCAN_CACHE as unknown as Parameters<typeof registerLlmVerdictCache>[0]) ?? null);
 
   const rl = await checkScanRateLimit(env.SCAN_CACHE, ip);
   if (!rl.ok) {

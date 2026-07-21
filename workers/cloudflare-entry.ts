@@ -35,6 +35,7 @@ import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
 import { buildResearchDigestHtml, runResearchSweep } from '../lib/server/research-agent';
 import { isAgentEnabled } from '../lib/server/agent-flags';
 import { registerSelfFetch } from './lib/fetch-gate';
+import { registerLlmVerdictCache } from './scan-engine/run-scan';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -50,6 +51,11 @@ function registerSelfAuditFetch(env: CloudflareEnv): void {
     } else {
       registerSelfFetch(null, null);
     }
+    // Deterministic repeat audits (issue #109): every scan path in this Worker —
+    // queue deep audits, recurring, outreach, self-improvement — shares the cache.
+    registerLlmVerdictCache(
+      (record['SCAN_CACHE'] as Parameters<typeof registerLlmVerdictCache>[0] | undefined) ?? null
+    );
   } catch {
     registerSelfFetch(null, null);
   }
