@@ -1,5 +1,5 @@
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
-import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadAgentStatuses } from '@/lib/server/agent-console';
 import { setAgentFlag } from './actions';
 
@@ -40,7 +40,16 @@ export default async function AdminAgentsPage() {
     );
   }
 
-  const env = (await getScanApiEnv()) as unknown as Record<string, string | undefined>;
+  // The RAW worker env — the typed accessors pick a fixed field list and silently omit
+  // secrets like RESEND_API_KEY / BROWSER_RENDERING_API_TOKEN, which made this console
+  // report false "credentials missing" blockers.
+  let env: Record<string, string | undefined> = {};
+  try {
+    const { env: rawEnv } = await getCloudflareContext({ async: true });
+    env = rawEnv as unknown as Record<string, string | undefined>;
+  } catch {
+    env = process.env as unknown as Record<string, string | undefined>;
+  }
   const agents = await loadAgentStatuses(ctx.adminDb, env);
   const internal = agents.filter((a) => a.audience === 'internal');
   const client = agents.filter((a) => a.audience === 'client');
