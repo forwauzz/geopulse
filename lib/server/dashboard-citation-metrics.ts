@@ -47,6 +47,10 @@ function runModeOf(row: { metrics?: unknown }): string | null {
 /**
  * Newest citation metric per engine for `domain`, or {} when the domain is not benchmarked.
  * Fail-soft: any query problem reads as "not tracked", never as a dashboard error.
+ *
+ * Mode preference: blind_discovery > ungrounded_inference > grounded_site. Blind is the only mode
+ * whose prompt never names the target, so it is the number that survives a user re-asking the
+ * question in the engine themselves; the others are progressively more assisted.
  */
 export async function loadEngineCitationMetrics(args: {
   readonly supabase: SupabaseLike;
@@ -71,10 +75,16 @@ export async function loadEngineCitationMetrics(args: {
       .limit(60);
     if (metricsError || !Array.isArray(metricRows)) return {};
 
+    const MODE_RANK: Record<string, number> = {
+      blind_discovery: 3,
+      ungrounded_inference: 2,
+      grounded_site: 1,
+    };
+
     const out: Partial<Record<EngineKey, EngineCitationMetric>> = {};
-    // Rows arrive newest-first; the first ungrounded row per engine wins, and a grounded row only
-    // stands in while no ungrounded row has been seen.
-    const placeholderEngines = new Set<EngineKey>();
+    const rankByEngine = new Map<EngineKey, number>();
+    // Rows arrive newest-first; per engine, a higher-ranked mode always replaces a lower-ranked
+    // one, and within the same mode the first (newest) row wins.
     for (const row of metricRows as Array<{
       model_id?: string;
       citation_rate?: number | null;
@@ -86,29 +96,17 @@ export async function loadEngineCitationMetrics(args: {
       if (!engine) continue;
       if (typeof row.citation_rate !== 'number') continue;
       const runMode = runModeOf(row);
+      const rank = MODE_RANK[runMode ?? ''] ?? 0;
+      if (rank <= (rankByEngine.get(engine) ?? -1)) continue;
 
-      const existing = out[engine];
-      if (existing && !placeholderEngines.has(engine)) continue;
-
-      if (runMode === 'ungrounded_inference') {
-        out[engine] = {
-          engine,
-          modelId,
-          citationRate: row.citation_rate,
-          runMode,
-          computedAt: row.computed_at ?? null,
-        };
-        placeholderEngines.delete(engine);
-      } else if (!existing) {
-        out[engine] = {
-          engine,
-          modelId,
-          citationRate: row.citation_rate,
-          runMode,
-          computedAt: row.computed_at ?? null,
-        };
-        placeholderEngines.add(engine);
-      }
+      rankByEngine.set(engine, rank);
+      out[engine] = {
+        engine,
+        modelId,
+        citationRate: row.citation_rate,
+        runMode,
+        computedAt: row.computed_at ?? null,
+      };
     }
     return out;
   } catch {

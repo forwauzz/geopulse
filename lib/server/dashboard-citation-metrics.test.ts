@@ -59,6 +59,36 @@ describe('loadEngineCitationMetrics', () => {
     expect(metrics).toEqual({});
   });
 
+  it('prefers blind discovery over every assisted mode', async () => {
+    const supabase = fakeSupabase({
+      domainId: 'd-1',
+      metricRows: [
+        {
+          model_id: 'gpt-4o-mini',
+          citation_rate: 0.9,
+          metrics: { run_mode: 'ungrounded_inference' },
+          computed_at: '2026-07-20T12:00:00Z',
+        },
+        {
+          model_id: 'gpt-4o-mini',
+          citation_rate: 0,
+          metrics: { run_mode: 'blind_discovery' },
+          computed_at: '2026-07-20T11:00:00Z',
+        },
+        {
+          model_id: 'gpt-4o-mini',
+          citation_rate: 1,
+          metrics: { run_mode: 'grounded_site' },
+          computed_at: '2026-07-20T13:00:00Z',
+        },
+      ],
+    });
+    const metrics = await loadEngineCitationMetrics({ supabase, domain: 'example.com' });
+    // The honest cold number wins even when assisted modes are newer and higher.
+    expect(metrics.chatgpt?.citationRate).toBe(0);
+    expect(metrics.chatgpt?.runMode).toBe('blind_discovery');
+  });
+
   it('keeps the newest ungrounded metric per engine', async () => {
     const supabase = fakeSupabase({
       domainId: 'd-1',

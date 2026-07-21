@@ -10,6 +10,12 @@ import { buildTextSample, parsePageSignals } from '../../workers/scan-engine/par
 export const benchmarkRunModeSchema = z.enum([
   'ungrounded_inference',
   'grounded_site',
+  // True cold-visibility: the prompt is ONLY the buyer question — the target domain is never
+  // mentioned. A citation here means the model surfaced the site unprompted, which is the number
+  // that survives a customer typing the same question into the engine themselves.
+  // ('ungrounded_inference' names the target in the prompt, so its citation rate measures brand
+  // echo/knowledge, not discovery.)
+  'blind_discovery',
 ]);
 
 export type BenchmarkRunMode = z.infer<typeof benchmarkRunModeSchema>;
@@ -435,6 +441,16 @@ export function buildBenchmarkPrompt(args: {
       `Question: ${args.queryText}`,
       '',
       `Answer in 3 to 5 sentences in plain text. Mention ${args.canonicalDomain} naturally at least once when the evidence supports the target company. If the evidence is ambiguous or incomplete, flag that briefly.`,
+    ].join('\n');
+  }
+
+  if (args.runMode === 'blind_discovery') {
+    // The target must never appear in this prompt — the entire point is measuring whether the
+    // model surfaces it unaided, exactly as a real buyer's session would.
+    return [
+      args.queryText,
+      '',
+      'Answer naturally in 3 to 6 sentences, as you would for a real user. When specific companies, providers or websites are relevant, name them (include their website domain when you know it). Do not return JSON.',
     ].join('\n');
   }
 

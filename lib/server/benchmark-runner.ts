@@ -207,7 +207,10 @@ export async function runBenchmarkGroupSkeleton(
     runGroupId: runGroup.id,
     domainId: domain.id,
     modelId: input.modelId,
-    citationRate: computedMetrics.citationRate,
+    // The MEASURED domain's rate — "how often did the model cite YOU". The old value here was
+    // cited_runs/completed (any company cited at all), which reads ~100% for every discovery
+    // question and inflated every headline metric; that number survives as metrics.inclusion_rate.
+    citationRate: computedMetrics.measuredDomainCitationRate,
     shareOfVoice: computedMetrics.shareOfVoice,
     queryCoverage: computedMetrics.queryCoverage,
     driftScore: null,
