@@ -10,6 +10,8 @@ import {
   type EngineCitationMetric,
   type EngineKey,
 } from '@/lib/server/dashboard-citation-metrics';
+import { getTrackedPromptPanel, type TrackedPromptPanel } from '@/lib/server/tracked-prompts';
+import { TrackedPromptsPanel } from '@/components/tracked-prompts-panel';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +23,7 @@ export const dynamic = 'force-dynamic';
 export default async function DashboardHomePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ url?: string }>;
+  searchParams?: Promise<{ url?: string; prompt?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
   const supabase = await createSupabaseServerClient();
@@ -67,11 +69,12 @@ export default async function DashboardHomePage({
 
   // Real citation data where the audited domain is in the benchmark system; {} otherwise.
   let engineCitations: Partial<Record<EngineKey, EngineCitationMetric>> = {};
+  let promptPanel: TrackedPromptPanel | null = null;
   if (admin && view.latest?.domain) {
-    engineCitations = await loadEngineCitationMetrics({
-      supabase: admin,
-      domain: view.latest.domain,
-    });
+    [engineCitations, promptPanel] = await Promise.all([
+      loadEngineCitationMetrics({ supabase: admin, domain: view.latest.domain }),
+      getTrackedPromptPanel({ supabase: admin, domain: view.latest.domain }),
+    ]);
   }
 
   return (
@@ -89,6 +92,11 @@ export default async function DashboardHomePage({
         />
       </div>
       <AuditDashboardOverview view={view} engineCitations={engineCitations} />
+      {promptPanel?.tracked && view.latest?.domain ? (
+        <div className="mx-auto w-full max-w-6xl">
+          <TrackedPromptsPanel panel={promptPanel} domain={view.latest.domain} statusCode={sp.prompt} />
+        </div>
+      ) : null}
     </div>
   );
 }

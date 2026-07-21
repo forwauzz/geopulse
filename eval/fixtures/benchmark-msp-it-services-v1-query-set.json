@@ -1,0 +1,94 @@
+{
+  "name": "msp-it-services-core",
+  "version": "v1",
+  "vertical": "msp_it",
+  "description": "First MSP / managed IT services query set — SMB buyer questions with a Montreal/Quebec regional flavor. Seeded for the mipsmedia.com pilot.",
+  "status": "active",
+  "metadata": {
+    "owner": "internal",
+    "source": "msp_pilot_mipsmedia_v1",
+    "target_subcohort": "smb_managed_it_montreal"
+  },
+  "queries": [
+    {
+      "queryKey": "managed-it-provider-montreal",
+      "queryText": "Which managed IT service providers in Montreal are recommended for small and mid-sized businesses?",
+      "intentType": "discovery",
+      "topic": "managed_it_services",
+      "weight": 1.2,
+      "metadata": { "frame": "category_buying" }
+    },
+    {
+      "queryKey": "choose-msp-criteria",
+      "queryText": "What should a business look for when choosing a managed IT services provider?",
+      "intentType": "comparative",
+      "topic": "msp_selection",
+      "weight": 1.1,
+      "metadata": { "frame": "selection_criteria" }
+    },
+    {
+      "queryKey": "247-it-support-montreal",
+      "queryText": "Who offers 24/7 IT support and proactive monitoring for businesses in the Montreal area?",
+      "intentType": "discovery",
+      "topic": "it_support",
+      "weight": 1.1,
+      "metadata": { "frame": "category_buying" }
+    },
+    {
+      "queryKey": "smb-cybersecurity-provider",
+      "queryText": "Which IT companies help small businesses with cybersecurity and ransomware protection in Quebec?",
+      "intentType": "discovery",
+      "topic": "cybersecurity",
+      "weight": 1.15,
+      "metadata": { "frame": "category_buying" }
+    },
+    {
+      "queryKey": "cloud-migration-partner",
+      "queryText": "Which IT providers can plan and manage a move to the cloud for a small business?",
+      "intentType": "discovery",
+      "topic": "cloud_migration",
+      "weight": 1,
+      "metadata": { "frame": "category_buying" }
+    },
+    {
+      "queryKey": "backup-disaster-recovery",
+      "queryText": "Who provides backup, disaster recovery and business continuity services for SMBs in Montreal?",
+      "intentType": "discovery",
+      "topic": "backup_disaster_recovery",
+      "weight": 1,
+      "metadata": { "frame": "category_buying" }
+    },
+    {
+      "queryKey": "outsourced-it-vs-inhouse",
+      "queryText": "Is it better for a 20-50 person company to outsource IT to a managed services provider or hire in-house?",
+      "intentType": "comparative",
+      "topic": "outsourced_it",
+      "weight": 0.95,
+      "metadata": { "frame": "consideration" }
+    },
+    {
+      "queryKey": "bilingual-it-support-quebec",
+      "queryText": "Which IT support companies serve businesses in both French and English in Quebec?",
+      "intentType": "discovery",
+      "topic": "bilingual_support",
+      "weight": 0.9,
+      "metadata": { "frame": "regional_fit" }
+    },
+    {
+      "queryKey": "it-assessment-audit",
+      "queryText": "Who can do an IT assessment or security audit for a small business before switching providers?",
+      "intentType": "direct",
+      "topic": "it_assessment",
+      "weight": 0.95,
+      "metadata": { "frame": "entry_offer" }
+    },
+    {
+      "queryKey": "switch-it-provider",
+      "queryText": "How do I switch from a bad IT provider without disrupting my business, and who handles that transition well?",
+      "intentType": "direct",
+      "topic": "provider_transition",
+      "weight": 1,
+      "metadata": { "frame": "switching_moment" }
+    }
+  ]
+}

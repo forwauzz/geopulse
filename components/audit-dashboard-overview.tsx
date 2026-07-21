@@ -264,7 +264,11 @@ export function AuditDashboardOverview({
                       <span className="text-xs font-semibold text-on-surface-variant">%</span>
                     </p>
                     <p className="text-[11px] text-on-surface-variant">
-                      citation rate{metric.runMode === 'grounded_site' ? ' (grounded)' : ''}
+                      {metric.runMode === 'blind_discovery'
+                        ? 'cited when buyers ask'
+                        : metric.runMode === 'grounded_site'
+                          ? 'citation rate (site-assisted)'
+                          : 'citation rate (brand-aware)'}
                     </p>
                   </div>
                 ) : (

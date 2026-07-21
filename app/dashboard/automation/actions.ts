@@ -27,6 +27,9 @@ export async function saveRecurringSchedule(formData: FormData): Promise<void> {
   const url = String(formData.get('url') ?? '').trim();
   const cadence: Cadence = String(formData.get('cadence') ?? 'weekly') === 'daily' ? 'daily' : 'weekly';
   const enabled = String(formData.get('enabled') ?? '') === 'true';
+  // Optional separate recipient for the report; empty → account email.
+  const rawReportEmail = String(formData.get('reportEmail') ?? '').trim();
+  const reportEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(rawReportEmail) ? rawReportEmail : null;
   try {
     // Reject anything that isn't a real http(s) URL before scheduling scans against it.
     const parsed = new URL(url);
@@ -49,6 +52,7 @@ export async function saveRecurringSchedule(formData: FormData): Promise<void> {
     url,
     cadence,
     enabled,
+    reportEmail,
     nowMs: Date.now(),
   });
   revalidatePath('/dashboard/automation');
