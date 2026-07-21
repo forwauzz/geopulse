@@ -261,7 +261,7 @@ export function buildResearchDigestHtml(proposals: ResearchProposalDraft[]): str
       (p) =>
         `<li style="margin-bottom:10px;"><strong>Tier ${String(p.sourceTier)} — ${p.specSection}</strong><br/>` +
         `${p.claimAfter.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}<br/>` +
-        `<a href="${p.sourceUrl}">${p.sourceUrl}</a> · confidence: ${p.confidence}</li>`
+        `<a href="${p.sourceUrl.replace(/"/g, '&quot;')}">${p.sourceUrl.replace(/</g, '&lt;')}</a> · confidence: ${p.confidence}</li>`
     )
     .join('');
   return [
