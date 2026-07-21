@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fullIssueListFromScan } from '@/lib/server/scan-issue-list';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const uuid = z.string().uuid();
@@ -122,7 +123,7 @@ export async function getScanForPublicShare(
       score: data.score,
       letterGrade: data.letter_grade,
       topIssues: extractTopIssues(data.issues_json),
-      issues: Array.isArray(data.issues_json) ? data.issues_json : [],
+      issues: fullIssueListFromScan(data.issues_json, data.full_results_json),
       categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
       hasPaidReport: hasPaid,
       reportStatus,

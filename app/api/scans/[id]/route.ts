@@ -5,6 +5,7 @@ import {
   resolveAgencyScanAccess,
 } from '@/lib/server/agency-access';
 import { getScanApiEnv } from '@/lib/server/cf-env';
+import { fullIssueListFromScan } from '@/lib/server/scan-issue-list';
 import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -112,7 +113,7 @@ export async function GET(
           score: scan.score,
           letterGrade: scan.letter_grade,
           topIssues: Array.isArray(scan.issues_json) ? scan.issues_json.slice(0, 3) : [],
-          issues: Array.isArray(scan.issues_json) ? scan.issues_json : [],
+          issues: fullIssueListFromScan(scan.issues_json, scan.full_results_json),
           benchmark,
           categoryScores: Array.isArray(fullResults?.categoryScores) ? fullResults.categoryScores : [],
           hasPaidReport: hasPaid,
