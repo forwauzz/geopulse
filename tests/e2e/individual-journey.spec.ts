@@ -85,13 +85,15 @@ test.describe('authenticated dashboard home', () => {
   //   - "Run a Scan link is visible in the sidebar" — that nav item is gone; the nav is now
   //     History / Connectors / Billing / Settings / Blog, and /dashboard is itself the scan box.
 
-  test('Connectors link is visible for startup workspace user', async ({ page }) => {
+  test('Connectors nav item stays hidden under the OSS default flags', async ({ page }) => {
+    // `show_connectors` defaults to false (app_ui_flags, migration 049) and the E2E env runs on
+    // code defaults — the sidebar deliberately has no Connectors entry. The connectors surface
+    // itself stays covered by the direct-navigation specs in startup-journey.
     await signInAsIndividual(page);
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
-    await expect(
-      page.getByRole('link', { name: /connectors/i }).first()
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /connectors/i })).toHaveCount(0);
   });
 
   test('personal section shows "run your first audit" banner or empty scan list', async ({ page }) => {
@@ -188,6 +190,10 @@ test.describe('new scan page', () => {
 
     await signInAsIndividual(page);
     await page.goto('/dashboard/new-scan', { waitUntil: 'domcontentloaded' });
+    // The scan form intercepts submit in a client component. Clicking before hydration falls
+    // back to a native GET (?url=...) that never hits the mocked API — wait for the page to
+    // settle so the React handler is attached.
+    await page.waitForLoadState('networkidle');
 
     await page.getByRole('textbox').fill('https://example.com');
     await page.getByRole('button', { name: /run diagnostic/i }).click();
@@ -262,9 +268,10 @@ test.describe('scan results page', () => {
     await page.goto('/results/e2e-free-scan');
 
     // The upsell section became the free "Get the full report" block when the audit was
-    // de-paywalled — same section, no payment step in front of it.
+    // de-paywalled — same section, no payment step in front of it. Both the section heading and
+    // the floating CTA carry the text, so assert the heading specifically.
     await expect(
-      page.getByText(/get the full report/i)
+      page.getByRole('heading', { name: /get the full report/i })
     ).toBeVisible();
   });
 

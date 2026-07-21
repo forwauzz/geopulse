@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { buildE2EAdminDb, isE2EAuthEnabled } from '@/lib/supabase/e2e-auth';
 
 export function requireAdminOrRedirect(userEmail: string | null | undefined): void {
   if (!userEmail) {
@@ -27,6 +28,17 @@ export async function isUserPlatformAdmin(
     const url = supabaseUrl ?? process.env['NEXT_PUBLIC_SUPABASE_URL'];
     const key = serviceRoleKey ?? process.env['SUPABASE_SERVICE_ROLE_KEY'];
     if (!url || !key) {
+      // Playwright deliberately runs without a service-role key; the fixture DB carries the
+      // platform_admin_users row so admin surfaces stay testable. Dev-only (guarded inside).
+      if (isE2EAuthEnabled()) {
+        db = buildE2EAdminDb() as unknown as SupabaseClient;
+        const { data } = await db
+          .from('platform_admin_users')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+        return !!data;
+      }
       return false;
     }
     db = createServiceRoleClient(url, key);

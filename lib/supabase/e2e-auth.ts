@@ -246,6 +246,12 @@ export function buildE2EAdminDb() {
     query_citations: citations,
     benchmark_cohorts: cohorts,
     benchmark_cohort_members: cohortMembers,
+    // The DB-backed admin check (`isUserPlatformAdmin`) replaced the old email allowlist; without
+    // this row the 'admin' E2E session is not an admin anywhere, and every admin surface the
+    // specs cover (benchmarks pages, the sidebar Admin Console link) silently disappears.
+    platform_admin_users: [
+      { id: '00000000-0000-4000-8000-000000000501', user_id: E2E_ADMIN_USER_ID },
+    ],
   };
 
   return {
@@ -264,6 +270,8 @@ function createE2EAdminQueryBuilder(seedRows: unknown[]) {
     limit: (count: number) => typeof builder;
     eq: (column: string, value: unknown) => typeof builder;
     in: (column: string, values: unknown[]) => typeof builder;
+    maybeSingle: () => Promise<{ data: unknown; error: null }>;
+    single: () => Promise<{ data: unknown; error: null }>;
     then: <TResult1 = { data: unknown[]; error: null }, TResult2 = never>(
       onfulfilled?:
         | ((value: { data: unknown[]; error: null }) => TResult1 | PromiseLike<TResult1>)
@@ -300,6 +308,14 @@ function createE2EAdminQueryBuilder(seedRows: unknown[]) {
       const allowed = new Set(values);
       rows = rows.filter((row) => allowed.has((row as Record<string, unknown>)[column]));
       return builder;
+    },
+    // `isUserPlatformAdmin` ends its chain with maybeSingle(); without these the admin check
+    // throws instead of answering, which reads as "not an admin" at best and a 500 at worst.
+    async maybeSingle() {
+      return { data: rows[0] ?? null, error: null };
+    },
+    async single() {
+      return { data: rows[0] ?? null, error: null };
     },
     then(onfulfilled, onrejected) {
       return Promise.resolve(result()).then(onfulfilled, onrejected);
