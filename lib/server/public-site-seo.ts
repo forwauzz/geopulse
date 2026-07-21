@@ -8,6 +8,15 @@ export const SITE_AUTHOR_ROLE = 'Founder, GEO-Pulse';
 export const SITE_AUTHOR_URL_PATH = '/about';
 export const SITE_EDITORIAL_NAME = 'GEO-Pulse Editorial';
 
+/**
+ * Entity pinning (spec C16): sameAs links disambiguate GEO-Pulse in the crowded
+ * "GeoPulse" namespace. Only profiles that actually exist belong here — add
+ * LinkedIn/X/Crunchbase URLs as those profiles are created.
+ */
+export const SITE_SAME_AS: readonly string[] = [
+  'https://github.com/forwauzz/geopulse',
+];
+
 export function normalizeBaseUrl(value: string | null | undefined): string {
   return (value || 'https://getgeopulse.com/').replace(/\/+$/, '');
 }
@@ -85,6 +94,7 @@ export function buildOrganizationStructuredData(input: {
     name: SITE_NAME,
     url: input.url,
     description: input.description,
+    sameAs: [...SITE_SAME_AS],
   };
 }
 
@@ -102,6 +112,7 @@ export function buildWebSiteStructuredData(input: {
       '@type': 'Organization',
       name: SITE_NAME,
       url: input.url,
+      sameAs: [...SITE_SAME_AS],
     },
   };
 }
