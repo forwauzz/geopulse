@@ -41,6 +41,9 @@ export type PublicShareScanResult =
   | { ok: false; code: PublicShareScanError; message?: string };
 
 const MAX_AGE_MS = 48 * 60 * 60 * 1000;
+// Outreach + recurring-audit scans are DELIVERED BY EMAIL on a cadence — a prospect who
+// opens day-3 must not hit a dead link (issue #114). Self-serve anonymous scans keep 48h.
+const RECURRING_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
 export function extractTopIssues(raw: unknown): unknown[] {
   if (!Array.isArray(raw)) return [];
@@ -71,7 +74,7 @@ export async function getScanForPublicShare(
 
   const { data, error } = await supabase
     .from('scans')
-    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,user_id')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,user_id,run_source')
     .eq('id', parsed.data)
     .maybeSingle();
 
@@ -87,7 +90,8 @@ export async function getScanForPublicShare(
   }
 
   const created = new Date(data.created_at);
-  if (Number.isFinite(created.getTime()) && Date.now() - created.getTime() > MAX_AGE_MS) {
+  const maxAge = data.run_source === 'recurring' ? RECURRING_MAX_AGE_MS : MAX_AGE_MS;
+  if (Number.isFinite(created.getTime()) && Date.now() - created.getTime() > maxAge) {
     return { ok: false, code: 'expired' };
   }
 
