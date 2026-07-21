@@ -14,13 +14,18 @@ import { fetchPage } from './fetch-page';
 import { buildTextSample, parsePageSignals } from './parse-signals';
 import { buildDeterministicChecks, buildFreeTierChecks } from './checks/registry';
 import { buildAccessMatrix, type AccessMatrix } from './access-matrix';
+import { CHECK_CATALOG_VERSION, bucketOf, type CheckBucket } from './check-catalog';
 import {
   attachWeights,
   computeScore,
+  computeBucketScores,
   computeCategoryScores,
+  eligibilityBand,
   letterGrade,
   topFailedIssues,
+  type BucketScore,
   type CategoryScore,
+  type EligibilityBand,
 } from './scoring';
 
 export interface ScanIssueJson {
@@ -30,6 +35,8 @@ export interface ScanIssueJson {
   passed: boolean;
   status: CheckStatus;
   category: CheckCategory;
+  /** Scoring bucket (spec §3): hygiene issues never affect the AI-readiness score. */
+  bucket: CheckBucket;
   finding: string;
   fix?: string;
   confidence?: 'high' | 'medium' | 'low';
@@ -41,8 +48,14 @@ export interface FreeScanOutput {
   issues: ScanIssueJson[];
   topIssues: ScanIssueJson[];
   categoryScores: CategoryScore[];
+  /** Bucket subtotals with published weights (spec C6/C7). */
+  bucketScores: BucketScore[];
+  /** Which catalog version produced these weights — the score is reproducible from it. */
+  checkCatalogVersion: string;
   /** Access & Eligibility Matrix — per-destination eligibility + training panel (spec C3). */
   accessMatrix?: AccessMatrix;
+  /** Plain-English eligibility band derived from the matrix (spec C6). */
+  eligibility?: { band: EligibilityBand; label: string };
 }
 
 /** Payload for a scan whose page fetch was blocked — a diagnosis, not a graded audit. */
@@ -93,6 +106,7 @@ export async function auditPageFromHtml(
   const score = computeScore(weighted);
   const lg = letterGrade(score);
   const categoryScores = computeCategoryScores(weighted);
+  const bucketScores = computeBucketScores(weighted);
 
   const mapIssue = (r: (typeof weighted)[number]): ScanIssueJson => ({
     check: checks.find((c) => c.id === r.id)?.name ?? r.id,
@@ -101,6 +115,7 @@ export async function auditPageFromHtml(
     passed: r.passed,
     status: r.status,
     category: r.category,
+    bucket: r.bucket,
     finding: r.finding,
     fix: r.fix,
     confidence: r.confidence,
@@ -118,6 +133,8 @@ export async function auditPageFromHtml(
     topIssues:
       topIssues.length > 0 ? topIssues : issues.filter((i) => !i.passed).slice(0, 3),
     categoryScores,
+    bucketScores,
+    checkCatalogVersion: CHECK_CATALOG_VERSION,
   };
 }
 
@@ -144,6 +161,7 @@ function notTestedIssues(rootCause: string): ScanIssueJson[] {
     passed: false,
     status: 'NOT_EVALUATED' as CheckStatus,
     category: c.category,
+    bucket: bucketOf(c.id),
     finding: `Not tested — the page could not be retrieved (${rootCause}). This is an access problem, not a content problem.`,
   }));
 }
@@ -203,6 +221,7 @@ export async function runFreeScan(url: string, llm: LLMProvider): Promise<
       snippetRestricted: signals.hasSnippetRestriction,
     },
   });
+  output.eligibility = eligibilityBand(output.accessMatrix.rows);
 
   const domain = extractDomain(fetched.finalUrl);
   if (!domain) return { ok: false, reason: 'Could not extract domain' };

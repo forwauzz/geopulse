@@ -27,6 +27,8 @@ export interface PageSignals {
   jsonLdSnippetCount: number;
   /** Schema.org @type values found in JSON-LD blocks. */
   jsonLdTypes: string[];
+  /** Parsed JSON-LD root objects (capped) — lets checks validate required properties. */
+  jsonLdBlocks: unknown[];
   h1Count: number;
   h2Count: number;
   hasViewportMeta: boolean;

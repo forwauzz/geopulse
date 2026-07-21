@@ -13,6 +13,7 @@ describe('titleTagCheck', () => {
         ogDescription: null,
         jsonLdSnippetCount: 0,
         jsonLdTypes: [],
+        jsonLdBlocks: [],
         h1Count: 1,
         h2Count: 0,
         hasViewportMeta: true,

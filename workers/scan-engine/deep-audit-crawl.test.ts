@@ -240,6 +240,7 @@ beforeEach(() => {
           passed: score >= 70,
           status: score >= 70 ? 'PASS' : 'FAIL',
           category: 'extractability',
+          bucket: 'understanding',
           finding: score >= 70 ? 'Structured data present.' : 'Structured data missing.',
           weight: 10,
           fix: 'Add JSON-LD on key pages.',
@@ -247,6 +248,8 @@ beforeEach(() => {
       ],
       topIssues: [],
       categoryScores: [],
+      bucketScores: [],
+      checkCatalogVersion: 'test',
     };
   });
 });

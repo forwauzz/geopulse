@@ -13,6 +13,7 @@ import {
 } from '@/lib/shared/deep-audit-checkout-mode';
 import { buildReportPath } from '@/lib/shared/report-route';
 import { AccessMatrixView, BlockedScanNotice, type AccessMatrixData } from '@/components/access-matrix';
+import { ScoringExplainer, type BucketScoreData, type EligibilityData } from '@/components/scoring-explainer';
 
 type Issue = { check?: string; checkId?: string; finding?: string; fix?: string; weight?: number; passed?: boolean; status?: string; category?: string; confidence?: string };
 type ReportStatus = 'none' | 'generating' | 'delivered';
@@ -25,6 +26,8 @@ type ScanData = {
   letterGrade: string;
   scoreState: 'measured' | 'not_tested';
   accessMatrix: AccessMatrixData | null;
+  bucketScores: BucketScoreData[];
+  eligibility: EligibilityData;
   topIssues: Issue[];
   issues: ReportIssue[];
   benchmark: ScoreBenchmark | null;
@@ -91,6 +94,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       benchmark?: ScoreBenchmark | null;
       categoryScores?: CategoryScoreData[];
       accessMatrix?: AccessMatrixData | null;
+      bucketScores?: BucketScoreData[];
+      eligibility?: EligibilityData;
       scoreState?: string;
       hasPaidReport?: boolean;
       reportStatus?: ReportStatus;
@@ -107,6 +112,8 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         letterGrade: j.letterGrade ?? '\u2014',
         scoreState: j.scoreState === 'not_tested' ? 'not_tested' : 'measured',
         accessMatrix: j.accessMatrix ?? null,
+        bucketScores: Array.isArray(j.bucketScores) ? j.bucketScores : [],
+        eligibility: j.eligibility ?? null,
         topIssues: Array.isArray(j.topIssues) ? j.topIssues : [],
         issues: Array.isArray(j.issues) ? (j.issues as ReportIssue[]) : [],
         benchmark: j.benchmark ?? null,
@@ -303,6 +310,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         <div className="space-y-6">
           {/* Access & Eligibility Matrix — the per-destination headline diagnostic */}
           {data.accessMatrix && <AccessMatrixView matrix={data.accessMatrix} />}
+
+          {/* Published weights + bucket subtotals (spec C6) */}
+          <ScoringExplainer bucketScores={data.bucketScores} eligibility={data.eligibility} />
 
           {/* Report being generated */}
           {data.reportStatus === 'generating' && (
