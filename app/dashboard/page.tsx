@@ -10,7 +10,9 @@ import {
   type EngineCitationMetric,
   type EngineKey,
 } from '@/lib/server/dashboard-citation-metrics';
+import { getCitationEvidence, type EngineEvidence } from '@/lib/server/citation-evidence';
 import { getTrackedPromptPanel, type TrackedPromptPanel } from '@/lib/server/tracked-prompts';
+import { CitationEvidencePanel } from '@/components/citation-evidence-panel';
 import { TrackedPromptsPanel } from '@/components/tracked-prompts-panel';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
@@ -70,10 +72,12 @@ export default async function DashboardHomePage({
   // Real citation data where the audited domain is in the benchmark system; {} otherwise.
   let engineCitations: Partial<Record<EngineKey, EngineCitationMetric>> = {};
   let promptPanel: TrackedPromptPanel | null = null;
+  let citationEvidence: EngineEvidence[] = [];
   if (admin && view.latest?.domain) {
-    [engineCitations, promptPanel] = await Promise.all([
+    [engineCitations, promptPanel, citationEvidence] = await Promise.all([
       loadEngineCitationMetrics({ supabase: admin, domain: view.latest.domain }),
       getTrackedPromptPanel({ supabase: admin, domain: view.latest.domain }),
+      getCitationEvidence({ supabase: admin, domain: view.latest.domain }),
     ]);
   }
 
@@ -95,6 +99,11 @@ export default async function DashboardHomePage({
       {promptPanel?.tracked && view.latest?.domain ? (
         <div className="mx-auto w-full max-w-6xl">
           <TrackedPromptsPanel panel={promptPanel} domain={view.latest.domain} statusCode={sp.prompt} />
+        </div>
+      ) : null}
+      {citationEvidence.length > 0 && view.latest?.domain ? (
+        <div className="mx-auto w-full max-w-6xl">
+          <CitationEvidencePanel evidence={citationEvidence} domain={view.latest.domain} />
         </div>
       ) : null}
     </div>

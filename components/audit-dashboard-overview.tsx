@@ -270,6 +270,18 @@ export function AuditDashboardOverview({
                           ? 'citation rate (site-assisted)'
                           : 'citation rate (brand-aware)'}
                     </p>
+                    {metric.computedAt ? (
+                      <p className="text-[10px] text-on-surface-variant/80">
+                        measured{' '}
+                        {new Date(metric.computedAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </p>
+                    ) : null}
+                    <a href="#citation-evidence" className="mt-1 inline-block text-[11px] font-semibold text-primary underline">
+                      See the evidence
+                    </a>
                   </div>
                 ) : (
                   <span className="text-xs text-on-surface-variant">Not tracked yet</span>
