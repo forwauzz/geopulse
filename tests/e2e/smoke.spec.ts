@@ -257,8 +257,12 @@ test.describe('public smoke flows', () => {
     await page.goto('/results/e2e-report/report', { waitUntil: 'domcontentloaded' });
     await expect(page.getByText(/loading report/i)).toBeVisible();
 
-    await expect(page.getByRole('heading', { name: /example\.com/i })).toBeVisible();
-    await expect(page.getByText(/interactive summary/i)).toBeVisible();
+    // The summary block became the report data story (score dial, outcome donut, category bars,
+    // impact-ranked action plan) — assert its anchors rather than the old summary copy.
+    await expect(page.getByTestId('report-story')).toBeVisible();
+    await expect(page.getByText(/ai search readiness · example\.com/i)).toBeVisible();
+    await expect(page.getByText(/checks at a glance/i)).toBeVisible();
+    await expect(page.getByText(/where the score comes from/i)).toBeVisible();
     await expect(page.getByRole('link', { name: /back to results/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /pdf/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /executive summary/i })).toBeVisible();

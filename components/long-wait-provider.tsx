@@ -17,6 +17,17 @@ export type LongWaitConfig = {
   readonly steps: readonly string[];
   readonly delayMs?: number;
   readonly stepIntervalMs?: number;
+  /**
+   * URL returning `{ percent, detail }` (see `buildScanProgress`). When set, the panel polls it
+   * and shows a REAL percentage bar and what is actually happening ("Reviewing <url>") instead of
+   * the estimated step animation.
+   */
+  readonly progressUrl?: string;
+};
+
+type LiveProgress = {
+  readonly percent: number;
+  readonly detail: string | null;
 };
 
 type Session = {
@@ -40,6 +51,37 @@ function LongWaitPanel({
   config: LongWaitConfig;
   activeStep: number;
 }) {
+  const [progress, setProgress] = useState<LiveProgress | null>(null);
+
+  useEffect(() => {
+    if (!config.progressUrl) return;
+    let cancelled = false;
+
+    async function poll() {
+      try {
+        const res = await fetch(config.progressUrl!, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = (await res.json()) as { percent?: unknown; detail?: unknown };
+        if (cancelled || typeof data.percent !== 'number') return;
+        const percent = Math.max(0, Math.min(100, Math.round(data.percent)));
+        // A progress bar must never move backwards — hold the max we have shown.
+        setProgress((current) => ({
+          percent: Math.max(current?.percent ?? 0, percent),
+          detail: typeof data.detail === 'string' && data.detail ? data.detail : current?.detail ?? null,
+        }));
+      } catch {
+        /* keep the last known progress */
+      }
+    }
+
+    void poll();
+    const interval = window.setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [config.progressUrl]);
+
   return (
     <div className="pointer-events-auto w-full max-w-lg rounded-[28px] border border-outline-variant/40 bg-surface-container-lowest/95 p-6 text-on-surface shadow-[0_32px_80px_rgba(15,23,42,0.26)] backdrop-blur-xl dark:border-outline-variant/60 dark:bg-surface-container-low/95 md:p-7">
       <div className="flex items-center gap-3">
@@ -51,9 +93,9 @@ function LongWaitPanel({
         </div>
         <div>
           <p className="font-label text-[10px] font-semibold uppercase tracking-[0.24em] text-on-surface-variant">
-            Loading
+            {progress ? 'Live progress' : 'Loading'}
           </p>
-          <h2 className="font-headline text-2xl font-bold text-on-surface">LOADINGC</h2>
+          <h2 className="font-headline text-2xl font-bold text-on-surface">{config.title}</h2>
         </div>
       </div>
 
@@ -61,11 +103,35 @@ function LongWaitPanel({
         {config.description ?? 'Estimated processing steps are shown below while your request finishes.'}
       </p>
 
-      <div className="loading-stripe mt-5 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
-        <div className="h-full w-2/5 rounded-full bg-primary" />
-      </div>
+      {progress ? (
+        <div className="mt-5">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="min-w-0 truncate font-body text-sm text-on-surface" data-testid="long-wait-progress-detail">
+              {progress.detail ?? 'Working…'}
+            </p>
+            <p className="shrink-0 font-sans text-sm font-black tabular-nums text-on-surface">
+              {progress.percent}%
+            </p>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-container-high">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
+              style={{ width: `${progress.percent}%` }}
+              role="progressbar"
+              aria-valuenow={progress.percent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="loading-stripe mt-5 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+          <div className="h-full w-2/5 rounded-full bg-primary" />
+        </div>
+      )}
 
-      <ol className="mt-5 space-y-3">
+      {/* With live progress on screen the estimated step animation would just contradict it. */}
+      <ol className={`mt-5 space-y-3 ${progress ? 'hidden' : ''}`}>
         {config.steps.map((step, index) => {
           const isComplete = index < activeStep;
           const isCurrent = index === activeStep;

@@ -25,6 +25,8 @@ export type ScanResponse = {
   score: number | null;
   letterGrade: string | null;
   topIssues: Issue[];
+  /** Full check list (the API sends it; older cached payloads may omit it). */
+  issues?: Issue[];
   categoryScores: CategoryScore[];
   pdfUrl?: string | null;
   markdownUrl?: string | null;
