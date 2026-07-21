@@ -130,16 +130,20 @@ export function parsePageSignals(html: string): PageSignals {
   let external = 0;
   let hasAboutLink = false;
   let m: RegExpExecArray | null;
+  // Semantic trust anchors, not a literal "/about" URL (spec C1): a Why Us, Team,
+  // Company, or Our Story page establishes identity just as well as an About page.
+  const trustAnchorRe =
+    /\/(about(-us)?|team|our-team|company|why(-choose)?-us|our-story|who-we-are|leadership|people|meet-the-team)\b/i;
   const re = new RegExp(linkHrefRe.source, linkHrefRe.flags);
   while ((m = re.exec(h)) !== null) {
     const href = m[1] ?? '';
     if (!href || href.startsWith('#') || href.toLowerCase().startsWith('javascript:')) continue;
     if (href.startsWith('http://') || href.startsWith('https://')) {
       external += 1;
-      if (/\/about\b/i.test(href)) hasAboutLink = true;
+      if (trustAnchorRe.test(href)) hasAboutLink = true;
     } else {
       internal += 1;
-      if (/\/about\b/i.test(href)) hasAboutLink = true;
+      if (trustAnchorRe.test(href)) hasAboutLink = true;
     }
   }
 

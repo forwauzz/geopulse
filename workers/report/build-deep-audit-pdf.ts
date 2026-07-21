@@ -17,6 +17,9 @@ import {
   summarizePageIssuePatterns,
   type IssueRow,
 } from './deep-audit-report-helpers';
+import { deriveCheckCounts, describeCheckCounts, type CheckCounts } from './check-counts';
+import { truncateAtWord } from './report-qa-gate';
+import { INDEXATION_GUIDANCE } from './indexation-guidance';
 
 function wrapLine(text: string, maxChars: number): string[] {
   const words = text.split(/\s+/);
@@ -337,15 +340,14 @@ class PdfBuilder {
   drawAtAGlance(input: {
     score: number;
     grade: string;
-    passedChecks: number;
-    totalChecks: number;
+    counts: CheckCounts;
     topIssue?: IssueRow;
     firstMove?: string;
   }): void {
     this.drawSectionTitle('At a Glance');
     const rows: string[] = [
       `Overall score: ${String(input.score)}/100 (${input.grade})`,
-      `Checks passed: ${String(input.passedChecks)} of ${String(input.totalChecks)}`,
+      `Checks: ${describeCheckCounts(input.counts)}`,
     ];
     if (input.topIssue) {
       rows.push(`Top blocker: ${input.topIssue.check ?? input.topIssue.checkId ?? 'Check'}`);
@@ -390,17 +392,22 @@ class PdfBuilder {
         this.page.drawRectangle({ x: MARGIN, y: this.y - 2, width: MAX_W, height: rowH, color: ROW_ALT });
       }
 
-      const name = (row.check ?? row.checkId ?? 'Check').slice(0, 40);
+      // Word-boundary truncation + wrapped findings — a hard slice mid-word ("…AI crawle")
+      // is exactly the credibility bug the QA gate exists to block (spec C1).
+      const name = truncateAtWord(row.check ?? row.checkId ?? 'Check', 42);
       const status = issueStatusLabel(row);
       const statusClr = issueStatusColor(status);
       const weight = String(row.weight ?? 0);
-      const finding = customerFacingFinding(row).slice(0, 70);
+      const findingLines = wrapLine(customerFacingFinding(row), 48).slice(0, 3);
 
       this.page.drawText(name, { x: MARGIN + 4, y: this.y, size: 8, font: this.font, color: INK });
       this.page.drawText(status, { x: MARGIN + 220, y: this.y, size: 8, font: this.fontBold, color: statusClr });
       this.page.drawText(weight, { x: MARGIN + 280, y: this.y, size: 8, font: this.font, color: MUTED });
-      this.page.drawText(finding, { x: MARGIN + 330, y: this.y, size: 7, font: this.font, color: MUTED });
-      this.y -= rowH + 2;
+      for (let li = 0; li < findingLines.length; li += 1) {
+        this.page.drawText(findingLines[li] ?? '', { x: MARGIN + 330, y: this.y - li * 9, size: 7, font: this.font, color: MUTED });
+      }
+      const extraLines = Math.max(0, findingLines.length - 1);
+      this.y -= rowH + 2 + extraLines * 9;
     }
     this.y -= 8;
   }
@@ -558,12 +565,28 @@ class PdfBuilder {
           const statusClr = issueStatusColor(status);
           this.ensureSpace(14);
           this.page.drawText(`[${status}]`, { x: MARGIN + 12, y: this.y, size: 7, font: this.fontBold, color: statusClr });
-          this.page.drawText((row.check ?? row.checkId ?? 'Check').slice(0, 50), { x: MARGIN + 50, y: this.y, size: 8, font: this.font, color: INK });
+          this.page.drawText(truncateAtWord(row.check ?? row.checkId ?? 'Check', 50), { x: MARGIN + 50, y: this.y, size: 8, font: this.font, color: INK });
           this.y -= 14;
         }
       }
       this.y -= 8;
     }
+  }
+
+  drawIndexationGuidance(): void {
+    this.drawSectionTitle(INDEXATION_GUIDANCE.headline);
+    this.drawText(INDEXATION_GUIDANCE.explanation, 9, false, MUTED);
+    this.y -= 4;
+    for (const block of INDEXATION_GUIDANCE.steps) {
+      this.ensureSpace(30);
+      this.drawText(`${block.destination} — ${block.tool}`, 9, true, PRIMARY);
+      for (let i = 0; i < block.steps.length; i += 1) {
+        this.drawText(`${String(i + 1)}. ${block.steps[i] ?? ''}`, 8, false, INK, 12);
+      }
+      this.y -= 6;
+    }
+    this.drawText(INDEXATION_GUIDANCE.caveat, 8, false, MUTED);
+    this.y -= 8;
   }
 
   drawCategoryBreakdown(cats: readonly CategoryScorePayload[]): void {
@@ -656,8 +679,11 @@ export async function buildDeepAuditPdf(input: {
   const allIssues = issues.length > 0 ? issues : (input.pageSummaries?.[0] ? parseIssues(input.pageSummaries[0].issuesJson) : []);
   const highlightedIssues = enrichIssues(parseIssues(input.highlightedIssues), allIssues);
 
-  const totalChecks = allIssues.length;
-  const passedChecks = allIssues.filter((i) => issueStatusLabel(i) === 'PASS').length;
+  // Canonical arithmetic (spec C1): every surface derives counts from deriveCheckCounts
+  // so passed+warning+failed+notTested always reconciles with the total.
+  const counts = deriveCheckCounts(allIssues);
+  const totalChecks = counts.total;
+  const passedChecks = counts.passed;
   const failedSorted = allIssues
     .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
@@ -689,8 +715,7 @@ export async function buildDeepAuditPdf(input: {
   pdf.drawAtAGlance({
     score,
     grade,
-    passedChecks,
-    totalChecks,
+    counts,
     topIssue: strongestFailed,
     firstMove: topFailed[0]?.fix ?? '',
   });
@@ -698,6 +723,7 @@ export async function buildDeepAuditPdf(input: {
     pdf.drawCategoryBreakdown(input.categoryScores);
   }
   pdf.drawActionPlan(failedSorted);
+  pdf.drawIndexationGuidance();
   pdf.drawDemandCoverage(allIssues);
   pdf.drawCoverageSummary(input.coverageSummary);
 

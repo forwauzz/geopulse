@@ -18,6 +18,11 @@ const OUTCOME_TONE: Record<CheckOutcome, { swatch: string; chip: string; icon: s
   },
   warning: { swatch: 'fill-warning', chip: 'bg-warning/20 text-on-background', icon: 'error' },
   failed: { swatch: 'fill-error', chip: 'bg-error/15 text-error', icon: 'cancel' },
+  not_tested: {
+    swatch: 'fill-outline-variant',
+    chip: 'bg-surface-container-high text-on-surface-variant',
+    icon: 'help',
+  },
 };
 
 function toneBar(tone: 'good' | 'ok' | 'warn' | 'bad'): string {

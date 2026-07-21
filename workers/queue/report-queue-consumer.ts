@@ -22,6 +22,8 @@ import { browserRenderConfigFromEnv } from '../scan-engine/browser-rendering';
 import { parseCrawlPending, runDeepAuditCrawl } from '../scan-engine/deep-audit-crawl';
 import { computeCategoryScores, letterGrade, type WeightedResult } from '../scan-engine/scoring';
 import { bucketOf } from '../scan-engine/check-catalog';
+import { deriveCheckCounts } from '../report/check-counts';
+import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../report/report-qa-gate';
 import { replayReportJobFromDlq } from './dlq-replay';
 import { resolveStartupRolloutFlagsFromMetadata } from '../../lib/server/startup-rollout-flags';
 import { resolveStartupWorkspaceBundleKey } from '../../lib/server/startup-github-integration';
@@ -655,7 +657,18 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   const aggLetter = letterGrade(aggregateScore);
 
   const issuesForScan = topFailedIssuesFromPages(pages);
-  const allIssuesForReport = buildSitewideIssueSummaryFromPages(pages);
+  const allIssuesRaw = buildSitewideIssueSummaryFromPages(pages);
+
+  // Spec C1: resolve contradictory finding pairs before anything renders, then hold the
+  // report at the QA gate — a PDF with irreconcilable numbers or garbled text never ships.
+  const contradictionResult = resolveReportContradictions(allIssuesRaw as GateIssue[]);
+  const allIssuesForReport = contradictionResult.issues as Record<string, unknown>[];
+  if (contradictionResult.resolutions.length > 0) {
+    structuredLog('report_contradictions_resolved', {
+      scanId: job.scanId,
+      resolutions: contradictionResult.resolutions.join(' | '),
+    });
+  }
 
   const { data: runCoverage } = await supabase
     .from('scan_runs')
@@ -738,6 +751,17 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     bucket,
   });
 
+  const gate = runReportQaGate({ issues: payload.allIssues as GateIssue[] });
+  if (!gate.ok) {
+    structuredLog('report_qa_gate_failed', {
+      scanId: job.scanId,
+      violations: gate.violations.map((v) => `${v.rule}: ${v.detail}`).join(' | '),
+    });
+    throw new Error(
+      `report_qa_gate_failed: ${gate.violations.map((v) => `${v.rule}: ${v.detail}`).join(' | ')}`
+    );
+  }
+
   const pdfBytes = await buildDeepAuditPdfFromPayload(payload, branding);
   const markdownText = buildDeepAuditMarkdown(payload);
   const publicBase = (env.DEEP_AUDIT_R2_PUBLIC_BASE ?? '').trim();
@@ -789,8 +813,8 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     grade: aggLetter,
     topIssues: failedForEmail,
     appUrl: (env.NEXT_PUBLIC_APP_URL ?? '').trim() || undefined,
-    totalChecks: allIssueRows.length,
-    passedChecks: allIssueRows.filter((r: Record<string, unknown>) => String(r['status'] ?? '') === 'PASS').length,
+    totalChecks: deriveCheckCounts(allIssueRows as GateIssue[]).total,
+    passedChecks: deriveCheckCounts(allIssueRows as GateIssue[]).passed,
     scanId: job.scanId,
   });
 

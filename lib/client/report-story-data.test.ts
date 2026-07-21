@@ -30,12 +30,13 @@ describe('buildReportStoryData', () => {
     expect(buildReportStoryData(scan({ score: null }))).toBeNull();
   });
 
-  it('buckets outcomes and excludes not-evaluated checks from the donut', () => {
+  it('buckets outcomes so every check is accounted for — not-tested included (spec C1)', () => {
     const story = buildReportStoryData(scan())!;
-    expect(story.totalChecks).toBe(4);
+    expect(story.totalChecks).toBe(5);
     expect(story.outcomes.find((o) => o.outcome === 'passed')?.count).toBe(1);
     expect(story.outcomes.find((o) => o.outcome === 'warning')?.count).toBe(1);
     expect(story.outcomes.find((o) => o.outcome === 'failed')?.count).toBe(2);
+    expect(story.outcomes.find((o) => o.outcome === 'not_tested')?.count).toBe(1);
     const shares = story.outcomes.reduce((s, o) => s + o.share, 0);
     expect(shares).toBeCloseTo(1);
   });
