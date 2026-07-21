@@ -121,13 +121,14 @@ export async function fetchGateText(
   // the normal path, which fails fast and lets the caller degrade.
   const self = matchSelfFetch(rawUrl);
   if (self) {
+    let selfTimer: ReturnType<typeof setTimeout> | undefined;
+    const selfTimeout = new Promise<never>((_, reject) => {
+      selfTimer = setTimeout(() => reject(new Error('self_fetch_timeout')), timeoutMs);
+    });
+    // The race loser must never become an unhandled rejection (fatal in Workers).
+    selfTimeout.catch(() => {});
     try {
-      const res = await Promise.race([
-        self.fetch(rawUrl),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('self_fetch_timeout')), timeoutMs)
-        ),
-      ]);
+      const res = await Promise.race([self.fetch(rawUrl), selfTimeout]);
       if (!res.ok) return { ok: false, reason: `Target returned HTTP ${String(res.status)}` };
       const ctype = res.headers.get('Content-Type');
       const text = await readTextWithByteLimit(res, options.maxBytes);
@@ -140,7 +141,9 @@ export async function fetchGateText(
         headers: toHeaderMap(res.headers),
       };
     } catch {
-      // Self-fetch unavailable — fall through to the normal (validated) path.
+      // Self-fetch unavailable or timed out — fall through to the normal (validated) path.
+    } finally {
+      clearTimeout(selfTimer);
     }
   }
 
