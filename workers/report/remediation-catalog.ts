@@ -274,6 +274,34 @@ export const REMEDIATION_CATALOG: readonly RemediationEntry[] = [
     rollback: 'Content edits are versioned.',
     effortImpact: 'Big Project',
   },
+  {
+    checkId: 'information-gain',
+    ownerRole: 'Marketing/content person',
+    effort: '1-2 hours per page',
+    diy: true,
+    tool: 'WordPress editor',
+    clickPath: 'Edit page -> replace stock phrases with facts only you can claim',
+    desiredState: 'Copy that carries original specifics — real numbers, prices, response times, certifications, named case studies — instead of templated agency phrases.',
+    copyPaste:
+      'Please rewrite the generic phrases on our key pages ("best-in-class", "tailored solutions") into concrete facts: our actual response time, client count, certifications, prices, and one real case study per service.',
+    verify: 'Re-run the scan; the information-gain check should pass.',
+    rollback: 'Content edits are versioned in WordPress.',
+    effortImpact: 'Fill-in',
+  },
+  {
+    checkId: 'hreflang-parity',
+    ownerRole: 'WordPress admin',
+    effort: '30-60 minutes',
+    diy: true,
+    tool: 'WPML / Polylang (WordPress multilingual plugin)',
+    clickPath: 'Plugin settings -> Languages -> enable hreflang output; link each page to its translation',
+    desiredState: 'Every language version lists all alternates including itself, plus an x-default.',
+    copyPaste:
+      'Our hreflang annotations are inconsistent. Please make each language version list every alternate INCLUDING itself, add an x-default, and keep the set identical across all versions. WPML/Polylang handle this once pages are linked to their translations.',
+    verify: 'View source on both language versions: identical hreflang sets, each including itself.',
+    rollback: 'Annotations are additive metadata; removing them restores the previous state.',
+    effortImpact: 'Fill-in',
+  },
   // ── Hygiene (worth doing; does not move the AI score) ───────────────────────
   {
     checkId: 'meta-description',

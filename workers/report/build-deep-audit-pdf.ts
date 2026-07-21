@@ -22,6 +22,8 @@ import { truncateAtWord } from './report-qa-gate';
 import { INDEXATION_GUIDANCE } from './indexation-guidance';
 import { buildOwnerPage, type OwnerPageData } from './owner-page';
 import { OFFSITE_MODULE } from '../../lib/shared/offsite-guidance';
+import { classifyPageTier, sortPagesByTier, TIER_LABELS } from './page-tiers';
+import { assessBuyerQuestionCoverage } from './buyer-question-coverage';
 import { buildCadencePlan, type CadencePhase } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
 
@@ -595,7 +597,7 @@ class PdfBuilder {
     for (const pg of pages) {
       this.ensureSpace(30);
       const sc = pg.score !== null ? `${String(pg.score)}/100 (${pg.grade ?? '—'})` : '—';
-      this.drawText(`${pg.url}  —  ${sc}`, 9, true, PRIMARY);
+      this.drawText(`${pg.url}  —  ${sc}  [${TIER_LABELS[classifyPageTier(pg.url)]}]`, 9, true, PRIMARY);
       this.y -= 2;
 
       if (pg.issues.length === 0) {
@@ -717,6 +719,28 @@ class PdfBuilder {
       true,
       INK
     );
+    this.y -= 8;
+  }
+
+  drawBuyerQuestionCoverage(pages: readonly { url: string }[]): void {
+    const coverage = assessBuyerQuestionCoverage(pages);
+    this.drawSectionTitle('Buyer-Question Coverage');
+    this.drawText(
+      'Prospects ask AI engines four kinds of questions. This is whether your site gives engines anything to answer with.',
+      9,
+      false,
+      MUTED
+    );
+    this.y -= 4;
+    for (const gap of coverage.gaps) {
+      this.ensureSpace(36);
+      const label = gap.category.charAt(0).toUpperCase() + gap.category.slice(1);
+      this.drawText(`${label} coverage: ${gap.covered ? 'COVERED' : 'GAP'}`, 9, true, gap.covered ? PASS_GREEN : FAIL_RED);
+      this.drawText(gap.evidence, 8, false, MUTED, 12);
+      if (!gap.covered) this.drawText(`Do: ${gap.action}`, 8, false, INK, 12);
+      this.y -= 4;
+    }
+    this.drawText(coverage.note, 7, false, MUTED);
     this.y -= 8;
   }
 
@@ -895,11 +919,16 @@ export async function buildDeepAuditPdf(input: {
   }
   pdf.drawActionPlan(failedSorted);
   pdf.drawIndexationGuidance();
+  if ((input.pageSummaries?.length ?? 0) > 1) {
+    pdf.drawBuyerQuestionCoverage(input.pageSummaries ?? []);
+  }
   pdf.drawOffsiteModule();
   pdf.drawDemandCoverage(allIssues);
   pdf.drawCoverageSummary(input.coverageSummary);
 
-  const summaries = input.pageSummaries?.length ? input.pageSummaries : null;
+  // Money pages surface first (spec C12): findings on service/pricing/contact pages
+  // outrank the same findings on blog posts.
+  const summaries = input.pageSummaries?.length ? sortPagesByTier(input.pageSummaries) : null;
   if (summaries && summaries.length > 1) {
     pdf.drawRepeatedPagePatterns(
       summaries.map((pg) => ({

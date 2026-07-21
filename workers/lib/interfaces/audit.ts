@@ -29,6 +29,10 @@ export interface PageSignals {
   jsonLdTypes: string[];
   /** Parsed JSON-LD root objects (capped) — lets checks validate required properties. */
   jsonLdBlocks: unknown[];
+  /** The <html lang="…"> attribute, if any. */
+  htmlLang: string | null;
+  /** <link rel="alternate" hreflang> entries found in the page head. */
+  hreflangEntries: { lang: string; href: string }[];
   h1Count: number;
   h2Count: number;
   hasViewportMeta: boolean;

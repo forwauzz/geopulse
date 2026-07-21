@@ -14,6 +14,8 @@ import { createExtractabilityCheck } from './check-llm-extractability';
 import { createQaPatternCheck } from './check-llm-qa';
 import { llmsTxtCheck } from './check-llms-txt';
 import { headingStructureCheck } from './check-headings';
+import { hreflangCheck } from './check-hreflang';
+import { informationGainCheck } from './check-information-gain';
 import { htmlSizeCheck } from './check-html-size';
 import { httpsOnlyCheck } from './check-https-only';
 import { internalLinksCheck } from './check-internal-links';
@@ -48,6 +50,8 @@ const DETERMINISTIC_CHECKS: AuditCheck[] = [
   securityHeadersCheck,
   llmsTxtCheck,
   eeatSignalsCheck,
+  hreflangCheck,
+  informationGainCheck,
 ];
 
 /**

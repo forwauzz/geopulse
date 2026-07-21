@@ -45,13 +45,13 @@ describe('team-owner-map', () => {
     expect(getTeamOwner('')).toBeUndefined();
   });
 
-  it('has exactly 11 Engineering, 9 Content, 2 Brand, 0 Product checks', () => {
+  it('has exactly 12 Engineering, 10 Content, 2 Brand, 0 Product checks', () => {
     const counts: Record<string, number> = { Engineering: 0, Content: 0, Brand: 0, Product: 0 };
     for (const owner of Object.values(TEAM_OWNER_MAP)) {
       counts[owner] = (counts[owner] ?? 0) + 1;
     }
-    expect(counts['Engineering']).toBe(11);
-    expect(counts['Content']).toBe(9);
+    expect(counts['Engineering']).toBe(12);
+    expect(counts['Content']).toBe(10);
     expect(counts['Brand']).toBe(2);
     expect(counts['Product']).toBe(0);
   });

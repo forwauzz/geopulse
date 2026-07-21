@@ -26,6 +26,7 @@ export const TEAM_OWNER_MAP: Readonly<Record<string, TeamOwner>> = {
   'https-only': 'Engineering',
   viewport: 'Engineering',
   'html-size': 'Engineering',
+  'hreflang-parity': 'Engineering',
 
   // Content — writing, editorial structure, page maintenance
   'llm-qa-pattern': 'Content',
@@ -37,6 +38,7 @@ export const TEAM_OWNER_MAP: Readonly<Record<string, TeamOwner>> = {
   'internal-links': 'Content',
   'external-links': 'Content',
   'alt-text': 'Content',
+  'information-gain': 'Content',
 
   // Brand — organizational identity, credibility signals, brand representation
   'eeat-signals': 'Brand',
