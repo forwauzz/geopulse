@@ -92,7 +92,8 @@ test.describe('authenticated dashboard home', () => {
     await signInAsIndividual(page);
     await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
+    // Render sentinel: the scan hero is what /dashboard shows (History lives on its own page).
+    await expect(page.locator('#dashboard-scan')).toBeVisible();
     await expect(page.getByRole('link', { name: /connectors/i })).toHaveCount(0);
   });
 

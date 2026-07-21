@@ -366,10 +366,32 @@ function createE2EQueryBuilder(table: string) {
         startup_workspace_id: E2E_STARTUP_WORKSPACE_ID,
         agency_account_id: null,
         agency_client_id: null,
+        // A real founder-run workspace scan carries both ids; user_id also feeds the /dashboard
+        // overview (which shows the signed-in user's own audits regardless of workspace).
+        user_id: E2E_ADMIN_USER_ID,
+        status: 'complete',
         url: 'https://example.com',
         domain: 'example.com',
         score: 74,
         letter_grade: 'B',
+        issues_json: [
+          {
+            checkId: 'ai-crawler-access',
+            check: 'AI crawler access (robots.txt)',
+            passed: true,
+            weight: 10,
+            finding: 'robots.txt does not block any known AI crawler user-agents.',
+          },
+          {
+            checkId: 'jsonld',
+            check: 'JSON-LD structured data',
+            passed: false,
+            weight: 9,
+            finding: 'No JSON-LD blocks found.',
+            fix: 'Add an Organization JSON-LD block to the <head>.',
+          },
+          { checkId: 'open-graph', check: 'Open Graph tags', passed: true, weight: 4, finding: 'og tags present.' },
+        ],
         run_source: 'startup_dashboard',
         created_at: now,
       },
