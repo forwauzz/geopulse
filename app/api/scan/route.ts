@@ -201,6 +201,11 @@ export async function POST(request: Request): Promise<Response> {
     // persist a NOT-TESTED scan carrying the access matrix + root cause + safelist steps.
     if (scan.blocked) {
       const b = scan.blocked;
+      const blockedRunSource = agencyContext
+        ? 'agency_dashboard'
+        : startupContext
+          ? 'startup_dashboard'
+          : 'public_self_serve';
       const { data: row, error } = await supabase
         .from('scans')
         .insert({
@@ -216,7 +221,11 @@ export async function POST(request: Request): Promise<Response> {
             accessMatrix: b.accessMatrix,
             scoreState: 'not_tested',
           },
-          run_source: 'public_self_serve',
+          user_id: agencyContext || startupContext ? sessionUserId : null,
+          agency_account_id: agencyContext?.agencyAccountId ?? null,
+          agency_client_id: agencyContext?.agencyClientId ?? null,
+          startup_workspace_id: startupContext?.startupWorkspaceId ?? null,
+          run_source: blockedRunSource,
         })
         .select('id')
         .single();

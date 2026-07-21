@@ -71,6 +71,20 @@ describe('evaluateRobotsForToken', () => {
     expect(evaluateRobotsForToken(robots, 'GPTBot', '/').allowed).toBe(false);
   });
 
+  it('matches vendor prefixes only at a dash boundary', () => {
+    const robots = 'User-agent: Claude\nDisallow: /';
+    expect(evaluateRobotsForToken(robots, 'Claude-SearchBot').allowed).toBe(false);
+    // "Google" must not capture "Googlebot" (no dash boundary).
+    const g = 'User-agent: Google\nDisallow: /';
+    expect(evaluateRobotsForToken(g, 'Googlebot').allowed).toBe(true);
+    expect(evaluateRobotsForToken(g, 'Google-Extended').allowed).toBe(false);
+  });
+
+  it('ignores a malformed empty User-agent value', () => {
+    const robots = 'User-agent:\nDisallow: /\n\nUser-agent: *\nAllow: /';
+    expect(evaluateRobotsForToken(robots, 'Googlebot').allowed).toBe(true);
+  });
+
   it('supports wildcard and anchor patterns', () => {
     const robots = 'User-agent: *\nDisallow: /*.pdf$';
     expect(evaluateRobotsForToken(robots, 'Googlebot', '/x.pdf').allowed).toBe(false);

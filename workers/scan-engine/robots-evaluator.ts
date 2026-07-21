@@ -50,7 +50,8 @@ export function parseRobotsTxt(content: string): RobotsGroup[] {
         current = { agents: [], rules: [] };
         groups.push(current);
       }
-      current.agents.push(value.toLowerCase());
+      // A malformed empty token would otherwise prefix-match every crawler.
+      if (value) current.agents.push(value.toLowerCase());
       lastLineWasAgent = true;
       continue;
     }
@@ -82,9 +83,13 @@ function pathMatches(rulePath: string, path: string): boolean {
 
 function selectGroup(groups: RobotsGroup[], token: string): { group: RobotsGroup | null; kind: 'specific' | 'wildcard' | 'none' } {
   const lower = token.toLowerCase();
-  // RFC 9309: match the group whose UA token is the longest prefix of the crawler's
-  // product token. In practice, exact-token groups are what site owners write.
-  const specific = groups.filter((g) => g.agents.some((a) => a !== '*' && (lower === a || lower.startsWith(a))));
+  // Exact token match, plus the vendor-style dash-boundary fallback (a group named
+  // "Claude" governs "Claude-SearchBot"). A bare prefix without the boundary must NOT
+  // match — "Google" would otherwise capture "Google-Extended" AND "Googlebot" from
+  // unrelated groups per plain startsWith.
+  const specific = groups.filter((g) =>
+    g.agents.some((a) => a !== '*' && (lower === a || lower.startsWith(`${a}-`)))
+  );
   if (specific.length > 0) {
     // Merge all groups naming this token (RFC: rules from all matching groups combine).
     const merged: RobotsGroup = { agents: [lower], rules: specific.flatMap((g) => g.rules) };
