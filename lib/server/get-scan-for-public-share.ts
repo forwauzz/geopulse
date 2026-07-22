@@ -1,9 +1,13 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { fullIssueListFromScan } from '@/lib/server/scan-issue-list';
 import { structuredLog } from '@/lib/server/structured-log';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const uuid = z.string().uuid();
+// Share slugs are 32 hex chars (a dash-stripped UUID). Kept permissive on charset so a
+// future generator can widen the alphabet without breaking existing links.
+const shareSlug = z.string().regex(/^[a-zA-Z0-9_-]{16,128}$/);
 
 export type ReportStatus = 'none' | 'generating' | 'delivered';
 
@@ -58,62 +62,38 @@ export function extractTopIssues(raw: unknown): unknown[] {
   return failed.slice(0, 3);
 }
 
+/** The subset of columns both share paths project into a PublicShareScanRow. */
+type ShareScanCore = {
+  id: string;
+  url: string;
+  domain: string | null;
+  score: number | null;
+  letter_grade: string | null;
+  issues_json: unknown;
+  full_results_json: unknown;
+};
+
 /**
- * Same visibility rules as GET /api/scans/[id]: guest scans only, within 48h of creation.
+ * Load payment/report state for a visible scan and project it into a PublicShareScanRow.
+ * Shared by both the id-based (guest) path and the slug-based (recurring-audit) path so
+ * they render identically; the visibility gate is the caller's responsibility.
  */
-export async function getScanForPublicShare(
-  id: string,
-  supabaseUrl: string,
-  serviceRoleKey: string
+async function buildPublicShareRow(
+  supabase: SupabaseClient,
+  data: ShareScanCore
 ): Promise<PublicShareScanResult> {
-  const parsed = uuid.safeParse(id);
-  if (!parsed.success) {
-    return { ok: false, code: 'invalid_id' };
-  }
-
-  const supabase = createServiceRoleClient(supabaseUrl, serviceRoleKey);
-
-  const { data, error } = await supabase
-    .from('scans')
-    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,user_id,run_source')
-    .eq('id', parsed.data)
-    .maybeSingle();
-
-  if (error) {
-    return { ok: false, code: 'db_error', message: error.message };
-  }
-  if (!data) {
-    return { ok: false, code: 'not_found' };
-  }
-
-  if (data.user_id !== null) {
-    return { ok: false, code: 'forbidden' };
-  }
-
-  const created = new Date(data.created_at);
-  const maxAge = data.run_source === 'recurring' ? RECURRING_MAX_AGE_MS : MAX_AGE_MS;
-  if (Number.isFinite(created.getTime()) && Date.now() - created.getTime() > maxAge) {
-    return { ok: false, code: 'expired' };
-  }
-
-  // Funnel visibility (issue #116): a cadence-delivered report being SERVED is the
-  // strongest engagement signal we have (beats the pixel, which images-off kills).
-  if (data.run_source === 'recurring') {
-    structuredLog('outreach_report_viewed', { scanId: data.id }, 'info');
-  }
-
   const [paymentRes, reportRes] = await Promise.all([
     supabase
       .from('payments')
       .select('id')
-      .eq('scan_id', parsed.data)
+      .eq('scan_id', data.id)
       .eq('status', 'complete')
       .limit(1)
       .maybeSingle(),
     supabase
       .from('reports')
       .select('id,pdf_url,markdown_url,email_delivered_at')
-      .eq('scan_id', parsed.data)
+      .eq('scan_id', data.id)
       .eq('type', 'deep_audit')
       .limit(1)
       .maybeSingle(),
@@ -160,4 +140,99 @@ export async function getScanForPublicShare(
       viewerEmail: null,
     },
   };
+}
+
+/**
+ * Same visibility rules as GET /api/scans/[id]: guest scans only, within 48h of creation.
+ */
+export async function getScanForPublicShare(
+  id: string,
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<PublicShareScanResult> {
+  const parsed = uuid.safeParse(id);
+  if (!parsed.success) {
+    return { ok: false, code: 'invalid_id' };
+  }
+
+  const supabase = createServiceRoleClient(supabaseUrl, serviceRoleKey);
+
+  const { data, error } = await supabase
+    .from('scans')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,user_id,run_source')
+    .eq('id', parsed.data)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, code: 'db_error', message: error.message };
+  }
+  if (!data) {
+    return { ok: false, code: 'not_found' };
+  }
+
+  if (data.user_id !== null) {
+    return { ok: false, code: 'forbidden' };
+  }
+
+  const created = new Date(data.created_at);
+  const maxAge = data.run_source === 'recurring' ? RECURRING_MAX_AGE_MS : MAX_AGE_MS;
+  if (Number.isFinite(created.getTime()) && Date.now() - created.getTime() > maxAge) {
+    return { ok: false, code: 'expired' };
+  }
+
+  // Funnel visibility (issue #116): a cadence-delivered report being SERVED is the
+  // strongest engagement signal we have (beats the pixel, which images-off kills).
+  if (data.run_source === 'recurring') {
+    structuredLog('outreach_report_viewed', { scanId: data.id }, 'info');
+  }
+
+  return buildPublicShareRow(supabase, data);
+}
+
+/**
+ * Load a recurring-audit scan by its share slug (issue #128). Recurring-audit scans persist
+ * with the OWNER's user_id, so the id-based public route rejects them ("This scan is private").
+ * We mint an unguessable `share_slug` + `is_public` for those scans and serve them here: the
+ * slug is the capability, so — unlike getScanForPublicShare — we do NOT require user_id IS NULL.
+ * Gated to run_source='recurring' + is_public, with the same 90-day cadence window.
+ */
+export async function getScanForShareSlug(
+  slug: string,
+  supabaseUrl: string,
+  serviceRoleKey: string
+): Promise<PublicShareScanResult> {
+  const parsed = shareSlug.safeParse(slug);
+  if (!parsed.success) {
+    return { ok: false, code: 'invalid_id' };
+  }
+
+  const supabase = createServiceRoleClient(supabaseUrl, serviceRoleKey);
+
+  const { data, error } = await supabase
+    .from('scans')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,run_source,is_public')
+    .eq('share_slug', parsed.data)
+    .maybeSingle();
+
+  if (error) {
+    return { ok: false, code: 'db_error', message: error.message };
+  }
+  if (!data) {
+    return { ok: false, code: 'not_found' };
+  }
+
+  // Slugs are minted ONLY for cadence-delivered recurring audits, and only while the scan is
+  // still flagged shareable. This gate (not user_id) is what keeps arbitrary scans off this route.
+  if (data.run_source !== 'recurring' || data.is_public !== true) {
+    return { ok: false, code: 'forbidden' };
+  }
+
+  const created = new Date(data.created_at);
+  if (Number.isFinite(created.getTime()) && Date.now() - created.getTime() > RECURRING_MAX_AGE_MS) {
+    return { ok: false, code: 'expired' };
+  }
+
+  structuredLog('recurring_share_viewed', { scanId: data.id }, 'info');
+
+  return buildPublicShareRow(supabase, data);
 }
