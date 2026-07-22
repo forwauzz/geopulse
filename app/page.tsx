@@ -254,9 +254,10 @@ export default async function HomePage({
             is improving over time.
           </p>
           {uiFlags.show_monitor_subscription ? (
-            <p className="mx-auto mt-5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/5 px-4 py-1.5 font-body text-sm text-on-surface-variant">
-              <span className="material-symbols-outlined text-base text-primary" aria-hidden>autorenew</span>
-              Free instant audit — then keep your site monitored monthly from <strong className="text-on-background">$39/mo</strong>.
+            <p className="mx-auto mt-6 inline-flex items-center gap-2.5 rounded-full border border-primary/40 bg-primary/10 px-5 py-2.5 font-sans text-base font-bold text-on-background shadow-sm md:text-lg">
+              <span className="material-symbols-outlined text-primary" aria-hidden>autorenew</span>
+              Free instant audit — then monitor monthly from{' '}
+              <span className="font-black text-primary">$39/mo</span>
             </p>
           ) : null}
           <div className="mx-auto mt-10 max-w-5xl">
@@ -304,6 +305,78 @@ export default async function HomePage({
             Start with a free audit to see where AI visibility is weak, what to fix first, and whether
             the gaps are serious enough to warrant deeper implementation work.
           </p>
+        </div>
+      </section>
+
+      {/* Stats band — capability facts, in big bold numbers */}
+      <section className="border-y border-outline-variant/15 bg-surface-container-low px-6 py-16 md:px-10 md:py-20">
+        <div data-reveal className="mx-auto grid max-w-screen-2xl grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-4">
+          {[
+            { n: '16', label: 'Readiness checks per audit' },
+            { n: '5', label: 'AI answer engines checked' },
+            { n: '~90s', label: 'To your first score' },
+            { n: '$39', label: 'Per month to keep watch' },
+          ].map((s) => (
+            <div key={s.label} className="text-center">
+              <p className="font-sans text-5xl font-black tracking-tighter text-primary md:text-7xl">{s.n}</p>
+              <p className="mt-2 font-body text-sm text-on-surface-variant">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Prove-it-improves — coloured trend chart + a big delta number */}
+      <section className="mx-auto max-w-screen-2xl px-6 py-24 md:px-10 md:py-32">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:items-center">
+          <div data-reveal className="lg:col-span-5">
+            <span className="font-label text-xs uppercase tracking-[0.2em] text-primary">Prove it&rsquo;s working</span>
+            <h2 className="mt-3 font-sans text-3xl font-black uppercase tracking-tight text-on-background md:text-4xl">
+              Watch your AI visibility climb
+            </h2>
+            <p className="mt-4 max-w-md font-body text-on-surface-variant">
+              A one-time audit is a snapshot. With monthly monitoring you see the line move — every
+              fix reflected in a fresh score, tracked against your local competitors.
+            </p>
+            <div className="mt-8 flex items-end gap-4">
+              <span className="font-sans text-6xl font-black tracking-tighter text-primary md:text-7xl">+33</span>
+              <span className="mb-2 font-body text-sm leading-snug text-on-surface-variant">
+                points gained across an
+                <br />
+                example 6-month track
+              </span>
+            </div>
+          </div>
+          <div data-reveal className="lg:col-span-7">
+            <div className="rounded-3xl border border-outline-variant/40 bg-surface-container-lowest p-6 shadow-float md:p-8">
+              <div className="flex items-center justify-between">
+                <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">AI search readiness score</p>
+                <span className="rounded-md bg-green-100 px-2 py-0.5 font-label text-[0.6rem] font-bold uppercase tracking-wide text-green-800 dark:bg-green-500/15 dark:text-green-200">Example</span>
+              </div>
+              <div className="mt-4 text-primary">
+                <svg viewBox="0 0 480 240" className="w-full" role="img" aria-label="Example score trend rising from 46 to 79 over six months">
+                  <defs>
+                    <linearGradient id="gp-score-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0" stopColor="currentColor" stopOpacity="0.28" />
+                      <stop offset="1" stopColor="currentColor" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {[0, 1, 2, 3].map((i) => (
+                    <line key={i} x1="30" x2="460" y1={40 + i * 50} y2={40 + i * 50} stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" />
+                  ))}
+                  <path d="M30,150 L116,124 L202,105 L288,82 L374,70 L460,52 L460,190 L30,190 Z" fill="url(#gp-score-fill)" />
+                  <path d="M30,150 L116,124 L202,105 L288,82 L374,70 L460,52" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+                  {[[30, 150], [116, 124], [202, 105], [288, 82], [374, 70], [460, 52]].map(([x, y]) => (
+                    <circle key={x} cx={x} cy={y} r="4" fill="currentColor" />
+                  ))}
+                  <circle cx="460" cy="52" r="7.5" fill="none" stroke="currentColor" strokeWidth="2.5" />
+                </svg>
+              </div>
+              <div className="mt-3 flex justify-between font-label text-[0.62rem] uppercase tracking-wide text-on-surface-variant">
+                <span>Month 1 · 46</span>
+                <span>Month 6 · 79</span>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
