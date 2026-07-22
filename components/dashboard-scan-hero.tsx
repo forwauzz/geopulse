@@ -12,6 +12,12 @@ export type DashboardScanHeroProps = {
   readonly startupAccessBody?: string;
   /** One line under the headline (active workspace / client context). */
   readonly contextLine: string | null;
+  /**
+   * The viewer is an authenticated user — skip Turnstile (their session proves humanity) and do not
+   * gate the form on a configured site key. Defaults to true because this hero only renders on
+   * signed-in dashboard surfaces.
+   */
+  readonly authenticated?: boolean;
 };
 
 export function DashboardScanHero({
@@ -25,6 +31,7 @@ export function DashboardScanHero({
   startupAccessTitle,
   startupAccessBody,
   contextLine,
+  authenticated = true,
 }: DashboardScanHeroProps) {
   return (
     <section id="dashboard-scan" className="py-6">
@@ -48,7 +55,7 @@ export function DashboardScanHero({
               <p className="font-semibold text-on-background">{startupAccessTitle}</p>
               <p className="mt-1">{startupAccessBody}</p>
             </div>
-          ) : !siteKey ? (
+          ) : !siteKey && !authenticated ? (
             <p className="rounded-xl bg-error/10 px-4 py-3 text-left text-sm text-error" role="alert">
               Turnstile is not configured for this deployment.
             </p>
@@ -60,11 +67,12 @@ export function DashboardScanHero({
           ) : (
             <ScanForm
               variant="hero"
-              siteKey={siteKey}
+              siteKey={siteKey ?? ''}
               defaultUrl={defaultUrl}
               agencyAccountId={agencyAccountId}
               agencyClientId={agencyClientId}
               startupWorkspaceId={startupWorkspaceId}
+              skipTurnstile={authenticated}
             />
           )}
         </div>

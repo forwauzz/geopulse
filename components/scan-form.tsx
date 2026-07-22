@@ -21,6 +21,12 @@ type ScanFormProps = {
   variant?: 'default' | 'hero';
   /** Overrides the URL field placeholder (per-variant defaults apply when omitted). */
   placeholder?: string;
+  /**
+   * Skip the Turnstile widget entirely — the caller is an authenticated user whose session already
+   * proves humanity (the server accepts a token-less scan for logged-in sessions). Guests must never
+   * pass this.
+   */
+  skipTurnstile?: boolean;
 };
 
 const E2E_BYPASS_TURNSTILE =
@@ -72,15 +78,19 @@ export function ScanForm({
   startupWorkspaceId,
   variant = 'default',
   placeholder,
+  skipTurnstile = false,
 }: ScanFormProps) {
   const isHero = variant === 'hero';
   const resolvedPlaceholder =
     placeholder ?? (isHero ? 'Enter a website' : 'Enter your website URL');
   const router = useRouter();
   const [url, setUrl] = useState(defaultUrl ?? '');
-  const bypassTurnstile = isTurnstileBypassEnabled();
+  const e2eBypass = isTurnstileBypassEnabled();
+  // Verification is handled outside the widget when an E2E run bypasses it OR the caller is an
+  // authenticated user (session proves humanity). In both cases we render no Turnstile.
+  const verificationHandledElsewhere = e2eBypass || skipTurnstile;
   const [token, setToken] = useState<string | null>(
-    bypassTurnstile ? 'e2e-bypass-token' : null
+    e2eBypass ? 'e2e-bypass-token' : null
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -88,17 +98,17 @@ export function ScanForm({
 
   useEffect(() => {
     setToken((current) => {
-      if (bypassTurnstile) {
+      if (e2eBypass) {
         return current ?? 'e2e-bypass-token';
       }
       return current === 'e2e-bypass-token' ? null : current;
     });
-  }, [bypassTurnstile]);
+  }, [e2eBypass]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!token) {
+    if (!verificationHandledElsewhere && !token) {
       setError('Please complete the verification.');
       return;
     }
@@ -200,7 +210,7 @@ export function ScanForm({
           </p>
         </div>
       ) : null}
-      {bypassTurnstile ? null : (
+      {verificationHandledElsewhere ? null : (
         <div className={`flex justify-center ${isHero ? 'min-h-[60px]' : 'min-h-[65px]'}`}>
           <Turnstile
             siteKey={siteKey}
