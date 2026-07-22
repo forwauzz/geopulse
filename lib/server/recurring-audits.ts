@@ -34,6 +34,8 @@ export const CADENCE_DAYS: Record<Cadence, number> = { daily: 1, weekly: 7 };
  * Mint an unguessable share slug for a recurring-audit scan (issue #128). Recurring scans keep the
  * owner's user_id, so the id-based public route rejects them ("This scan is private"); the slug is
  * the capability that lets a signed-out recipient open the report at /share/<slug> for 90 days.
+ * NB: we do NOT also set scans.is_public — that would expose the row to the anon-key
+ * `scans_public_read` RLS policy; the slug (served via service role) is the only access path.
  */
 export function mintShareSlug(): string {
   return randomUUID().replace(/-/g, '');
@@ -234,7 +236,6 @@ export async function runDueRecurringAudits(args: {
             run_source: 'recurring',
             // Shareable via unguessable slug so the emailed recipient can open it signed-out (#128).
             share_slug: shareSlug,
-            is_public: true,
           })
           .select('id')
           .single();
@@ -328,7 +329,6 @@ export async function runUserAuditNow(
       run_source: 'recurring',
       // Shareable via unguessable slug so the emailed recipient can open it signed-out (#128).
       share_slug: shareSlug,
-      is_public: true,
     })
     .select('id')
     .single();

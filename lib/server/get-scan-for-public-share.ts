@@ -192,9 +192,13 @@ export async function getScanForPublicShare(
 /**
  * Load a recurring-audit scan by its share slug (issue #128). Recurring-audit scans persist
  * with the OWNER's user_id, so the id-based public route rejects them ("This scan is private").
- * We mint an unguessable `share_slug` + `is_public` for those scans and serve them here: the
- * slug is the capability, so — unlike getScanForPublicShare — we do NOT require user_id IS NULL.
- * Gated to run_source='recurring' + is_public, with the same 90-day cadence window.
+ * We mint an unguessable `share_slug` for those scans and serve them here via the service-role
+ * client: the slug is the capability, so — unlike getScanForPublicShare — we do NOT require
+ * user_id IS NULL. Gated to run_source='recurring' with the same 90-day cadence window.
+ *
+ * NB: we deliberately do NOT set scans.is_public — that flag activates the anon-key
+ * `scans_public_read` RLS policy, which would expose these owner-owned reports (and their full
+ * results) to enumeration via the public anon key, bypassing the slug entirely.
  */
 export async function getScanForShareSlug(
   slug: string,
@@ -210,7 +214,7 @@ export async function getScanForShareSlug(
 
   const { data, error } = await supabase
     .from('scans')
-    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,run_source,is_public')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,run_source')
     .eq('share_slug', parsed.data)
     .maybeSingle();
 
@@ -221,9 +225,9 @@ export async function getScanForShareSlug(
     return { ok: false, code: 'not_found' };
   }
 
-  // Slugs are minted ONLY for cadence-delivered recurring audits, and only while the scan is
-  // still flagged shareable. This gate (not user_id) is what keeps arbitrary scans off this route.
-  if (data.run_source !== 'recurring' || data.is_public !== true) {
+  // Slugs are minted ONLY for cadence-delivered recurring audits. This gate (not user_id) plus
+  // the unguessable slug is what keeps arbitrary scans off this route.
+  if (data.run_source !== 'recurring') {
     return { ok: false, code: 'forbidden' };
   }
 

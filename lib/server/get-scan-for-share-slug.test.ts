@@ -43,7 +43,6 @@ function recurringScan(overrides: Record<string, unknown> = {}) {
       full_results_json: {},
       created_at: new Date().toISOString(),
       run_source: 'recurring',
-      is_public: true,
       ...overrides,
     },
     error: null,
@@ -69,12 +68,6 @@ describe('getScanForShareSlug', () => {
 
   it('forbids a non-recurring scan even if the slug matches', async () => {
     mockClient({ scans: recurringScan({ run_source: 'self_serve' }) });
-    const res = await getScanForShareSlug(VALID_SLUG, 'https://db', 'key');
-    expect(res).toEqual({ ok: false, code: 'forbidden' });
-  });
-
-  it('forbids a scan that is no longer flagged public', async () => {
-    mockClient({ scans: recurringScan({ is_public: false }) });
     const res = await getScanForShareSlug(VALID_SLUG, 'https://db', 'key');
     expect(res).toEqual({ ok: false, code: 'forbidden' });
   });
