@@ -94,6 +94,12 @@ export function ScanForm({
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Turnstile (managed mode) is invisible and issues its token a moment after the widget renders.
+  // If the visitor clicks Audit before that token lands, we QUEUE the run instead of erroring \u2014 the
+  // button shows "Verifying\u2026" and the scan fires automatically the instant verification completes.
+  // Without this, a fast click silently dead-ends ("Please complete the verification" with nothing
+  // visible to complete) \u2014 the exact reason a site "couldn't be audited".
+  const [pending, setPending] = useState(false);
   useLongWaitEffect(loading, scanLoadingJourney);
 
   useEffect(() => {
@@ -105,13 +111,8 @@ export function ScanForm({
     });
   }, [e2eBypass]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!verificationHandledElsewhere && !token) {
-      setError('Please complete the verification.');
-      return;
-    }
+  async function runScan(tok: string | null) {
+    setPending(false);
     setLoading(true);
     try {
       const res = await fetch('/api/scan', {
@@ -119,7 +120,7 @@ export function ScanForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
-          turnstileToken: token,
+          turnstileToken: tok,
           agencyAccountId: agencyAccountId ?? null,
           agencyClientId: agencyClientId ?? null,
           startupWorkspaceId: startupWorkspaceId ?? null,
@@ -144,9 +145,26 @@ export function ScanForm({
       router.push(`/results/${id}`);
     } catch {
       setError('We couldn\u2019t reach that site. Check the URL and try again.');
+      setLoading(false);
     }
-    setLoading(false);
   }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (verificationHandledElsewhere || token) {
+      void runScan(token);
+      return;
+    }
+    // Token not issued yet \u2014 queue the run; the effect below fires it when verification lands.
+    setPending(true);
+  }
+
+  // Auto-submit a queued click the instant Turnstile issues a token.
+  useEffect(() => {
+    if (pending && token) void runScan(token);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, token]);
 
   return (
     <form
@@ -177,20 +195,20 @@ export function ScanForm({
         />
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || pending}
           className={
             isHero
               ? 'flex shrink-0 items-center justify-center rounded-2xl bg-primary px-8 py-5 text-base font-semibold text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 sm:min-w-[196px] sm:self-stretch sm:py-0'
               : 'shrink-0 rounded-xl bg-primary px-8 py-4 text-sm font-medium text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 md:min-w-[160px]'
           }
         >
-          {loading ? (
+          {loading || pending ? (
             <span className="flex items-center justify-center gap-2">
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
                 <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
               </svg>
-              {isHero ? 'Running…' : 'Running diagnostic…'}
+              {pending ? 'Verifying…' : isHero ? 'Running…' : 'Running diagnostic…'}
             </span>
           ) : (
             isHero ? 'Audit website' : 'Run diagnostic'
@@ -221,6 +239,8 @@ export function ScanForm({
             onExpire={() => setToken(null)}
             onError={(code) => {
               setToken(null);
+              setPending(false);
+              setLoading(false);
               setError(turnstileErrorMessage(code));
             }}
           />
