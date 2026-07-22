@@ -66,12 +66,37 @@ export type DomainComparison = {
   readonly structuredData: PageSignal;
   readonly llmsTxt: PageSignal;
   readonly scannedAt: string | null;
+  /** Position among the cohort's MEASURED domains (1 = best score); null when unmeasured. */
+  readonly rank: number | null;
+  /** Observable changes vs this domain's previous scan; empty until a second pass exists. */
+  readonly deltas: SignalDelta[];
 };
 
 export type Cohort = {
   readonly vertical: string;
   readonly geoRegion: string;
   readonly domains: DomainComparison[];
+  readonly standings: CohortStandings;
+};
+
+/** Aggregate market facts for one cohort — the synthesis layer's headline numbers (issue #123). */
+export type CohortStandings = {
+  readonly medianScore: number | null;
+  readonly measuredCount: number;
+  readonly totalCount: number;
+  /** Per destination: how many measured-or-verified domains allow it, out of how many verified. */
+  readonly destinationAllows: Partial<Record<DestinationId, { allows: number; of: number }>>;
+};
+
+/**
+ * One observable change between two scans of the same domain. Framed as facts, reusable
+ * verbatim by the future delta-email agent. Transitions in or out of 'not verified' are
+ * never reported — we don't claim a change we didn't observe on both sides.
+ */
+export type SignalDelta = {
+  readonly kind: 'score' | 'destination' | 'structured_data' | 'llms_txt';
+  readonly direction: 'improved' | 'regressed';
+  readonly label: string;
 };
 
 type ScanIssueLike = { checkId?: string; status?: string };
@@ -116,6 +141,105 @@ export function extractComparisonSignals(row: {
     structuredData: pageSignalFromStatus(byCheck.get('schema-types')),
     llmsTxt: pageSignalFromStatus(byCheck.get('llms-txt')),
   };
+}
+
+export const DESTINATION_LABELS: Record<DestinationId, string> = {
+  google_search_ai_overviews: 'AI Overviews',
+  chatgpt_search: 'ChatGPT search',
+  claude: 'Claude',
+  perplexity: 'Perplexity',
+  bing_copilot: 'Copilot',
+};
+
+type ExtractedSignals = ReturnType<typeof extractComparisonSignals>;
+
+const PAGE_SIGNAL_LADDER: Record<PageSignal, number | null> = {
+  present: 2,
+  partial: 1,
+  missing: 0,
+  not_verified: null,
+};
+
+/**
+ * Observable changes between two scans of one domain. A signal must be verified on BOTH
+ * sides to count — appearing from or vanishing into 'not verified' is not a change we saw.
+ */
+export function computeDomainDeltas(current: ExtractedSignals, previous: ExtractedSignals): SignalDelta[] {
+  const deltas: SignalDelta[] = [];
+
+  if (
+    current.scoreState === 'measured' &&
+    previous.scoreState === 'measured' &&
+    current.score != null &&
+    previous.score != null &&
+    current.score !== previous.score
+  ) {
+    deltas.push({
+      kind: 'score',
+      direction: current.score > previous.score ? 'improved' : 'regressed',
+      label: `Score ${String(previous.score)} → ${String(current.score)}`,
+    });
+  }
+
+  for (const dest of Object.keys(DESTINATION_LABELS) as DestinationId[]) {
+    const cur = current.destinations[dest];
+    const prev = previous.destinations[dest];
+    if (!cur || !prev || cur === 'not_verified' || prev === 'not_verified' || cur === prev) continue;
+    deltas.push({
+      kind: 'destination',
+      direction: cur === 'allows' ? 'improved' : 'regressed',
+      label: `${cur === 'allows' ? 'Now allows' : 'Now blocks'} ${DESTINATION_LABELS[dest]}`,
+    });
+  }
+
+  const pageChecks: { kind: SignalDelta['kind']; label: string; cur: PageSignal; prev: PageSignal }[] = [
+    { kind: 'structured_data', label: 'Structured data', cur: current.structuredData, prev: previous.structuredData },
+    { kind: 'llms_txt', label: 'llms.txt', cur: current.llmsTxt, prev: previous.llmsTxt },
+  ];
+  for (const check of pageChecks) {
+    const curRung = PAGE_SIGNAL_LADDER[check.cur];
+    const prevRung = PAGE_SIGNAL_LADDER[check.prev];
+    if (curRung == null || prevRung == null || curRung === prevRung) continue;
+    deltas.push({
+      kind: check.kind,
+      direction: curRung > prevRung ? 'improved' : 'regressed',
+      label: `${check.label}: ${check.prev.replace('_', ' ')} → ${check.cur.replace('_', ' ')}`,
+    });
+  }
+
+  return deltas;
+}
+
+/** Aggregate market facts across one cohort's rows, exported for tests + the delta agent. */
+export function computeCohortStandings(
+  domains: Pick<DomainComparison, 'score' | 'scoreState' | 'destinations'>[]
+): CohortStandings {
+  const measured = domains
+    .filter((d) => d.scoreState === 'measured' && d.score != null)
+    .map((d) => d.score as number)
+    .sort((a, b) => a - b);
+  const mid = measured.length / 2;
+  const medianScore =
+    measured.length === 0
+      ? null
+      : measured.length % 2 === 1
+        ? (measured[Math.floor(mid)] ?? null)
+        : Math.round(((measured[mid - 1] ?? 0) + (measured[mid] ?? 0)) / 2);
+
+  const destinationAllows: Partial<Record<DestinationId, { allows: number; of: number }>> = {};
+  for (const dest of Object.keys(DESTINATION_LABELS) as DestinationId[]) {
+    let allows = 0;
+    let of = 0;
+    for (const d of domains) {
+      const signal = d.destinations[dest];
+      if (signal !== 'allows' && signal !== 'blocks') continue;
+      of += 1;
+      if (signal === 'allows') allows += 1;
+    }
+    if (of > 0) destinationAllows[dest] = { allows, of };
+  }
+
+  return { medianScore, measuredCount: measured.length, totalCount: domains.length, destinationAllows };
 }
 
 export async function listCohortDomains(supabase: SupabaseClient): Promise<CohortDomainRow[]> {
@@ -296,11 +420,14 @@ export function selectStaleCohortDomains<
   return due.slice(0, maxScans);
 }
 
+type CohortScanRow = { id: string; score: number | null; full_results_json: unknown; created_at: string };
+
+/** Newest-first history per cohort canonical domain, capped at two rows (current + previous). */
 async function latestCohortScans(
   supabase: SupabaseClient,
   domains: CohortDomainRow[]
-): Promise<Map<string, { id: string; score: number | null; full_results_json: unknown; created_at: string }>> {
-  const latest = new Map<string, { id: string; score: number | null; full_results_json: unknown; created_at: string }>();
+): Promise<Map<string, CohortScanRow[]>> {
+  const latest = new Map<string, CohortScanRow[]>();
   if (domains.length === 0) return latest;
 
   // Scans may be stored under a redirect-observed host — map every known alias back to the
@@ -321,11 +448,14 @@ async function latestCohortScans(
     .in('domain', Array.from(new Set(variants)))
     .order('created_at', { ascending: false })
     .limit(400);
-  for (const row of (data ?? []) as { id: string; domain: string; score: number | null; full_results_json: unknown; created_at: string }[]) {
+  for (const row of (data ?? []) as (CohortScanRow & { domain: string })[]) {
     const canonical = toCanonicalBenchmarkDomain(row.domain);
     const cohortKey = canonical ? aliasToCohort.get(canonical) : undefined;
-    if (!cohortKey || latest.has(cohortKey)) continue;
-    latest.set(cohortKey, row);
+    if (!cohortKey) continue;
+    const rows = latest.get(cohortKey) ?? [];
+    if (rows.length >= 2) continue;
+    rows.push(row);
+    latest.set(cohortKey, rows);
   }
   return latest;
 }
@@ -350,7 +480,9 @@ export async function runCompetitorCohortSweep(args: {
   const domains = await listCohortDomains(supabase);
   const latest = await latestCohortScans(supabase, domains);
   const latestAt = new Map<string, number>();
-  for (const [canonical, row] of latest) latestAt.set(canonical, Date.parse(row.created_at));
+  for (const [canonical, rows] of latest) {
+    if (rows[0]) latestAt.set(canonical, Date.parse(rows[0].created_at));
+  }
 
   const due = selectStaleCohortDomains(domains, latestAt, nowMs, maxScans);
   let scanned = 0;
@@ -378,12 +510,14 @@ export async function loadCohortComparison(supabase: SupabaseClient): Promise<Co
   const domains = await listCohortDomains(supabase);
   const latest = await latestCohortScans(supabase, domains);
 
-  const groups = new Map<string, { vertical: string; geoRegion: string; domains: DomainComparison[] }>();
+  type MutableEntry = Omit<DomainComparison, 'rank'> & { rank: number | null };
+  const groups = new Map<string, { vertical: string; geoRegion: string; domains: MutableEntry[] }>();
   for (const d of domains) {
     const vertical = d.vertical?.trim() || 'Unspecified market';
     const geoRegion = d.geo_region?.trim() || 'Unspecified region';
     const key = `${vertical}|${geoRegion}`;
-    const scan = latest.get(d.canonical_domain);
+    const history = latest.get(d.canonical_domain) ?? [];
+    const scan = history[0];
     const signals = scan
       ? extractComparisonSignals(scan)
       : {
@@ -393,12 +527,15 @@ export async function loadCohortComparison(supabase: SupabaseClient): Promise<Co
           structuredData: 'not_verified' as const,
           llmsTxt: 'not_verified' as const,
         };
-    const entry: DomainComparison = {
+    const previous = history[1];
+    const entry: MutableEntry = {
       domainId: d.id,
       canonicalDomain: d.canonical_domain,
       displayName: d.display_name?.trim() || d.canonical_domain,
       isCustomer: d.is_customer,
       scannedAt: scan?.created_at ?? null,
+      rank: null,
+      deltas: scan && previous ? computeDomainDeltas(signals, extractComparisonSignals(previous)) : [],
       ...signals,
     };
     const group = groups.get(key) ?? { vertical, geoRegion, domains: [] };
@@ -406,11 +543,24 @@ export async function loadCohortComparison(supabase: SupabaseClient): Promise<Co
     groups.set(key, group);
   }
 
-  const cohorts = Array.from(groups.values());
-  for (const cohort of cohorts) {
-    cohort.domains.sort((a, b) => {
+  const cohorts: Cohort[] = [];
+  for (const group of groups.values()) {
+    // Rank by score across the cohort's measured domains (1 = best), then display customer-first.
+    const measured = group.domains
+      .filter((d) => d.scoreState === 'measured' && d.score != null)
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    measured.forEach((d, i) => {
+      d.rank = i + 1;
+    });
+    group.domains.sort((a, b) => {
       if (a.isCustomer !== b.isCustomer) return a.isCustomer ? -1 : 1;
       return (b.score ?? -1) - (a.score ?? -1);
+    });
+    cohorts.push({
+      vertical: group.vertical,
+      geoRegion: group.geoRegion,
+      domains: group.domains,
+      standings: computeCohortStandings(group.domains),
     });
   }
   cohorts.sort((a, b) => `${a.vertical}|${a.geoRegion}`.localeCompare(`${b.vertical}|${b.geoRegion}`));

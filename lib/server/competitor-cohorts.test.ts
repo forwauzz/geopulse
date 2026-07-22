@@ -2,9 +2,29 @@ import { describe, expect, it } from 'vitest';
 import {
   ATTEMPT_COOLDOWN_MS,
   COHORT_STALE_MS,
+  computeCohortStandings,
+  computeDomainDeltas,
   extractComparisonSignals,
   selectStaleCohortDomains,
+  type AccessSignal,
+  type PageSignal,
 } from './competitor-cohorts';
+
+function signals(overrides: {
+  score?: number | null;
+  scoreState?: 'measured' | 'not_tested';
+  destinations?: Partial<Record<string, AccessSignal>>;
+  structuredData?: PageSignal;
+  llmsTxt?: PageSignal;
+}) {
+  return {
+    score: overrides.score ?? 70,
+    scoreState: overrides.scoreState ?? ('measured' as const),
+    destinations: (overrides.destinations ?? {}) as never,
+    structuredData: overrides.structuredData ?? ('present' as const),
+    llmsTxt: overrides.llmsTxt ?? ('missing' as const),
+  };
+}
 
 const NOW = Date.parse('2026-07-21T12:00:00Z');
 
@@ -111,5 +131,72 @@ describe('selectStaleCohortDomains', () => {
     const domains = [domain('a', 'fresh.ca')];
     const latest = new Map([['fresh.ca', NOW - 1000]]);
     expect(selectStaleCohortDomains(domains, latest, NOW, 5)).toEqual([]);
+  });
+});
+
+describe('computeDomainDeltas', () => {
+  it('reports score moves and crawler flips with direction', () => {
+    const deltas = computeDomainDeltas(
+      signals({ score: 81, destinations: { chatgpt_search: 'allows', claude: 'blocks' } }),
+      signals({ score: 77, destinations: { chatgpt_search: 'blocks', claude: 'allows' } })
+    );
+    expect(deltas).toEqual([
+      { kind: 'score', direction: 'improved', label: 'Score 77 → 81' },
+      { kind: 'destination', direction: 'improved', label: 'Now allows ChatGPT search' },
+      { kind: 'destination', direction: 'regressed', label: 'Now blocks Claude' },
+    ]);
+  });
+
+  it('never claims a change into or out of not-verified', () => {
+    const deltas = computeDomainDeltas(
+      signals({
+        score: null,
+        scoreState: 'not_tested',
+        destinations: { chatgpt_search: 'not_verified' },
+        structuredData: 'not_verified',
+      }),
+      signals({ score: 77, destinations: { chatgpt_search: 'allows' }, structuredData: 'present' })
+    );
+    expect(deltas).toEqual([]);
+  });
+
+  it('reports page-signal ladder moves (missing → present)', () => {
+    const deltas = computeDomainDeltas(
+      signals({ llmsTxt: 'present' }),
+      signals({ llmsTxt: 'missing' })
+    );
+    expect(deltas).toEqual([
+      { kind: 'llms_txt', direction: 'improved', label: 'llms.txt: missing → present' },
+    ]);
+  });
+
+  it('is empty when nothing observable changed', () => {
+    expect(computeDomainDeltas(signals({}), signals({}))).toEqual([]);
+  });
+});
+
+describe('computeCohortStandings', () => {
+  it('computes median over measured domains only and per-destination allow counts', () => {
+    const standings = computeCohortStandings([
+      signals({ score: 80, destinations: { chatgpt_search: 'allows' } }),
+      signals({ score: 60, destinations: { chatgpt_search: 'blocks' } }),
+      signals({ score: 70, destinations: { chatgpt_search: 'allows' } }),
+      { score: null, scoreState: 'not_tested', destinations: { chatgpt_search: 'not_verified' } as never },
+    ]);
+    expect(standings.medianScore).toBe(70);
+    expect(standings.measuredCount).toBe(3);
+    expect(standings.totalCount).toBe(4);
+    expect(standings.destinationAllows.chatgpt_search).toEqual({ allows: 2, of: 3 });
+  });
+
+  it('handles an empty or unmeasured cohort', () => {
+    const standings = computeCohortStandings([]);
+    expect(standings.medianScore).toBeNull();
+    expect(standings.destinationAllows).toEqual({});
+  });
+
+  it('averages the middle pair for even-sized cohorts', () => {
+    const standings = computeCohortStandings([signals({ score: 60 }), signals({ score: 71 })]);
+    expect(standings.medianScore).toBe(66);
   });
 });

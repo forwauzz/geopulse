@@ -1,8 +1,10 @@
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { isAgentEnabled } from '@/lib/server/agent-flags';
 import {
+  DESTINATION_LABELS,
   loadCohortComparison,
   type AccessSignal,
+  type Cohort,
   type DomainComparison,
   type PageSignal,
 } from '@/lib/server/competitor-cohorts';
@@ -14,13 +16,9 @@ export const dynamic = 'force-dynamic';
 const input =
   'min-h-[40px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30';
 
-const DESTINATIONS: ReadonlyArray<{ id: DestinationId; label: string }> = [
-  { id: 'google_search_ai_overviews', label: 'AI Overviews' },
-  { id: 'chatgpt_search', label: 'ChatGPT search' },
-  { id: 'claude', label: 'Claude' },
-  { id: 'perplexity', label: 'Perplexity' },
-  { id: 'bing_copilot', label: 'Copilot' },
-];
+const DESTINATIONS: ReadonlyArray<{ id: DestinationId; label: string }> = (
+  Object.keys(DESTINATION_LABELS) as DestinationId[]
+).map((id) => ({ id, label: DESTINATION_LABELS[id] }));
 
 function fmt(iso: string | null): string {
   if (!iso) return 'never';
@@ -53,9 +51,40 @@ function PageCell({ signal }: { signal: PageSignal }) {
   );
 }
 
+function DeltaBadges({ deltas }: { deltas: DomainComparison['deltas'] }) {
+  if (deltas.length === 0) return null;
+  const shown = deltas.slice(0, 2);
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {shown.map((delta) => (
+        <span
+          key={delta.label}
+          className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+            delta.direction === 'improved'
+              ? 'bg-green-100 text-green-800 dark:bg-green-500/15 dark:text-green-200'
+              : 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200'
+          }`}
+        >
+          {delta.direction === 'improved' ? '▲' : '▼'} {delta.label}
+        </span>
+      ))}
+      {deltas.length > shown.length && (
+        <span className="text-[10px] text-on-surface-variant">+{deltas.length - shown.length} more</span>
+      )}
+    </div>
+  );
+}
+
 function DomainRow({ d }: { d: DomainComparison }) {
   return (
     <tr className="border-t border-outline-variant/10">
+      <td className="py-2.5 pr-2 text-center">
+        {d.rank != null ? (
+          <span className="font-sans text-sm font-bold tabular-nums text-on-surface-variant">#{d.rank}</span>
+        ) : (
+          <span className="text-xs text-on-surface-variant">—</span>
+        )}
+      </td>
       <td className="py-2.5 pr-3">
         <span className="font-sans font-bold text-on-background">{d.displayName}</span>
         {d.isCustomer && (
@@ -73,6 +102,7 @@ function DomainRow({ d }: { d: DomainComparison }) {
             {d.scoreState === 'never_scanned' ? 'not scanned yet' : 'couldn’t verify'}
           </span>
         )}
+        <DeltaBadges deltas={d.deltas} />
       </td>
       {DESTINATIONS.map((dest) => (
         <td key={dest.id} className="py-2.5 pr-3 text-xs">
@@ -103,6 +133,29 @@ function DomainRow({ d }: { d: DomainComparison }) {
         </div>
       </td>
     </tr>
+  );
+}
+
+function CohortStandingsChips({ cohort }: { cohort: Cohort }) {
+  const s = cohort.standings;
+  const chip =
+    'rounded-lg bg-surface-container px-2.5 py-1 text-xs font-semibold text-on-surface';
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <span className={chip}>
+        {s.measuredCount} of {s.totalCount} scanned
+      </span>
+      {s.medianScore != null && <span className={chip}>Market median {s.medianScore}</span>}
+      {DESTINATIONS.map(({ id, label }) => {
+        const stat = s.destinationAllows[id];
+        if (!stat) return null;
+        return (
+          <span key={id} className={chip}>
+            {stat.allows}/{stat.of} allow {label}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -196,10 +249,12 @@ export default async function AdminCompetitorsPage({
           <h2 className="font-sans text-base font-bold text-on-background">
             {cohort.vertical} · {cohort.geoRegion}
           </h2>
+          <CohortStandingsChips cohort={cohort} />
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[960px] text-left text-sm">
+            <table className="w-full min-w-[1000px] text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <th className="pb-2 pr-2 font-semibold">Rank</th>
                   <th className="pb-2 pr-3 font-semibold">Business</th>
                   <th className="pb-2 pr-3 font-semibold">Score</th>
                   {DESTINATIONS.map((d) => (
