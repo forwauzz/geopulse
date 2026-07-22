@@ -312,13 +312,13 @@ export default async function HomePage({
       <section className="border-y border-outline-variant/15 bg-surface-container-low px-6 py-16 md:px-10 md:py-20">
         <div data-reveal className="mx-auto grid max-w-screen-2xl grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-4">
           {[
-            { n: '16', label: 'Readiness checks per audit' },
-            { n: '5', label: 'AI answer engines checked' },
-            { n: '~90s', label: 'To your first score' },
-            { n: '$39', label: 'Per month to keep watch' },
+            { n: '16', label: 'Readiness checks per audit', color: 'text-indigo-600 dark:text-indigo-400' },
+            { n: '5', label: 'AI answer engines checked', color: 'text-emerald-600 dark:text-emerald-400' },
+            { n: '~90s', label: 'To your first score', color: 'text-amber-500 dark:text-amber-400' },
+            { n: '$39', label: 'Per month to keep watch', color: 'text-rose-500 dark:text-rose-400' },
           ].map((s) => (
             <div key={s.label} className="text-center">
-              <p className="font-sans text-5xl font-black tracking-tighter text-primary md:text-7xl">{s.n}</p>
+              <p className={`font-sans text-5xl font-black tracking-tighter md:text-7xl ${s.color}`}>{s.n}</p>
               <p className="mt-2 font-body text-sm text-on-surface-variant">{s.label}</p>
             </div>
           ))}
@@ -338,7 +338,7 @@ export default async function HomePage({
               fix reflected in a fresh score, tracked against your local competitors.
             </p>
             <div className="mt-8 flex items-end gap-4">
-              <span className="font-sans text-6xl font-black tracking-tighter text-primary md:text-7xl">+33</span>
+              <span className="font-sans text-6xl font-black tracking-tighter text-emerald-600 dark:text-emerald-400 md:text-7xl">+33</span>
               <span className="mb-2 font-body text-sm leading-snug text-on-surface-variant">
                 points gained across an
                 <br />
@@ -352,7 +352,7 @@ export default async function HomePage({
                 <p className="font-label text-xs uppercase tracking-widest text-on-surface-variant">AI search readiness score</p>
                 <span className="rounded-md bg-green-100 px-2 py-0.5 font-label text-[0.6rem] font-bold uppercase tracking-wide text-green-800 dark:bg-green-500/15 dark:text-green-200">Example</span>
               </div>
-              <div className="mt-4 text-primary">
+              <div className="mt-4 text-emerald-600 dark:text-emerald-400">
                 <svg viewBox="0 0 480 240" className="w-full" role="img" aria-label="Example score trend rising from 46 to 79 over six months">
                   <defs>
                     <linearGradient id="gp-score-fill" x1="0" y1="0" x2="0" y2="1">
