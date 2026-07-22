@@ -931,6 +931,41 @@ class PdfBuilder {
     this.y -= 8;
   }
 
+  /**
+   * Anonymized market position (issue #125): rank + median + market stats from the local
+   * cohort the audited domain belongs to. Aggregates only — no competitor is ever named.
+   */
+  drawMarketPosition(mp: MarketPositionInput, score: number): void {
+    this.drawSectionTitle('Your Market Position');
+    this.drawText(
+      `Among ${String(mp.of)} ${mp.vertical} businesses we monitor in ${mp.geoRegion}, ` +
+        `this site ranks #${String(mp.rank)} for AI-search readiness.`,
+      10,
+      true,
+      INK
+    );
+    this.y -= 4;
+    const yourFill = score >= mp.medianScore ? PASS_GREEN : rgb(0.72, 0.53, 0.13);
+    this.drawHBar('Your score', score, yourFill, String(score));
+    this.drawHBar('Market median', mp.medianScore, MUTED, String(mp.medianScore));
+    if (mp.marketStats.length > 0) {
+      this.y -= 2;
+      this.drawText('Across this market:', 9, true, PRIMARY);
+      for (const stat of mp.marketStats) {
+        this.drawText(`• ${stat}`, 9, false, INK, 12);
+      }
+    }
+    this.y -= 2;
+    this.drawText(
+      'Aggregated from scans of publicly available pages of businesses in this market. ' +
+        'Individual businesses are not identified.',
+      8,
+      false,
+      MUTED
+    );
+    this.y -= 8;
+  }
+
   drawCategoryBreakdown(cats: readonly CategoryScorePayload[]): void {
     if (cats.length === 0) return;
     this.drawSectionTitle('Category Breakdown');
@@ -974,6 +1009,16 @@ class PdfBuilder {
 /**
  * Build branded PDF for a paid deep-audit report.
  */
+/** Structural twin of lib/server/market-position MarketPosition — kept inline to avoid a cycle. */
+export interface MarketPositionInput {
+  rank: number;
+  of: number;
+  medianScore: number;
+  vertical: string;
+  geoRegion: string;
+  marketStats: string[];
+}
+
 export async function buildDeepAuditPdf(input: {
   url: string;
   domain: string;
@@ -1001,6 +1046,8 @@ export async function buildDeepAuditPdf(input: {
   brand?: BrandConfig;
   /** Raw logo bytes, already fetched from R2 by the caller. */
   logoBytes?: Uint8Array | null;
+  /** Anonymized cohort standing (issue #125); absent = section not rendered. */
+  marketPosition?: MarketPositionInput | null;
 }): Promise<Uint8Array> {
   const score = input.score ?? 0;
   const grade = input.letterGrade ?? '—';
@@ -1099,6 +1146,9 @@ export async function buildDeepAuditPdf(input: {
   if (input.categoryScores && input.categoryScores.length > 0) {
     pdf.drawCategoryBreakdown(input.categoryScores);
   }
+  if (input.marketPosition) {
+    pdf.drawMarketPosition(input.marketPosition, score);
+  }
   pdf.drawActionPlan(failedSorted);
   pdf.drawIndexationGuidance();
   if ((input.pageSummaries?.length ?? 0) > 1) {
@@ -1166,12 +1216,14 @@ export async function buildDeepAuditPdfFromPayload(
     credibilityLines: string[];
     heroImage: Uint8Array | null;
     themePrimaryHex?: string | null;
-  } | null
+  } | null,
+  marketPosition?: MarketPositionInput | null
 ): Promise<Uint8Array> {
   return buildDeepAuditPdf({
     brand: branding?.brand,
     logoBytes: branding?.logoBytes,
     coverDesign: coverDesign ?? null,
+    marketPosition: marketPosition ?? null,
     url: payload.seedUrl,
     domain: payload.domain,
     score: payload.aggregateScore,
