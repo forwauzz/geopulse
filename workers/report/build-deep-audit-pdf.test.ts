@@ -44,6 +44,27 @@ describe('buildDeepAuditPdf', () => {
     expect(bytes.byteLength).toBeGreaterThan(1000);
   });
 
+  it('renders the market-position section (issue #125) with accented region names', async () => {
+    const bytes = await buildDeepAuditPdf({
+      url: 'https://mipsmedia.com/',
+      domain: 'mipsmedia.com',
+      score: 77,
+      letterGrade: 'C+',
+      issuesJson: [{ check: 'Title', passed: true, status: 'PASS', finding: 'ok' }],
+      generatedAt: '2026-07-22T00:00:00.000Z',
+      marketPosition: {
+        rank: 7,
+        of: 29,
+        medianScore: 71,
+        vertical: 'MSP / IT services',
+        geoRegion: 'Québec', // é must survive WinAnsi encoding
+        marketStats: ['9 of 29 allow ChatGPT search', '12 of 29 allow Perplexity'],
+      },
+    });
+    expect(String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!)).toBe('%PDF');
+    expect(bytes.byteLength).toBeGreaterThan(1000);
+  });
+
   it('returns non-empty PDF bytes', async () => {
     const bytes = await buildDeepAuditPdf({
       url: 'https://example.com/page',

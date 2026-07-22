@@ -4,6 +4,7 @@ import { rewriteLayerOneReportInternal } from '../../lib/server/layer-one-report
 import { createServiceRoleClient } from '../../lib/supabase/service-role';
 import { writeGeneratedReportEval } from '../../lib/server/report-eval-writer';
 import { structuredLog } from '../../lib/server/structured-log';
+import { getMarketPosition } from '../../lib/server/market-position';
 import { buildDeepAuditMarkdown } from '../report/build-deep-audit-markdown';
 import { buildDeepAuditPdfFromPayload } from '../report/build-deep-audit-pdf';
 import { resolveReportBrand } from '../report/resolve-report-brand';
@@ -767,7 +768,20 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     coverDesign = null;
   }
 
-  const pdfBytes = await buildDeepAuditPdfFromPayload(payload, branding, coverDesign);
+  // Anonymized market position (issue #125): only renders when the audited domain belongs
+  // to a seeded local cohort with enough measured businesses. Never blocks the report.
+  let marketPosition = null;
+  try {
+    marketPosition = await getMarketPosition(
+      supabase as unknown as Parameters<typeof getMarketPosition>[0],
+      scan.domain,
+      payload.aggregateScore
+    );
+  } catch {
+    marketPosition = null;
+  }
+
+  const pdfBytes = await buildDeepAuditPdfFromPayload(payload, branding, coverDesign, marketPosition);
   const markdownText = buildDeepAuditMarkdown(payload);
   const publicBase = (env.DEEP_AUDIT_R2_PUBLIC_BASE ?? '').trim();
 
