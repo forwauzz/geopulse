@@ -23,7 +23,6 @@ const VALUE_PROPS: readonly { icon: string; text: string }[] = [
 
 export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
   const [plan, setPlan] = useState<Plan>('monthly');
-  const [email, setEmail] = useState('');
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -38,10 +37,6 @@ export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
   async function subscribe(): Promise<void> {
     if (submittingRef.current) return;
     setError(null);
-    if (!email.trim() || !email.includes('@')) {
-      setError('Enter the email where we should send your monthly report.');
-      return;
-    }
     if (!token) {
       setError('Please complete the verification.');
       return;
@@ -54,7 +49,6 @@ export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scanId,
-          email: email.trim(),
           plan,
           turnstileToken: token,
           anonymous_id: getAttributionContext().anonymous_id,
@@ -136,14 +130,6 @@ export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
       </div>
 
       <div className="mt-5 flex flex-col gap-3">
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@company.com — where to send your monthly report"
-          aria-label="Report delivery email"
-          className="rounded-xl border border-outline-variant/25 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface outline-none transition placeholder:text-on-surface-variant focus:ring-2 focus:ring-primary/30"
-        />
         <Turnstile
           ref={turnstileRef}
           siteKey={siteKey}
@@ -161,7 +147,7 @@ export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
           {loading ? 'Redirecting…' : `Subscribe — ${priceLabel}`}
         </button>
         <p className="text-center font-body text-xs text-on-surface-variant">
-          Secure checkout by Stripe. No account needed — your reports arrive by email with a private link.
+          Secure checkout by Stripe. Enter your email at checkout — reports arrive there with a private link. No account, no password.
         </p>
       </div>
     </section>

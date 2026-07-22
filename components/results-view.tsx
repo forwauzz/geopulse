@@ -307,6 +307,17 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
 
   return (
     <>
+    {checkoutState === 'subscribed' ? (
+      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 px-5 py-4">
+        <span className="material-symbols-outlined text-2xl text-primary" aria-hidden>check_circle</span>
+        <div>
+          <p className="font-headline font-semibold text-on-background">You're subscribed — welcome aboard</p>
+          <p className="mt-1 font-body text-sm text-on-surface-variant">
+            We'll re-audit {host} every month and email your full report and competitor ranking, with a private link to your live stats. Your first report is on its way — check your inbox for the checkout receipt.
+          </p>
+        </div>
+      </div>
+    ) : null}
     <ScoreReport
       data={reportData}
       benchmark={data.benchmark ?? undefined}

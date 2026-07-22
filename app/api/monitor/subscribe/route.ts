@@ -21,7 +21,8 @@ export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   scanId: z.string().uuid(),
-  email: z.string().email().max(320),
+  // Optional: Stripe Checkout collects the email itself. Passing it just prefills the field.
+  email: z.string().email().max(320).nullish(),
   plan: z.enum(['monthly', 'annual']).default('monthly'),
   turnstileToken: z.string().min(1),
   anonymous_id: z.string().max(128).nullish(),
@@ -105,10 +106,12 @@ export async function POST(request: Request): Promise<Response> {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      customer_email: parsed.data.email,
+      // Stripe Checkout collects the email; prefill it only when the caller supplied one.
+      ...(parsed.data.email ? { customer_email: parsed.data.email } : {}),
       success_url: `${baseUrl}/results/${scan.id}?checkout=subscribed`,
       cancel_url: `${baseUrl}/results/${scan.id}?checkout=cancel`,
-      automatic_tax: { enabled: true },
+      // Tax intentionally deferred — no GST/QST registration yet. Charge is flat, tax-exclusive.
+      // When registered, add `automatic_tax: { enabled: true }` here to collect tax on top.
       metadata,
       subscription_data: { metadata },
     });
