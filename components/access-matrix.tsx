@@ -8,6 +8,7 @@
  *   3. the Training / IP decision panel — deliberately separated and framed as a
  *      business choice, never a failure.
  */
+import { EngineLogo, engineForLabel } from '@/components/ai-engines';
 
 export type AccessMatrixData = {
   registryVersion: string;
@@ -112,7 +113,13 @@ export function AccessMatrixView({ matrix }: { matrix: AccessMatrixData }) {
         {matrix.rows.map((row) => (
           <li key={row.destination} className="py-4 first:pt-0 last:pb-0">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="font-headline text-base font-semibold text-on-background">{row.label}</p>
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const engine = engineForLabel(row.destination) ?? engineForLabel(row.label);
+                  return engine ? <EngineLogo engine={engine} className="h-5 w-5" /> : null;
+                })()}
+                <p className="font-headline text-base font-semibold text-on-background">{row.label}</p>
+              </div>
               <StatusPill status={row.status} />
             </div>
             <p className="mt-1 font-body text-xs uppercase tracking-wide text-on-surface-variant/80">

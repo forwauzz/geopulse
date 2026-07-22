@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ScanForm } from '@/components/scan-form';
-import { AiPlatformLogos } from '@/components/ai-platform-logos';
+import { AiEngineStrip } from '@/components/ai-engines';
 import { ScrollReveal } from '@/components/scroll-reveal';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
@@ -242,7 +242,7 @@ export default async function HomePage({
             is surfacing your company.
           </h1>
           <div className="mt-8">
-            <AiPlatformLogos />
+            <AiEngineStrip />
           </div>
           <p className="mx-auto mt-4 max-w-2xl font-body text-sm text-on-surface-variant">
             Editorially maintained by {SITE_EDITORIAL_NAME}.
