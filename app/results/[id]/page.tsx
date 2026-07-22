@@ -59,7 +59,7 @@ export default async function ResultsPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const query = searchParams ? await searchParams : undefined;
   const siteKey = getTurnstileSiteKey();
-  const showCompetitorSearch = (await loadUiFlags()).show_competitor_search;
+  const uiFlags = await loadUiFlags();
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 md:px-10 md:py-16">
@@ -67,7 +67,8 @@ export default async function ResultsPage({ params, searchParams }: PageProps) {
         scanId={id}
         turnstileSiteKey={siteKey}
         checkoutState={query?.checkout ?? null}
-        showCompetitorSearch={showCompetitorSearch}
+        showCompetitorSearch={uiFlags.show_competitor_search}
+        showMonitorSubscription={uiFlags.show_monitor_subscription}
       />
     </main>
   );

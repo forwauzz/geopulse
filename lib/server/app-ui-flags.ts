@@ -15,7 +15,8 @@ export type UiFlagKey =
   | 'show_connectors'
   | 'show_billing'
   | 'show_blog'
-  | 'show_competitor_search';
+  | 'show_competitor_search'
+  | 'show_monitor_subscription';
 
 export type UiFlags = Record<UiFlagKey, boolean>;
 
@@ -29,6 +30,9 @@ export const UI_FLAG_DEFAULTS: UiFlags = {
   show_blog: true,
   // Off by default — competitor discovery is still mock/imperfect; opt in per deployment.
   show_competitor_search: false,
+  // Off by default — turns on the $39/mo monitoring subscribe CTA + anonymous checkout (fail-closed
+  // until Stripe live prices + a QC tax registration are configured).
+  show_monitor_subscription: false,
 };
 
 export const UI_FLAG_LABELS: Record<UiFlagKey, { label: string; help: string }> = {
@@ -39,6 +43,7 @@ export const UI_FLAG_LABELS: Record<UiFlagKey, { label: string; help: string }> 
   show_billing: { label: 'Billing', help: 'Show the Billing section in the dashboard.' },
   show_blog: { label: 'Blog', help: 'Show the Blog link.' },
   show_competitor_search: { label: 'Competitor search', help: 'Show the “compare against competitors” tool on the results scorecard.' },
+  show_monitor_subscription: { label: 'Monitoring subscription', help: 'Show the $39/mo “monitor my site monthly” subscribe CTA on results + reports, and enable its checkout.' },
 };
 
 export const UI_FLAG_KEYS = Object.keys(UI_FLAG_DEFAULTS) as UiFlagKey[];

@@ -9,6 +9,11 @@ import {
   handleInvoicePaid,
   handleInvoiceFailed,
 } from '@/lib/server/stripe/subscription-handlers';
+import {
+  handleMonitorCheckoutCompleted,
+  handleMonitorSubscriptionEvent,
+  handleMonitorInvoiceEvent,
+} from '@/lib/server/monitor-subscription';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 
@@ -56,24 +61,39 @@ export async function POST(request: Request): Promise<Response> {
       env.SUPABASE_SERVICE_ROLE_KEY
     );
 
+    const nowMs = Date.now();
     try {
       switch (event.type) {
         case 'customer.subscription.created':
-        case 'customer.subscription.updated':
-          await handleSubscriptionUpserted(adminDb, event.data.object as Stripe.Subscription);
+        case 'customer.subscription.updated': {
+          const sub = event.data.object as Stripe.Subscription;
+          // Monitor subscriptions ($39/mo product) are email-keyed and must NOT provision a
+          // workspace — route them to their own handler and skip the workspace path.
+          const monitor = await handleMonitorSubscriptionEvent({ supabase: adminDb, subscription: sub, env, deleted: false, nowMs });
+          if (!monitor.handled) await handleSubscriptionUpserted(adminDb, sub);
           break;
+        }
 
-        case 'customer.subscription.deleted':
-          await handleSubscriptionCancelled(adminDb, event.data.object as Stripe.Subscription);
+        case 'customer.subscription.deleted': {
+          const sub = event.data.object as Stripe.Subscription;
+          const monitor = await handleMonitorSubscriptionEvent({ supabase: adminDb, subscription: sub, env, deleted: true, nowMs });
+          if (!monitor.handled) await handleSubscriptionCancelled(adminDb, sub);
           break;
+        }
 
-        case 'invoice.payment_succeeded':
-          await handleInvoicePaid(adminDb, event.data.object as Stripe.Invoice);
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object as Stripe.Invoice;
+          const monitor = await handleMonitorInvoiceEvent({ supabase: adminDb, invoice, paid: true, nowMs });
+          if (!monitor.handled) await handleInvoicePaid(adminDb, invoice);
           break;
+        }
 
-        case 'invoice.payment_failed':
-          await handleInvoiceFailed(adminDb, event.data.object as Stripe.Invoice);
+        case 'invoice.payment_failed': {
+          const invoice = event.data.object as Stripe.Invoice;
+          const monitor = await handleMonitorInvoiceEvent({ supabase: adminDb, invoice, paid: false, nowMs });
+          if (!monitor.handled) await handleInvoiceFailed(adminDb, invoice);
           break;
+        }
 
         case 'customer.subscription.trial_will_end':
           // 3-day warning before trial ends. Log only — email reminders are future work.
@@ -102,6 +122,33 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const sessionObj = event.data.object as Stripe.Checkout.Session;
+
+  // Monitor subscription ($39/mo) — the authoritative seed of the email-keyed row. Handled here
+  // (not in the subscription lifecycle events) because the session carries the customer email.
+  if (sessionObj.mode === 'subscription' && sessionObj.metadata?.['kind'] === 'monitor') {
+    if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+      return new Response('Misconfigured', { status: 503 });
+    }
+    const adminDb = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+    const monitor = await handleMonitorCheckoutCompleted({
+      supabase: adminDb,
+      stripe,
+      session: sessionObj,
+      env,
+      nowMs: Date.now(),
+    });
+    if (!monitor.ok) {
+      structuredError('monitor_checkout_seed_failed', {
+        stripeEventId: event.id,
+        sessionId: sessionObj.id,
+        error: monitor.error ?? 'unknown',
+      });
+      // 500 so Stripe retries — a dropped seed would lose the subscriber.
+      return new Response('Monitor seed failed', { status: 500 });
+    }
+    structuredLog('monitor_checkout_seeded', { stripeEventId: event.id, sessionId: sessionObj.id }, 'info');
+    return new Response(null, { status: 200 });
+  }
 
   // Subscription-mode checkouts (BILL stream) only have bundle_key + user_id in metadata.
   // Workspace provisioning is handled by customer.subscription.created — skip here.

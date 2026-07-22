@@ -70,6 +70,10 @@ export type PaymentApiEnv = ScanApiEnv & {
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRICE_ID_DEEP_AUDIT: string;
+  // GEO-Pulse Monitoring subscription ($39/mo, $390/yr). Non-secret price ids; live in wrangler [vars].
+  // Optional so env fixtures/scripts that predate them still satisfy PaymentApiEnv.
+  STRIPE_PRICE_ID_MONITOR_MONTHLY?: string;
+  STRIPE_PRICE_ID_MONITOR_ANNUAL?: string;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
   KIT_API_KEY: string;
@@ -280,6 +284,8 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       STRIPE_SECRET_KEY: pickEnvString(e, 'STRIPE_SECRET_KEY'),
       STRIPE_WEBHOOK_SECRET: pickEnvString(e, 'STRIPE_WEBHOOK_SECRET'),
       STRIPE_PRICE_ID_DEEP_AUDIT: pickEnvString(e, 'STRIPE_PRICE_ID_DEEP_AUDIT'),
+      STRIPE_PRICE_ID_MONITOR_MONTHLY: pickEnvString(e, 'STRIPE_PRICE_ID_MONITOR_MONTHLY'),
+      STRIPE_PRICE_ID_MONITOR_ANNUAL: pickEnvString(e, 'STRIPE_PRICE_ID_MONITOR_ANNUAL'),
       RESEND_API_KEY: pickEnvString(e, 'RESEND_API_KEY'),
       RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
       KIT_API_KEY: pickEnvString(e, 'KIT_API_KEY'),
@@ -318,6 +324,8 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       STRIPE_SECRET_KEY: process.env['STRIPE_SECRET_KEY'] ?? '',
       STRIPE_WEBHOOK_SECRET: process.env['STRIPE_WEBHOOK_SECRET'] ?? '',
       STRIPE_PRICE_ID_DEEP_AUDIT: process.env['STRIPE_PRICE_ID_DEEP_AUDIT'] ?? '',
+      STRIPE_PRICE_ID_MONITOR_MONTHLY: process.env['STRIPE_PRICE_ID_MONITOR_MONTHLY'] ?? '',
+      STRIPE_PRICE_ID_MONITOR_ANNUAL: process.env['STRIPE_PRICE_ID_MONITOR_ANNUAL'] ?? '',
       RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
       KIT_API_KEY: process.env['KIT_API_KEY'] ?? '',
