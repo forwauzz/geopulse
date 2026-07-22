@@ -1,6 +1,12 @@
 import Link from 'next/link';
-import type { ActionSeverity, AuditDashboardView } from '@/lib/server/audit-dashboard-data';
+import type {
+  ActionSeverity,
+  AuditDashboardView,
+  DashboardDestinationStatus,
+} from '@/lib/server/audit-dashboard-data';
 import type { EngineCitationMetric, EngineKey } from '@/lib/server/dashboard-citation-metrics';
+import type { MarketPosition } from '@/lib/server/market-position';
+import { ScoreOverTimeChart } from '@/components/dashboard-charts';
 
 /**
  * The signed-in overview under the scan hero: every tile is backed by measurements the user's own
@@ -32,6 +38,44 @@ function severityChip(severity: ActionSeverity): { label: string; className: str
   return { label: 'Low', className: 'bg-surface-container-high text-on-surface-variant' };
 }
 
+/**
+ * Access-matrix status language, shared with the report's Access Matrix (components/access-matrix.tsx):
+ * eligible = green, blocked = red, not_tested = amber. Training access is never rendered here — it
+ * lives in its own neutral chip row because blocking training crawlers is a choice, not a failure.
+ */
+const DESTINATION_STATUS: Record<
+  DashboardDestinationStatus,
+  { label: string; icon: string; chip: string; dot: string }
+> = {
+  eligible: {
+    label: 'Eligible',
+    icon: 'check_circle',
+    chip: GOOD_CHIP,
+    dot: 'bg-green-500 dark:bg-green-400',
+  },
+  blocked: {
+    label: 'Blocked',
+    icon: 'block',
+    chip: 'bg-error/15 text-error',
+    dot: 'bg-error',
+  },
+  not_tested: {
+    label: 'Not tested',
+    icon: 'help',
+    chip: 'bg-warning/20 text-on-background',
+    dot: 'bg-warning',
+  },
+};
+
+/** Compact labels for the four-up card; the full label still lives on the report matrix. */
+const DESTINATION_SHORT_LABEL: Record<string, string> = {
+  'Google Search + AI Overviews': 'AI Overviews',
+  'ChatGPT Search': 'ChatGPT',
+  Claude: 'Claude',
+  Perplexity: 'Perplexity',
+  'Bing / Copilot': 'Copilot',
+};
+
 function ScoreRing({ score }: { score: number }) {
   const radius = 44;
   const circumference = 2 * Math.PI * radius;
@@ -61,25 +105,6 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function Sparkline({ points }: { points: ReadonlyArray<{ score: number }> }) {
-  const width = 220;
-  const height = 56;
-  const pad = 4;
-  const xs = points.map((_, i) => pad + (i * (width - pad * 2)) / Math.max(1, points.length - 1));
-  const min = Math.min(...points.map((p) => p.score));
-  const max = Math.max(...points.map((p) => p.score));
-  const span = Math.max(1, max - min);
-  const ys = points.map((p) => height - pad - ((p.score - min) / span) * (height - pad * 2));
-  const path = xs.map((x, i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${(ys[i] ?? 0).toFixed(1)}`).join(' ');
-  const last = points[points.length - 1];
-  return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-14 w-full" role="img" aria-label={`Score trend, latest ${last?.score ?? ''}`}>
-      <path d={path} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="stroke-primary" />
-      <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r="3.5" className="fill-primary" />
-    </svg>
-  );
-}
-
 function Card({
   title,
   badge,
@@ -90,7 +115,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <article className="flex flex-col rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5">
+    <article className="flex flex-col rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 transition duration-200 hover:border-outline-variant/40 hover:shadow-float">
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-headline text-sm font-semibold text-on-background">{title}</h3>
         {badge ? (
@@ -111,27 +136,49 @@ function NoDataHint({ children }: { children: React.ReactNode }) {
 export function AuditDashboardOverview({
   view,
   engineCitations = {},
+  marketPosition = null,
 }: {
   view: AuditDashboardView;
   engineCitations?: Partial<Record<EngineKey, EngineCitationMetric>>;
+  /** Anonymized cohort rank ("#7 of 29 …"), same computation as the PDF. Null when out of cohort. */
+  marketPosition?: MarketPosition | null;
 }) {
   const { latest } = view;
   const anyEngineTracked = Object.keys(engineCitations).length > 0;
 
+  // Score momentum: latest gradeable score vs the previous gradeable one (honest — skips gaps).
+  const tested = view.timeline.filter((p): p is typeof p & { score: number } => p.score !== null);
+  const latestScored = tested[tested.length - 1] ?? null;
+  const prevScored = tested[tested.length - 2] ?? null;
+  const momentum = latestScored && prevScored ? latestScored.score - prevScored.score : null;
+
   return (
     <section className="mx-auto w-full max-w-6xl space-y-6" data-testid="audit-dashboard-overview">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Your AI visibility</p>
-        <h2 className="mt-1 font-headline text-lg font-semibold text-on-background">
-          {latest ? (
-            <>
-              Latest audit: <span className="text-primary">{latest.domain}</span>
-              <span className="ml-2 text-sm font-normal text-on-surface-variant">{formatDate(latest.createdAt)}</span>
-            </>
-          ) : (
-            'Run your first audit to see how AI reads your site'
-          )}
-        </h2>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-on-surface-variant">Your AI visibility</p>
+          <h2 className="mt-1 font-headline text-lg font-semibold text-on-background">
+            {latest ? (
+              <>
+                Latest audit: <span className="text-primary">{latest.domain}</span>
+                <span className="ml-2 text-sm font-normal text-on-surface-variant">{formatDate(latest.createdAt)}</span>
+              </>
+            ) : (
+              'Run your first audit to see how AI reads your site'
+            )}
+          </h2>
+        </div>
+        {marketPosition ? (
+          <div className="rounded-xl border-l-2 border-gold/60 bg-surface-container-lowest px-4 py-2.5">
+            <p className="font-sans text-2xl font-black tabular-nums leading-none text-primary">
+              #{marketPosition.rank}
+              <span className="text-sm font-semibold text-on-surface-variant"> of {marketPosition.of}</span>
+            </p>
+            <p className="mt-1 text-[11px] leading-tight text-on-surface-variant">
+              {marketPosition.vertical} in {marketPosition.geoRegion} · median {marketPosition.medianScore}/100
+            </p>
+          </div>
+        ) : null}
       </div>
 
       {/* KPI row — all real measurements from the latest audit */}
@@ -154,27 +201,73 @@ export function AuditDashboardOverview({
           )}
         </Card>
 
-        <Card title="AI crawler access">
-          {view.botAccess ? (
-            <ul className="space-y-2">
-              {view.botAccess.map((bot) => (
-                <li key={bot.name} className="flex items-center justify-between gap-2 text-sm text-on-background">
-                  <span>{bot.name}</span>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${
-                      bot.blocked ? 'bg-error/15 text-error' : GOOD_CHIP
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[13px]" aria-hidden>
-                      {bot.blocked ? 'block' : 'check_circle'}
-                    </span>
-                    {bot.blocked ? 'Blocked' : 'Allowed'}
+        <Card title="AI answer eligibility">
+          {view.accessMatrix ? (
+            <div className="flex h-full flex-col">
+              {view.accessMatrix.testedCount > 0 ? (
+                <p className="font-sans text-3xl font-black tabular-nums leading-none text-on-background">
+                  {view.accessMatrix.eligibleCount}
+                  <span className="text-base font-semibold text-on-surface-variant">
+                    /{view.accessMatrix.testedCount} eligible
                   </span>
-                </li>
-              ))}
-            </ul>
+                </p>
+              ) : (
+                <p className="text-sm font-semibold text-on-background">
+                  {view.accessMatrix.pageBlocked ? 'Access not testable' : 'Not yet tested'}
+                </p>
+              )}
+              <ul className="mt-3 space-y-1.5">
+                {view.accessMatrix.destinations.map((dest) => {
+                  const tone = DESTINATION_STATUS[dest.status];
+                  return (
+                    <li
+                      key={dest.label}
+                      className="flex items-center justify-between gap-2 text-xs text-on-background"
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} aria-hidden />
+                        <span className="truncate">
+                          {DESTINATION_SHORT_LABEL[dest.label] ?? dest.label}
+                        </span>
+                      </span>
+                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${tone.chip}`}>
+                        {tone.label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {view.accessMatrix.trainingChoices.length > 0 ? (
+                <div className="mt-3 border-t border-outline-variant/15 pt-2.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-on-surface-variant">
+                    Training choices <span className="font-normal normal-case">(not scored)</span>
+                  </p>
+                  <ul className="mt-1.5 flex flex-wrap gap-1">
+                    {view.accessMatrix.trainingChoices.map((choice) => (
+                      <li
+                        key={choice.token}
+                        className="inline-flex items-center gap-1 rounded-md bg-surface-container-high px-1.5 py-0.5 text-[10px] font-medium text-on-surface-variant"
+                        title={
+                          choice.allowed === null
+                            ? `${choice.token}: robots.txt unavailable`
+                            : `${choice.token}: training ${choice.allowed ? 'allowed' : 'opted out'}`
+                        }
+                      >
+                        {choice.token}
+                        <span className="text-on-surface-variant/70">
+                          {choice.allowed === null ? '—' : choice.allowed ? 'on' : 'off'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
           ) : (
-            <NoDataHint>Robots.txt access for GPTBot, ClaudeBot and PerplexityBot, measured by your audit.</NoDataHint>
+            <NoDataHint>
+              Eligibility across AI Overviews, ChatGPT, Claude, Perplexity and Copilot appears here after your
+              next audit.
+            </NoDataHint>
           )}
         </Card>
 
@@ -206,19 +299,57 @@ export function AuditDashboardOverview({
           )}
         </Card>
 
-        <Card title="Score trend">
-          {view.trendPoints.length >= 2 ? (
+        <Card title="Score momentum">
+          {latestScored ? (
             <div>
-              <Sparkline points={view.trendPoints} />
+              <div className="flex items-baseline gap-2">
+                <span className="font-sans text-4xl font-black tabular-nums leading-none text-on-background">
+                  {latestScored.score}
+                </span>
+                {momentum !== null ? (
+                  <span
+                    className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums ${
+                      momentum > 0
+                        ? GOOD_CHIP
+                        : momentum < 0
+                          ? 'bg-error/15 text-error'
+                          : 'bg-surface-container-high text-on-surface-variant'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]" aria-hidden>
+                      {momentum > 0 ? 'trending_up' : momentum < 0 ? 'trending_down' : 'trending_flat'}
+                    </span>
+                    {momentum > 0 ? '+' : ''}
+                    {momentum}
+                  </span>
+                ) : null}
+              </div>
               <p className="mt-2 text-xs text-on-surface-variant">
-                {view.trendPoints.length} audits · latest {view.trendPoints[view.trendPoints.length - 1]?.score}/100
+                {momentum !== null
+                  ? `${momentum >= 0 ? 'Up' : 'Down'} ${Math.abs(momentum)} points since your previous audit.`
+                  : `${tested.length} gradeable audit${tested.length === 1 ? '' : 's'} so far.`}
               </p>
             </div>
           ) : (
-            <NoDataHint>Run at least two audits to see your score move over time.</NoDataHint>
+            <NoDataHint>Your score momentum appears once an audit produces a gradeable score.</NoDataHint>
           )}
         </Card>
       </div>
+
+      {/* Real trend module — replaces the tiny sparkline. Honest gaps for not-tested runs. */}
+      {tested.length >= 2 ? (
+        <article className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 transition duration-200 hover:border-outline-variant/40 hover:shadow-float md:p-6">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-headline text-sm font-semibold text-on-background">Score over time</h3>
+            <Link href="/dashboard/history" className="text-xs font-semibold text-primary hover:underline">
+              Full history →
+            </Link>
+          </div>
+          <div className="mt-3">
+            <ScoreOverTimeChart points={view.timeline} height={200} />
+          </div>
+        </article>
+      ) : null}
 
       {/* Engines with benchmark data show the real citation rate; the rest say so honestly. */}
       <article className="rounded-2xl border border-dashed border-outline-variant/40 bg-surface-container-lowest p-5 md:p-6">

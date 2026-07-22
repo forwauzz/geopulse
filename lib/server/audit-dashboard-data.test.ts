@@ -1,12 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAuditDashboardView,
-  deriveBotAccess,
+  deriveAccessMatrix,
   deriveStructuredDataHealth,
   extractScanIssues,
   severityForWeight,
   type AuditScanRow,
 } from './audit-dashboard-data';
+
+/**
+ * A `full_results_json` payload carrying an accessMatrix, shaped like the scan route persists it
+ * (workers/scan-engine/access-matrix.ts nested under `accessMatrix`).
+ */
+function withAccessMatrix(
+  rows: Array<{ label: string; status: 'eligible' | 'blocked' | 'not_tested' }>,
+  opts: {
+    training?: Array<{ token: string; vendor: string; allowed: boolean | null }>;
+    pageFetched?: boolean;
+  } = {}
+) {
+  return {
+    accessMatrix: {
+      registryVersion: 'test',
+      rows: rows.map((r) => ({ destination: r.label, ...r, control: '', detail: '' })),
+      trainingPanel: opts.training ?? [],
+      diagnosis: { pageFetched: opts.pageFetched ?? true },
+    },
+  };
+}
 
 function issue(checkId: string, passed: boolean, extra: Partial<Record<string, unknown>> = {}) {
   return { checkId, check: checkId, passed, weight: 5, finding: '', ...extra };
@@ -43,29 +64,49 @@ describe('extractScanIssues', () => {
   });
 });
 
-describe('deriveBotAccess', () => {
-  it('reports all bots allowed when the robots check passed', () => {
-    const bots = deriveBotAccess([issue('ai-crawler-access', true)] as never);
-    expect(bots).toEqual([
-      { name: 'GPTBot', blocked: false },
-      { name: 'ClaudeBot', blocked: false },
-      { name: 'PerplexityBot', blocked: false },
-    ]);
+describe('deriveAccessMatrix', () => {
+  it('reads the five retrieval destinations and counts eligible vs tested', () => {
+    const s = scan({
+      full_results_json: withAccessMatrix([
+        { label: 'Google Search + AI Overviews', status: 'eligible' },
+        { label: 'ChatGPT Search', status: 'eligible' },
+        { label: 'Claude', status: 'blocked' },
+        { label: 'Perplexity', status: 'eligible' },
+        { label: 'Bing / Copilot', status: 'not_tested' },
+      ]),
+    });
+    const m = deriveAccessMatrix(s);
+    expect(m?.destinations).toHaveLength(5);
+    expect(m?.testedCount).toBe(4); // not_tested excluded
+    expect(m?.eligibleCount).toBe(3);
+    expect(m?.pageBlocked).toBe(false);
   });
 
-  it('flags exactly the bots named in the failure finding', () => {
-    const bots = deriveBotAccess([
-      issue('ai-crawler-access', false, {
-        finding: 'robots.txt blocks GPTBot, PerplexityBot — these AI crawlers cannot index your site.',
-      }),
-    ] as never);
-    expect(bots?.find((b) => b.name === 'GPTBot')?.blocked).toBe(true);
-    expect(bots?.find((b) => b.name === 'ClaudeBot')?.blocked).toBe(false);
-    expect(bots?.find((b) => b.name === 'PerplexityBot')?.blocked).toBe(true);
+  it('keeps training tokens separate and never counts a training block as blocked access', () => {
+    const s = scan({
+      full_results_json: withAccessMatrix(
+        [{ label: 'Claude', status: 'eligible' }],
+        { training: [{ token: 'GPTBot', vendor: 'OpenAI', allowed: false }] }
+      ),
+    });
+    const m = deriveAccessMatrix(s);
+    expect(m?.eligibleCount).toBe(1);
+    expect(m?.trainingChoices).toEqual([{ token: 'GPTBot', vendor: 'OpenAI', allowed: false }]);
   });
 
-  it('returns null when the check never ran', () => {
-    expect(deriveBotAccess([issue('jsonld', true)] as never)).toBeNull();
+  it('flags a blocked page fetch so the card can explain the Not-tested rows', () => {
+    const s = scan({
+      full_results_json: withAccessMatrix(
+        [{ label: 'Claude', status: 'not_tested' }],
+        { pageFetched: false }
+      ),
+    });
+    expect(deriveAccessMatrix(s)?.pageBlocked).toBe(true);
+  });
+
+  it('returns null for scans that predate the access matrix', () => {
+    expect(deriveAccessMatrix(scan({ full_results_json: { issues: [] } }))).toBeNull();
+    expect(deriveAccessMatrix(scan({ full_results_json: null }))).toBeNull();
   });
 });
 
@@ -99,8 +140,8 @@ describe('buildAuditDashboardView', () => {
   it('handles the empty state', () => {
     const view = buildAuditDashboardView([]);
     expect(view.latest).toBeNull();
-    expect(view.botAccess).toBeNull();
-    expect(view.trendPoints).toHaveLength(0);
+    expect(view.accessMatrix).toBeNull();
+    expect(view.timeline).toHaveLength(0);
     expect(view.priorityActions).toHaveLength(0);
   });
 
@@ -120,7 +161,7 @@ describe('buildAuditDashboardView', () => {
     ];
     const view = buildAuditDashboardView(rows);
     expect(view.latest?.scanId).toBe('new');
-    expect(view.trendPoints.map((p) => p.score)).toEqual([60, 80]);
+    expect(view.timeline.map((p) => p.score)).toEqual([60, 80]);
     expect(view.priorityActions[0]).toMatchObject({ title: 'jsonld', severity: 'high', scanId: 'new' });
     expect(view.recent).toHaveLength(2);
   });
