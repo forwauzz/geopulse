@@ -171,7 +171,7 @@ function LongWaitPanel({
       </ol>
 
       <p className="mt-5 font-body text-xs tracking-[0.02em] text-on-surface-variant">
-        {config.note ?? 'We only show this overlay when a request takes longer than the normal fast path.'}
+        {config.note ?? 'Hang tight — this usually takes a minute or two. You can keep this tab open.'}
       </p>
     </div>
   );

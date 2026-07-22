@@ -197,7 +197,7 @@ export default async function AdminCompetitorsPage({
         }`}
       >
         {sweepEnabled ? (
-          <>Weekly sweep is <strong>on</strong> — stale domains re-scan automatically (max 2 per hour).</>
+          <>Weekly sweep is <strong>on</strong> — stale domains re-scan automatically (one scan per hour).</>
         ) : (
           <>
             Weekly sweep is <strong>off</strong> (fail-closed default). “Scan now” still works per
