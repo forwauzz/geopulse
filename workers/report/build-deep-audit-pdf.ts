@@ -950,7 +950,9 @@ class PdfBuilder {
     this.drawHBar('Market median', mp.medianScore, MUTED, String(mp.medianScore));
     if (mp.marketStats.length > 0) {
       this.y -= 2;
-      this.drawText('Across this market:', 9, true, PRIMARY);
+      // Denominators can differ from the headline: stats count businesses whose crawler
+      // settings we could VERIFY, the headline counts businesses we could SCORE.
+      this.drawText('Across this market (among businesses whose settings we could verify):', 9, true, PRIMARY);
       for (const stat of mp.marketStats) {
         this.drawText(`• ${stat}`, 9, false, INK, 12);
       }
