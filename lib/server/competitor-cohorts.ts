@@ -334,7 +334,19 @@ export async function scanCohortDomain(
   const targetUrl = row.site_url ?? `https://${row.domain}`;
   const attemptedAt = new Date().toISOString();
   const stampedMetadata = { ...row.metadata, [ATTEMPT_KEY]: attemptedAt };
-  await supabase.from('benchmark_domains').update({ metadata: stampedMetadata }).eq('id', row.id);
+  // A silently-lost stamp means the same failing domain re-blocks the queue every tick
+  // (observed 2026-07-22 02:00) — surface stamp failures instead of ignoring them.
+  const { error: stampError } = await supabase
+    .from('benchmark_domains')
+    .update({ metadata: stampedMetadata })
+    .eq('id', row.id);
+  if (stampError) {
+    structuredLog(
+      'competitor_cohort_stamp_failed',
+      { domainId: row.id, reason: stampError.message.slice(0, 200) },
+      'warning'
+    );
+  }
 
   const scan = await runFreeScan(targetUrl, buildAuditLlm(env));
 
@@ -394,7 +406,15 @@ export async function scanCohortDomain(
       };
 
   const { data, error } = await supabase.from('scans').insert(insert).select('id').single();
-  if (error || !data?.id) return { ok: false, reason: error?.message ?? 'scan_insert_failed' };
+  if (error || !data?.id) {
+    // This was the sweep's only silent failure path (2026-07-22 02:00) — always say why.
+    structuredLog(
+      'competitor_cohort_scan_failed',
+      { domainId: row.id, reason: `scan_insert: ${(error?.message ?? 'no_row').slice(0, 200)}` },
+      'warning'
+    );
+    return { ok: false, reason: error?.message ?? 'scan_insert_failed' };
+  }
   return { ok: true, scanId: data.id as string };
 }
 
@@ -485,6 +505,14 @@ export async function runCompetitorCohortSweep(args: {
   }
 
   const due = selectStaleCohortDomains(domains, latestAt, nowMs, maxScans);
+  if (due.length > 0) {
+    // Name the tick's targets up front — the invocation can die before any later log.
+    structuredLog(
+      'competitor_cohort_due',
+      { domains: due.map((d) => d.canonical_domain).join(',') },
+      'info'
+    );
+  }
   let scanned = 0;
   let failed = 0;
   for (const row of due) {
