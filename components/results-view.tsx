@@ -54,7 +54,7 @@ function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
   if (mode === 'agency_bypass') {
     return 'This agency client is eligible for deep-audit bypass. GEO-Pulse will queue the full audit directly under the current agency entitlement.';
   }
-  return 'The preview shows the score and top issues. The paid audit keeps going: more coverage, more detail, and delivery to the email you enter in Stripe checkout.';
+  return 'The scorecard shows your score and top issues. The full audit goes further: a multi-page crawl of your site, every check explained, and the complete report emailed to you.';
 }
 
 function domainFromUrl(url: string): string {
@@ -481,7 +481,9 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       }
     />
     {showCheckout ? (
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4">
+      // Right-aligned so the pill floats beside the content column instead of covering
+      // centered headings mid-scroll (issue #129); spacer below keeps the page end clear.
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-end px-6 pb-5">
         <button
           type="button"
           onClick={() => document.getElementById('full-audit-checkout')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
@@ -492,6 +494,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         </button>
       </div>
     ) : null}
+    {showCheckout ? <div aria-hidden className="h-20" /> : null}
     </>
   );
 }

@@ -291,25 +291,26 @@ export function ReportViewer({ scanId }: { scanId: string }) {
           {state.phase === 'ready' ? (
             <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low p-4">
               <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant">
-                Delivery
+                Your report
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-on-surface-variant">
-                <span>
-                  Email:{' '}
-                  <strong className="text-on-background">
-                    {state.scan.viewerEmail ?? 'not configured'}
-                  </strong>
-                </span>
-                <span>
-                  Report:{' '}
-                  <strong className="text-on-background">
-                    {state.scan.reportStatus ?? 'none'}
-                  </strong>
-                </span>
-              </div>
               <p className="mt-2 text-sm text-on-surface-variant">
-                Use the configured email to resend the finished report, or jump into Slack/GitHub
-                delivery settings if this scan belongs to a startup workspace.
+                {state.scan.reportStatus === 'delivered'
+                  ? 'The full report is ready below — the PDF was also emailed to the address you provided.'
+                  : state.scan.reportStatus === 'generating'
+                    ? 'We are assembling your PDF — it will land in your inbox shortly. Everything is already readable below.'
+                    : 'The full report is ready below.'}
+                {state.scan.viewerEmail ? (
+                  <>
+                    {' '}
+                    Sent to <strong className="text-on-background">{state.scan.viewerEmail}</strong>.
+                  </>
+                ) : null}
+              </p>
+              {/* Full-audit scores span every crawled page, so they can differ from the
+                  single-page scorecard — say so before the user wonders (issue #129). */}
+              <p className="mt-1 text-xs text-on-surface-variant">
+                This score reflects your whole site across every page we crawled, so it can differ
+                from the single-page scorecard you saw first.
               </p>
             </div>
           ) : null}
