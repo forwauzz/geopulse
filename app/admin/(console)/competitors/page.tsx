@@ -24,7 +24,7 @@ const DESTINATIONS: ReadonlyArray<{ id: DestinationId; label: string }> = [
 
 function fmt(iso: string | null): string {
   if (!iso) return 'never';
-  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Toronto' });
 }
 
 /** Neutral, factual cell — 'not verified' is a scanner limitation, never a claim about the site. */
