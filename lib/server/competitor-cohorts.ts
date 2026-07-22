@@ -26,8 +26,12 @@ const ATTEMPT_KEY = `${COHORT_METADATA_KEY}_last_attempt_at`;
 const OBSERVED_KEY = `${COHORT_METADATA_KEY}_observed_domain`;
 /** Weekly cadence with slack for hourly-cron jitter. */
 export const COHORT_STALE_MS = 6.5 * 24 * 60 * 60 * 1000;
-/** Failed attempts also wait a full cycle so a dead domain can't eat every tick's budget. */
-const ATTEMPT_COOLDOWN_MS = COHORT_STALE_MS;
+/**
+ * Failed/incomplete attempts retry after hours, not a full week: the cron invocation can die
+ * mid-scan (issue #104), and a full-cycle cooldown would burn that domain's slot for a week.
+ * A genuinely dead site still costs at most one bounded (~65s) slot every cooldown.
+ */
+export const ATTEMPT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 export type CohortEnvLike = {
   GEMINI_API_KEY?: string;
@@ -352,9 +356,19 @@ export async function runCompetitorCohortSweep(args: {
   let scanned = 0;
   let failed = 0;
   for (const row of due) {
-    const result = await scanCohortDomain(supabase, env, row);
-    if (result.ok) scanned += 1;
-    else failed += 1;
+    // One throwing scan must not abort the rest of the tick's budget.
+    try {
+      const result = await scanCohortDomain(supabase, env, row);
+      if (result.ok) scanned += 1;
+      else failed += 1;
+    } catch (error) {
+      failed += 1;
+      structuredLog(
+        'competitor_cohort_scan_failed',
+        { domainId: row.id, reason: error instanceof Error ? error.message : 'unknown_throw' },
+        'warning'
+      );
+    }
   }
   return { enabled: true, due: due.length, scanned, failed };
 }

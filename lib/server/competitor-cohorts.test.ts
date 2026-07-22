@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ATTEMPT_COOLDOWN_MS,
   COHORT_STALE_MS,
   extractComparisonSignals,
   selectStaleCohortDomains,
@@ -95,6 +96,13 @@ describe('selectStaleCohortDomains', () => {
   it('re-tries a failed domain after the cooldown lapses', () => {
     const past = new Date(NOW - COHORT_STALE_MS - 1000).toISOString();
     const domains = [domain('a', 'dead.ca', { local_cohort_last_attempt_at: past })];
+    const due = selectStaleCohortDomains(domains, new Map(), NOW, 5);
+    expect(due.map((d) => d.id)).toEqual(['a']);
+  });
+
+  it('re-tries within the same day when an attempt died mid-scan (issue #104 resilience)', () => {
+    const sevenHoursAgo = new Date(NOW - ATTEMPT_COOLDOWN_MS - 30 * 60 * 1000).toISOString();
+    const domains = [domain('a', 'died-mid-scan.ca', { local_cohort_last_attempt_at: sevenHoursAgo })];
     const due = selectStaleCohortDomains(domains, new Map(), NOW, 5);
     expect(due.map((d) => d.id)).toEqual(['a']);
   });
