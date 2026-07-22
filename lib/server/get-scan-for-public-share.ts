@@ -1,10 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { fullIssueListFromScan } from '@/lib/server/scan-issue-list';
+import { deriveReportStatus, type ReportStatus as DerivedReportStatus } from '@/lib/server/report-status';
 import { structuredLog } from '@/lib/server/structured-log';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const uuid = z.string().uuid();
+
+// Run sources whose scans are served by /share/<slug> (unguessable slug is the capability). Monitor
+// re-audits (Codex P1 #1) persist with run_source='monitor' and MUST be resolvable here, or every
+// monthly monitor email links to a 403.
+const SHARE_SLUG_RUN_SOURCES: ReadonlySet<string> = new Set(['recurring', 'monitor']);
 // Share slugs are 32 hex chars (a dash-stripped UUID). Kept permissive on charset so a
 // future generator can widen the alphabet without breaking existing links.
 const shareSlug = z.string().regex(/^[a-zA-Z0-9_-]{16,128}$/);
@@ -97,12 +103,12 @@ async function buildPublicShareRow(
       .eq('type', 'deep_audit')
       .limit(1)
       .maybeSingle(),
-    // A full-audit run exists means the report is being (or is about to be) assembled. In free
-    // mode (LEGACY_PAID_ENABLED=false) there is no payment, so without this the report page would
-    // see reportStatus='none' and give up before the crawl even finishes.
+    // A full-audit run's live state drives whether the report page keeps polling. In free mode
+    // (LEGACY_PAID_ENABLED=false) there is no payment to key off, so we read the run itself — but
+    // only its timestamps, so a dead run doesn't poll forever (Codex P1 #3, via deriveReportStatus).
     supabase
       .from('scan_runs')
-      .select('id')
+      .select('created_at, started_at, completed_at')
       .eq('scan_id', data.id)
       .limit(1)
       .maybeSingle(),
@@ -110,13 +116,13 @@ async function buildPublicShareRow(
 
   const hasPaid = !!paymentRes.data?.id;
   const report = reportRes.data;
-  const deepRunInProgress = !!runRes.data?.id;
-  let reportStatus: ReportStatus = 'none';
-  if (report?.email_delivered_at) {
-    reportStatus = 'delivered';
-  } else if (hasPaid || deepRunInProgress) {
-    reportStatus = 'generating';
-  }
+  const reportStatus: DerivedReportStatus = deriveReportStatus({
+    emailDelivered: !!report?.email_delivered_at,
+    hasReport: !!report?.id,
+    hasPaid,
+    run: runRes.data ?? null,
+    nowMs: Date.now(),
+  });
 
   const fullResults = data.full_results_json as {
     categoryScores?: unknown[];
@@ -185,7 +191,7 @@ export async function getScanForPublicShare(
   }
 
   const created = new Date(data.created_at);
-  const maxAge = data.run_source === 'recurring' ? RECURRING_MAX_AGE_MS : MAX_AGE_MS;
+  const maxAge = SHARE_SLUG_RUN_SOURCES.has(data.run_source) ? RECURRING_MAX_AGE_MS : MAX_AGE_MS;
   if (Number.isFinite(created.getTime()) && Date.now() - created.getTime() > maxAge) {
     return { ok: false, code: 'expired' };
   }
@@ -235,9 +241,9 @@ export async function getScanForShareSlug(
     return { ok: false, code: 'not_found' };
   }
 
-  // Slugs are minted ONLY for cadence-delivered recurring audits. This gate (not user_id) plus
-  // the unguessable slug is what keeps arbitrary scans off this route.
-  if (data.run_source !== 'recurring') {
+  // Slugs are minted ONLY for cadence-delivered audits (recurring + monitor). This gate (not
+  // user_id) plus the unguessable slug is what keeps arbitrary scans off this route.
+  if (!SHARE_SLUG_RUN_SOURCES.has(data.run_source)) {
     return { ok: false, code: 'forbidden' };
   }
 

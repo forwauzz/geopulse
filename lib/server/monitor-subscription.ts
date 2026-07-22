@@ -124,9 +124,45 @@ export type SeedMonitorArgs = {
 };
 
 /**
+ * Update an existing monitor row in place from a checkout/seed. Always carries the (possibly new)
+ * stripe_subscription_id so a re-subscribe or race never leaves the row pointing at a stale/absent
+ * subscription. Arms the first monthly re-audit when the row transitions active and isn't armed yet.
+ */
+async function updateMonitorRowById(
+  supabase: SupabaseClient,
+  id: string,
+  existingNextAuditAt: string | null,
+  args: SeedMonitorArgs & { email: string }
+): Promise<{ ok: boolean; created: false; token?: string; error?: string }> {
+  const goingActive = (args.status === 'active' || args.status === 'trialing') && !existingNextAuditAt;
+  const { data, error } = await supabase
+    .from('monitoring_subscriptions')
+    .update({
+      status: args.status,
+      stripe_customer_id: args.stripeCustomerId,
+      stripe_subscription_id: args.stripeSubscriptionId,
+      stripe_price_id: args.stripePriceId,
+      plan: args.plan,
+      ...(goingActive ? { next_audit_at: computeNextAudit(args.nowMs) } : {}),
+      updated_at: new Date(args.nowMs).toISOString(),
+    })
+    .eq('id', id)
+    .select('private_token')
+    .maybeSingle();
+  return error
+    ? { ok: false, created: false, error: error.message }
+    : { ok: true, created: false, token: (data?.private_token as string | undefined) };
+}
+
+/**
  * Idempotent create-or-touch from checkout completion. Keyed by stripe_subscription_id so webhook
  * retries never duplicate. Mints the private token once. When the row goes `active`, arms the first
  * monthly re-audit 30 days out (the origin free scan is this month's "report").
+ *
+ * A unique violation is NOT silently swallowed (Codex P1 #2): it is resolved to the conflicting row
+ * (by subscription id, then by the active email+domain partial index) which is then updated to carry
+ * this subscription. Only an unresolvable conflict returns ok:false, so the webhook surfaces it
+ * (Stripe retries) instead of returning 200 with the subscription id unstored.
  */
 export async function seedMonitorSubscription(
   supabase: SupabaseClient,
@@ -135,29 +171,16 @@ export async function seedMonitorSubscription(
   const email = args.email.trim().toLowerCase();
   if (!email.includes('@')) return { ok: false, created: false, error: 'invalid_email' };
   if (!args.monitoredUrl) return { ok: false, created: false, error: 'missing_url' };
+  const domain = hostFromUrl(args.monitoredUrl);
 
   if (args.stripeSubscriptionId) {
     const { data: existing } = await supabase
       .from('monitoring_subscriptions')
-      .select('id, private_token, status, next_audit_at')
+      .select('id, next_audit_at')
       .eq('stripe_subscription_id', args.stripeSubscriptionId)
       .maybeSingle();
     if (existing?.id) {
-      const goingActive = (args.status === 'active' || args.status === 'trialing') && !existing.next_audit_at;
-      const { error } = await supabase
-        .from('monitoring_subscriptions')
-        .update({
-          status: args.status,
-          stripe_customer_id: args.stripeCustomerId,
-          stripe_price_id: args.stripePriceId,
-          plan: args.plan,
-          ...(goingActive ? { next_audit_at: computeNextAudit(args.nowMs) } : {}),
-          updated_at: new Date(args.nowMs).toISOString(),
-        })
-        .eq('id', existing.id);
-      return error
-        ? { ok: false, created: false, error: error.message }
-        : { ok: true, created: false, token: existing.private_token as string };
+      return updateMonitorRowById(supabase, existing.id, existing.next_audit_at ?? null, { ...args, email });
     }
   }
 
@@ -166,7 +189,7 @@ export async function seedMonitorSubscription(
   const { error } = await supabase.from('monitoring_subscriptions').insert({
     email,
     monitored_url: args.monitoredUrl,
-    domain: hostFromUrl(args.monitoredUrl),
+    domain,
     plan: args.plan,
     status: args.status,
     private_token: token,
@@ -177,14 +200,43 @@ export async function seedMonitorSubscription(
     next_audit_at: active ? computeNextAudit(args.nowMs) : null,
     updated_at: new Date(args.nowMs).toISOString(),
   });
-  if (error) {
-    // Unique-violation on a webhook race → treat as already-seeded, not an error.
-    if ((error as { code?: string }).code === '23505') {
-      return { ok: true, created: false };
+  if (!error) return { ok: true, created: true, token };
+
+  if ((error as { code?: string }).code === '23505') {
+    // Race: the sibling handler already inserted this exact subscription → update it in place.
+    if (args.stripeSubscriptionId) {
+      const { data: bySub } = await supabase
+        .from('monitoring_subscriptions')
+        .select('id, next_audit_at')
+        .eq('stripe_subscription_id', args.stripeSubscriptionId)
+        .maybeSingle();
+      if (bySub?.id) {
+        return updateMonitorRowById(supabase, bySub.id, bySub.next_audit_at ?? null, { ...args, email });
+      }
     }
-    return { ok: false, created: false, error: error.message };
+    // Active subscription already exists for this email+site (partial unique index). The customer
+    // re-subscribed — repoint the newest active row to this Stripe subscription.
+    if (domain) {
+      const { data: byEmailDomain } = await supabase
+        .from('monitoring_subscriptions')
+        .select('id, next_audit_at')
+        .eq('email', email)
+        .eq('domain', domain)
+        .in('status', ['active', 'trialing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (byEmailDomain?.id) {
+        return updateMonitorRowById(supabase, byEmailDomain.id, byEmailDomain.next_audit_at ?? null, { ...args, email });
+      }
+    }
+    structuredError('monitor_seed_conflict_unresolved', {
+      stripeSubscriptionId: args.stripeSubscriptionId ?? null,
+      domain: domain ?? null,
+    });
+    return { ok: false, created: false, error: 'seed_conflict_unresolved' };
   }
-  return { ok: true, created: true, token };
+  return { ok: false, created: false, error: error.message };
 }
 
 // ── Lifecycle updates by subscription id ─────────────────────────────────────

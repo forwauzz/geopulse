@@ -5,6 +5,7 @@ import {
   resolveAgencyScanAccess,
 } from '@/lib/server/agency-access';
 import { getScanApiEnv } from '@/lib/server/cf-env';
+import { deriveReportStatus } from '@/lib/server/report-status';
 import { fullIssueListFromScan } from '@/lib/server/scan-issue-list';
 import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-context';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -98,11 +99,12 @@ export async function GET(
             .eq('type', 'deep_audit')
             .limit(1)
             .maybeSingle(),
-          // A full-audit run exists → the report is generating. In free mode there's no payment,
-          // so without this the report page sees 'none' and bails before the crawl finishes.
+          // The full-audit run's live state drives report polling. In free mode there's no payment,
+          // so we read the run — but only its timestamps, so a dead run doesn't poll forever
+          // (Codex P1 #3, via deriveReportStatus).
           adminDb
             .from('scan_runs')
-            .select('id')
+            .select('created_at, started_at, completed_at')
             .eq('scan_id', id)
             .limit(1)
             .maybeSingle(),
@@ -110,12 +112,13 @@ export async function GET(
 
         const hasPaid = !!paymentRes.data?.id;
         const report = reportRes.data;
-        const deepRunInProgress = !!runRes.data?.id;
-        const reportStatus = report?.email_delivered_at
-          ? 'delivered'
-          : hasPaid || deepRunInProgress
-            ? 'generating'
-            : 'none';
+        const reportStatus = deriveReportStatus({
+          emailDelivered: !!report?.email_delivered_at,
+          hasReport: !!report?.id,
+          hasPaid,
+          run: runRes.data ?? null,
+          nowMs: Date.now(),
+        });
 
         const fullResults = scan.full_results_json as {
           categoryScores?: unknown[];
