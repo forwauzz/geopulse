@@ -7,6 +7,12 @@ import { resolveFirstRunAt } from '@/lib/server/montreal-time';
 import { normalizeProspectUrl, parseProspectImport } from '@/lib/server/outreach-import';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import {
+  addSegmentToSequence,
+  importContacts,
+  normalizeSegment,
+  parseContactImport,
+} from '@/lib/server/outreach-contacts';
+import {
   normalizeOutreachCadence,
   runOutreachForProspect,
   type OutreachProspect,
@@ -293,5 +299,62 @@ export async function runOutreachNowAction(formData: FormData): Promise<void> {
     prospect,
     nowMs: Date.now(),
   });
+  revalidatePath('/admin/outreach');
+}
+
+// ── Contact bank (issue #135) — save now, sequence later ─────────────────────
+
+export async function importOutreachContactsAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const segment = normalizeSegment(String(formData.get('segment') ?? ''));
+  const text = String(formData.get('contacts') ?? '');
+  if (!segment || !text.trim()) return;
+
+  const tags = String(formData.get('tags') ?? '')
+    .split(',')
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 8);
+
+  const parsed = parseContactImport(text);
+  const result = await importContacts(ctx.adminDb, parsed.rows, {
+    segment,
+    tags,
+    source: 'admin-import',
+  });
+  revalidatePath('/admin/outreach');
+  redirect(
+    `/admin/outreach?contactsImported=${String(result.imported)}&contactsInvalid=${String(parsed.invalid.length)}${result.error ? `&contactsError=${encodeURIComponent(result.error.slice(0, 120))}` : ''}`
+  );
+}
+
+export async function addSegmentToSequenceAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const segment = normalizeSegment(String(formData.get('segment') ?? ''));
+  if (!segment) return;
+  const firstRunAt = resolveFirstRunAt(String(formData.get('startAt') ?? ''), Date.now());
+
+  const result = await addSegmentToSequence({
+    supabase: ctx.adminDb,
+    segment,
+    startMs: new Date(firstRunAt).getTime(),
+    cadence: normalizeOutreachCadence(String(formData.get('cadence') ?? 'monthly')),
+  });
+  revalidatePath('/admin/outreach');
+  redirect(
+    `/admin/outreach?seqAdded=${String(result.added)}&seqSkipped=${String(result.skippedExisting + result.skippedUnsubscribed)}`
+  );
+}
+
+export async function deleteOutreachContactAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+  const id = String(formData.get('contactId') ?? '').trim();
+  if (!id) return;
+  await ctx.adminDb.from('outreach_contacts').delete().eq('id', id);
   revalidatePath('/admin/outreach');
 }
