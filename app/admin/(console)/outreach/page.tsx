@@ -117,6 +117,53 @@ export default async function AdminOutreachPage({
     sendsByProspect.set(send.prospect_id, list);
   }
 
+  // Subscribed (funnel roll-up): which prospect emails converted to a monitoring subscription.
+  // Email-keyed join — degrades to empty if the table isn't there yet.
+  const prospectEmails = prospects.map((p) => p.email.toLowerCase());
+  let subscribedEmails = new Set<string>();
+  if (prospectEmails.length > 0) {
+    try {
+      const { data: subs } = await ctx.adminDb
+        .from('monitoring_subscriptions')
+        .select('email')
+        .in('status', ['active', 'trialing'])
+        .in('email', prospectEmails);
+      subscribedEmails = new Set(((subs ?? []) as { email: string }[]).map((s) => s.email.toLowerCase()));
+    } catch {
+      subscribedEmails = new Set();
+    }
+  }
+  const subscribedProspectIds = new Set(
+    prospects.filter((p) => subscribedEmails.has(p.email.toLowerCase())).map((p) => p.id)
+  );
+
+  // Full funnel roll-up (prospect-level): Sent → Opened → Clicked → Full audit → Subscribed.
+  const flags = prospects.map((p) => {
+    const sends = sendsByProspect.get(p.id) ?? [];
+    return {
+      sent: sends.length > 0 || Boolean(p.lastScanId),
+      opened: sends.some((s) => s.opened_at != null),
+      clicked: sends.some((s) => s.scan_id != null && viewedScanIds.has(s.scan_id)),
+      fullAudit: sends.some((s) => s.scan_id != null && fullAuditScanIds.has(s.scan_id)),
+      subscribed: subscribedProspectIds.has(p.id),
+    };
+  });
+  const funnel = {
+    total: prospects.length,
+    sent: flags.filter((f) => f.sent).length,
+    opened: flags.filter((f) => f.opened).length,
+    clicked: flags.filter((f) => f.clicked).length,
+    fullAudit: flags.filter((f) => f.fullAudit).length,
+    subscribed: flags.filter((f) => f.subscribed).length,
+  };
+  const funnelStages: { label: string; value: number; color: string }[] = [
+    { label: 'Sent', value: funnel.sent, color: 'text-on-background' },
+    { label: 'Opened', value: funnel.opened, color: 'text-indigo-600 dark:text-indigo-400' },
+    { label: 'Clicked', value: funnel.clicked, color: 'text-sky-600 dark:text-sky-400' },
+    { label: 'Full audit', value: funnel.fullAudit, color: 'text-amber-500 dark:text-amber-400' },
+    { label: 'Subscribed', value: funnel.subscribed, color: 'text-emerald-600 dark:text-emerald-400' },
+  ];
+
   return (
     <div className="space-y-6">
       <header>
@@ -127,6 +174,35 @@ export default async function AdminOutreachPage({
           their side. The full report link is public; the report page carries the sign-up CTA.
         </p>
       </header>
+
+      {/* Funnel roll-up — Sent → Opened → Clicked → Full audit → Subscribed, with drop-off %. */}
+      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+        <div className="flex items-baseline justify-between">
+          <h2 className="font-sans text-lg font-bold text-on-background">Funnel</h2>
+          <span className="font-label text-[0.6rem] uppercase tracking-widest text-on-surface-variant">
+            {funnel.total} prospects
+          </span>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
+          {funnelStages.map((stage, i) => {
+            const prev = i === 0 ? funnel.total : funnelStages[i - 1]!.value;
+            const rate = prev > 0 ? Math.round((stage.value / prev) * 100) : 0;
+            return (
+              <div key={stage.label} className="text-center">
+                <p className={`font-sans text-3xl font-black tracking-tighter md:text-4xl ${stage.color}`}>
+                  {stage.value}
+                </p>
+                <p className="mt-1 font-label text-[0.6rem] uppercase tracking-widest text-on-surface-variant">
+                  {stage.label}
+                </p>
+                <p className="mt-0.5 font-sans text-xs text-on-surface-variant/70">
+                  {i === 0 ? `of ${funnel.total}` : `${rate}% of ${funnelStages[i - 1]!.label.toLowerCase()}`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
         <h2 className="font-sans text-lg font-bold text-on-background">Add prospect</h2>
@@ -518,6 +594,12 @@ export default async function AdminOutreachPage({
                               <span className="ml-1 inline-flex items-center gap-0.5 rounded-md bg-green-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-800 dark:bg-green-500/15 dark:text-green-200">
                                 <span className="material-symbols-outlined text-[12px]" aria-hidden>task_alt</span>
                                 Full audit
+                              </span>
+                            )}
+                            {subscribedProspectIds.has(prospect.id) && (
+                              <span className="ml-1 inline-flex items-center gap-0.5 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200">
+                                <span className="material-symbols-outlined text-[12px]" aria-hidden>paid</span>
+                                Subscribed
                               </span>
                             )}
                           </>
