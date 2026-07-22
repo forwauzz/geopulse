@@ -23,10 +23,10 @@ export interface AiEngine {
 
 /** The engines we surface, in display order. Named to match the buyer's mental model. */
 export const AI_ENGINES: readonly AiEngine[] = [
-  { key: 'chatgpt', name: 'ChatGPT', file: 'openai.svg', match: ['openai', 'chatgpt', 'oai-searchbot', 'gptbot', 'oai'] },
-  { key: 'google', name: 'Google', file: 'google.svg', match: ['google', 'gemini', 'ai overview', 'googlebot', 'google-extended'] },
-  { key: 'claude', name: 'Claude', file: 'claude.svg', match: ['claude', 'anthropic', 'claudebot', 'claude-searchbot'] },
-  { key: 'copilot', name: 'Copilot', file: 'copilot.svg', match: ['copilot', 'bing', 'bingbot', 'microsoft'] },
+  { key: 'chatgpt', name: 'OpenAI ChatGPT', file: 'openai.svg', match: ['openai', 'chatgpt', 'oai-searchbot', 'gptbot', 'oai'] },
+  { key: 'google', name: 'Google', file: 'google.png', match: ['google', 'gemini', 'ai overview', 'googlebot', 'google-extended'] },
+  { key: 'claude', name: 'Anthropic Claude', file: 'claude.svg', match: ['claude', 'anthropic', 'claudebot', 'claude-searchbot'] },
+  { key: 'copilot', name: 'Microsoft Bing / Copilot', file: 'copilot.svg', match: ['copilot', 'bing', 'bingbot', 'microsoft'] },
   { key: 'perplexity', name: 'Perplexity', file: 'perplexity.svg', match: ['perplexity', 'perplexitybot'] },
 ] as const;
 
@@ -66,17 +66,30 @@ export function EngineLogo({
   );
 }
 
-/** Landing-hero strip: official mark + wordmark for each engine (wordmark keeps it legible if an
- *  asset is missing). */
+/**
+ * Landing-hero strip: the official brand logos, rendered at a consistent height on a light panel so
+ * dark wordmarks stay visible in both light and dark themes. Logos speak for themselves — no extra
+ * text. A caption frames it as nominative ("the engines we check").
+ */
 export function AiEngineStrip() {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4">
-      {AI_ENGINES.map((engine) => (
-        <span key={engine.key} className="inline-flex items-center gap-2 opacity-90 transition hover:opacity-100">
-          <EngineLogo engine={engine} className="h-6 w-6" />
-          <span className="font-sans text-sm font-bold tracking-tight text-on-background">{engine.name}</span>
-        </span>
-      ))}
+    <div className="mx-auto max-w-3xl">
+      <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-5 rounded-2xl border border-outline-variant/15 bg-white px-6 py-5 shadow-sm">
+        {AI_ENGINES.map((engine) => (
+          <img
+            key={engine.key}
+            // eslint-disable-next-line @next/next/no-img-element -- static brand asset
+            src={`${LOGO_BASE}/${engine.file}`}
+            alt={`${engine.name} logo`}
+            className="h-6 w-auto object-contain md:h-7"
+            loading="lazy"
+            decoding="async"
+          />
+        ))}
+      </div>
+      <p className="mt-3 text-center font-body text-xs text-on-surface-variant">
+        The AI answer engines we check your visibility across.
+      </p>
     </div>
   );
 }
