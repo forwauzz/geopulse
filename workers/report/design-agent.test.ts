@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCoverDesignCopy, captureHeroScreenshot, extractSiteIdentity, isDesignAgentEnabled } from './design-agent';
+import { buildCoverDesignCopy, captureHeroScreenshot, extractBrandColorFromCss, extractSiteIdentity, isDesignAgentEnabled } from './design-agent';
 import { AGENT_REGISTRY_VERSION } from '../scan-engine/agent-registry';
 import { buildDeepAuditPdf } from './build-deep-audit-pdf';
 
@@ -156,5 +156,45 @@ describe('PDF cover with design (integration smoke)', () => {
       },
     });
     expect(String.fromCharCode(bytes[0]!, bytes[1]!, bytes[2]!, bytes[3]!)).toBe('%PDF');
+  });
+});
+
+describe('extractBrandColorFromCss (issue #134 — real brand extraction)', () => {
+  it('prefers named custom properties outright', () => {
+    const html = `<style>:root{--primary-color:#1a6fd4;--muted:#888888;} .btn{background:#e74c3c}</style>`;
+    expect(extractBrandColorFromCss(html)).toBe('#1a6fd4');
+  });
+
+  it('falls back to the most frequent saturated colour, ignoring neutrals', () => {
+    const html = `<style>
+      body{color:#111111;background:#ffffff}
+      .nav{background:#0a58c7}.hero{background:#0a58c7}.cta{border-color:#0a58c7}
+      .accent{color:#f0f0f0}.one-off{color:#00aa55}
+    </style>`;
+    expect(extractBrandColorFromCss(html)).toBe('#0a58c7');
+  });
+
+  it('returns null when the page is genuinely monochrome', () => {
+    const html = `<style>body{color:#000;background:#fff;border:#eeeeee}</style>`;
+    expect(extractBrandColorFromCss(html)).toBeNull();
+  });
+
+  it('never returns a one-off hex (noise floor of 2 occurrences)', () => {
+    const html = `<style>.x{color:#c0392b}</style>`;
+    expect(extractBrandColorFromCss(html)).toBeNull();
+  });
+});
+
+describe('extractSiteIdentity dangling separators (issue #134)', () => {
+  it('trims trailing separator artifacts from og:site_name', () => {
+    const html = `<meta property="og:site_name" content="Mipsmedia - " />`;
+    expect(extractSiteIdentity(html).siteName).toBe('Mipsmedia');
+  });
+});
+
+describe('buildCoverDesignCopy timestamp dedupe (issue #134)', () => {
+  it('no longer repeats the Generated line in preparedBy', () => {
+    const copy = buildCoverDesignCopy({ domain: 'a.ca', checkCount: 24, generatedDate: '2026-07-22, 04:00 UTC' });
+    expect(copy.preparedByLines.join(' ')).not.toContain('Generated');
   });
 });

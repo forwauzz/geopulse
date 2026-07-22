@@ -55,6 +55,10 @@ export function extractSiteIdentity(html: string): { themeColor: string | null; 
       siteName = title.split(/\s+[|\-–—·]\s+/)[0]?.trim() || null;
     }
   }
+  // "Mipsmedia -" on a live cover (issue #134): strip dangling separators either side.
+  if (siteName) {
+    siteName = siteName.replace(/^[\s|\-–—·:•]+/, '').replace(/[\s|\-–—·:•]+$/, '').trim() || null;
+  }
   if (siteName && (siteName.length < 2 || siteName.length > 48)) siteName = null;
 
   // Normalize 3/4/8-digit hex to 6 digits for pdf parsing (drop alpha).
@@ -69,6 +73,100 @@ export function extractSiteIdentity(html: string): { themeColor: string | null; 
   }
 
   return { themeColor: normalizedTheme, siteName };
+}
+
+/**
+ * Mine the page's CSS for its real brand colour (issue #134). Most sites never declare
+ * meta theme-color — the brand lives in stylesheets. Strategy: named custom properties
+ * (--brand/--primary/--accent/--main/--theme) win outright; otherwise the most frequent
+ * SATURATED, mid-lightness hex in the document. Neutrals (whites/blacks/greys) never
+ * qualify — a grey report is the failure mode we are fixing, not a brand.
+ */
+export function extractBrandColorFromCss(html: string): string | null {
+  const normalize = (raw: string): string | null => {
+    let h = raw.replace('#', '').toLowerCase();
+    if (h.length === 4 || h.length === 8) h = h.slice(0, h.length === 4 ? 3 : 6);
+    if (h.length === 3) h = `${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`;
+    return h.length === 6 ? `#${h}` : null;
+  };
+  const isBrandLike = (hex: string): boolean => {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    const s = max === min ? 0 : (max - min) / (1 - Math.abs(2 * l - 1));
+    return s >= 0.25 && l >= 0.12 && l <= 0.72;
+  };
+
+  // 1) Named custom properties — the site telling us its own palette.
+  const propRe = /--(?:brand|primary|main|accent|theme)[\w-]*\s*:\s*(#[0-9a-fA-F]{3,8})\b/g;
+  for (const match of html.matchAll(propRe)) {
+    const hex = normalize(match[1] ?? '');
+    if (hex && isBrandLike(hex)) return hex;
+  }
+
+  // 2) Frequency vote across every hex in the document (styles, SVGs, inline attrs).
+  const counts = new Map<string, number>();
+  for (const match of html.matchAll(/#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g)) {
+    const hex = normalize(match[0]);
+    if (!hex || !isBrandLike(hex)) continue;
+    counts.set(hex, (counts.get(hex) ?? 0) + 1);
+  }
+  let best: string | null = null;
+  let bestCount = 1; // require at least 2 occurrences — a one-off hex is noise
+  for (const [hex, count] of counts) {
+    if (count > bestCount) {
+      best = hex;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+const RENDERED_HTML_TIMEOUT_MS = 20_000;
+const RENDERED_HTML_MAX_BYTES = 900_000;
+
+/**
+ * Rendered-HTML fallback via Browser Rendering /content (issue #134): the same real-Chrome
+ * door that already captures the hero screenshot through WAFs that 403 our direct fetch
+ * (observed on mipsmedia.com). Null on any failure — identity extraction just degrades.
+ */
+export async function fetchRenderedHtml(
+  env: BrowserRenderEnv,
+  url: string,
+  deps?: { fetchImpl?: typeof fetch }
+): Promise<string | null> {
+  const config = browserRenderConfigFromEnv(env);
+  if (config.mode === 'off' || !hasBrowserRenderingCredentials(config)) return null;
+
+  const validation = await validateEngineFetchUrl(url);
+  if (!validation.ok) return null;
+
+  const fetchImpl = deps?.fetchImpl ?? fetch;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${config.accountId ?? ''}/browser-rendering/content?cacheTTL=3600`;
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.apiToken ?? ''}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: validation.safeUrl,
+        gotoOptions: { waitUntil: 'networkidle2', timeout: 15_000 },
+      }),
+      signal: AbortSignal.timeout(RENDERED_HTML_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as { success?: boolean; result?: string };
+    const html = typeof payload.result === 'string' ? payload.result : null;
+    if (!html || html.length === 0) return null;
+    return html.slice(0, RENDERED_HTML_MAX_BYTES);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -145,10 +243,11 @@ export function buildCoverDesignCopy(input: {
     : input.domain;
   return {
     preparedForLines: [`Prepared for the team at ${who}`],
+    // No Generated line here — the cover already prints it under the domain (issue #134
+    // fixed the duplicate); keep provenance only.
     preparedByLines: [
       'Prepared by the GEO-Pulse team',
       'getgeopulse.com · Montréal, Québec',
-      `Generated ${input.generatedDate}`,
     ],
     credibilityLines: [
       `${String(input.checkCount)} checks across retrieval eligibility, AI understanding & trust, and site hygiene`,
@@ -170,23 +269,30 @@ export async function buildCoverDesign(args: {
   const enabled = await isDesignAgentEnabled(args.supabase);
   if (!enabled) return null;
 
-  // Their site's own identity signals — theme colour + display name (issue #103).
-  // One bounded fetch; every failure degrades to the un-themed default.
+  // Their site's own identity signals — theme colour + display name (issues #103/#134).
+  // Ladder: direct fetch → Browser Rendering rendered HTML (beats WAFs, same door as the
+  // screenshot) → meta theme-color → CSS brand-colour mining. Every rung degrades quietly.
   let themeColor: string | null = null;
   let siteName: string | null = null;
+  let html: string | null = null;
   try {
     const page = await fetchGateText(args.seedUrl, {
       maxBytes: 300_000,
       timeoutMs: 10_000,
       acceptHeader: 'text/html,*/*',
     });
-    if (page.ok) {
-      const identity = extractSiteIdentity(page.text);
-      themeColor = identity.themeColor;
-      siteName = identity.siteName;
-    }
+    if (page.ok) html = page.text;
   } catch {
-    /* un-themed cover is a fine cover */
+    /* fall through to rendered HTML */
+  }
+  if (!html) {
+    html = await fetchRenderedHtml(args.env, args.seedUrl);
+  }
+  if (html) {
+    const identity = extractSiteIdentity(html);
+    siteName = identity.siteName;
+    // meta theme-color when honest, else mine the CSS for the real brand colour.
+    themeColor = identity.themeColor ?? extractBrandColorFromCss(html);
   }
 
   const copy = buildCoverDesignCopy({
