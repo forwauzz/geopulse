@@ -33,6 +33,7 @@ import {
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
 import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
 import { runCompetitorCohortSweep, type CohortEnvLike } from '../lib/server/competitor-cohorts';
+import { runEngagementDigest } from '../lib/server/engagement-digest';
 import { buildResearchDigestHtml, runResearchSweep } from '../lib/server/research-agent';
 import { isAgentEnabled } from '../lib/server/agent-flags';
 import { registerSelfFetch } from './lib/fetch-gate';
@@ -344,6 +345,27 @@ export default {
       // Outreach v1 — recurring scorecard emails to admin-added prospects (no account needed).
       // Self-gates on `next_run_at`; a tick with nothing due is a cheap no-op.
       // Admin-flagged (fail-open): a row in automation_settings can switch it off.
+      // Engagement digest (issue #131): daily 12:00 UTC ping to the operator, only when the
+      // last 24h had funnel activity. Cheap (a few reads), so it runs before the heavy stages.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('engagement_digest');
+        const digest = await runEngagementDigest({
+          supabase,
+          env: env as unknown as { RESEND_API_KEY?: string; RESEND_FROM_EMAIL?: string },
+          nowMs: Date.now(),
+        });
+        if (digest.sent) {
+          structuredLog('engagement_digest_tick', { sent: true }, 'info');
+        }
+      } catch (err) {
+        structuredError('engagement_digest_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
       try {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },

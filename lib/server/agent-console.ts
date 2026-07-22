@@ -67,11 +67,13 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     researchEnabled,
     designEnabled,
     cohortEnabled,
+    digestEnabled,
     outreachSetting,
     researchSetting,
     designSetting,
     marketingSetting,
     cohortSetting,
+    digestSetting,
     selfImprove,
     templatesTable,
     researchTable,
@@ -82,17 +84,24 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     isAgentEnabled(supabase, 'research_agent', { failOpen: true }),
     isAgentEnabled(supabase, 'report_design_agent', { failOpen: true }),
     isAgentEnabled(supabase, 'competitor_benchmark', { failOpen: false }),
+    isAgentEnabled(supabase, 'engagement_digest', { failOpen: true }),
     loadAutomationSetting(supabase, 'outreach_sweep'),
     loadAutomationSetting(supabase, 'research_agent'),
     loadAutomationSetting(supabase, 'report_design_agent'),
     loadAutomationSetting(supabase, 'marketing_autopilot'),
     loadAutomationSetting(supabase, 'competitor_benchmark'),
+    loadAutomationSetting(supabase, 'engagement_digest'),
     loadSelfImprovementSettings(supabase),
     tableExists(supabase, 'outreach_templates'),
     tableExists(supabase, 'research_watchlist'),
     hasConnectedChannel(supabase),
     countCohortDomains(supabase),
   ]);
+
+  const digestRecipientSet = Boolean(
+    (typeof digestSetting.config['recipient'] === 'string' && (digestSetting.config['recipient'] as string).trim()) ||
+      selfImprove.reportRecipient
+  );
 
   const resendReady = Boolean(env['RESEND_API_KEY']?.trim() && env['RESEND_FROM_EMAIL']?.trim());
   const browserRenderReady = Boolean(
@@ -142,6 +151,21 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       enabled: designEnabled,
       killSwitch: designSetting.killSwitch,
       blockers: browserRenderReady ? [] : ['Browser Rendering credentials/mode not set — covers render without the screenshot'],
+    },
+    {
+      key: 'engagement_digest',
+      name: 'Engagement digest',
+      audience: 'internal',
+      description:
+        'Daily 8 AM ping, only when something happened: opens, report views, full audits, new leads. Silence = nothing to act on.',
+      control: 'flag',
+      flagFeature: 'engagement_digest',
+      enabled: digestEnabled,
+      killSwitch: digestSetting.killSwitch,
+      blockers: [
+        ...(resendReady ? [] : ['Resend email credentials missing — digest cannot send']),
+        ...(digestRecipientSet ? [] : ['No recipient — set one in automation_settings config or the self-improvement recipient']),
+      ],
     },
     {
       key: 'competitor_benchmark',
