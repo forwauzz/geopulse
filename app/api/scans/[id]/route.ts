@@ -83,7 +83,7 @@ export async function GET(
       }
 
       if (canAccessAsOwner || canAccessAsAgency || canAccessAsStartupMember) {
-        const [paymentRes, reportRes] = await Promise.all([
+        const [paymentRes, reportRes, runRes] = await Promise.all([
           adminDb
             .from('payments')
             .select('id')
@@ -98,11 +98,24 @@ export async function GET(
             .eq('type', 'deep_audit')
             .limit(1)
             .maybeSingle(),
+          // A full-audit run exists → the report is generating. In free mode there's no payment,
+          // so without this the report page sees 'none' and bails before the crawl finishes.
+          adminDb
+            .from('scan_runs')
+            .select('id')
+            .eq('scan_id', id)
+            .limit(1)
+            .maybeSingle(),
         ]);
 
         const hasPaid = !!paymentRes.data?.id;
         const report = reportRes.data;
-        const reportStatus = report?.email_delivered_at ? 'delivered' : hasPaid ? 'generating' : 'none';
+        const deepRunInProgress = !!runRes.data?.id;
+        const reportStatus = report?.email_delivered_at
+          ? 'delivered'
+          : hasPaid || deepRunInProgress
+            ? 'generating'
+            : 'none';
 
         const fullResults = scan.full_results_json as {
           categoryScores?: unknown[];

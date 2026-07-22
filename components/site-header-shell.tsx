@@ -139,7 +139,7 @@ export function SiteHeaderShell({
                   Sign in
                 </Link>
                 <Link
-                  href="/"
+                  href="/#audit"
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
                 >
                   Free audit
