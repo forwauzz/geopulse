@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 function fmt(value: string | null): string {
   if (!value) return '—';
-  return new Date(value).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return new Date(value).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Toronto' });
 }
 
 // A server-action toggle: one submit button that flips the current boolean.
