@@ -163,7 +163,8 @@ export default async function HomePage({
   const siteKey = getTurnstileSiteKey();
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
   // When Pricing is hidden by the App Settings flag, point CTAs at sign-in instead.
-  const gapsCtaHref = (await loadUiFlags()).show_pricing ? '/pricing' : '/login';
+  const uiFlags = await loadUiFlags();
+  const gapsCtaHref = uiFlags.show_pricing ? '/pricing' : '/login';
   const pageModifiedAt = new Date().toISOString();
   const organizationSchema = buildOrganizationStructuredData({
     url: siteUrl,
@@ -252,6 +253,12 @@ export default async function HomePage({
             answers, turns gaps into prioritized improvements, and helps you verify whether visibility
             is improving over time.
           </p>
+          {uiFlags.show_monitor_subscription ? (
+            <p className="mx-auto mt-5 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/5 px-4 py-1.5 font-body text-sm text-on-surface-variant">
+              <span className="material-symbols-outlined text-base text-primary" aria-hidden>autorenew</span>
+              Free instant audit — then keep your site monitored monthly from <strong className="text-on-background">$39/mo</strong>.
+            </p>
+          ) : null}
           <div className="mx-auto mt-10 max-w-5xl">
             {siteKey ? (
               <ScanForm
