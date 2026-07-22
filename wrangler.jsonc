@@ -16,6 +16,13 @@
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // The hourly cron runs every agent stage plus up to 2 full site scans (competitor cohort);
+  // the default 30s CPU ceiling killed the invocation mid-scan twice on 2026-07-22 (issue #104
+  // fingerprint). 300s is the platform max; billing is by actual usage, so no idle cost.
+  "limits": {
+    "cpu_ms": 300000
+  },
+
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
