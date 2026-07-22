@@ -131,18 +131,18 @@ export function SiteHeaderShell({
                   </Link>
                 ) : null}
                 {/*
-                  Returning users need a way in from the header. Without this the only "Sign in"
-                  link on the whole page was in the footer, so signing in meant scrolling past the
-                  entire landing page to find it. Sign-up keeps the primary treatment.
+                  The free thing is the AUDIT (anonymous, no account) — not a free signup. So the
+                  primary CTA drives cold visitors to the hero scan, and "Sign in" stays for
+                  returning agency/startup dashboard users (its only other link is in the footer).
                 */}
                 <Link href="/login?mode=signin" className={primaryNavLinkClassName}>
                   Sign in
                 </Link>
                 <Link
-                  href="/login"
+                  href="/"
                   className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
                 >
-                  Sign up for free
+                  Free audit
                 </Link>
               </div>
               {/* Admin link removed — admins use /login then navigate to /admin directly */}
