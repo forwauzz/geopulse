@@ -185,8 +185,9 @@ export default async function AdminOutreachPage({
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
           {funnelStages.map((stage, i) => {
-            const prev = i === 0 ? funnel.total : funnelStages[i - 1]!.value;
-            const rate = prev > 0 ? Math.round((stage.value / prev) * 100) : 0;
+            // Each stage as a share of Sent — open-pixel undercounting means the stages aren't
+            // strictly nested (clicks can exceed opens), so "% of sent" reads honestly.
+            const rate = funnel.sent > 0 ? Math.round((stage.value / funnel.sent) * 100) : 0;
             return (
               <div key={stage.label} className="text-center">
                 <p className={`font-sans text-3xl font-black tracking-tighter md:text-4xl ${stage.color}`}>
@@ -196,7 +197,7 @@ export default async function AdminOutreachPage({
                   {stage.label}
                 </p>
                 <p className="mt-0.5 font-sans text-xs text-on-surface-variant/70">
-                  {i === 0 ? `of ${funnel.total}` : `${rate}% of ${funnelStages[i - 1]!.label.toLowerCase()}`}
+                  {i === 0 ? `of ${funnel.total}` : `${rate}% of sent`}
                 </p>
               </div>
             );
