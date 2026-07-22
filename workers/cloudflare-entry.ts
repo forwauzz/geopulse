@@ -33,6 +33,7 @@ import {
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
 import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
 import { runCompetitorCohortSweep, type CohortEnvLike } from '../lib/server/competitor-cohorts';
+import { runDueMonitorAudits } from '../lib/server/monitor-subscription';
 import { runEngagementDigest } from '../lib/server/engagement-digest';
 import { buildResearchDigestHtml, runResearchSweep } from '../lib/server/research-agent';
 import { isAgentEnabled } from '../lib/server/agent-flags';
@@ -450,6 +451,27 @@ export default {
         structuredError('recurring_audits_sweep_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
+      }
+
+      // Monitoring subscribers ($39/mo) — re-audit due sites and email the monthly report. Paying
+      // customers, so this runs before the internal cohort/benchmark long-runners. Bounded to a
+      // couple scans per tick to respect the Free-plan CPU budget (same constraint as the cohort).
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('monitor_audits');
+        const result = await runDueMonitorAudits({
+          supabase,
+          env: env as unknown as RecurringEnvLike,
+          nowMs: Date.now(),
+          limit: 2,
+        });
+        if (result.due > 0) {
+          structuredLog('monitor_audits_tick', { due: result.due, ran: result.ran, failed: result.failed }, 'info');
+        }
+      } catch (err) {
+        structuredError('monitor_audits_error', { error: err instanceof Error ? err.message : 'unknown' });
       }
 
       // Local-competitor cohort sweep (issue #118) — FAIL-CLOSED flag, max 2 scans per tick,
