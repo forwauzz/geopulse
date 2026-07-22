@@ -5,6 +5,7 @@
  * schedules via the same `runFreeScan` the product uses, persists a normal scan (run_source
  * 'recurring'), and advances the schedule. Pure schedule math is unit-tested.
  */
+import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ctaButton, emailShell, escapeEmailHtml, scoreBlock } from './email-theme';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
@@ -28,6 +29,17 @@ function sameHost(a: string, b: string): boolean {
   }
 }
 export const CADENCE_DAYS: Record<Cadence, number> = { daily: 1, weekly: 7 };
+
+/**
+ * Mint an unguessable share slug for a recurring-audit scan (issue #128). Recurring scans keep the
+ * owner's user_id, so the id-based public route rejects them ("This scan is private"); the slug is
+ * the capability that lets a signed-out recipient open the report at /share/<slug> for 90 days.
+ * NB: we do NOT also set scans.is_public — that would expose the row to the anon-key
+ * `scans_public_read` RLS policy; the slug (served via service role) is the only access path.
+ */
+export function mintShareSlug(): string {
+  return randomUUID().replace(/-/g, '');
+}
 
 export type RecurringSchedule = {
   id: string;
@@ -128,13 +140,15 @@ async function sendRecurringAuditEmail(
   scanUrl: string,
   score: number,
   letterGrade: string,
-  scanId: string
+  shareSlug: string
 ): Promise<void> {
   const key = env.RESEND_API_KEY?.trim();
   const from = env.RESEND_FROM_EMAIL?.trim();
   if (!key || !from) return;
   const base = (env.NEXT_PUBLIC_APP_URL?.trim() || 'https://getgeopulse.com').replace(/\/$/, '');
-  const link = `${base}/results/${scanId}`;
+  // Slug-based share route (issue #128): recurring scans keep the owner's user_id, so a
+  // signed-out recipient can't open /results/<id>. The slug link works without sign-in.
+  const link = `${base}/share/${shareSlug}`;
   const html = emailShell({
     kicker: 'Scheduled audit · AI search readiness',
     mastheadNote: 'Recurring audit',
@@ -202,6 +216,7 @@ export async function runDueRecurringAudits(args: {
     try {
       const scan = await runFreeScan(s.url, llm);
       if (scan.ok) {
+        const shareSlug = mintShareSlug();
         const { data: scanRow } = await supabase
           .from('scans')
           .insert({
@@ -219,6 +234,8 @@ export async function runDueRecurringAudits(args: {
             user_id: s.userId,
             startup_workspace_id: s.startupWorkspaceId,
             run_source: 'recurring',
+            // Shareable via unguessable slug so the emailed recipient can open it signed-out (#128).
+            share_slug: shareSlug,
           })
           .select('id')
           .single();
@@ -233,7 +250,7 @@ export async function runDueRecurringAudits(args: {
         if (scanId) {
           try {
             const to = s.reportEmail || (await resolveUserEmail(supabase, s.userId));
-            if (to) await sendRecurringAuditEmail(env, to, scan.finalUrl, scan.output.score, scan.output.letterGrade, scanId);
+            if (to) await sendRecurringAuditEmail(env, to, scan.finalUrl, scan.output.score, scan.output.letterGrade, shareSlug);
           } catch {
             /* email is best-effort */
           }
@@ -296,6 +313,7 @@ export async function runUserAuditNow(
   const scan = await runFreeScan(schedule.url, buildLlm(env));
   if (!scan.ok) return { ok: false, reason: scan.reason };
 
+  const shareSlug = mintShareSlug();
   const { data: scanRow } = await supabase
     .from('scans')
     .insert({
@@ -309,6 +327,8 @@ export async function runUserAuditNow(
       user_id: schedule.userId,
       startup_workspace_id: schedule.startupWorkspaceId,
       run_source: 'recurring',
+      // Shareable via unguessable slug so the emailed recipient can open it signed-out (#128).
+      share_slug: shareSlug,
     })
     .select('id')
     .single();
@@ -323,6 +343,6 @@ export async function runUserAuditNow(
   if (!scanId) return { ok: false, reason: 'insert_failed' };
 
   const to = schedule.reportEmail || (await resolveUserEmail(supabase, userId));
-  if (to) await sendRecurringAuditEmail(env, to, scan.finalUrl, scan.output.score, scan.output.letterGrade, scanId);
+  if (to) await sendRecurringAuditEmail(env, to, scan.finalUrl, scan.output.score, scan.output.letterGrade, shareSlug);
   return { ok: true, scanId };
 }

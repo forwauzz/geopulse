@@ -44,7 +44,14 @@ type ScanData = {
   deepAuditAvailable: boolean;
 };
 
-type Props = { scanId: string; turnstileSiteKey: string; checkoutState?: string | null; showCompetitorSearch?: boolean };
+type Props = {
+  scanId: string;
+  turnstileSiteKey: string;
+  checkoutState?: string | null;
+  showCompetitorSearch?: boolean;
+  /** When set, load the scan via the public share-slug route (issue #128) instead of by id. */
+  shareSlug?: string;
+};
 type LoadError = 'not_found' | 'expired' | 'forbidden' | 'load_failed' | 'network' | null;
 
 function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
@@ -69,7 +76,7 @@ function domainFromUrl(url: string): string {
 const POLL_INTERVAL_MS = 10_000;
 const POLL_MAX_MS = 120_000;
 
-export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompetitorSearch = false }: Props) {
+export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompetitorSearch = false, shareSlug }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError>(null);
   const [data, setData] = useState<ScanData | null>(null);
@@ -81,7 +88,10 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
   useLongWaitEffect(data?.reportStatus === 'generating', generatingJourney);
 
   const fetchScan = useCallback(async (): Promise<{ data: ScanData | null; error: LoadError }> => {
-    const res = await fetch(`/api/scans/${scanId}`, { cache: 'no-store' });
+    const endpoint = shareSlug
+      ? `/api/scans/share/${encodeURIComponent(shareSlug)}`
+      : `/api/scans/${scanId}`;
+    const res = await fetch(endpoint, { cache: 'no-store' });
     if (!res.ok) {
       if (res.status === 404) return { data: null, error: 'not_found' };
       if (res.status === 403) return { data: null, error: 'forbidden' };
@@ -131,7 +141,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       },
       error: null,
     };
-  }, [scanId]);
+  }, [scanId, shareSlug]);
 
   useEffect(() => {
     let cancelled = false;
