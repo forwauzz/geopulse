@@ -10,6 +10,7 @@ const TOGGLEABLE: ReadonlySet<AutomationFeature> = new Set<AutomationFeature>([
   'report_design_agent',
   'marketing_autopilot',
   'competitor_benchmark',
+  'engagement_digest',
 ]);
 
 export async function setAgentFlag(formData: FormData): Promise<void> {

@@ -10,7 +10,8 @@ export type AutomationFeature =
   | 'report_design_agent'
   | 'outreach_sweep'
   | 'research_agent'
-  | 'competitor_benchmark';
+  | 'competitor_benchmark'
+  | 'engagement_digest';
 
 export type AutomationSetting = {
   feature: string;

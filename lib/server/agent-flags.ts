@@ -16,7 +16,8 @@ export type AgentFlagFeature =
   | 'report_design_agent'
   | 'outreach_sweep'
   | 'research_agent'
-  | 'competitor_benchmark';
+  | 'competitor_benchmark'
+  | 'engagement_digest';
 
 export async function isAgentEnabled(
   supabase: SupabaseClient,
