@@ -530,6 +530,7 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
         startupAccessTitle={startupAccessTitle}
         startupAccessBody={startupAccessBody}
         contextLine={scanHeroContextLine}
+        authenticated
       />
 
       {/* ── Startup workspace section ────────────────────────── */}

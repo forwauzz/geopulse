@@ -75,8 +75,6 @@ export type AuditDashboardView = {
     readonly percent: number;
     readonly parts: ReadonlyArray<{ readonly label: string; readonly passed: boolean }>;
   } | null;
-  /** Chronological scores across the user's scans; a trend needs at least 2 points. */
-  readonly trendPoints: ReadonlyArray<{ readonly score: number; readonly createdAt: string | null }>;
   /** Full chronological timeline incl. not-tested runs (null score = gap), for the trend module. */
   readonly timeline: ScoreTimePoint[];
   readonly priorityActions: ReadonlyArray<{
@@ -250,10 +248,6 @@ export function buildAuditDashboardView(rows: AuditScanRow[]): AuditDashboardVie
         : null,
     accessMatrix: newest ? deriveAccessMatrix(newest) : null,
     structuredData: newest ? deriveStructuredDataHealth(latestIssues) : null,
-    trendPoints: [...rows]
-      .reverse()
-      .filter((r): r is AuditScanRow & { score: number } => typeof r.score === 'number')
-      .map((r) => ({ score: r.score, createdAt: r.created_at })),
     timeline: buildScoreTimeline(rows),
     priorityActions,
     recent: rows.slice(0, 6).map((r) => ({

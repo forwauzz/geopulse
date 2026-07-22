@@ -141,7 +141,7 @@ describe('buildAuditDashboardView', () => {
     const view = buildAuditDashboardView([]);
     expect(view.latest).toBeNull();
     expect(view.accessMatrix).toBeNull();
-    expect(view.trendPoints).toHaveLength(0);
+    expect(view.timeline).toHaveLength(0);
     expect(view.priorityActions).toHaveLength(0);
   });
 
@@ -161,7 +161,7 @@ describe('buildAuditDashboardView', () => {
     ];
     const view = buildAuditDashboardView(rows);
     expect(view.latest?.scanId).toBe('new');
-    expect(view.trendPoints.map((p) => p.score)).toEqual([60, 80]);
+    expect(view.timeline.map((p) => p.score)).toEqual([60, 80]);
     expect(view.priorityActions[0]).toMatchObject({ title: 'jsonld', severity: 'high', scanId: 'new' });
     expect(view.recent).toHaveLength(2);
   });

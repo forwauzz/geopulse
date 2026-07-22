@@ -97,6 +97,7 @@ export default async function DashboardHomePage({
           scanDisabled={false}
           startupAccessBlocked={false}
           contextLine={null}
+          authenticated
         />
       </div>
       <AuditDashboardOverview view={view} engineCitations={engineCitations} marketPosition={marketPosition} />
