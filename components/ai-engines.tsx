@@ -73,21 +73,21 @@ export function EngineLogo({
  */
 export function AiEngineStrip() {
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-5 rounded-2xl border border-outline-variant/15 bg-white px-6 py-5 shadow-sm">
+    <div className="mx-auto max-w-5xl">
+      <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 rounded-3xl border border-outline-variant/15 bg-white px-8 py-7 shadow-sm md:gap-x-14 md:px-12 md:py-8">
         {AI_ENGINES.map((engine) => (
           <img
             key={engine.key}
             // eslint-disable-next-line @next/next/no-img-element -- static brand asset
             src={`${LOGO_BASE}/${engine.file}`}
             alt={`${engine.name} logo`}
-            className="h-6 w-auto object-contain md:h-7"
+            className="h-8 w-auto object-contain md:h-11"
             loading="lazy"
             decoding="async"
           />
         ))}
       </div>
-      <p className="mt-3 text-center font-body text-xs text-on-surface-variant">
+      <p className="mt-4 text-center font-body text-sm text-on-surface-variant">
         The AI answer engines we check your visibility across.
       </p>
     </div>
