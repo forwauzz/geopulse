@@ -465,7 +465,8 @@ export default {
           supabase,
           env: env as unknown as RecurringEnvLike,
           nowMs: Date.now(),
-          limit: 2,
+          // Workers Paid: 5-min CPU ceiling lets several re-audits run per tick (paying subscribers).
+          limit: 5,
         });
         if (result.due > 0) {
           structuredLog('monitor_audits_tick', { due: result.due, ran: result.ran, failed: result.failed }, 'info');
@@ -474,9 +475,9 @@ export default {
         structuredError('monitor_audits_error', { error: err instanceof Error ? err.message : 'unknown' });
       }
 
-      // Local-competitor cohort sweep (issue #118) — FAIL-CLOSED flag, max 2 scans per tick,
-      // every fetch inside runFreeScan is timeout-bounded (~65s worst case per scan). Sits with
-      // the benchmark long-runner at the tail so customer-facing stages never wait on it.
+      // Local-competitor cohort sweep (issue #118) — FAIL-CLOSED flag; every fetch inside
+      // runFreeScan is timeout-bounded (~65s worst case per scan). Sits with the benchmark
+      // long-runner at the tail so customer-facing stages never wait on it.
       try {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
@@ -486,9 +487,9 @@ export default {
           supabase,
           env: env as unknown as CohortEnvLike,
           nowMs: Date.now(),
-          // Free-plan CPU budget kills the tick during a second scan (observed 00:00 + 01:00
-          // 2026-07-22) — one scan per tick until the account moves to Workers Paid.
-          maxScans: 1,
+          // Workers Paid: 5-min CPU ceiling clears several cohort sites per tick — enough to
+          // re-audit all 202 domains well within a week instead of one per hour.
+          maxScans: 5,
         });
         if (result.enabled && result.due > 0) {
           structuredLog('competitor_cohort_tick', {

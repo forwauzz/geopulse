@@ -16,10 +16,11 @@
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
 
-  // NOTE (2026-07-22): the account is on the Workers FREE plan, whose tiny CPU budget silently
-  // kills heavy cron ticks mid-scan (issue #104 fingerprint; two consecutive deaths observed).
-  // Free plan rejects the "limits" key entirely — after upgrading to Workers Paid, uncomment:
-  // "limits": { "cpu_ms": 300000 },
+  // Workers Paid (upgraded 2026-07-22): raise the per-invocation CPU ceiling to 5 min so heavy
+  // cron ticks (multi-site re-audit sweeps + benchmark LLM fan-out) finish instead of being
+  // killed at the Free plan's tiny budget. You only pay for CPU actually used, so a high ceiling
+  // is safe — most scan time is I/O wait, not CPU.
+  "limits": { "cpu_ms": 300000 },
 
   "assets": {
     "directory": ".open-next/assets",
