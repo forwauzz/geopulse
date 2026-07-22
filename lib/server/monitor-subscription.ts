@@ -17,6 +17,7 @@ import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { ctaButton, emailShell, escapeEmailHtml, scoreBlock } from './email-theme';
 import { mintShareSlug, type RecurringEnvLike } from './recurring-audits';
+import { fetchLatestVisibilityForDomain, renderVisibilitySummary } from './visibility-report';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
@@ -255,7 +256,8 @@ async function sendMonitorAuditEmail(
   scanUrl: string,
   score: number,
   letterGrade: string,
-  shareSlug: string
+  shareSlug: string,
+  visibilityHtml = ''
 ): Promise<void> {
   const key = env.RESEND_API_KEY?.trim();
   const from = env.RESEND_FROM_EMAIL?.trim();
@@ -268,6 +270,7 @@ async function sendMonitorAuditEmail(
     bodyHtml: [
       `<p style="margin:0 0 6px;">Here is this month's audit of <strong>${escapeEmailHtml(scanUrl)}</strong>.</p>`,
       scoreBlock(score, letterGrade, 'AI search readiness'),
+      visibilityHtml,
       ctaButton('View your full report + ranking', link),
       `<p style="margin:0;color:#586162;font-size:13px;">Your private report shows every check, how you rank against local competitors, and what changed since last month.</p>`,
     ].join('\n'),
@@ -347,7 +350,11 @@ export async function runDueMonitorAudits(args: {
         .eq('id', sub.id);
       ran += 1;
       try {
-        await sendMonitorAuditEmail(env, sub.email, scan.finalUrl, scan.output.score, scan.output.letterGrade, shareSlug);
+        // Display-only visibility (free path): include the AI Visibility Performance block when the
+        // domain already has benchmark data. Reads existing metrics — runs no new benchmark.
+        const vis = await fetchLatestVisibilityForDomain(supabase, scan.domain);
+        const visibilityHtml = vis ? renderVisibilitySummary({ domain: scan.domain, metrics: vis }).html : '';
+        await sendMonitorAuditEmail(env, sub.email, scan.finalUrl, scan.output.score, scan.output.letterGrade, shareSlug, visibilityHtml);
       } catch {
         /* email is best-effort — never fails the run */
       }

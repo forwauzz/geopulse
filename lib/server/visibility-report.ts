@@ -7,8 +7,69 @@
  * the data plumbing (fetch latest run group → metrics) and per-subscriber benchmark execution are
  * separate, cost-bearing layers wired on top.
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { BenchmarkMetricComputation } from './benchmark-metrics';
+import { createBenchmarkRepository } from './benchmark-repository';
 import { escapeEmailHtml } from './email-theme';
+
+const ZERO_METRICS: BenchmarkMetricComputation['metrics'] = {
+  scheduled_runs: 0, completed_runs: 0, skipped_runs: 0, failed_runs: 0, cited_runs: 0,
+  inclusion_rate: 0, measured_domain_cited_runs: 0, measured_domain_citation_rate: 0,
+  domain_citation_count: 0, pool_citation_count: 0, explicit_url_citation_count: 0,
+  explicit_domain_citation_count: 0, brand_mention_citation_count: 0,
+  exact_page_matched_runs: 0, exact_page_supported_runs: 0, exact_page_quality_rate: 0,
+  industry_rank: null, chatgpt_visibility_pct: 0, gemini_visibility_pct: 0, perplexity_visibility_pct: 0,
+};
+
+function toFraction(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * DISPLAY-ONLY (free path): read the latest benchmark the scheduler already ran for this domain and
+ * reconstruct the metrics — no new benchmark runs, no LLM cost. Returns null when we have never
+ * benchmarked the domain (so the monthly report simply omits the visibility section). Never throws.
+ */
+export async function fetchLatestVisibilityForDomain(
+  supabase: SupabaseClient,
+  canonicalDomain: string
+): Promise<BenchmarkMetricComputation | null> {
+  try {
+    const repo = createBenchmarkRepository(supabase);
+    const domain = await repo.getDomainByCanonicalDomain(canonicalDomain.toLowerCase());
+    if (!domain) return null;
+
+    const { data } = await supabase
+      .from('benchmark_domain_metrics')
+      .select('citation_rate, share_of_voice, query_coverage, metrics, created_at')
+      .eq('domain_id', domain.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return null;
+
+    const jsonb = (data.metrics ?? {}) as Record<string, unknown>;
+    const metrics = { ...ZERO_METRICS, ...jsonb } as BenchmarkMetricComputation['metrics'];
+    if (metrics.completed_runs <= 0) return null;
+
+    return {
+      queryCoverage: toFraction(data.query_coverage),
+      citationRate: toFraction(metrics.inclusion_rate || data.citation_rate),
+      measuredDomainCitationRate: toFraction(data.citation_rate ?? metrics.measured_domain_citation_rate),
+      shareOfVoice: toFraction(data.share_of_voice),
+      exactPageQualityRate: toFraction(metrics.exact_page_quality_rate),
+      visibilityPctByPlatform: {
+        gemini: toFraction(metrics.gemini_visibility_pct),
+        openai: toFraction(metrics.chatgpt_visibility_pct),
+        perplexity: toFraction(metrics.perplexity_visibility_pct),
+      },
+      metrics,
+    };
+  } catch {
+    return null;
+  }
+}
 
 const EMAIL = {
   ink: '#0f1b1b',
