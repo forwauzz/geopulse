@@ -18,7 +18,9 @@ export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   url: z.string().url(),
-  turnstileToken: z.string().min(1),
+  // Optional: authenticated users are verified by their session, so the dashboard scan hero
+  // sends no Turnstile token. Guests still must (enforced below).
+  turnstileToken: z.string().min(1).nullish(),
   agencyAccountId: z.string().uuid().nullish(),
   agencyClientId: z.string().uuid().nullish(),
   startupWorkspaceId: z.string().uuid().nullish(),
@@ -77,12 +79,34 @@ export async function POST(request: Request): Promise<Response> {
   } = parsed.data;
   const attrCtx = { anonymous_id, utm_source, utm_medium, utm_campaign, utm_content, utm_term, referrer_url, landing_path };
 
-  const ts = await verifyTurnstileToken(env.TURNSTILE_SECRET_KEY, turnstileToken, ip);
-  if (!ts.ok) {
-    return Response.json(
-      { error: { code: 'turnstile_failed', message: ts.error } },
-      { status: 400 }
-    );
+  // Resolve the caller's session once. An authenticated user proves humanity via their login, so
+  // they skip Turnstile (the dashboard hero sends no token); guests must still pass it. Rate
+  // limiting above applies to both paths.
+  let sessionUserId: string | null = null;
+  try {
+    const sessionClient = await createSupabaseServerClient();
+    const {
+      data: { user },
+    } = await sessionClient.auth.getUser();
+    sessionUserId = user?.id ?? null;
+  } catch {
+    sessionUserId = null;
+  }
+
+  if (!sessionUserId) {
+    if (!turnstileToken) {
+      return Response.json(
+        { error: { code: 'turnstile_required', message: 'Verification required.' } },
+        { status: 400 }
+      );
+    }
+    const ts = await verifyTurnstileToken(env.TURNSTILE_SECRET_KEY, turnstileToken, ip);
+    if (!ts.ok) {
+      return Response.json(
+        { error: { code: 'turnstile_failed', message: ts.error } },
+        { status: 400 }
+      );
+    }
   }
 
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -98,24 +122,16 @@ export async function POST(request: Request): Promise<Response> {
   );
   const supabaseForAttr = supabase;
 
-  let sessionUserId: string | null = null;
   let agencyContext: { agencyAccountId: string | null; agencyClientId: string | null } | null = null;
   let startupContext: { startupWorkspaceId: string } | null = null;
 
-  if (agencyAccountId || startupWorkspaceId) {
+  if ((agencyAccountId || startupWorkspaceId) && sessionUserId) {
     try {
-      const sessionClient = await createSupabaseServerClient();
-      const {
-        data: { user },
-      } = await sessionClient.auth.getUser();
-      sessionUserId = user?.id ?? null;
-
       if (
-        user?.id &&
         agencyAccountId &&
         (await validateAgencyContext({
           supabase,
-          userId: user.id,
+          userId: sessionUserId,
           agencyAccountId,
           agencyClientId: agencyClientId ?? null,
         }))
@@ -127,7 +143,7 @@ export async function POST(request: Request): Promise<Response> {
         });
         if (!entitlements.scanLaunchEnabled) {
           structuredLog('agency_scan_launch_blocked', {
-            userId: user.id,
+            userId: sessionUserId,
             agencyAccountId,
             agencyClientId: agencyClientId ?? null,
           });
@@ -148,7 +164,7 @@ export async function POST(request: Request): Promise<Response> {
         structuredLog(
           'agency_scan_context_resolved',
           {
-            userId: user.id,
+            userId: sessionUserId,
             agencyAccountId,
             agencyClientId: agencyClientId ?? null,
           },
@@ -158,18 +174,17 @@ export async function POST(request: Request): Promise<Response> {
 
       if (
         !agencyContext &&
-        user?.id &&
         startupWorkspaceId &&
         (await validateStartupWorkspaceScanContext({
           supabase,
-          userId: user.id,
+          userId: sessionUserId,
           startupWorkspaceId,
         }))
       ) {
         startupContext = { startupWorkspaceId };
         structuredLog(
           'startup_scan_context_resolved',
-          { userId: user.id, startupWorkspaceId },
+          { userId: sessionUserId, startupWorkspaceId },
           'info'
         );
       }

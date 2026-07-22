@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AgencyClientManagementView } from '@/components/agency-client-management-view';
 import { DashboardScanHero } from '@/components/dashboard-scan-hero';
+import { DashboardHistoryChartsSection } from '@/components/dashboard-charts';
+import { buildDashboardHistoryCharts } from '@/lib/server/dashboard-history-charts';
 import { WhatNextBanner } from '@/components/what-next-banner';
 import { NewSubscriberWelcomeBanner } from '@/components/new-subscriber-welcome-banner';
 import { SubscriptionWorkspacePendingBanner } from '@/components/subscription-workspace-pending-banner';
@@ -132,7 +134,7 @@ function ScanRow({
   contextLabel,
 }: ScanRowProps) {
   return (
-    <li className="rounded-xl bg-surface-container-lowest px-5 py-4 shadow-float">
+    <li className="rounded-xl bg-surface-container-lowest px-5 py-4 shadow-float transition duration-200 hover:-translate-y-0.5 hover:shadow-lg">
       {/* Top row: domain + grade + score */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-3">
@@ -248,7 +250,9 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
   ] = await Promise.all([
     supabase
       .from('scans')
-      .select('id, url, domain, score, letter_grade, created_at')
+      // `categoryScores` is projected from the jsonb so the history charts get per-category trends
+      // without pulling the whole (large) full_results_json blob for every scan.
+      .select('id, url, domain, score, letter_grade, created_at, categoryScores:full_results_json->categoryScores')
       .eq('user_id', user.id)
       .is('agency_account_id', null)
       .is('startup_workspace_id', null)
@@ -316,6 +320,10 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
   const deliveredReport = reportList.find(
     (r) => r.type === 'deep_audit' && !!r.email_delivered_at
   );
+
+  // Presentation-grade history charts — honest not-tested gaps, hygiene excluded (issue #133).
+  const personalCharts = buildDashboardHistoryCharts(scanList);
+  const personalChartDomain = scanList.find((s) => s.domain)?.domain ?? 'Your audits';
 
   // ── Context ─────────────────────────────────────────────────
   const selectedAgencyAccount =
@@ -522,6 +530,7 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
         startupAccessTitle={startupAccessTitle}
         startupAccessBody={startupAccessBody}
         contextLine={scanHeroContextLine}
+        authenticated
       />
 
       {/* ── Startup workspace section ────────────────────────── */}
@@ -944,6 +953,13 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
               accent={avgScore != null}
             />
             <StatCard label="Deep audits" value={String(deepAuditCount)} />
+          </div>
+        ) : null}
+
+        {/* History charts — present-ready score trend, category lines, run deltas */}
+        {personalCharts.scoredRunCount >= 2 ? (
+          <div className="mt-6">
+            <DashboardHistoryChartsSection domain={personalChartDomain} data={personalCharts} />
           </div>
         ) : null}
 
