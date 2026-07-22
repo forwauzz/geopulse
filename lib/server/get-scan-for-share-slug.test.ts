@@ -93,4 +93,16 @@ describe('getScanForShareSlug', () => {
       expect(res.data.score).toBe(72);
     }
   });
+
+  it('P1 #1: serves a monitor scan (monthly monitor email link must resolve, not 403)', async () => {
+    mockClient({
+      scans: recurringScan({ run_source: 'monitor' }),
+      payments: { data: null, error: null },
+      reports: { data: null, error: null },
+      scan_runs: { data: null, error: null },
+    });
+    const res = await getScanForShareSlug(VALID_SLUG, 'https://db', 'key');
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.data.scanId).toBe('11111111-1111-1111-1111-111111111111');
+  });
 });
