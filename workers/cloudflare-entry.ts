@@ -442,6 +442,9 @@ export default {
           supabase,
           env: env as unknown as CohortEnvLike,
           nowMs: Date.now(),
+          // Free-plan CPU budget kills the tick during a second scan (observed 00:00 + 01:00
+          // 2026-07-22) — one scan per tick until the account moves to Workers Paid.
+          maxScans: 1,
         });
         if (result.enabled && result.due > 0) {
           structuredLog('competitor_cohort_tick', {
