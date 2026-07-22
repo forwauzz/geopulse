@@ -121,7 +121,11 @@
     "BENCHMARK_DAILY_RECAP_TIMEZONE": "America/Toronto",
 
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
-    "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "1000",
+    // Full-audit crawl breadth. 1000 made every crawl run far longer than the report page's
+    // poll window (and froze the progress bar near 5%, since percent = 5 + pagesDone/limit*85),
+    // so reports appeared to "never generate". 30 pages is a representative site-wide sample
+    // that completes in ~1-2 min. Raise per-run via scan_runs.config.page_limit if needed.
+    "DEEP_AUDIT_DEFAULT_PAGE_LIMIT": "30",
     "DEEP_AUDIT_BROWSER_RENDER_MODE": "auto",
     // Report rewrite now runs on Cloudflare Workers AI (free tier, open-source model) instead of
     // the stale Gemini preview model that was returning HTTP 400. Set provider back to "gemini"

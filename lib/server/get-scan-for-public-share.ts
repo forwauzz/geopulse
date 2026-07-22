@@ -82,7 +82,7 @@ async function buildPublicShareRow(
   supabase: SupabaseClient,
   data: ShareScanCore
 ): Promise<PublicShareScanResult> {
-  const [paymentRes, reportRes] = await Promise.all([
+  const [paymentRes, reportRes, runRes] = await Promise.all([
     supabase
       .from('payments')
       .select('id')
@@ -97,14 +97,24 @@ async function buildPublicShareRow(
       .eq('type', 'deep_audit')
       .limit(1)
       .maybeSingle(),
+    // A full-audit run exists means the report is being (or is about to be) assembled. In free
+    // mode (LEGACY_PAID_ENABLED=false) there is no payment, so without this the report page would
+    // see reportStatus='none' and give up before the crawl even finishes.
+    supabase
+      .from('scan_runs')
+      .select('id')
+      .eq('scan_id', data.id)
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const hasPaid = !!paymentRes.data?.id;
   const report = reportRes.data;
+  const deepRunInProgress = !!runRes.data?.id;
   let reportStatus: ReportStatus = 'none';
   if (report?.email_delivered_at) {
     reportStatus = 'delivered';
-  } else if (hasPaid) {
+  } else if (hasPaid || deepRunInProgress) {
     reportStatus = 'generating';
   }
 

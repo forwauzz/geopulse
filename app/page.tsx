@@ -260,7 +260,7 @@ export default async function HomePage({
               <span className="font-black text-primary">$39/mo</span>
             </p>
           ) : null}
-          <div className="mx-auto mt-10 max-w-5xl">
+          <div id="audit" className="mx-auto mt-10 max-w-5xl scroll-mt-28">
             {siteKey ? (
               <ScanForm
                 variant="hero"

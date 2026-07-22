@@ -18,7 +18,10 @@ import {
 import { reportLoadingJourneyFor } from '@/lib/client/loading-journeys';
 
 const REPORT_POLL_INTERVAL_MS = 4000;
-const REPORT_POLL_MAX_MS = 120000;
+// Crawl (up to DEEP_AUDIT_DEFAULT_PAGE_LIMIT pages) + LLM report assembly can run past 2 min on
+// slower sites; give the page enough headroom to resolve to the report instead of falsely
+// reporting "no report available" while it's still being built.
+const REPORT_POLL_MAX_MS = 240000;
 
 export function ReportViewer({ scanId }: { scanId: string }) {
   const [state, setState] = useState<ViewState>({ phase: 'loading' });
