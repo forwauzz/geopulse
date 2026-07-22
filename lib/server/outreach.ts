@@ -13,6 +13,21 @@ import { buildAuditLlm } from './fix-agent-run';
 import { ctaButton, emailShell, escapeEmailHtml, issueListHtml, scoreBlock } from './email-theme';
 import { renderOutreachTemplate, resolveOutreachTemplate } from './outreach-templates';
 import { structuredLog } from './structured-log';
+import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../../workers/report/report-qa-gate';
+
+/**
+ * Fail-closed QA before an outreach email leaves (spec §18): a scorecard whose findings
+ * contradict each other, don't reconcile, or contain garbled text must never reach a prospect.
+ * A confirmed FAIL is a HIGH/MEDIUM-confidence FAIL — a NOT_TESTED, BLOCKED, or low-confidence
+ * signal can never headline the email ("do not lead with a low-confidence issue").
+ */
+export function isConfirmedFail(issue: { status?: string | null; confidence?: string | null; passed?: boolean }): boolean {
+  const status = (issue.status ?? '').toUpperCase();
+  const confidence = (issue.confidence ?? '').toLowerCase();
+  if (status === 'NOT_TESTED' || status === 'NOT_EVALUATED' || status === 'BLOCKED') return false;
+  if (confidence === 'low') return false;
+  return status === 'FAIL' || (status === '' && issue.passed === false);
+}
 
 export type OutreachCadence = 'hourly' | 'daily' | 'weekly' | 'monthly';
 
@@ -181,6 +196,12 @@ export async function runOutreachForProspect(args: {
     return { ok: false, reason: scan.reason };
   }
 
+  // Fail-closed QA (spec §18): resolve known contradictions, then gate. A report that fails the
+  // gate is persisted (for the admin run view) but NEVER emailed — the scorecard the prospect
+  // sees must be internally consistent and free of garbled/clipped findings.
+  const resolved = resolveReportContradictions((scan.output.issues ?? []) as GateIssue[]);
+  const gate = runReportQaGate({ issues: resolved.issues });
+
   const { data: scanRow } = await supabase
     .from('scans')
     .insert({
@@ -189,9 +210,9 @@ export async function runOutreachForProspect(args: {
       status: 'complete',
       score: scan.output.score,
       letter_grade: scan.output.letterGrade,
-      issues_json: scan.output.issues,
+      issues_json: resolved.issues,
       full_results_json: {
-        issues: scan.output.issues,
+        issues: resolved.issues,
         categoryScores: scan.output.categoryScores,
         pageSample: scan.textSample.slice(0, 6000),
       },
@@ -209,6 +230,26 @@ export async function runOutreachForProspect(args: {
     return { ok: false, reason: 'scan_insert_failed' };
   }
 
+  // QUARANTINE: the scan is recorded, but a report that fails the gate never reaches the prospect.
+  if (!gate.ok) {
+    await supabase
+      .from('outreach_prospects')
+      .update({
+        last_run_at: nowIso,
+        next_run_at: computeNextOutreachRun(prospect.cadence, nowMs),
+        last_scan_id: scanId,
+        last_error: `quarantined: ${gate.violations.map((v) => v.rule).join(', ')}`,
+        updated_at: nowIso,
+      })
+      .eq('id', prospect.id);
+    structuredLog(
+      'outreach_report_quarantined',
+      { prospectId: prospect.id, scanId, violations: gate.violations.map((v) => v.rule).join(',') },
+      'warning'
+    );
+    return { ok: false, reason: 'quarantined' };
+  }
+
   const { data: sendRow } = await supabase
     .from('outreach_sends')
     .insert({ prospect_id: prospect.id, scan_id: scanId, score: scan.output.score })
@@ -217,8 +258,11 @@ export async function runOutreachForProspect(args: {
   const sendId = (sendRow?.id as string | undefined) ?? null;
 
   const appUrl = (env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com').replace(/\/+$/, '');
-  const topFailed = scan.output.issues
-    .filter((issue) => issue.passed === false)
+  // Confirmed FAILs only — never headline the email with a NOT_TESTED or low-confidence signal.
+  // resolveReportContradictions preserves every field at runtime; the GateIssue type just omits
+  // `weight`, so cast back to the scan-issue shape the email template already accepts.
+  const topFailed = (resolved.issues as unknown as typeof scan.output.issues)
+    .filter(isConfirmedFail)
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
     .slice(0, 3);
 
