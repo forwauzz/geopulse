@@ -131,7 +131,7 @@ export async function listContacts(supabase: SupabaseClient, segment?: string | 
     .from('outreach_contacts')
     .select('id,email,name,company,url,segment,tags,city,source,added_to_sequence_at,created_at')
     .order('created_at', { ascending: false })
-    .limit(1000);
+    .limit(5000);
   if (segment) query = query.eq('segment', segment);
   const { data } = await query;
   return (data ?? []) as ContactRow[];

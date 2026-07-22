@@ -11,6 +11,7 @@ import {
   listContacts,
   listSegments,
 } from '@/lib/server/outreach-contacts';
+import { ContactBankBrowser } from './contact-bank-browser';
 import {
   addOutreachProspect,
   addSegmentToSequenceAction,
@@ -75,9 +76,8 @@ export default async function AdminOutreachPage({
   // Contact bank (issue #136) — degrades to a dormant panel until migration 057.
   const contactsReady = await contactsTableExists(ctx.adminDb);
   const segments = contactsReady ? await listSegments(ctx.adminDb) : [];
-  const bankContacts = contactsReady
-    ? await listContacts(ctx.adminDb, importSummary?.segment || null)
-    : [];
+  // Load the whole bank once; the browser filters/searches client-side.
+  const bankContacts = contactsReady ? await listContacts(ctx.adminDb, null) : [];
 
   // Funnel signals (issue #116): which delivered scans were VIEWED (served to a
   // browser) and which converted to a FULL deep-audit report.
@@ -253,45 +253,6 @@ export default async function AdminOutreachPage({
               </p>
             )}
 
-            {/* Segments: counts + one-click add-to-sequence. */}
-            {segments.length > 0 && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {segments.map((seg) => (
-                  <div key={seg.segment} className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <a
-                        href={`/admin/outreach?segment=${encodeURIComponent(seg.segment)}`}
-                        className="font-sans text-sm font-bold text-on-background underline-offset-2 hover:underline"
-                      >
-                        {seg.segment}
-                      </a>
-                      <span className="rounded-md bg-surface-container px-2 py-0.5 font-sans text-xs font-semibold text-on-surface-variant">
-                        {seg.saved} saved · {seg.total} total
-                      </span>
-                    </div>
-                    {seg.saved > 0 && (
-                      <form action={addSegmentToSequenceAction} className="mt-3 flex flex-wrap items-end gap-2">
-                        <input type="hidden" name="segment" value={seg.segment} />
-                        <label className="block">
-                          <span className="mb-1 block font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant">
-                            First send (Montréal time)
-                          </span>
-                          <input name="startAt" type="datetime-local" className={input} />
-                        </label>
-                        <select name="cadence" defaultValue="monthly" className={input}>
-                          <option value="monthly">monthly</option>
-                          <option value="weekly">weekly</option>
-                        </select>
-                        <button className="inline-flex min-h-[40px] items-center rounded-xl bg-primary px-4 text-sm font-semibold text-on-primary hover:opacity-90">
-                          Add {seg.saved} to sequence
-                        </button>
-                      </form>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* Save contacts into a segment. */}
             <form action={importOutreachContactsAction} className="mt-4 grid gap-3">
               <textarea
@@ -319,70 +280,14 @@ export default async function AdminOutreachPage({
               </div>
             </form>
 
-            {/* Contact list (filtered by ?segment=). */}
+            {/* Collapsible, searchable, filterable browser (issue #139). */}
             {bankContacts.length > 0 && (
-              <div className="mt-5 overflow-x-auto">
-                <p className="mb-2 font-sans text-xs text-on-surface-variant">
-                  {importSummary?.segment ? (
-                    <>
-                      Showing <strong>{importSummary.segment}</strong> ·{' '}
-                      <a className="underline" href="/admin/outreach">show all</a>
-                    </>
-                  ) : (
-                    'All saved contacts (latest first)'
-                  )}
-                </p>
-                <table className="w-full min-w-[760px] text-left font-sans text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase tracking-wider text-on-surface-variant">
-                      <th className="pb-2 pr-3 font-semibold">Contact</th>
-                      <th className="pb-2 pr-3 font-semibold">Company</th>
-                      <th className="pb-2 pr-3 font-semibold">Segment</th>
-                      <th className="pb-2 pr-3 font-semibold">City</th>
-                      <th className="pb-2 pr-3 font-semibold">Status</th>
-                      <th className="pb-2 font-semibold" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {bankContacts.slice(0, 60).map((c) => (
-                      <tr key={c.id} className="border-t border-outline-variant/10">
-                        <td className="py-2 pr-3">
-                          <span className="font-semibold text-on-background">{c.email}</span>
-                          <div className="text-xs text-on-surface-variant">{c.url}</div>
-                        </td>
-                        <td className="py-2 pr-3 text-on-surface-variant">{c.company ?? '—'}</td>
-                        <td className="py-2 pr-3">
-                          <span className="rounded-md bg-tertiary/10 px-1.5 py-0.5 text-xs font-semibold text-tertiary">{c.segment}</span>
-                          {c.tags.length > 0 && (
-                            <span className="ml-1 text-xs text-on-surface-variant">{c.tags.join(' · ')}</span>
-                          )}
-                        </td>
-                        <td className="py-2 pr-3 text-on-surface-variant">{c.city ?? '—'}</td>
-                        <td className="py-2 pr-3 text-xs">
-                          {c.added_to_sequence_at ? (
-                            <span className="font-semibold text-sky-700 dark:text-sky-300">In sequence</span>
-                          ) : (
-                            <span className="text-on-surface-variant">Saved</span>
-                          )}
-                        </td>
-                        <td className="py-2 text-right">
-                          <form action={deleteOutreachContactAction}>
-                            <input type="hidden" name="contactId" value={c.id} />
-                            <button className="rounded-lg border border-error/30 px-2.5 py-1 text-xs font-semibold text-error hover:bg-error/10">
-                              Remove
-                            </button>
-                          </form>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {bankContacts.length > 60 && (
-                  <p className="mt-2 font-sans text-xs text-on-surface-variant">
-                    Showing 60 of {bankContacts.length} — filter by segment to narrow.
-                  </p>
-                )}
-              </div>
+              <ContactBankBrowser
+                contacts={bankContacts}
+                segments={segments}
+                addSegmentToSequenceAction={addSegmentToSequenceAction}
+                deleteOutreachContactAction={deleteOutreachContactAction}
+              />
             )}
           </>
         )}
