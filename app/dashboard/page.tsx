@@ -11,6 +11,7 @@ import {
   type EngineKey,
 } from '@/lib/server/dashboard-citation-metrics';
 import { getCitationEvidence, type EngineEvidence } from '@/lib/server/citation-evidence';
+import { getMarketPosition, type MarketPosition } from '@/lib/server/market-position';
 import { getTrackedPromptPanel, type TrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { CitationEvidencePanel } from '@/components/citation-evidence-panel';
 import { TrackedPromptsPanel } from '@/components/tracked-prompts-panel';
@@ -73,11 +74,14 @@ export default async function DashboardHomePage({
   let engineCitations: Partial<Record<EngineKey, EngineCitationMetric>> = {};
   let promptPanel: TrackedPromptPanel | null = null;
   let citationEvidence: EngineEvidence[] = [];
+  let marketPosition: MarketPosition | null = null;
   if (admin && view.latest?.domain) {
-    [engineCitations, promptPanel, citationEvidence] = await Promise.all([
+    [engineCitations, promptPanel, citationEvidence, marketPosition] = await Promise.all([
       loadEngineCitationMetrics({ supabase: admin, domain: view.latest.domain }),
       getTrackedPromptPanel({ supabase: admin, domain: view.latest.domain }),
       getCitationEvidence({ supabase: admin, domain: view.latest.domain }),
+      // Same anonymized cohort computation as the PDF's market-position section (issue #133).
+      getMarketPosition(admin, view.latest.domain, view.latest.score),
     ]);
   }
 
@@ -95,7 +99,7 @@ export default async function DashboardHomePage({
           contextLine={null}
         />
       </div>
-      <AuditDashboardOverview view={view} engineCitations={engineCitations} />
+      <AuditDashboardOverview view={view} engineCitations={engineCitations} marketPosition={marketPosition} />
       {promptPanel?.tracked && view.latest?.domain ? (
         <div className="mx-auto w-full max-w-6xl">
           <TrackedPromptsPanel panel={promptPanel} domain={view.latest.domain} statusCode={sp.prompt} />
