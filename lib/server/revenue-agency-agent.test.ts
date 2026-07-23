@@ -11,6 +11,23 @@ describe('Revenue Agency control plane', () => {
     expect(resolveRevenueAgencyConfig({ mode: 'assist', run_hour_utc: 99 }, true, false)).toMatchObject({
       mode: 'assist',
       runHourUtc: 23,
+      nurtureEnabled: false,
+    });
+    expect(
+      resolveRevenueAgencyConfig(
+        {
+          mode: 'autonomous',
+          nurture_enabled: true,
+          nurture_daily_cap: 999,
+          nurture_delay_hours: 0,
+        },
+        true,
+        false
+      )
+    ).toMatchObject({
+      nurtureEnabled: true,
+      nurtureDailyCap: 20,
+      nurtureDelayHours: 0,
     });
   });
 

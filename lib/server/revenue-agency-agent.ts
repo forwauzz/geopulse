@@ -13,6 +13,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadAutomationSetting } from './automation-settings';
 import { runSocialProofAgent, type SocialProofAgentResult } from './social-proof-agent';
 import { structuredLogWithClientAndWait } from './structured-log';
+import { runRevenueNurtureAgent, type RevenueNurtureResult } from './revenue-nurture-agent';
+import type { LeadEmailEnv } from './lead-email';
 
 export type RevenueAgencyMode = 'off' | 'observe' | 'assist' | 'autonomous';
 
@@ -20,6 +22,9 @@ export type RevenueAgencyConfig = {
   readonly mode: RevenueAgencyMode;
   readonly runHourUtc: number;
   readonly socialProofEnabled: boolean;
+  readonly nurtureEnabled: boolean;
+  readonly nurtureDailyCap: number;
+  readonly nurtureDelayHours: number;
 };
 
 export type RevenueStage = {
@@ -54,6 +59,7 @@ export type RevenueAgencyRunResult = {
   readonly mode: RevenueAgencyMode;
   readonly snapshot?: RevenueAgencySnapshot;
   readonly proof?: SocialProofAgentResult;
+  readonly nurture?: RevenueNurtureResult;
   readonly reason?: string;
 };
 
@@ -82,6 +88,10 @@ export function resolveRevenueAgencyConfig(
       typeof config['social_proof_enabled'] === 'boolean'
         ? config['social_proof_enabled']
         : true,
+    nurtureEnabled:
+      typeof config['nurture_enabled'] === 'boolean' ? config['nurture_enabled'] : false,
+    nurtureDailyCap: positiveInt(config['nurture_daily_cap'], 5, 20),
+    nurtureDelayHours: positiveInt(config['nurture_delay_hours'], 24, 168),
   };
 }
 
@@ -247,6 +257,7 @@ async function alreadyRanToday(supabase: SupabaseClient, now: Date): Promise<boo
 export async function runRevenueAgency(args: {
   readonly supabase: SupabaseClient;
   readonly appUrl: string;
+  readonly env?: LeadEmailEnv;
   readonly force?: boolean;
   readonly now?: Date;
 }): Promise<RevenueAgencyRunResult> {
@@ -271,6 +282,17 @@ export async function runRevenueAgency(args: {
             now,
           })
         : undefined;
+    const nurture =
+      config.nurtureEnabled && mode === 'autonomous'
+        ? await runRevenueNurtureAgent({
+            supabase: args.supabase,
+            appUrl: args.appUrl,
+            env: args.env ?? process.env,
+            now,
+            dailyCap: config.nurtureDailyCap,
+            delayHours: config.nurtureDelayHours,
+          })
+        : undefined;
 
     await structuredLogWithClientAndWait(
       args.supabase,
@@ -285,10 +307,12 @@ export async function runRevenueAgency(args: {
         converted_leads: snapshot.convertedLeads,
         active_monitoring: snapshot.activeMonitoring,
         social_proof_status: proof?.status ?? null,
+        nurture_status: nurture?.status ?? null,
+        nurture_sent: nurture?.sent ?? 0,
       },
       'info'
     );
-    return { status: 'completed', mode, snapshot, proof };
+    return { status: 'completed', mode, snapshot, proof, nurture };
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'unknown';
     await structuredLogWithClientAndWait(

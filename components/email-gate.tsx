@@ -17,6 +17,8 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
   const [email, setEmail] = useState('');
   const [token, setToken] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [emailDelivered, setEmailDelivered] = useState(true);
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   useLongWaitEffect(loading, saveResultsLoadingJourney);
@@ -40,6 +42,7 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
           scanId,
           turnstileToken: token,
           anonymous_id: getAttributionContext().anonymous_id,
+          marketingConsent,
         }),
       });
       if (!res.ok) {
@@ -52,6 +55,8 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
         setLoading(false);
         return;
       }
+      const data = (await res.json()) as { emailDelivered?: boolean };
+      setEmailDelivered(data.emailDelivered !== false);
       setDone(true);
     } catch {
       setError('Network error');
@@ -64,7 +69,10 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
       <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-6 text-on-background">
         <p className="font-headline font-semibold">Preview saved.</p>
         <p className="mt-2 font-body text-sm text-on-surface-variant">
-          We&apos;ll email this preview summary so you can come back to it later. Paid full audits are still delivered to the email entered at checkout.
+          {emailDelivered
+            ? 'We emailed this preview summary so you can come back to it later.'
+            : 'Your preview is saved, but email delivery is temporarily unavailable. Bookmark this page so you can return to it.'}{' '}
+          Paid full audits are still delivered to the email entered at checkout.
         </p>
       </div>
     );
@@ -87,6 +95,15 @@ export function EmailGate({ siteKey, scanId, url, score }: EmailGateProps) {
         onChange={(e) => setEmail(e.target.value)}
         className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 font-body text-base text-on-surface outline-none ring-0 focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40"
       />
+      <label className="flex items-start gap-3 font-body text-sm text-on-surface-variant">
+        <input
+          type="checkbox"
+          checked={marketingConsent}
+          onChange={(event) => setMarketingConsent(event.target.checked)}
+          className="mt-0.5 h-4 w-4 rounded border-outline-variant text-primary"
+        />
+        <span>Send me occasional GEO visibility tips and product updates. Unsubscribe anytime.</span>
+      </label>
       <Turnstile siteKey={siteKey} onSuccess={setToken} onExpire={() => setToken(null)} />
       {error ? <p className="text-sm text-error">{error}</p> : null}
       <button

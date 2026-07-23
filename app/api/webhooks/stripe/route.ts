@@ -16,6 +16,7 @@ import {
 } from '@/lib/server/monitor-subscription';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
+import { markMonitorLeadConverted } from '@/lib/server/monitor-lead-conversion';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -146,7 +147,20 @@ export async function POST(request: Request): Promise<Response> {
       // 500 so Stripe retries — a dropped seed would lose the subscriber.
       return new Response('Monitor seed failed', { status: 500 });
     }
-    structuredLog('monitor_checkout_seeded', { stripeEventId: event.id, sessionId: sessionObj.id }, 'info');
+    const email = sessionObj.customer_details?.email ?? sessionObj.customer_email ?? null;
+    const scanId = sessionObj.metadata?.['scan_id'] ?? null;
+    const convertedLeads = await markMonitorLeadConverted({
+      supabase: adminDb,
+      scanId,
+      email,
+      stripeEventId: event.id,
+      stripeSessionId: sessionObj.id,
+    });
+    structuredLog('monitor_checkout_seeded', {
+      stripeEventId: event.id,
+      sessionId: sessionObj.id,
+      convertedLeads,
+    }, 'info');
     return new Response(null, { status: 200 });
   }
 
