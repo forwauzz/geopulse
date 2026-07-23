@@ -9,7 +9,7 @@ import { runSelfImprovementAudit } from '@/lib/server/self-improvement';
 import { runMarketingAutopilot } from '@/lib/server/marketing-autopilot';
 import { runAutonomousEditorialEngine } from '@/lib/server/autonomous-editorial-engine';
 import { createAutonomousEditorialProvider } from '@/lib/server/autonomous-editorial-providers';
-import { structuredLog } from '@/lib/server/structured-log';
+import { structuredLogAndWait } from '@/lib/server/structured-log';
 
 const AUTOMATION_PATH = '/admin/automation';
 
@@ -114,7 +114,7 @@ export async function runEditorialPipelineNow(): Promise<void> {
     supabase: ctx.supabase,
     provider: createAutonomousEditorialProvider(editorialEnv),
   });
-  structuredLog('autonomous_editorial_manual_run', {
+  await structuredLogAndWait('autonomous_editorial_manual_run', {
     status: result.status,
     reason: result.reason ?? null,
     content_id: result.contentId ?? null,

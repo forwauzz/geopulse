@@ -84,14 +84,23 @@ function writeConsoleLog(level: StructuredLogLevel, event: string, data: Record<
   console.warn(line);
 }
 
+/** Persist an audit event before returning. Use in request handlers where the caller needs a durable outcome. */
+export async function structuredLogAndWait(
+  event: string,
+  data: StructuredLogData,
+  level: StructuredLogLevel = 'warning'
+): Promise<void> {
+  const sanitized = sanitizeStructuredLogData(data);
+  writeConsoleLog(level, event, sanitized);
+  await persistStructuredLogEntry({ level, event, data: sanitized });
+}
+
 export function structuredLog(
   event: string,
   data: StructuredLogData,
   level: StructuredLogLevel = 'warning'
 ): void {
-  const sanitized = sanitizeStructuredLogData(data);
-  writeConsoleLog(level, event, sanitized);
-  void persistStructuredLogEntry({ level, event, data: sanitized });
+  void structuredLogAndWait(event, data, level);
 }
 
 export function structuredError(event: string, data: StructuredLogData): void {
