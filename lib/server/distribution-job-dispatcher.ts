@@ -1500,7 +1500,6 @@ export async function dispatchDistributionJobById(
 
     const attemptNumber = (await repo.listJobAttempts(currentJob.id)).length + 1;
     const destination = buildSyntheticDestination(account);
-    const adapter = resolveAdapter(destination as any);
 
     let result: PublishResult;
     if (asset.asset_type === 'single_image_post' && account.provider_name === 'x') {
@@ -1572,6 +1571,7 @@ export async function dispatchDistributionJobById(
         retryable: false,
       });
     } else {
+      const adapter = resolveAdapter(destination as any);
       result = await adapter.publishDraft({
         item: item as any,
         destination: destination as any,

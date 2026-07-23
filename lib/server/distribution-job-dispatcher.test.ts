@@ -1799,9 +1799,12 @@ describe('dispatchDistributionJobs', () => {
       metadata: { provider: 'x' },
     });
 
+    const resolveAdapter = vi.fn(() => {
+      throw new Error('media publishers must not resolve content destination adapters');
+    });
     const summary = await dispatchDistributionJobById(supabase, baseEnv as any, 'job-row-media-x-1', {
       createRepository: () => repo as any,
-      resolveAdapter: vi.fn(),
+      resolveAdapter,
       publishXSingleImagePost,
       structuredLog: vi.fn(),
       structuredError: vi.fn(),
@@ -1814,6 +1817,7 @@ describe('dispatchDistributionJobs', () => {
       failed: 0,
     });
     expect(publishXSingleImagePost).toHaveBeenCalledOnce();
+    expect(resolveAdapter).not.toHaveBeenCalled();
     expect(repo.updateJob).toHaveBeenLastCalledWith(
       'job-row-media-x-1',
       expect.objectContaining({
