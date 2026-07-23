@@ -134,6 +134,84 @@ Read [this related guide](/blog/internal-linking-guide) before rollout.
     ).toContain('Article cannot be published while noindex is enabled.');
   });
 
+  it('blocks an unedited planned topic-registry seed', () => {
+    expect(
+      getContentPublishIssues({
+        content_type: 'article',
+        slug: 'single-brand-vs-multi-client-geo-operating-model',
+        title: 'Single Brand Vs Multi Client GEO Operating Model',
+        status: 'approved',
+        topic_cluster: 'vertical_strategy_agencies',
+        cta_goal: 'free_scan',
+        source_type: 'internal_plus_research',
+        source_links: ['docs/13-topic-registry-v1.json'],
+        draft_markdown: `# Single Brand Vs Multi Client GEO Operating Model
+
+Single Brand Vs Multi Client GEO Operating Model matters because operators need a reliable, repeatable way to improve AI search readiness without guessing.
+
+## What should operators do first?
+
+- Start with a focused baseline.
+- Identify one clear bottleneck.
+
+## Practical steps to improve this topic
+
+Read [the topic hub](/blog/topic/vertical_strategy_agencies).`,
+        canonical_url: null,
+        metadata: {
+          author_name: 'GEO-Pulse Editorial Team',
+          author_role: 'AI Search Readiness Editorial',
+          hero_image_url: 'https://cdn.example.com/hero.png',
+          hero_image_alt: 'Hero image',
+          seeded_from_topic_registry: true,
+          topic_registry_status: 'planned',
+        },
+        published_at: null,
+      })
+    ).toContain(
+      'This is an unedited topic-registry planning seed. Replace its generic draft with original, source-backed editorial content before publishing.'
+    );
+  });
+
+  it('allows a rewritten topic-registry article through this safeguard', () => {
+    const checks = evaluateContentPublishChecks({
+      content_type: 'article',
+      slug: 'single-brand-vs-multi-client-geo-operating-model',
+      title: 'Single Brand Vs Multi Client GEO Operating Model',
+      status: 'approved',
+      topic_cluster: 'vertical_strategy_agencies',
+      cta_goal: 'free_scan',
+      source_type: 'internal_plus_research',
+      source_links: ['https://example.com/research'],
+      draft_markdown: `# Single Brand Vs Multi Client GEO Operating Model
+
+Teams with multiple clients should keep the shared audit method stable while maintaining separate evidence and measurement baselines.
+
+## When should teams separate client workflows?
+
+- When brands have different markets or conversion journeys.
+- When evidence and governance requirements differ.
+
+## How should an agency begin?
+
+Use [an AI-search readiness audit](/blog/ai-search-readiness-audit) to establish a baseline before standardising the workflow.`,
+      canonical_url: null,
+      metadata: {
+        author_name: 'GEO-Pulse Editorial Team',
+        author_role: 'AI Search Readiness Editorial',
+        hero_image_url: 'https://cdn.example.com/hero.png',
+        hero_image_alt: 'Hero image',
+        seeded_from_topic_registry: true,
+        topic_registry_status: 'planned',
+      },
+      published_at: null,
+    });
+
+    expect(checks.find((check) => check.key === 'topic_registry_editorial_rewrite')).toMatchObject({
+      passed: true,
+    });
+  });
+
   it('blocks publish when hero image URL is not absolute', () => {
     expect(
       getContentPublishIssues({

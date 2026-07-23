@@ -45,6 +45,7 @@ describe('content-topic-registry-seed', () => {
     expect(firstBatchOne.brief_markdown).toContain('AI Search Readiness Foundations');
     expect(firstBatchOne.metadata).toMatchObject({
       seeded_from_topic_registry: true,
+      requires_editorial_rewrite: true,
       topic_registry_intent: 'definition',
       topic_registry_batch: 'batch_1',
     });
