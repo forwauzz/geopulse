@@ -9,6 +9,7 @@ import { runSelfImprovementAudit } from '@/lib/server/self-improvement';
 import { runMarketingAutopilot } from '@/lib/server/marketing-autopilot';
 import { runAutonomousEditorialEngine } from '@/lib/server/autonomous-editorial-engine';
 import { createAutonomousEditorialProvider } from '@/lib/server/autonomous-editorial-providers';
+import { structuredLog } from '@/lib/server/structured-log';
 
 const AUTOMATION_PATH = '/admin/automation';
 
@@ -109,9 +110,14 @@ export async function runEditorialPipelineNow(): Promise<void> {
   if ('error' in ctx) return;
   await runMarketingAutopilot({ supabase: ctx.supabase, env: ctx.env, triggerSource: 'admin_manual', force: true });
   const editorialEnv = await getAutonomousEditorialEnv();
-  await runAutonomousEditorialEngine({
+  const result = await runAutonomousEditorialEngine({
     supabase: ctx.supabase,
     provider: createAutonomousEditorialProvider(editorialEnv),
   });
+  structuredLog('autonomous_editorial_manual_run', {
+    status: result.status,
+    reason: result.reason ?? null,
+    content_id: result.contentId ?? null,
+  }, result.status === 'failed' ? 'error' : result.status === 'rejected' ? 'warning' : 'info');
   revalidatePath(AUTOMATION_PATH);
 }
