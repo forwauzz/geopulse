@@ -27,7 +27,7 @@ export async function runAutonomousEditorialEngine(args: {
 
   const { data: candidates, error } = await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
     .eq('content_type', 'article')
     // Archived topic-registry items are deliberately excluded from the public site until this
     // engine replaces their thin planning seed with a source-backed editorial draft.
