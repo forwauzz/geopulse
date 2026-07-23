@@ -1,11 +1,11 @@
-import type { PaymentApiEnv } from "@/lib/server/cf-env";
+import type { PaymentApiEnv } from '@/lib/server/cf-env';
 import {
   ContentDestinationPublishError,
   resolveContentDestinationAdapter,
-} from "@/lib/server/content-destination-adapters";
-import { refreshSocialOAuthToken } from "@/lib/server/distribution-social-oauth";
-import { structuredError, structuredLog } from "@/lib/server/structured-log";
-import { publishInstagramAsset } from "@/lib/server/instagram-publisher";
+} from '@/lib/server/content-destination-adapters';
+import { refreshSocialOAuthToken } from '@/lib/server/distribution-social-oauth';
+import { structuredError, structuredLog } from '@/lib/server/structured-log';
+import { publishInstagramAsset } from '@/lib/server/instagram-publisher';
 import {
   createDistributionEngineRepository,
   type DistributionAccountRow,
@@ -13,7 +13,7 @@ import {
   type DistributionAssetRow,
   type DistributionAssetMediaRow,
   type DistributionJobRow,
-} from "@/lib/server/distribution-engine-repository";
+} from '@/lib/server/distribution-engine-repository';
 
 type SupabaseLike = {
   from(table: string): any;
@@ -77,17 +77,15 @@ type DispatchableContentRow = {
 type PublishResult = {
   readonly providerPublicationId: string;
   readonly destinationUrl: string | null;
-  readonly status: "drafted" | "published" | "queued";
+  readonly status: 'drafted' | 'published' | 'queued';
   readonly metadata: Record<string, unknown>;
 };
 
 function buildSyntheticDestination(account: DistributionAccountRow) {
   const destinationType =
-    account.provider_name === "buttondown" ||
-    account.provider_name === "kit" ||
-    account.provider_name === "ghost"
-      ? "newsletter"
-      : "social";
+    account.provider_name === 'buttondown' || account.provider_name === 'kit' || account.provider_name === 'ghost'
+      ? 'newsletter'
+      : 'social';
 
   return {
     id: account.id,
@@ -102,7 +100,7 @@ function buildSyntheticDestination(account: DistributionAccountRow) {
     supports_scheduling: true,
     supports_public_archive: false,
     plan_tier: null,
-    availability_status: "available",
+    availability_status: 'available',
     availability_reason: null,
     metadata: account.metadata ?? {},
     created_at: account.created_at,
@@ -122,15 +120,14 @@ function classifyDispatchError(error: unknown): DispatchFailureDetails {
 
   if (error instanceof TypeError) {
     return {
-      message: error.message || "Network failure during distribution dispatch.",
+      message: error.message || 'Network failure during distribution dispatch.',
       retryable: true,
       providerStatusCode: null,
       retryAfterMs: null,
     };
   }
 
-  const message =
-    error instanceof Error ? error.message : "Unknown dispatch failure";
+  const message = error instanceof Error ? error.message : 'Unknown dispatch failure';
   return {
     message,
     retryable: false,
@@ -145,50 +142,44 @@ export function isRetryableDistributionDispatchError(error: unknown): boolean {
 
 async function getDispatchableContentItem(
   supabase: SupabaseLike,
-  distributionAsset: DistributionAssetRow,
+  distributionAsset: DistributionAssetRow
 ): Promise<DispatchableContentRow | null> {
   if (!distributionAsset.content_item_id) return null;
 
   const { data, error } = await supabase
-    .from("content_items")
+    .from('content_items')
     .select(
-      "id,content_id,slug,title,status,content_type,target_persona,primary_problem,topic_cluster,keyword_cluster,cta_goal,source_type,source_links,brief_markdown,draft_markdown,canonical_url,metadata,published_at,created_at,updated_at",
+      'id,content_id,slug,title,status,content_type,target_persona,primary_problem,topic_cluster,keyword_cluster,cta_goal,source_type,source_links,brief_markdown,draft_markdown,canonical_url,metadata,published_at,created_at,updated_at'
     )
-    .eq("id", distributionAsset.content_item_id)
+    .eq('id', distributionAsset.content_item_id)
     .maybeSingle();
 
   if (error) throw error;
   if (!data) return null;
 
   return {
-    ...(data as Omit<
-      DispatchableContentRow,
-      "source_links" | "metadata" | "deliveries"
-    >),
+    ...(data as Omit<DispatchableContentRow, 'source_links' | 'metadata' | 'deliveries'>),
     source_links: Array.isArray((data as Record<string, unknown>).source_links)
       ? ((data as Record<string, unknown>).source_links as string[])
       : [],
     metadata:
       (data as Record<string, unknown>).metadata &&
-      typeof (data as Record<string, unknown>).metadata === "object" &&
+      typeof (data as Record<string, unknown>).metadata === 'object' &&
       !Array.isArray((data as Record<string, unknown>).metadata)
-        ? ((data as Record<string, unknown>).metadata as Record<
-            string,
-            unknown
-          >)
+        ? ((data as Record<string, unknown>).metadata as Record<string, unknown>)
         : {},
     deliveries: [],
   };
 }
 
 function readString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
 function pickPreferredToken(
-  tokens: ReadonlyArray<DistributionAccountTokenRow>,
+  tokens: ReadonlyArray<DistributionAccountTokenRow>
 ): DistributionAccountTokenRow | null {
   if (tokens.length === 0) return null;
   const order: Record<string, number> = {
@@ -211,7 +202,7 @@ function pickPreferredToken(
 function resolveProviderRuntimeEnv(
   env: PaymentApiEnv,
   account: DistributionAccountRow,
-  token: DistributionAccountTokenRow | null,
+  token: DistributionAccountTokenRow | null
 ): PaymentApiEnv {
   if (!token) return env;
 
@@ -219,29 +210,24 @@ function resolveProviderRuntimeEnv(
   const metadata = token.metadata ?? {};
   const accountMetadata = account.metadata ?? {};
 
-  if (account.provider_name === "x") {
+  if (account.provider_name === 'x') {
     return {
       ...env,
       X_ACCESS_TOKEN: accessToken ?? env.X_ACCESS_TOKEN,
     };
   }
 
-  if (account.provider_name === "linkedin") {
-    const metadataAuthorUrn = readString(
-      (metadata as Record<string, unknown>)["author_urn"],
-    );
-    const accountAuthorUrn = readString(
-      (accountMetadata as Record<string, unknown>)["author_urn"],
-    );
+  if (account.provider_name === 'linkedin') {
+    const metadataAuthorUrn = readString((metadata as Record<string, unknown>)['author_urn']);
+    const accountAuthorUrn = readString((accountMetadata as Record<string, unknown>)['author_urn']);
     return {
       ...env,
       LINKEDIN_ACCESS_TOKEN: accessToken ?? env.LINKEDIN_ACCESS_TOKEN,
-      LINKEDIN_AUTHOR_URN:
-        metadataAuthorUrn ?? accountAuthorUrn ?? env.LINKEDIN_AUTHOR_URN,
+      LINKEDIN_AUTHOR_URN: metadataAuthorUrn ?? accountAuthorUrn ?? env.LINKEDIN_AUTHOR_URN,
     };
   }
 
-  if (account.provider_name === "instagram") {
+  if (account.provider_name === 'instagram') {
     return {
       ...env,
       INSTAGRAM_ACCESS_TOKEN: accessToken ?? env.INSTAGRAM_ACCESS_TOKEN,
@@ -251,93 +237,64 @@ function resolveProviderRuntimeEnv(
   return env;
 }
 
-function requiresTokenRuntime(
-  providerName: DistributionAccountRow["provider_name"],
-): boolean {
+function requiresTokenRuntime(providerName: DistributionAccountRow['provider_name']): boolean {
+  return providerName === 'x' || providerName === 'linkedin' || providerName === 'instagram';
+}
+
+function requiresMediaAttachments(assetType: DistributionAssetRow['asset_type']): boolean {
   return (
-    providerName === "x" ||
-    providerName === "linkedin" ||
-    providerName === "instagram"
+    assetType === 'single_image_post' ||
+    assetType === 'carousel_post' ||
+    assetType === 'short_video_post' ||
+    assetType === 'long_video_post'
   );
 }
 
-function requiresMediaAttachments(
-  assetType: DistributionAssetRow["asset_type"],
-): boolean {
-  return (
-    assetType === "single_image_post" ||
-    assetType === "carousel_post" ||
-    assetType === "short_video_post" ||
-    assetType === "long_video_post"
-  );
-}
-
-function hasProviderReadyMedia(
-  mediaRows: ReadonlyArray<DistributionAssetMediaRow>,
-): boolean {
+function hasProviderReadyMedia(mediaRows: ReadonlyArray<DistributionAssetMediaRow>): boolean {
   return mediaRows.some(
-    (media) =>
-      media.provider_ready_status === "ready" ||
-      media.provider_ready_status === "uploaded",
+    (media) => media.provider_ready_status === 'ready' || media.provider_ready_status === 'uploaded'
   );
 }
 
 function pickProviderReadyMedia(
-  mediaRows: ReadonlyArray<DistributionAssetMediaRow>,
+  mediaRows: ReadonlyArray<DistributionAssetMediaRow>
 ): DistributionAssetMediaRow[] {
   return mediaRows.filter(
-    (media) =>
-      media.provider_ready_status === "ready" ||
-      media.provider_ready_status === "uploaded",
+    (media) => media.provider_ready_status === 'ready' || media.provider_ready_status === 'uploaded'
   );
 }
 
 function trimToLength(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
-  return maxChars > 1
-    ? `${value.slice(0, maxChars - 1).trimEnd()}…`
-    : value.slice(0, maxChars);
+  return maxChars > 1 ? `${value.slice(0, maxChars - 1).trimEnd()}…` : value.slice(0, maxChars);
 }
 
 function buildLinkedInCaption(item: DispatchableContentRow): string {
-  const parts = [item.title, item.canonical_url ?? ""].filter(
-    (part) => part.trim().length > 0,
-  );
-  return trimToLength(parts.join("\n\n").trim(), 3000);
+  const parts = [item.title, item.canonical_url ?? ''].filter((part) => part.trim().length > 0);
+  return trimToLength(parts.join('\n\n').trim(), 3000);
 }
 
-function isRetryableLinkedInFailure(
-  status: number,
-  errorText: string,
-): boolean {
+function isRetryableLinkedInFailure(status: number, errorText: string): boolean {
   if (status === 429 || status >= 500) return true;
   if (status !== 403) return false;
   const normalized = errorText.trim().toLowerCase();
   return (
-    normalized.includes("rate limit") ||
-    normalized.includes("throttle") ||
-    normalized.includes("too many requests")
+    normalized.includes('rate limit') ||
+    normalized.includes('throttle') ||
+    normalized.includes('too many requests')
   );
 }
 
 function isRetryableXFailure(status: number, errorText: string): boolean {
   if (status === 429 || status >= 500) return true;
   const normalized = errorText.trim().toLowerCase();
-  return (
-    normalized.includes("rate limit") ||
-    normalized.includes("too many requests")
-  );
+  return normalized.includes('rate limit') || normalized.includes('too many requests');
 }
 
-function buildXPostText(
-  item: DispatchableContentRow,
-  asset: DistributionAssetRow,
-): string {
+function buildXPostText(item: DispatchableContentRow, asset: DistributionAssetRow): string {
   const title = (asset.title ?? item.title).trim();
-  const canonical = (item.canonical_url ?? "").trim();
-  const combined = [title, canonical]
-    .filter((part) => part.length > 0)
-    .join("\n\n");
+  const canonical = (item.canonical_url ?? '').trim();
+  const combined = [title, canonical].filter((part) => part.length > 0).join('\n\n');
   return trimToLength(combined, 280);
 }
 
@@ -347,24 +304,20 @@ async function publishXSingleImagePost(args: {
   readonly mediaRows: ReadonlyArray<DistributionAssetMediaRow>;
   readonly env: PaymentApiEnv;
 }): Promise<PublishResult> {
-  const accessToken = args.env.X_ACCESS_TOKEN?.trim() ?? "";
+  const accessToken = args.env.X_ACCESS_TOKEN?.trim() ?? '';
   if (!accessToken) {
     throw new ContentDestinationPublishError({
-      message: "X_ACCESS_TOKEN is missing.",
-      providerName: "x",
+      message: 'X_ACCESS_TOKEN is missing.',
+      providerName: 'x',
       retryable: false,
     });
   }
 
-  const readyMedia =
-    pickProviderReadyMedia(args.mediaRows).find(
-      (media) => media.media_kind === "image",
-    ) ?? null;
+  const readyMedia = pickProviderReadyMedia(args.mediaRows).find((media) => media.media_kind === 'image') ?? null;
   if (!readyMedia) {
     throw new ContentDestinationPublishError({
-      message:
-        "X single-image publish requires at least one provider-ready image media row.",
-      providerName: "x",
+      message: 'X single-image publish requires at least one provider-ready image media row.',
+      providerName: 'x',
       retryable: false,
     });
   }
@@ -374,25 +327,20 @@ async function publishXSingleImagePost(args: {
     const errorText = await mediaResponse.text();
     throw new ContentDestinationPublishError({
       message: `X media fetch failed (${mediaResponse.status}): ${errorText}`,
-      providerName: "x",
+      providerName: 'x',
       statusCode: mediaResponse.status,
       retryable: mediaResponse.status >= 500,
     });
   }
   const mediaBuffer = await mediaResponse.arrayBuffer();
-  const mediaContentType =
-    readyMedia.mime_type?.trim() ||
-    mediaResponse.headers.get("content-type") ||
-    "image/png";
+  const mediaContentType = readyMedia.mime_type?.trim() || mediaResponse.headers.get('content-type') || 'image/png';
 
-  const apiBase = (
-    args.env.X_API_BASE_URL?.trim() || "https://api.x.com"
-  ).replace(/\/+$/, "");
+  const apiBase = (args.env.X_API_BASE_URL?.trim() || 'https://api.x.com').replace(/\/+$/, '');
   const uploadResponse = await fetch(`${apiBase}/2/media/upload`, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type": mediaContentType,
+      'Content-Type': mediaContentType,
     },
     body: mediaBuffer,
   });
@@ -400,42 +348,40 @@ async function publishXSingleImagePost(args: {
   if (!uploadResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `X media upload failed (${uploadResponse.status}): ${uploadText}`,
-      providerName: "x",
+      providerName: 'x',
       statusCode: uploadResponse.status,
       retryable: isRetryableXFailure(uploadResponse.status, uploadText),
     });
   }
 
-  let mediaId = "";
+  let mediaId = '';
   if (uploadText.trim().length > 0) {
     try {
       const json = JSON.parse(uploadText) as Record<string, unknown>;
-      const fromTop = json["media_id_string"];
-      const fromData = (json["data"] as Record<string, unknown> | undefined)?.[
-        "id"
-      ];
+      const fromTop = json['media_id_string'];
+      const fromData = (json['data'] as Record<string, unknown> | undefined)?.['id'];
       mediaId =
-        typeof fromTop === "string"
+        typeof fromTop === 'string'
           ? fromTop.trim()
-          : typeof fromData === "string"
+          : typeof fromData === 'string'
             ? fromData.trim()
-            : "";
+            : '';
     } catch {
-      mediaId = "";
+      mediaId = '';
     }
   }
   if (!mediaId) {
     throw new ContentDestinationPublishError({
-      message: "X media upload succeeded but no media id was returned.",
-      providerName: "x",
+      message: 'X media upload succeeded but no media id was returned.',
+      providerName: 'x',
       retryable: false,
     });
   }
 
   const postResponse = await fetch(`${apiBase}/2/tweets`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({
@@ -447,27 +393,26 @@ async function publishXSingleImagePost(args: {
   if (!postResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `X publish failed (${postResponse.status}): ${postText}`,
-      providerName: "x",
+      providerName: 'x',
       statusCode: postResponse.status,
       retryable: isRetryableXFailure(postResponse.status, postText),
     });
   }
 
-  let tweetId = "";
+  let tweetId = '';
   if (postText.trim().length > 0) {
     try {
       const json = JSON.parse(postText) as Record<string, unknown>;
-      const data = json["data"] as Record<string, unknown> | undefined;
-      tweetId =
-        typeof data?.["id"] === "string" ? String(data["id"]).trim() : "";
+      const data = json['data'] as Record<string, unknown> | undefined;
+      tweetId = typeof data?.['id'] === 'string' ? String(data['id']).trim() : '';
     } catch {
-      tweetId = "";
+      tweetId = '';
     }
   }
   if (!tweetId) {
     throw new ContentDestinationPublishError({
-      message: "X publish succeeded but no tweet id was returned.",
-      providerName: "x",
+      message: 'X publish succeeded but no tweet id was returned.',
+      providerName: 'x',
       retryable: false,
     });
   }
@@ -475,9 +420,9 @@ async function publishXSingleImagePost(args: {
   return {
     providerPublicationId: tweetId,
     destinationUrl: `https://x.com/i/web/status/${tweetId}`,
-    status: "published",
+    status: 'published',
     metadata: {
-      provider: "x",
+      provider: 'x',
       media_id: mediaId,
       media_storage_url: readyMedia.storage_url,
     },
@@ -490,24 +435,20 @@ async function publishXShortVideoPost(args: {
   readonly mediaRows: ReadonlyArray<DistributionAssetMediaRow>;
   readonly env: PaymentApiEnv;
 }): Promise<PublishResult> {
-  const accessToken = args.env.X_ACCESS_TOKEN?.trim() ?? "";
+  const accessToken = args.env.X_ACCESS_TOKEN?.trim() ?? '';
   if (!accessToken) {
     throw new ContentDestinationPublishError({
-      message: "X_ACCESS_TOKEN is missing.",
-      providerName: "x",
+      message: 'X_ACCESS_TOKEN is missing.',
+      providerName: 'x',
       retryable: false,
     });
   }
 
-  const readyVideo =
-    pickProviderReadyMedia(args.mediaRows).find(
-      (media) => media.media_kind === "video",
-    ) ?? null;
+  const readyVideo = pickProviderReadyMedia(args.mediaRows).find((media) => media.media_kind === 'video') ?? null;
   if (!readyVideo) {
     throw new ContentDestinationPublishError({
-      message:
-        "X short-video publish requires at least one provider-ready video media row.",
-      providerName: "x",
+      message: 'X short-video publish requires at least one provider-ready video media row.',
+      providerName: 'x',
       retryable: false,
     });
   }
@@ -517,25 +458,20 @@ async function publishXShortVideoPost(args: {
     const errorText = await mediaResponse.text();
     throw new ContentDestinationPublishError({
       message: `X media fetch failed (${mediaResponse.status}): ${errorText}`,
-      providerName: "x",
+      providerName: 'x',
       statusCode: mediaResponse.status,
       retryable: mediaResponse.status >= 500,
     });
   }
   const mediaBuffer = await mediaResponse.arrayBuffer();
-  const mediaContentType =
-    readyVideo.mime_type?.trim() ||
-    mediaResponse.headers.get("content-type") ||
-    "video/mp4";
+  const mediaContentType = readyVideo.mime_type?.trim() || mediaResponse.headers.get('content-type') || 'video/mp4';
 
-  const apiBase = (
-    args.env.X_API_BASE_URL?.trim() || "https://api.x.com"
-  ).replace(/\/+$/, "");
+  const apiBase = (args.env.X_API_BASE_URL?.trim() || 'https://api.x.com').replace(/\/+$/, '');
   const uploadResponse = await fetch(`${apiBase}/2/media/upload`, {
-    method: "POST",
+    method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type": mediaContentType,
+      'Content-Type': mediaContentType,
     },
     body: mediaBuffer,
   });
@@ -543,42 +479,40 @@ async function publishXShortVideoPost(args: {
   if (!uploadResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `X media upload failed (${uploadResponse.status}): ${uploadText}`,
-      providerName: "x",
+      providerName: 'x',
       statusCode: uploadResponse.status,
       retryable: isRetryableXFailure(uploadResponse.status, uploadText),
     });
   }
 
-  let mediaId = "";
+  let mediaId = '';
   if (uploadText.trim().length > 0) {
     try {
       const json = JSON.parse(uploadText) as Record<string, unknown>;
-      const fromTop = json["media_id_string"];
-      const fromData = (json["data"] as Record<string, unknown> | undefined)?.[
-        "id"
-      ];
+      const fromTop = json['media_id_string'];
+      const fromData = (json['data'] as Record<string, unknown> | undefined)?.['id'];
       mediaId =
-        typeof fromTop === "string"
+        typeof fromTop === 'string'
           ? fromTop.trim()
-          : typeof fromData === "string"
+          : typeof fromData === 'string'
             ? fromData.trim()
-            : "";
+            : '';
     } catch {
-      mediaId = "";
+      mediaId = '';
     }
   }
   if (!mediaId) {
     throw new ContentDestinationPublishError({
-      message: "X media upload succeeded but no media id was returned.",
-      providerName: "x",
+      message: 'X media upload succeeded but no media id was returned.',
+      providerName: 'x',
       retryable: false,
     });
   }
 
   const postResponse = await fetch(`${apiBase}/2/tweets`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({
@@ -590,27 +524,26 @@ async function publishXShortVideoPost(args: {
   if (!postResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `X publish failed (${postResponse.status}): ${postText}`,
-      providerName: "x",
+      providerName: 'x',
       statusCode: postResponse.status,
       retryable: isRetryableXFailure(postResponse.status, postText),
     });
   }
 
-  let tweetId = "";
+  let tweetId = '';
   if (postText.trim().length > 0) {
     try {
       const json = JSON.parse(postText) as Record<string, unknown>;
-      const data = json["data"] as Record<string, unknown> | undefined;
-      tweetId =
-        typeof data?.["id"] === "string" ? String(data["id"]).trim() : "";
+      const data = json['data'] as Record<string, unknown> | undefined;
+      tweetId = typeof data?.['id'] === 'string' ? String(data['id']).trim() : '';
     } catch {
-      tweetId = "";
+      tweetId = '';
     }
   }
   if (!tweetId) {
     throw new ContentDestinationPublishError({
-      message: "X publish succeeded but no tweet id was returned.",
-      providerName: "x",
+      message: 'X publish succeeded but no tweet id was returned.',
+      providerName: 'x',
       retryable: false,
     });
   }
@@ -618,12 +551,12 @@ async function publishXShortVideoPost(args: {
   return {
     providerPublicationId: tweetId,
     destinationUrl: `https://x.com/i/web/status/${tweetId}`,
-    status: "published",
+    status: 'published',
     metadata: {
-      provider: "x",
+      provider: 'x',
       media_id: mediaId,
       media_storage_url: readyVideo.storage_url,
-      media_kind: "video",
+      media_kind: 'video',
     },
   };
 }
@@ -643,19 +576,19 @@ async function publishLinkedInSingleImagePost(args: {
   readonly mediaRows: ReadonlyArray<DistributionAssetMediaRow>;
   readonly env: PaymentApiEnv;
 }): Promise<PublishResult> {
-  const accessToken = args.env.LINKEDIN_ACCESS_TOKEN?.trim() ?? "";
+  const accessToken = args.env.LINKEDIN_ACCESS_TOKEN?.trim() ?? '';
   if (!accessToken) {
     throw new ContentDestinationPublishError({
-      message: "LINKEDIN_ACCESS_TOKEN is missing.",
-      providerName: "linkedin",
+      message: 'LINKEDIN_ACCESS_TOKEN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
-  const authorUrn = args.env.LINKEDIN_AUTHOR_URN?.trim() ?? "";
+  const authorUrn = args.env.LINKEDIN_AUTHOR_URN?.trim() ?? '';
   if (!authorUrn) {
     throw new ContentDestinationPublishError({
-      message: "LINKEDIN_AUTHOR_URN is missing.",
-      providerName: "linkedin",
+      message: 'LINKEDIN_AUTHOR_URN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
@@ -664,8 +597,8 @@ async function publishLinkedInSingleImagePost(args: {
   if (!readyMedia) {
     throw new ContentDestinationPublishError({
       message:
-        "LinkedIn single-image publish requires at least one provider-ready media row.",
-      providerName: "linkedin",
+        'LinkedIn single-image publish requires at least one provider-ready media row.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
@@ -675,90 +608,75 @@ async function publishLinkedInSingleImagePost(args: {
     const errorText = await mediaResponse.text();
     throw new ContentDestinationPublishError({
       message: `LinkedIn media fetch failed (${mediaResponse.status}): ${errorText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: mediaResponse.status,
       retryable: mediaResponse.status >= 500,
     });
   }
   const mediaBuffer = await mediaResponse.arrayBuffer();
-  const mediaContentType =
-    readyMedia.mime_type?.trim() ||
-    mediaResponse.headers.get("content-type") ||
-    "application/octet-stream";
+  const mediaContentType = readyMedia.mime_type?.trim() || mediaResponse.headers.get('content-type') || 'application/octet-stream';
 
-  const apiBase = (
-    args.env.LINKEDIN_API_BASE_URL?.trim() || "https://api.linkedin.com"
-  ).replace(/\/+$/, "");
-
-  const registerResponse = await fetch(
-    `${apiBase}/v2/assets?action=registerUpload`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-      body: JSON.stringify({
-        registerUploadRequest: {
-          owner: authorUrn,
-          recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-          serviceRelationships: [
-            {
-              relationshipType: "OWNER",
-              identifier: "urn:li:userGeneratedContent",
-            },
-          ],
-          supportedUploadMechanism: ["SYNCHRONOUS_UPLOAD"],
-        },
-      }),
-    },
+  const apiBase = (args.env.LINKEDIN_API_BASE_URL?.trim() || 'https://api.linkedin.com').replace(
+    /\/+$/,
+    ''
   );
+
+  const registerResponse = await fetch(`${apiBase}/v2/assets?action=registerUpload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'X-Restli-Protocol-Version': '2.0.0',
+    },
+    body: JSON.stringify({
+      registerUploadRequest: {
+        owner: authorUrn,
+        recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+        serviceRelationships: [
+          {
+            relationshipType: 'OWNER',
+            identifier: 'urn:li:userGeneratedContent',
+          },
+        ],
+        supportedUploadMechanism: ['SYNCHRONOUS_UPLOAD'],
+      },
+    }),
+  });
   const registerText = await registerResponse.text();
   if (!registerResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn media register failed (${registerResponse.status}): ${registerText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: registerResponse.status,
-      retryable: isRetryableLinkedInFailure(
-        registerResponse.status,
-        registerText,
-      ),
+      retryable: isRetryableLinkedInFailure(registerResponse.status, registerText),
     });
   }
 
   const registerJson = JSON.parse(registerText) as Record<string, unknown>;
-  const uploadMechanism = (registerJson["value"] as Record<string, unknown>)?.[
-    "uploadMechanism"
+  const uploadMechanism = (registerJson['value'] as Record<string, unknown>)?.[
+    'uploadMechanism'
   ] as Record<string, unknown> | undefined;
-  const httpRequest =
-    (uploadMechanism?.[
-      "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
-    ] as Record<string, unknown>) ?? null;
-  const uploadUrl =
-    typeof httpRequest?.["uploadUrl"] === "string"
-      ? String(httpRequest["uploadUrl"])
-      : "";
-  const assetUrn =
-    typeof (registerJson["value"] as Record<string, unknown>)?.["asset"] ===
-    "string"
-      ? String((registerJson["value"] as Record<string, unknown>)["asset"])
-      : "";
+  const httpRequest = (uploadMechanism?.[
+    'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
+  ] as Record<string, unknown>) ?? null;
+  const uploadUrl = typeof httpRequest?.['uploadUrl'] === 'string' ? String(httpRequest['uploadUrl']) : '';
+  const assetUrn = typeof (registerJson['value'] as Record<string, unknown>)?.['asset'] === 'string'
+    ? String((registerJson['value'] as Record<string, unknown>)['asset'])
+    : '';
 
   if (!uploadUrl || !assetUrn) {
     throw new ContentDestinationPublishError({
-      message:
-        "LinkedIn media register succeeded but upload URL or asset URN is missing.",
-      providerName: "linkedin",
+      message: 'LinkedIn media register succeeded but upload URL or asset URN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
 
   const uploadResponse = await fetch(uploadUrl, {
-    method: "PUT",
+    method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type": mediaContentType,
+      'Content-Type': mediaContentType,
     },
     body: mediaBuffer,
   });
@@ -766,39 +684,37 @@ async function publishLinkedInSingleImagePost(args: {
   if (!uploadResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn media upload failed (${uploadResponse.status}): ${uploadText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: uploadResponse.status,
       retryable: isRetryableLinkedInFailure(uploadResponse.status, uploadText),
     });
   }
 
   const postResponse = await fetch(`${apiBase}/v2/ugcPosts`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
-      "X-Restli-Protocol-Version": "2.0.0",
+      'X-Restli-Protocol-Version': '2.0.0',
     },
     body: JSON.stringify({
       author: authorUrn,
-      lifecycleState: "PUBLISHED",
+      lifecycleState: 'PUBLISHED',
       specificContent: {
-        "com.linkedin.ugc.ShareContent": {
+        'com.linkedin.ugc.ShareContent': {
           shareCommentary: { text: buildLinkedInCaption(args.item) },
-          shareMediaCategory: "IMAGE",
+          shareMediaCategory: 'IMAGE',
           media: [
             {
-              status: "READY",
+              status: 'READY',
               media: assetUrn,
-              title: {
-                text: trimToLength(args.asset.title ?? args.item.title, 200),
-              },
+              title: { text: trimToLength(args.asset.title ?? args.item.title, 200) },
             },
           ],
         },
       },
       visibility: {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
       },
     }),
   });
@@ -806,25 +722,25 @@ async function publishLinkedInSingleImagePost(args: {
   if (!postResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn publish failed (${postResponse.status}): ${postText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: postResponse.status,
       retryable: isRetryableLinkedInFailure(postResponse.status, postText),
     });
   }
 
-  let postId = postResponse.headers.get("x-restli-id")?.trim() ?? "";
+  let postId = postResponse.headers.get('x-restli-id')?.trim() ?? '';
   if (!postId && postText.trim().length > 0) {
     try {
       const json = JSON.parse(postText) as Record<string, unknown>;
-      postId = typeof json["id"] === "string" ? String(json["id"]).trim() : "";
+      postId = typeof json['id'] === 'string' ? String(json['id']).trim() : '';
     } catch {
-      postId = "";
+      postId = '';
     }
   }
   if (!postId) {
     throw new ContentDestinationPublishError({
-      message: "LinkedIn publish succeeded but no post id was returned.",
-      providerName: "linkedin",
+      message: 'LinkedIn publish succeeded but no post id was returned.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
@@ -832,9 +748,9 @@ async function publishLinkedInSingleImagePost(args: {
   return {
     providerPublicationId: postId,
     destinationUrl: null,
-    status: "published",
+    status: 'published',
     metadata: {
-      provider: "linkedin",
+      provider: 'linkedin',
       media_asset_urn: assetUrn,
       media_storage_url: readyMedia.storage_url,
     },
@@ -847,39 +763,39 @@ async function publishLinkedInCarouselPost(args: {
   readonly mediaRows: ReadonlyArray<DistributionAssetMediaRow>;
   readonly env: PaymentApiEnv;
 }): Promise<PublishResult> {
-  const accessToken = args.env.LINKEDIN_ACCESS_TOKEN?.trim() ?? "";
+  const accessToken = args.env.LINKEDIN_ACCESS_TOKEN?.trim() ?? '';
   if (!accessToken) {
     throw new ContentDestinationPublishError({
-      message: "LINKEDIN_ACCESS_TOKEN is missing.",
-      providerName: "linkedin",
+      message: 'LINKEDIN_ACCESS_TOKEN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
-  const authorUrn = args.env.LINKEDIN_AUTHOR_URN?.trim() ?? "";
+  const authorUrn = args.env.LINKEDIN_AUTHOR_URN?.trim() ?? '';
   if (!authorUrn) {
     throw new ContentDestinationPublishError({
-      message: "LINKEDIN_AUTHOR_URN is missing.",
-      providerName: "linkedin",
+      message: 'LINKEDIN_AUTHOR_URN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
 
   const readyMedia = pickProviderReadyMedia(args.mediaRows).filter(
-    (media) =>
-      media.media_kind === "carousel_slide" || media.media_kind === "image",
+    (media) => media.media_kind === 'carousel_slide' || media.media_kind === 'image'
   );
   if (readyMedia.length < 2) {
     throw new ContentDestinationPublishError({
       message:
-        "LinkedIn carousel publish requires at least two provider-ready image/carousel-slide media rows.",
-      providerName: "linkedin",
+        'LinkedIn carousel publish requires at least two provider-ready image/carousel-slide media rows.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
 
-  const apiBase = (
-    args.env.LINKEDIN_API_BASE_URL?.trim() || "https://api.linkedin.com"
-  ).replace(/\/+$/, "");
+  const apiBase = (args.env.LINKEDIN_API_BASE_URL?.trim() || 'https://api.linkedin.com').replace(
+    /\/+$/,
+    ''
+  );
 
   const uploadedMedia: Array<{ assetUrn: string; storageUrl: string }> = [];
   for (const media of readyMedia) {
@@ -888,86 +804,72 @@ async function publishLinkedInCarouselPost(args: {
       const errorText = await mediaResponse.text();
       throw new ContentDestinationPublishError({
         message: `LinkedIn media fetch failed (${mediaResponse.status}): ${errorText}`,
-        providerName: "linkedin",
+        providerName: 'linkedin',
         statusCode: mediaResponse.status,
         retryable: mediaResponse.status >= 500,
       });
     }
     const mediaBuffer = await mediaResponse.arrayBuffer();
     const mediaContentType =
-      media.mime_type?.trim() ||
-      mediaResponse.headers.get("content-type") ||
-      "application/octet-stream";
+      media.mime_type?.trim() || mediaResponse.headers.get('content-type') || 'application/octet-stream';
 
-    const registerResponse = await fetch(
-      `${apiBase}/v2/assets?action=registerUpload`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-          "X-Restli-Protocol-Version": "2.0.0",
-        },
-        body: JSON.stringify({
-          registerUploadRequest: {
-            owner: authorUrn,
-            recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-            serviceRelationships: [
-              {
-                relationshipType: "OWNER",
-                identifier: "urn:li:userGeneratedContent",
-              },
-            ],
-            supportedUploadMechanism: ["SYNCHRONOUS_UPLOAD"],
-          },
-        }),
+    const registerResponse = await fetch(`${apiBase}/v2/assets?action=registerUpload`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+        'X-Restli-Protocol-Version': '2.0.0',
       },
-    );
+      body: JSON.stringify({
+        registerUploadRequest: {
+          owner: authorUrn,
+          recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
+          serviceRelationships: [
+            {
+              relationshipType: 'OWNER',
+              identifier: 'urn:li:userGeneratedContent',
+            },
+          ],
+          supportedUploadMechanism: ['SYNCHRONOUS_UPLOAD'],
+        },
+      }),
+    });
     const registerText = await registerResponse.text();
     if (!registerResponse.ok) {
       throw new ContentDestinationPublishError({
         message: `LinkedIn media register failed (${registerResponse.status}): ${registerText}`,
-        providerName: "linkedin",
+        providerName: 'linkedin',
         statusCode: registerResponse.status,
-        retryable: isRetryableLinkedInFailure(
-          registerResponse.status,
-          registerText,
-        ),
+        retryable: isRetryableLinkedInFailure(registerResponse.status, registerText),
       });
     }
 
     const registerJson = JSON.parse(registerText) as Record<string, unknown>;
-    const uploadMechanism = (
-      registerJson["value"] as Record<string, unknown>
-    )?.["uploadMechanism"] as Record<string, unknown> | undefined;
-    const httpRequest =
-      (uploadMechanism?.[
-        "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
-      ] as Record<string, unknown>) ?? null;
-    const uploadUrl =
-      typeof httpRequest?.["uploadUrl"] === "string"
-        ? String(httpRequest["uploadUrl"])
-        : "";
+    const uploadMechanism = (registerJson['value'] as Record<string, unknown>)?.[
+      'uploadMechanism'
+    ] as Record<string, unknown> | undefined;
+    const httpRequest = (uploadMechanism?.[
+      'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
+    ] as Record<string, unknown>) ?? null;
+    const uploadUrl = typeof httpRequest?.['uploadUrl'] === 'string' ? String(httpRequest['uploadUrl']) : '';
     const assetUrn =
-      typeof (registerJson["value"] as Record<string, unknown>)?.["asset"] ===
-      "string"
-        ? String((registerJson["value"] as Record<string, unknown>)["asset"])
-        : "";
+      typeof (registerJson['value'] as Record<string, unknown>)?.['asset'] === 'string'
+        ? String((registerJson['value'] as Record<string, unknown>)['asset'])
+        : '';
 
     if (!uploadUrl || !assetUrn) {
       throw new ContentDestinationPublishError({
-        message:
-          "LinkedIn media register succeeded but upload URL or asset URN is missing.",
-        providerName: "linkedin",
+        message: 'LinkedIn media register succeeded but upload URL or asset URN is missing.',
+        providerName: 'linkedin',
         retryable: false,
       });
     }
 
     const uploadResponse = await fetch(uploadUrl, {
-      method: "PUT",
+      method: 'PUT',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": mediaContentType,
+        'Content-Type': mediaContentType,
       },
       body: mediaBuffer,
     });
@@ -975,12 +877,9 @@ async function publishLinkedInCarouselPost(args: {
     if (!uploadResponse.ok) {
       throw new ContentDestinationPublishError({
         message: `LinkedIn media upload failed (${uploadResponse.status}): ${uploadText}`,
-        providerName: "linkedin",
+        providerName: 'linkedin',
         statusCode: uploadResponse.status,
-        retryable: isRetryableLinkedInFailure(
-          uploadResponse.status,
-          uploadText,
-        ),
+        retryable: isRetryableLinkedInFailure(uploadResponse.status, uploadText),
       });
     }
 
@@ -991,35 +890,33 @@ async function publishLinkedInCarouselPost(args: {
   }
 
   const postResponse = await fetch(`${apiBase}/v2/ugcPosts`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
-      "X-Restli-Protocol-Version": "2.0.0",
+      'X-Restli-Protocol-Version': '2.0.0',
     },
     body: JSON.stringify({
       author: authorUrn,
-      lifecycleState: "PUBLISHED",
+      lifecycleState: 'PUBLISHED',
       specificContent: {
-        "com.linkedin.ugc.ShareContent": {
+        'com.linkedin.ugc.ShareContent': {
           shareCommentary: { text: buildLinkedInCaption(args.item) },
-          shareMediaCategory: "IMAGE",
+          shareMediaCategory: 'IMAGE',
           media: uploadedMedia.map((media, index) => ({
-            status: "READY",
+            status: 'READY',
             media: media.assetUrn,
             title: {
               text: trimToLength(
-                index === 0
-                  ? (args.asset.title ?? args.item.title)
-                  : `${args.asset.title ?? args.item.title} ${index + 1}`,
-                200,
+                index === 0 ? args.asset.title ?? args.item.title : `${args.asset.title ?? args.item.title} ${index + 1}`,
+                200
               ),
             },
           })),
         },
       },
       visibility: {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
       },
     }),
   });
@@ -1027,25 +924,25 @@ async function publishLinkedInCarouselPost(args: {
   if (!postResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn publish failed (${postResponse.status}): ${postText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: postResponse.status,
       retryable: isRetryableLinkedInFailure(postResponse.status, postText),
     });
   }
 
-  let postId = postResponse.headers.get("x-restli-id")?.trim() ?? "";
+  let postId = postResponse.headers.get('x-restli-id')?.trim() ?? '';
   if (!postId && postText.trim().length > 0) {
     try {
       const json = JSON.parse(postText) as Record<string, unknown>;
-      postId = typeof json["id"] === "string" ? String(json["id"]).trim() : "";
+      postId = typeof json['id'] === 'string' ? String(json['id']).trim() : '';
     } catch {
-      postId = "";
+      postId = '';
     }
   }
   if (!postId) {
     throw new ContentDestinationPublishError({
-      message: "LinkedIn publish succeeded but no post id was returned.",
-      providerName: "linkedin",
+      message: 'LinkedIn publish succeeded but no post id was returned.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
@@ -1053,9 +950,9 @@ async function publishLinkedInCarouselPost(args: {
   return {
     providerPublicationId: postId,
     destinationUrl: null,
-    status: "published",
+    status: 'published',
     metadata: {
-      provider: "linkedin",
+      provider: 'linkedin',
       media_asset_urns: uploadedMedia.map((media) => media.assetUrn),
       media_storage_urls: uploadedMedia.map((media) => media.storageUrl),
     },
@@ -1068,32 +965,31 @@ async function publishLinkedInShortVideoPost(args: {
   readonly mediaRows: ReadonlyArray<DistributionAssetMediaRow>;
   readonly env: PaymentApiEnv;
 }): Promise<PublishResult> {
-  const accessToken = args.env.LINKEDIN_ACCESS_TOKEN?.trim() ?? "";
+  const accessToken = args.env.LINKEDIN_ACCESS_TOKEN?.trim() ?? '';
   if (!accessToken) {
     throw new ContentDestinationPublishError({
-      message: "LINKEDIN_ACCESS_TOKEN is missing.",
-      providerName: "linkedin",
+      message: 'LINKEDIN_ACCESS_TOKEN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
-  const authorUrn = args.env.LINKEDIN_AUTHOR_URN?.trim() ?? "";
+  const authorUrn = args.env.LINKEDIN_AUTHOR_URN?.trim() ?? '';
   if (!authorUrn) {
     throw new ContentDestinationPublishError({
-      message: "LINKEDIN_AUTHOR_URN is missing.",
-      providerName: "linkedin",
+      message: 'LINKEDIN_AUTHOR_URN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
 
   const readyVideoMedia = pickProviderReadyMedia(args.mediaRows).filter(
-    (media) => media.media_kind === "video",
+    (media) => media.media_kind === 'video'
   );
   const videoMedia = readyVideoMedia[0] ?? null;
   if (!videoMedia) {
     throw new ContentDestinationPublishError({
-      message:
-        "LinkedIn short-video publish requires at least one provider-ready video media row.",
-      providerName: "linkedin",
+      message: 'LinkedIn short-video publish requires at least one provider-ready video media row.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
@@ -1103,90 +999,77 @@ async function publishLinkedInShortVideoPost(args: {
     const errorText = await mediaResponse.text();
     throw new ContentDestinationPublishError({
       message: `LinkedIn media fetch failed (${mediaResponse.status}): ${errorText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: mediaResponse.status,
       retryable: mediaResponse.status >= 500,
     });
   }
   const mediaBuffer = await mediaResponse.arrayBuffer();
   const mediaContentType =
-    videoMedia.mime_type?.trim() ||
-    mediaResponse.headers.get("content-type") ||
-    "video/mp4";
+    videoMedia.mime_type?.trim() || mediaResponse.headers.get('content-type') || 'video/mp4';
 
-  const apiBase = (
-    args.env.LINKEDIN_API_BASE_URL?.trim() || "https://api.linkedin.com"
-  ).replace(/\/+$/, "");
-
-  const registerResponse = await fetch(
-    `${apiBase}/v2/assets?action=registerUpload`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-      body: JSON.stringify({
-        registerUploadRequest: {
-          owner: authorUrn,
-          recipes: ["urn:li:digitalmediaRecipe:feedshare-video"],
-          serviceRelationships: [
-            {
-              relationshipType: "OWNER",
-              identifier: "urn:li:userGeneratedContent",
-            },
-          ],
-          supportedUploadMechanism: ["SYNCHRONOUS_UPLOAD"],
-        },
-      }),
-    },
+  const apiBase = (args.env.LINKEDIN_API_BASE_URL?.trim() || 'https://api.linkedin.com').replace(
+    /\/+$/,
+    ''
   );
+
+  const registerResponse = await fetch(`${apiBase}/v2/assets?action=registerUpload`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+      'X-Restli-Protocol-Version': '2.0.0',
+    },
+    body: JSON.stringify({
+      registerUploadRequest: {
+        owner: authorUrn,
+        recipes: ['urn:li:digitalmediaRecipe:feedshare-video'],
+        serviceRelationships: [
+          {
+            relationshipType: 'OWNER',
+            identifier: 'urn:li:userGeneratedContent',
+          },
+        ],
+        supportedUploadMechanism: ['SYNCHRONOUS_UPLOAD'],
+      },
+    }),
+  });
   const registerText = await registerResponse.text();
   if (!registerResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn media register failed (${registerResponse.status}): ${registerText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: registerResponse.status,
-      retryable: isRetryableLinkedInFailure(
-        registerResponse.status,
-        registerText,
-      ),
+      retryable: isRetryableLinkedInFailure(registerResponse.status, registerText),
     });
   }
 
   const registerJson = JSON.parse(registerText) as Record<string, unknown>;
-  const uploadMechanism = (registerJson["value"] as Record<string, unknown>)?.[
-    "uploadMechanism"
+  const uploadMechanism = (registerJson['value'] as Record<string, unknown>)?.[
+    'uploadMechanism'
   ] as Record<string, unknown> | undefined;
-  const httpRequest =
-    (uploadMechanism?.[
-      "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
-    ] as Record<string, unknown>) ?? null;
-  const uploadUrl =
-    typeof httpRequest?.["uploadUrl"] === "string"
-      ? String(httpRequest["uploadUrl"])
-      : "";
+  const httpRequest = (uploadMechanism?.[
+    'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
+  ] as Record<string, unknown>) ?? null;
+  const uploadUrl = typeof httpRequest?.['uploadUrl'] === 'string' ? String(httpRequest['uploadUrl']) : '';
   const assetUrn =
-    typeof (registerJson["value"] as Record<string, unknown>)?.["asset"] ===
-    "string"
-      ? String((registerJson["value"] as Record<string, unknown>)["asset"])
-      : "";
+    typeof (registerJson['value'] as Record<string, unknown>)?.['asset'] === 'string'
+      ? String((registerJson['value'] as Record<string, unknown>)['asset'])
+      : '';
 
   if (!uploadUrl || !assetUrn) {
     throw new ContentDestinationPublishError({
-      message:
-        "LinkedIn media register succeeded but upload URL or asset URN is missing.",
-      providerName: "linkedin",
+      message: 'LinkedIn media register succeeded but upload URL or asset URN is missing.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
 
   const uploadResponse = await fetch(uploadUrl, {
-    method: "PUT",
+    method: 'PUT',
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type": mediaContentType,
+      'Content-Type': mediaContentType,
     },
     body: mediaBuffer,
   });
@@ -1194,39 +1077,37 @@ async function publishLinkedInShortVideoPost(args: {
   if (!uploadResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn media upload failed (${uploadResponse.status}): ${uploadText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: uploadResponse.status,
       retryable: isRetryableLinkedInFailure(uploadResponse.status, uploadText),
     });
   }
 
   const postResponse = await fetch(`${apiBase}/v2/ugcPosts`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
+      'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
-      "X-Restli-Protocol-Version": "2.0.0",
+      'X-Restli-Protocol-Version': '2.0.0',
     },
     body: JSON.stringify({
       author: authorUrn,
-      lifecycleState: "PUBLISHED",
+      lifecycleState: 'PUBLISHED',
       specificContent: {
-        "com.linkedin.ugc.ShareContent": {
+        'com.linkedin.ugc.ShareContent': {
           shareCommentary: { text: buildLinkedInCaption(args.item) },
-          shareMediaCategory: "VIDEO",
+          shareMediaCategory: 'VIDEO',
           media: [
             {
-              status: "READY",
+              status: 'READY',
               media: assetUrn,
-              title: {
-                text: trimToLength(args.asset.title ?? args.item.title, 200),
-              },
+              title: { text: trimToLength(args.asset.title ?? args.item.title, 200) },
             },
           ],
         },
       },
       visibility: {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC",
+        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
       },
     }),
   });
@@ -1234,25 +1115,25 @@ async function publishLinkedInShortVideoPost(args: {
   if (!postResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn publish failed (${postResponse.status}): ${postText}`,
-      providerName: "linkedin",
+      providerName: 'linkedin',
       statusCode: postResponse.status,
       retryable: isRetryableLinkedInFailure(postResponse.status, postText),
     });
   }
 
-  let postId = postResponse.headers.get("x-restli-id")?.trim() ?? "";
+  let postId = postResponse.headers.get('x-restli-id')?.trim() ?? '';
   if (!postId && postText.trim().length > 0) {
     try {
       const json = JSON.parse(postText) as Record<string, unknown>;
-      postId = typeof json["id"] === "string" ? String(json["id"]).trim() : "";
+      postId = typeof json['id'] === 'string' ? String(json['id']).trim() : '';
     } catch {
-      postId = "";
+      postId = '';
     }
   }
   if (!postId) {
     throw new ContentDestinationPublishError({
-      message: "LinkedIn publish succeeded but no post id was returned.",
-      providerName: "linkedin",
+      message: 'LinkedIn publish succeeded but no post id was returned.',
+      providerName: 'linkedin',
       retryable: false,
     });
   }
@@ -1260,12 +1141,12 @@ async function publishLinkedInShortVideoPost(args: {
   return {
     providerPublicationId: postId,
     destinationUrl: null,
-    status: "published",
+    status: 'published',
     metadata: {
-      provider: "linkedin",
+      provider: 'linkedin',
       media_asset_urn: assetUrn,
       media_storage_url: videoMedia.storage_url,
-      media_kind: "video",
+      media_kind: 'video',
     },
   };
 }
@@ -1280,34 +1161,19 @@ async function publishLinkedInLongVideoPost(args: {
 }
 
 function pickBackoffWindowMs(
-  providerName: DistributionAccountRow["provider_name"] | undefined,
+  providerName: DistributionAccountRow['provider_name'] | undefined,
   providerStatusCode: number | null,
   attemptNumber: number,
   options?: {
-    readonly profile?: "default" | "aggressive" | "conservative";
+    readonly profile?: 'default' | 'aggressive' | 'conservative';
     readonly multiplier?: number | null;
-  },
+  }
 ): number {
   const defaultWindows = [2 * 60_000, 5 * 60_000, 10 * 60_000, 20 * 60_000];
-  const xRateLimitedWindows = [
-    5 * 60_000,
-    15 * 60_000,
-    30 * 60_000,
-    60 * 60_000,
-  ];
+  const xRateLimitedWindows = [5 * 60_000, 15 * 60_000, 30 * 60_000, 60 * 60_000];
   const xServerWindows = [2 * 60_000, 5 * 60_000, 15 * 60_000, 30 * 60_000];
-  const linkedInRateWindows = [
-    10 * 60_000,
-    20 * 60_000,
-    40 * 60_000,
-    60 * 60_000,
-  ];
-  const linkedInServerWindows = [
-    3 * 60_000,
-    10 * 60_000,
-    20 * 60_000,
-    45 * 60_000,
-  ];
+  const linkedInRateWindows = [10 * 60_000, 20 * 60_000, 40 * 60_000, 60 * 60_000];
+  const linkedInServerWindows = [3 * 60_000, 10 * 60_000, 20 * 60_000, 45 * 60_000];
 
   const idx = Math.max(0, attemptNumber - 1);
   const status = providerStatusCode ?? 0;
@@ -1315,39 +1181,26 @@ function pickBackoffWindowMs(
   let baseWindowMs =
     defaultWindows[idx] ?? defaultWindows[defaultWindows.length - 1]!;
 
-  if (providerName === "x") {
+  if (providerName === 'x') {
     if (status === 429) {
-      baseWindowMs =
-        xRateLimitedWindows[idx] ??
-        xRateLimitedWindows[xRateLimitedWindows.length - 1]!;
+      baseWindowMs = xRateLimitedWindows[idx] ?? xRateLimitedWindows[xRateLimitedWindows.length - 1]!;
     } else if (status >= 500 || status === 0) {
-      baseWindowMs =
-        xServerWindows[idx] ?? xServerWindows[xServerWindows.length - 1]!;
+      baseWindowMs = xServerWindows[idx] ?? xServerWindows[xServerWindows.length - 1]!;
     }
   }
 
-  if (providerName === "linkedin") {
+  if (providerName === 'linkedin') {
     if (status === 429 || status === 403) {
-      baseWindowMs =
-        linkedInRateWindows[idx] ??
-        linkedInRateWindows[linkedInRateWindows.length - 1]!;
+      baseWindowMs = linkedInRateWindows[idx] ?? linkedInRateWindows[linkedInRateWindows.length - 1]!;
     } else if (status >= 500 || status === 0) {
-      baseWindowMs =
-        linkedInServerWindows[idx] ??
-        linkedInServerWindows[linkedInServerWindows.length - 1]!;
+      baseWindowMs = linkedInServerWindows[idx] ?? linkedInServerWindows[linkedInServerWindows.length - 1]!;
     }
   }
 
   const profileFactor =
-    options?.profile === "aggressive"
-      ? 0.7
-      : options?.profile === "conservative"
-        ? 1.5
-        : 1;
+    options?.profile === 'aggressive' ? 0.7 : options?.profile === 'conservative' ? 1.5 : 1;
   const multiplier =
-    typeof options?.multiplier === "number" &&
-    Number.isFinite(options.multiplier) &&
-    options.multiplier > 0
+    typeof options?.multiplier === 'number' && Number.isFinite(options.multiplier) && options.multiplier > 0
       ? Math.min(options.multiplier, 5)
       : 1;
   const adjusted = Math.round(baseWindowMs * profileFactor * multiplier);
@@ -1355,24 +1208,20 @@ function pickBackoffWindowMs(
 }
 
 function readBackoffProfile(
-  account: DistributionAccountRow | null,
-): "default" | "aggressive" | "conservative" {
-  const value = account?.metadata?.["retry_backoff_profile"];
-  if (value === "aggressive" || value === "conservative") return value;
-  return "default";
+  account: DistributionAccountRow | null
+): 'default' | 'aggressive' | 'conservative' {
+  const value = account?.metadata?.['retry_backoff_profile'];
+  if (value === 'aggressive' || value === 'conservative') return value;
+  return 'default';
 }
 
-function readBackoffMultiplier(
-  account: DistributionAccountRow | null,
-): number | null {
-  const value = account?.metadata?.["retry_backoff_multiplier"];
-  if (typeof value !== "number") return null;
+function readBackoffMultiplier(account: DistributionAccountRow | null): number | null {
+  const value = account?.metadata?.['retry_backoff_multiplier'];
+  if (typeof value !== 'number') return null;
   return Number.isFinite(value) && value > 0 ? Math.min(value, 5) : null;
 }
 
-function parseTokenExpiryMs(
-  token: DistributionAccountTokenRow | null,
-): number | null {
+function parseTokenExpiryMs(token: DistributionAccountTokenRow | null): number | null {
   if (!token?.expires_at) return null;
   const parsed = Date.parse(token.expires_at);
   return Number.isFinite(parsed) ? parsed : null;
@@ -1381,20 +1230,20 @@ function parseTokenExpiryMs(
 async function markAccountTokenExpired(
   repo: ReturnType<typeof createDistributionEngineRepository>,
   account: DistributionAccountRow,
-  reason: string,
+  reason: string
 ): Promise<void> {
   await repo.upsertAccount({
     accountId: account.account_id,
     providerName: account.provider_name,
     accountLabel: account.account_label,
     externalAccountId: account.external_account_id,
-    status: "token_expired",
+    status: 'token_expired',
     defaultAudienceId: account.default_audience_id,
     connectedByUserId: account.connected_by_user_id,
     lastVerifiedAt: account.last_verified_at,
     metadata: {
       ...account.metadata,
-      oauth_refresh_state: "token_expired",
+      oauth_refresh_state: 'token_expired',
       oauth_refresh_failure_reason: reason,
       oauth_refresh_failed_at: new Date().toISOString(),
     },
@@ -1405,15 +1254,15 @@ async function ensureActiveProviderToken(
   repo: ReturnType<typeof createDistributionEngineRepository>,
   env: PaymentApiEnv,
   account: DistributionAccountRow,
-  token: DistributionAccountTokenRow | null,
+  token: DistributionAccountTokenRow | null
 ): Promise<DistributionAccountTokenRow | null> {
   if (!token || !requiresTokenRuntime(account.provider_name)) {
     return token;
   }
   if (
-    account.provider_name !== "x" &&
-    account.provider_name !== "linkedin" &&
-    account.provider_name !== "instagram"
+    account.provider_name !== 'x' &&
+    account.provider_name !== 'linkedin' &&
+    account.provider_name !== 'instagram'
   ) {
     return token;
   }
@@ -1434,10 +1283,10 @@ async function ensureActiveProviderToken(
     await markAccountTokenExpired(
       repo,
       account,
-      `${account.provider_name} token expired or near expiry and no refresh token is stored.`,
+      `${account.provider_name} token expired or near expiry and no refresh token is stored.`
     );
     throw new ContentDestinationPublishError({
-      message: `${account.provider_name === "linkedin" ? "LinkedIn" : account.provider_name === "instagram" ? "Instagram" : "X"} OAuth token expired and no refresh token is available.`,
+      message: `${account.provider_name === 'linkedin' ? 'LinkedIn' : account.provider_name === 'instagram' ? 'Instagram' : 'X'} OAuth token expired and no refresh token is available.`,
       providerName: account.provider_name,
       retryable: false,
     });
@@ -1458,15 +1307,14 @@ async function ensureActiveProviderToken(
 
     const refreshedToken = await repo.upsertAccountToken({
       distributionAccountId: account.id,
-      tokenType: "oauth",
+      tokenType: 'oauth',
       accessTokenEncrypted: refreshed.accessToken,
       refreshTokenEncrypted: refreshed.refreshToken ?? refreshToken,
       expiresAt: refreshed.expiresAt,
-      scopes:
-        refreshed.scopeList.length > 0 ? refreshed.scopeList : token.scopes,
+      scopes: refreshed.scopeList.length > 0 ? refreshed.scopeList : token.scopes,
       metadata: {
         ...(token.metadata ?? {}),
-        source: "provider_oauth_refresh",
+        source: 'provider_oauth_refresh',
         provider: account.provider_name,
         raw: refreshed.raw,
         refreshed_at: new Date().toISOString(),
@@ -1478,13 +1326,13 @@ async function ensureActiveProviderToken(
       providerName: account.provider_name,
       accountLabel: account.account_label,
       externalAccountId: account.external_account_id,
-      status: "connected",
+      status: 'connected',
       defaultAudienceId: account.default_audience_id,
       connectedByUserId: account.connected_by_user_id,
       lastVerifiedAt: new Date().toISOString(),
       metadata: {
         ...account.metadata,
-        oauth_refresh_state: "ok",
+        oauth_refresh_state: 'ok',
         oauth_refreshed_at: new Date().toISOString(),
       },
     });
@@ -1497,7 +1345,7 @@ async function ensureActiveProviderToken(
         : `Unknown ${account.provider_name} OAuth refresh failure.`;
     await markAccountTokenExpired(repo, account, message);
     throw new ContentDestinationPublishError({
-      message: `${account.provider_name === "linkedin" ? "LinkedIn" : account.provider_name === "instagram" ? "Instagram" : "X"} OAuth token refresh failed: ${message}`,
+      message: `${account.provider_name === 'linkedin' ? 'LinkedIn' : account.provider_name === 'instagram' ? 'Instagram' : 'X'} OAuth token refresh failed: ${message}`,
       providerName: account.provider_name,
       retryable: false,
     });
@@ -1511,11 +1359,9 @@ export async function dispatchDistributionJobs(
     readonly now?: string;
     readonly limit?: number;
   },
-  deps: DispatchDependencies = {},
+  deps: DispatchDependencies = {}
 ): Promise<DispatchSummary> {
-  const repo = (deps.createRepository ?? createDistributionEngineRepository)(
-    supabase as any,
-  );
+  const repo = (deps.createRepository ?? createDistributionEngineRepository)(supabase as any);
 
   const jobs = await repo.listDispatchableJobs({
     now: args?.now,
@@ -1529,12 +1375,7 @@ export async function dispatchDistributionJobs(
   for (const job of jobs) {
     dispatched += 1;
     try {
-      const summary = await dispatchDistributionJobById(
-        supabase,
-        env,
-        job.id,
-        deps,
-      );
+      const summary = await dispatchDistributionJobById(supabase, env, job.id, deps);
       succeeded += summary.succeeded;
       failed += summary.failed;
     } catch {
@@ -1554,17 +1395,12 @@ export async function dispatchDistributionJobById(
   supabase: SupabaseLike,
   env: PaymentApiEnv,
   distributionJobId: string,
-  deps: DispatchDependencies = {},
+  deps: DispatchDependencies = {}
 ): Promise<DispatchSummary> {
-  const repo = (deps.createRepository ?? createDistributionEngineRepository)(
-    supabase as any,
-  );
-  const resolveAdapter =
-    deps.resolveAdapter ?? resolveContentDestinationAdapter;
-  const publishXSingleImage =
-    deps.publishXSingleImagePost ?? publishXSingleImagePost;
-  const publishXShortVideo =
-    deps.publishXShortVideoPost ?? publishXShortVideoPost;
+  const repo = (deps.createRepository ?? createDistributionEngineRepository)(supabase as any);
+  const resolveAdapter = deps.resolveAdapter ?? resolveContentDestinationAdapter;
+  const publishXSingleImage = deps.publishXSingleImagePost ?? publishXSingleImagePost;
+  const publishXShortVideo = deps.publishXShortVideoPost ?? publishXShortVideoPost;
   const publishXLongVideo = deps.publishXLongVideoPost ?? publishXLongVideoPost;
   const publishLinkedInSingleImage =
     deps.publishLinkedInSingleImagePost ?? publishLinkedInSingleImagePost;
@@ -1582,23 +1418,23 @@ export async function dispatchDistributionJobById(
   const job = await repo.getJobById(distributionJobId);
   if (!job) {
     log(
-      "distribution_job_dispatch_skipped",
-      { distribution_job_id: distributionJobId, reason: "job_not_found" },
-      "info",
+      'distribution_job_dispatch_skipped',
+      { distribution_job_id: distributionJobId, reason: 'job_not_found' },
+      'info'
     );
     return { scanned: 1, dispatched: 0, succeeded: 0, failed: 0 };
   }
 
-  if (!["queued", "scheduled", "processing"].includes(job.status)) {
+  if (!['queued', 'scheduled', 'processing'].includes(job.status)) {
     log(
-      "distribution_job_dispatch_skipped",
+      'distribution_job_dispatch_skipped',
       {
         distribution_job_id: distributionJobId,
         job_id: job.job_id,
-        reason: "job_not_dispatchable",
+        reason: 'job_not_dispatchable',
         status: job.status,
       },
-      "info",
+      'info'
     );
     return { scanned: 1, dispatched: 0, succeeded: 0, failed: 0 };
   }
@@ -1606,9 +1442,9 @@ export async function dispatchDistributionJobById(
   let currentJob: DistributionJobRow = job;
 
   try {
-    if (currentJob.status !== "processing") {
+    if (currentJob.status !== 'processing') {
       currentJob = await repo.updateJob(job.id, {
-        status: "processing",
+        status: 'processing',
         lastError: null,
       });
     }
@@ -1620,15 +1456,13 @@ export async function dispatchDistributionJobById(
     activeAccount = account;
 
     if (!account) {
-      throw new Error("Distribution account not found for job.");
+      throw new Error('Distribution account not found for job.');
     }
     if (!asset) {
-      throw new Error("Distribution asset not found for job.");
+      throw new Error('Distribution asset not found for job.');
     }
-    if (asset.source_type !== "content_item") {
-      throw new Error(
-        "Only content_item sourced assets are dispatchable in the current runtime.",
-      );
+    if (asset.source_type !== 'content_item') {
+      throw new Error('Only content_item sourced assets are dispatchable in the current runtime.');
     }
     const mediaRows = requiresMediaAttachments(asset.asset_type)
       ? await repo.listMediaForAsset(asset.id)
@@ -1637,7 +1471,7 @@ export async function dispatchDistributionJobById(
       if (!hasProviderReadyMedia(mediaRows)) {
         throw new ContentDestinationPublishError({
           message:
-            "Media-required asset has no provider-ready media. Save media rows with ready/uploaded status before dispatch.",
+            'Media-required asset has no provider-ready media. Save media rows with ready/uploaded status before dispatch.',
           providerName: account.provider_name,
           retryable: false,
         });
@@ -1646,16 +1480,14 @@ export async function dispatchDistributionJobById(
 
     const item = await getDispatchableContentItem(supabase, asset);
     if (!item) {
-      throw new Error("Canonical content item not found for asset.");
+      throw new Error('Canonical content item not found for asset.');
     }
 
     const tokenList =
-      typeof (repo as any).listAccountTokensForAccount === "function"
+      typeof (repo as any).listAccountTokensForAccount === 'function'
         ? await (repo as any).listAccountTokensForAccount(account.id)
         : [];
-    const preferredToken = pickPreferredToken(
-      tokenList as DistributionAccountTokenRow[],
-    );
+    const preferredToken = pickPreferredToken(tokenList as DistributionAccountTokenRow[]);
     if (requiresTokenRuntime(account.provider_name) && !preferredToken) {
       throw new ContentDestinationPublishError({
         message: `No distribution account token is configured for provider ${account.provider_name}.`,
@@ -1663,83 +1495,57 @@ export async function dispatchDistributionJobById(
         retryable: false,
       });
     }
-    const activeToken = await ensureActiveProviderToken(
-      repo,
-      env,
-      account,
-      preferredToken,
-    );
+    const activeToken = await ensureActiveProviderToken(repo, env, account, preferredToken);
     const runtimeEnv = resolveProviderRuntimeEnv(env, account, activeToken);
 
-    const attemptNumber =
-      (await repo.listJobAttempts(currentJob.id)).length + 1;
+    const attemptNumber = (await repo.listJobAttempts(currentJob.id)).length + 1;
     const destination = buildSyntheticDestination(account);
+    const adapter = resolveAdapter(destination as any);
 
     let result: PublishResult;
-    if (
-      asset.asset_type === "single_image_post" &&
-      account.provider_name === "x"
-    ) {
+    if (asset.asset_type === 'single_image_post' && account.provider_name === 'x') {
       result = await publishXSingleImage({
         item,
         asset,
         mediaRows,
         env: runtimeEnv,
       });
-    } else if (
-      asset.asset_type === "short_video_post" &&
-      account.provider_name === "x"
-    ) {
+    } else if (asset.asset_type === 'short_video_post' && account.provider_name === 'x') {
       result = await publishXShortVideo({
         item,
         asset,
         mediaRows,
         env: runtimeEnv,
       });
-    } else if (
-      asset.asset_type === "long_video_post" &&
-      account.provider_name === "x"
-    ) {
+    } else if (asset.asset_type === 'long_video_post' && account.provider_name === 'x') {
       result = await publishXLongVideo({
         item,
         asset,
         mediaRows,
         env: runtimeEnv,
       });
-    } else if (
-      asset.asset_type === "single_image_post" &&
-      account.provider_name === "linkedin"
-    ) {
+    } else if (asset.asset_type === 'single_image_post' && account.provider_name === 'linkedin') {
       result = await publishLinkedInSingleImage({
         item,
         asset,
         mediaRows,
         env: runtimeEnv,
       });
-    } else if (
-      asset.asset_type === "carousel_post" &&
-      account.provider_name === "linkedin"
-    ) {
+    } else if (asset.asset_type === 'carousel_post' && account.provider_name === 'linkedin') {
       result = await publishLinkedInCarousel({
         item,
         asset,
         mediaRows,
         env: runtimeEnv,
       });
-    } else if (
-      asset.asset_type === "short_video_post" &&
-      account.provider_name === "linkedin"
-    ) {
+    } else if (asset.asset_type === 'short_video_post' && account.provider_name === 'linkedin') {
       result = await publishLinkedInShortVideo({
         item,
         asset,
         mediaRows,
         env: runtimeEnv,
       });
-    } else if (
-      asset.asset_type === "long_video_post" &&
-      account.provider_name === "linkedin"
-    ) {
+    } else if (asset.asset_type === 'long_video_post' && account.provider_name === 'linkedin') {
       result = await publishLinkedInLongVideo({
         item,
         asset,
@@ -1747,16 +1553,16 @@ export async function dispatchDistributionJobById(
         env: runtimeEnv,
       });
     } else if (
-      account.provider_name === "instagram" &&
-      (asset.asset_type === "single_image_post" ||
-        asset.asset_type === "carousel_post" ||
-        asset.asset_type === "short_video_post")
+      account.provider_name === 'instagram' &&
+      (asset.asset_type === 'single_image_post' ||
+        asset.asset_type === 'carousel_post' ||
+        asset.asset_type === 'short_video_post')
     ) {
       result = await publishInstagram({
         account,
         asset,
         mediaRows,
-        accessToken: runtimeEnv.INSTAGRAM_ACCESS_TOKEN ?? "",
+        accessToken: runtimeEnv.INSTAGRAM_ACCESS_TOKEN ?? '',
         graphBaseUrl: runtimeEnv.INSTAGRAM_GRAPH_API_BASE_URL,
       });
     } else if (requiresMediaAttachments(asset.asset_type)) {
@@ -1766,7 +1572,6 @@ export async function dispatchDistributionJobById(
         retryable: false,
       });
     } else {
-      const adapter = resolveAdapter(destination as any);
       result = await adapter.publishDraft({
         item: item as any,
         destination: destination as any,
@@ -1794,11 +1599,11 @@ export async function dispatchDistributionJobById(
 
     await repo.updateJob(currentJob.id, {
       status:
-        result.status === "published"
-          ? "published"
-          : result.status === "queued"
-            ? "queued"
-            : "published",
+        result.status === 'published'
+          ? 'published'
+          : result.status === 'queued'
+            ? 'queued'
+            : 'published',
       destinationUrl: result.destinationUrl,
       providerPostId: result.providerPublicationId,
       lastError: null,
@@ -1806,7 +1611,7 @@ export async function dispatchDistributionJobById(
     });
 
     log(
-      "distribution_job_dispatch_succeeded",
+      'distribution_job_dispatch_succeeded',
       {
         job_id: currentJob.job_id,
         account_id: account.account_id,
@@ -1815,7 +1620,7 @@ export async function dispatchDistributionJobById(
         publish_mode: currentJob.publish_mode,
         result_status: result.status,
       },
-      "info",
+      'info'
     );
 
     return { scanned: 1, dispatched: 1, succeeded: 1, failed: 0 };
@@ -1826,21 +1631,15 @@ export async function dispatchDistributionJobById(
     const providerName = activeAccount?.provider_name;
     const backoffProfile = readBackoffProfile(activeAccount);
     const backoffMultiplier = readBackoffMultiplier(activeAccount);
-    const retryAfterMs = failure.retryable
-      ? pickBackoffWindowMs(
-          providerName,
-          failure.providerStatusCode,
-          nextAttemptNumber,
-          {
+    const retryAfterMs =
+      failure.retryable
+        ? pickBackoffWindowMs(providerName, failure.providerStatusCode, nextAttemptNumber, {
             profile: backoffProfile,
             multiplier: backoffMultiplier,
-          },
-        )
-      : null;
-    const retryScheduledFor =
-      retryAfterMs && retryAfterMs > 0
-        ? new Date(Date.now() + retryAfterMs).toISOString()
+          })
         : null;
+    const retryScheduledFor =
+      retryAfterMs && retryAfterMs > 0 ? new Date(Date.now() + retryAfterMs).toISOString() : null;
 
     await repo.createJobAttempt({
       distributionJobId: currentJob.id,
@@ -1860,10 +1659,8 @@ export async function dispatchDistributionJobById(
     });
 
     await repo.updateJob(currentJob.id, {
-      status: failure.retryable ? "scheduled" : "failed",
-      scheduledFor: failure.retryable
-        ? retryScheduledFor
-        : currentJob.scheduled_for,
+      status: failure.retryable ? 'scheduled' : 'failed',
+      scheduledFor: failure.retryable ? retryScheduledFor : currentJob.scheduled_for,
       lastError: failure.message,
       completedAt: failure.retryable ? null : new Date().toISOString(),
     });
@@ -1878,8 +1675,8 @@ export async function dispatchDistributionJobById(
 
     logError(
       failure.retryable
-        ? "distribution_job_dispatch_retryable_failed"
-        : "distribution_job_dispatch_failed",
+        ? 'distribution_job_dispatch_retryable_failed'
+        : 'distribution_job_dispatch_failed',
       {
         job_id: currentJob.job_id,
         message: failure.message,
@@ -1888,7 +1685,7 @@ export async function dispatchDistributionJobById(
         retry_scheduled_for: retryScheduledFor,
         retry_backoff_profile: failure.retryable ? backoffProfile : null,
         retry_backoff_multiplier: failure.retryable ? backoffMultiplier : null,
-      },
+      }
     );
 
     throw error;
