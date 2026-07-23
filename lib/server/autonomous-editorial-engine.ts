@@ -29,12 +29,18 @@ export async function runAutonomousEditorialEngine(args: {
     .from('content_items')
     .select('content_id,slug,title,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
     .eq('content_type', 'article')
-    .in('status', ['brief', 'draft'])
+    // Archived topic-registry items are deliberately excluded from the public site until this
+    // engine replaces their thin planning seed with a source-backed editorial draft.
+    .in('status', ['brief', 'draft', 'archived'])
     .order('updated_at', { ascending: true })
     .limit(25);
   if (error) return { status: 'failed', reason: error.message };
 
-  const candidate = (candidates ?? []).find((row: any) => row?.status === 'brief' || row?.metadata?.proposed_by === 'marketing_autopilot');
+  const candidate = (candidates ?? []).find((row: any) =>
+    row?.status === 'brief' ||
+    row?.metadata?.proposed_by === 'marketing_autopilot' ||
+    (row?.status === 'archived' && row?.metadata?.seeded_from_topic_registry === true)
+  );
   if (!candidate?.content_id || !candidate.topic_cluster) return { status: 'skipped', reason: 'no_candidate' };
 
   const { data: existing } = await args.supabase.from('content_items').select('title').eq('content_type', 'article').limit(250);
