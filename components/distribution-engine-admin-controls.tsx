@@ -74,7 +74,10 @@ export function DistributionEngineAdminControls({
   );
 
   const socialAccountOptions = accountOptions.filter(
-    (account) => account.providerName === 'x' || account.providerName === 'linkedin'
+    (account) =>
+      account.providerName === 'x' ||
+      account.providerName === 'linkedin' ||
+      account.providerName === 'instagram'
   );
 
   return (
@@ -201,7 +204,7 @@ export function DistributionEngineAdminControls({
             Connect social account (OAuth)
           </h2>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Start provider OAuth for one stored `x`/`linkedin` account. On callback, token rows and
+            Connect Instagram, X, or LinkedIn. GEO-Pulse stores the token and verifies the account
             account verification metadata are updated automatically.
           </p>
           <div className="mt-4 grid gap-4">
@@ -213,7 +216,7 @@ export function DistributionEngineAdminControls({
                 defaultValue=""
                 className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
               >
-                <option value="">Choose x/linkedin account</option>
+                <option value="">Choose Instagram, X, or LinkedIn</option>
                 {socialAccountOptions.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.label} ({account.accountId})

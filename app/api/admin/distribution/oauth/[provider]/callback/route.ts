@@ -3,6 +3,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { createDistributionEngineRepository } from '@/lib/server/distribution-engine-repository';
 import {
   exchangeSocialOAuthCode,
+  fetchInstagramOAuthProfile,
   validateSignedOAuthState,
   type SocialOAuthProvider,
 } from '@/lib/server/distribution-social-oauth';
@@ -14,7 +15,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 export const dynamic = 'force-dynamic';
 
 function toProvider(value: string): SocialOAuthProvider | null {
-  return value === 'x' || value === 'linkedin' ? value : null;
+  return value === 'x' || value === 'linkedin' || value === 'instagram' ? value : null;
 }
 
 function buildRedirect(appUrl: string, outcome: string, provider: string): NextResponse {
@@ -103,7 +104,19 @@ export async function GET(
       linkedinClientId: process.env['LINKEDIN_OAUTH_CLIENT_ID'],
       linkedinClientSecret: process.env['LINKEDIN_OAUTH_CLIENT_SECRET'],
       linkedinTokenUrl: process.env['LINKEDIN_OAUTH_TOKEN_URL'],
+      instagramClientId: process.env['INSTAGRAM_OAUTH_CLIENT_ID'],
+      instagramClientSecret: process.env['INSTAGRAM_OAUTH_CLIENT_SECRET'],
+      instagramTokenUrl: process.env['INSTAGRAM_OAUTH_TOKEN_URL'],
+      instagramGraphBaseUrl: process.env['INSTAGRAM_GRAPH_API_BASE_URL'],
     });
+
+    const instagramProfile =
+      provider === 'instagram'
+        ? await fetchInstagramOAuthProfile({
+            accessToken: token.accessToken,
+            graphBaseUrl: process.env['INSTAGRAM_GRAPH_API_BASE_URL'],
+          })
+        : null;
 
     await repo.upsertAccountToken({
       distributionAccountId: account.id,
@@ -130,7 +143,7 @@ export async function GET(
       accountId: account.account_id,
       providerName: account.provider_name,
       accountLabel: account.account_label,
-      externalAccountId: account.external_account_id,
+      externalAccountId: instagramProfile?.userId ?? account.external_account_id,
       status: 'connected',
       defaultAudienceId: account.default_audience_id,
       connectedByUserId: account.connected_by_user_id ?? user.id,
@@ -143,6 +156,13 @@ export async function GET(
           ? { author_urn: account.external_account_id }
           : {}),
         ...(provider === 'linkedin' && authorUrnFromToken ? { author_urn: authorUrnFromToken } : {}),
+        ...(instagramProfile
+          ? {
+              instagram_user_id: instagramProfile.userId,
+              instagram_username: instagramProfile.username,
+              instagram_account_type: instagramProfile.accountType,
+            }
+          : {}),
       },
     });
   } catch {

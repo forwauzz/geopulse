@@ -59,6 +59,11 @@
     "DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED": "true",
     "DISTRIBUTION_ENGINE_BACKGROUND_ENABLED": "true",
     "DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT": "20",
+    "INSTAGRAM_OAUTH_CLIENT_ID": "1854026362641864",
+    "INSTAGRAM_OAUTH_AUTH_URL": "https://www.instagram.com/oauth/authorize",
+    "INSTAGRAM_OAUTH_TOKEN_URL": "https://api.instagram.com/oauth/access_token",
+    "INSTAGRAM_OAUTH_SCOPE": "instagram_business_basic instagram_business_content_publish instagram_business_manage_insights",
+    "INSTAGRAM_GRAPH_API_BASE_URL": "https://graph.instagram.com/v25.0",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
 
@@ -269,6 +274,7 @@
   //   LINKEDIN_OAUTH_SCOPE
   //   LINKEDIN_OAUTH_AUTH_URL
   //   LINKEDIN_OAUTH_TOKEN_URL
+  //   INSTAGRAM_OAUTH_CLIENT_SECRET
   //   Optional provider base-url overrides:
   //   X_API_BASE_URL
   //   LINKEDIN_API_BASE_URL

@@ -3,6 +3,8 @@ import {
   buildAggregateCandidate,
   buildBeforeAfterCandidate,
   buildEducationalCandidate,
+  buildIndustryHumorCandidate,
+  instagramScheduleSlot,
   resolveSocialProofAgentConfig,
 } from './social-proof-agent';
 
@@ -67,7 +69,7 @@ describe('Social Proof Agent safeguards', () => {
       {
         ...base,
         metadata: {
-          hero_image_url: 'https://getgeopulse.com/media/hero.png',
+          hero_image_url: 'https://getgeopulse.com/media/hero.jpg',
           hero_image_alt: 'Clean diagram of an AI visibility workflow',
         },
       },
@@ -82,5 +84,43 @@ describe('Social Proof Agent safeguards', () => {
     expect(config.clientProofEnabled).toBe(false);
     expect(config.auditScreenshotsEnabled).toBe(false);
     expect(config.reelsEnabled).toBe(false);
+    expect(config.industryHumorEnabled).toBe(true);
+  });
+
+  it('creates claim-safe agency humor from a verified article hero', () => {
+    const candidate = buildIndustryHumorCandidate(
+      {
+        id: 'article-1',
+        title: 'Why search rank is not AI visibility',
+        slug: 'search-vs-ai',
+        canonical_url: 'https://getgeopulse.com/blog/search-vs-ai',
+        published_at: '2026-07-20T00:00:00Z',
+        metadata: {
+          hero_image_url: 'https://getgeopulse.com/media/hero.jpg',
+          hero_image_alt: 'Search and AI visibility diagram',
+        },
+      },
+      'https://getgeopulse.com'
+    );
+    expect(candidate?.kind).toBe('industry_humor');
+    expect(candidate?.safeForAutonomousPublish).toBe(true);
+    expect(candidate?.caption).toContain('not the same system');
+  });
+
+  it('schedules Toronto posts at the local half-hour and sends a missed slot promptly', () => {
+    expect(
+      instagramScheduleSlot(
+        new Date('2026-07-23T13:00:00.000Z'),
+        'America/Toronto',
+        17
+      )
+    ).toBe('2026-07-23T21:30:00.000Z');
+    expect(
+      instagramScheduleSlot(
+        new Date('2026-07-23T14:00:00.000Z'),
+        'America/Toronto',
+        9
+      )
+    ).toBe('2026-07-23T14:02:00.000Z');
   });
 });

@@ -10,7 +10,7 @@ describe('autonomous editorial hero', () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: [{ b64_json: Buffer.from('fake-png-bytes').toString('base64') }],
+          data: [{ b64_json: Buffer.from('fake-jpeg-bytes').toString('base64') }],
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       )
@@ -34,8 +34,14 @@ describe('autonomous editorial hero', () => {
     });
     expect(hero?.alt).not.toMatch(/\b(ai|robot|future|innovation)\b/i);
     expect(hero?.url).toMatch(
-      /^https:\/\/media\.example\.com\/editorial-heroes\/ai-search-readiness-without-generic-ai-buzzwords-\d+\.png$/
+      /^https:\/\/media\.example\.com\/editorial-heroes\/ai-search-readiness-without-generic-ai-buzzwords-\d+\.jpg$/
     );
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toMatchObject({
+      output_format: 'jpeg',
+    });
+    expect(put.mock.calls[0]?.[2]).toMatchObject({
+      httpMetadata: { contentType: 'image/jpeg' },
+    });
     expect(put).toHaveBeenCalledOnce();
   });
 });

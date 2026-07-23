@@ -88,12 +88,17 @@ export type PaymentApiEnv = ScanApiEnv & {
   LINKEDIN_ACCESS_TOKEN?: string;
   LINKEDIN_AUTHOR_URN?: string;
   LINKEDIN_API_BASE_URL?: string;
+  INSTAGRAM_ACCESS_TOKEN?: string;
+  INSTAGRAM_GRAPH_API_BASE_URL?: string;
   X_OAUTH_CLIENT_ID?: string;
   X_OAUTH_CLIENT_SECRET?: string;
   X_OAUTH_TOKEN_URL?: string;
   LINKEDIN_OAUTH_CLIENT_ID?: string;
   LINKEDIN_OAUTH_CLIENT_SECRET?: string;
   LINKEDIN_OAUTH_TOKEN_URL?: string;
+  INSTAGRAM_OAUTH_CLIENT_ID?: string;
+  INSTAGRAM_OAUTH_CLIENT_SECRET?: string;
+  INSTAGRAM_OAUTH_TOKEN_URL?: string;
   NEXT_PUBLIC_APP_URL: string;
   /** Set via wrangler secret / .dev.vars — required for POST /api/admin/reconcile-deep-audit */
   RECONCILE_SECRET: string;
@@ -300,12 +305,17 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       LINKEDIN_ACCESS_TOKEN: pickEnvString(e, 'LINKEDIN_ACCESS_TOKEN'),
       LINKEDIN_AUTHOR_URN: pickEnvString(e, 'LINKEDIN_AUTHOR_URN'),
       LINKEDIN_API_BASE_URL: pickEnvString(e, 'LINKEDIN_API_BASE_URL'),
+      INSTAGRAM_ACCESS_TOKEN: pickEnvString(e, 'INSTAGRAM_ACCESS_TOKEN'),
+      INSTAGRAM_GRAPH_API_BASE_URL: pickEnvString(e, 'INSTAGRAM_GRAPH_API_BASE_URL'),
       X_OAUTH_CLIENT_ID: pickEnvString(e, 'X_OAUTH_CLIENT_ID'),
       X_OAUTH_CLIENT_SECRET: pickEnvString(e, 'X_OAUTH_CLIENT_SECRET'),
       X_OAUTH_TOKEN_URL: pickEnvString(e, 'X_OAUTH_TOKEN_URL'),
       LINKEDIN_OAUTH_CLIENT_ID: pickEnvString(e, 'LINKEDIN_OAUTH_CLIENT_ID'),
       LINKEDIN_OAUTH_CLIENT_SECRET: pickEnvString(e, 'LINKEDIN_OAUTH_CLIENT_SECRET'),
       LINKEDIN_OAUTH_TOKEN_URL: pickEnvString(e, 'LINKEDIN_OAUTH_TOKEN_URL'),
+      INSTAGRAM_OAUTH_CLIENT_ID: pickEnvString(e, 'INSTAGRAM_OAUTH_CLIENT_ID'),
+      INSTAGRAM_OAUTH_CLIENT_SECRET: pickEnvString(e, 'INSTAGRAM_OAUTH_CLIENT_SECRET'),
+      INSTAGRAM_OAUTH_TOKEN_URL: pickEnvString(e, 'INSTAGRAM_OAUTH_TOKEN_URL'),
       NEXT_PUBLIC_APP_URL: pickEnvString(e, 'NEXT_PUBLIC_APP_URL'),
       GITHUB_APP_ID: pickEnvString(e, 'GITHUB_APP_ID'),
       GITHUB_APP_PRIVATE_KEY: pickEnvString(e, 'GITHUB_APP_PRIVATE_KEY'),
@@ -340,12 +350,17 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       LINKEDIN_ACCESS_TOKEN: process.env['LINKEDIN_ACCESS_TOKEN'] ?? '',
       LINKEDIN_AUTHOR_URN: process.env['LINKEDIN_AUTHOR_URN'] ?? '',
       LINKEDIN_API_BASE_URL: process.env['LINKEDIN_API_BASE_URL'] ?? '',
+      INSTAGRAM_ACCESS_TOKEN: process.env['INSTAGRAM_ACCESS_TOKEN'] ?? '',
+      INSTAGRAM_GRAPH_API_BASE_URL: process.env['INSTAGRAM_GRAPH_API_BASE_URL'] ?? '',
       X_OAUTH_CLIENT_ID: process.env['X_OAUTH_CLIENT_ID'] ?? '',
       X_OAUTH_CLIENT_SECRET: process.env['X_OAUTH_CLIENT_SECRET'] ?? '',
       X_OAUTH_TOKEN_URL: process.env['X_OAUTH_TOKEN_URL'] ?? '',
       LINKEDIN_OAUTH_CLIENT_ID: process.env['LINKEDIN_OAUTH_CLIENT_ID'] ?? '',
       LINKEDIN_OAUTH_CLIENT_SECRET: process.env['LINKEDIN_OAUTH_CLIENT_SECRET'] ?? '',
       LINKEDIN_OAUTH_TOKEN_URL: process.env['LINKEDIN_OAUTH_TOKEN_URL'] ?? '',
+      INSTAGRAM_OAUTH_CLIENT_ID: process.env['INSTAGRAM_OAUTH_CLIENT_ID'] ?? '',
+      INSTAGRAM_OAUTH_CLIENT_SECRET: process.env['INSTAGRAM_OAUTH_CLIENT_SECRET'] ?? '',
+      INSTAGRAM_OAUTH_TOKEN_URL: process.env['INSTAGRAM_OAUTH_TOKEN_URL'] ?? '',
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       RECONCILE_SECRET: process.env['RECONCILE_SECRET'] ?? '',
       SELF_IMPROVEMENT_TRIGGER_SECRET: process.env['SELF_IMPROVEMENT_TRIGGER_SECRET'] ?? '',

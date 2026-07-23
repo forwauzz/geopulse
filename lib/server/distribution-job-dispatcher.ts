@@ -5,6 +5,7 @@ import {
 } from '@/lib/server/content-destination-adapters';
 import { refreshSocialOAuthToken } from '@/lib/server/distribution-social-oauth';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
+import { publishInstagramAsset } from '@/lib/server/instagram-publisher';
 import {
   createDistributionEngineRepository,
   type DistributionAccountRow,
@@ -46,6 +47,7 @@ type DispatchDependencies = {
   readonly publishLinkedInCarouselPost?: typeof publishLinkedInCarouselPost;
   readonly publishLinkedInShortVideoPost?: typeof publishLinkedInShortVideoPost;
   readonly publishLinkedInLongVideoPost?: typeof publishLinkedInLongVideoPost;
+  readonly publishInstagramAsset?: typeof publishInstagramAsset;
 };
 
 type DispatchableContentRow = {
@@ -225,11 +227,18 @@ function resolveProviderRuntimeEnv(
     };
   }
 
+  if (account.provider_name === 'instagram') {
+    return {
+      ...env,
+      INSTAGRAM_ACCESS_TOKEN: accessToken ?? env.INSTAGRAM_ACCESS_TOKEN,
+    };
+  }
+
   return env;
 }
 
 function requiresTokenRuntime(providerName: DistributionAccountRow['provider_name']): boolean {
-  return providerName === 'x' || providerName === 'linkedin';
+  return providerName === 'x' || providerName === 'linkedin' || providerName === 'instagram';
 }
 
 function requiresMediaAttachments(assetType: DistributionAssetRow['asset_type']): boolean {
@@ -1250,7 +1259,11 @@ async function ensureActiveProviderToken(
   if (!token || !requiresTokenRuntime(account.provider_name)) {
     return token;
   }
-  if (account.provider_name !== 'x' && account.provider_name !== 'linkedin') {
+  if (
+    account.provider_name !== 'x' &&
+    account.provider_name !== 'linkedin' &&
+    account.provider_name !== 'instagram'
+  ) {
     return token;
   }
 
@@ -1273,7 +1286,7 @@ async function ensureActiveProviderToken(
       `${account.provider_name} token expired or near expiry and no refresh token is stored.`
     );
     throw new ContentDestinationPublishError({
-      message: `${account.provider_name === 'linkedin' ? 'LinkedIn' : 'X'} OAuth token expired and no refresh token is available.`,
+      message: `${account.provider_name === 'linkedin' ? 'LinkedIn' : account.provider_name === 'instagram' ? 'Instagram' : 'X'} OAuth token expired and no refresh token is available.`,
       providerName: account.provider_name,
       retryable: false,
     });
@@ -1289,6 +1302,7 @@ async function ensureActiveProviderToken(
       linkedinClientId: env.LINKEDIN_OAUTH_CLIENT_ID,
       linkedinClientSecret: env.LINKEDIN_OAUTH_CLIENT_SECRET,
       linkedinTokenUrl: env.LINKEDIN_OAUTH_TOKEN_URL,
+      instagramGraphBaseUrl: env.INSTAGRAM_GRAPH_API_BASE_URL,
     });
 
     const refreshedToken = await repo.upsertAccountToken({
@@ -1297,7 +1311,7 @@ async function ensureActiveProviderToken(
       accessTokenEncrypted: refreshed.accessToken,
       refreshTokenEncrypted: refreshed.refreshToken ?? refreshToken,
       expiresAt: refreshed.expiresAt,
-      scopes: refreshed.scopeList,
+      scopes: refreshed.scopeList.length > 0 ? refreshed.scopeList : token.scopes,
       metadata: {
         ...(token.metadata ?? {}),
         source: 'provider_oauth_refresh',
@@ -1331,7 +1345,7 @@ async function ensureActiveProviderToken(
         : `Unknown ${account.provider_name} OAuth refresh failure.`;
     await markAccountTokenExpired(repo, account, message);
     throw new ContentDestinationPublishError({
-      message: `${account.provider_name === 'linkedin' ? 'LinkedIn' : 'X'} OAuth token refresh failed: ${message}`,
+      message: `${account.provider_name === 'linkedin' ? 'LinkedIn' : account.provider_name === 'instagram' ? 'Instagram' : 'X'} OAuth token refresh failed: ${message}`,
       providerName: account.provider_name,
       retryable: false,
     });
@@ -1396,6 +1410,7 @@ export async function dispatchDistributionJobById(
     deps.publishLinkedInShortVideoPost ?? publishLinkedInShortVideoPost;
   const publishLinkedInLongVideo =
     deps.publishLinkedInLongVideoPost ?? publishLinkedInLongVideoPost;
+  const publishInstagram = deps.publishInstagramAsset ?? publishInstagramAsset;
   const log = deps.structuredLog ?? structuredLog;
   const logError = deps.structuredError ?? structuredError;
   let activeAccount: DistributionAccountRow | null = null;
@@ -1536,6 +1551,19 @@ export async function dispatchDistributionJobById(
         asset,
         mediaRows,
         env: runtimeEnv,
+      });
+    } else if (
+      account.provider_name === 'instagram' &&
+      (asset.asset_type === 'single_image_post' ||
+        asset.asset_type === 'carousel_post' ||
+        asset.asset_type === 'short_video_post')
+    ) {
+      result = await publishInstagram({
+        account,
+        asset,
+        mediaRows,
+        accessToken: runtimeEnv.INSTAGRAM_ACCESS_TOKEN ?? '',
+        graphBaseUrl: runtimeEnv.INSTAGRAM_GRAPH_API_BASE_URL,
       });
     } else if (requiresMediaAttachments(asset.asset_type)) {
       throw new ContentDestinationPublishError({

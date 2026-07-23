@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-export type SocialOAuthProvider = 'x' | 'linkedin';
+export type SocialOAuthProvider = 'x' | 'linkedin' | 'instagram';
 
 type OAuthStatePayload = {
   readonly provider: SocialOAuthProvider;
@@ -26,6 +26,9 @@ type SocialOAuthStartInput = {
   readonly linkedinAuthorizeUrl?: string;
   readonly xScope?: string;
   readonly linkedinScope?: string;
+  readonly instagramClientId?: string;
+  readonly instagramAuthorizeUrl?: string;
+  readonly instagramScope?: string;
 };
 
 type SocialOAuthTokenExchangeInput = {
@@ -38,6 +41,10 @@ type SocialOAuthTokenExchangeInput = {
   readonly linkedinClientSecret?: string;
   readonly xTokenUrl?: string;
   readonly linkedinTokenUrl?: string;
+  readonly instagramClientId?: string;
+  readonly instagramClientSecret?: string;
+  readonly instagramTokenUrl?: string;
+  readonly instagramGraphBaseUrl?: string;
   readonly codeVerifier?: string;
 };
 
@@ -50,6 +57,7 @@ type SocialOAuthTokenRefreshInput = {
   readonly linkedinClientId?: string;
   readonly linkedinClientSecret?: string;
   readonly linkedinTokenUrl?: string;
+  readonly instagramGraphBaseUrl?: string;
 };
 
 export type SocialOAuthTokenResponse = {
@@ -171,6 +179,41 @@ export function buildSocialOAuthAuthorizeUrl(input: SocialOAuthStartInput): stri
     return url.toString();
   }
 
+  if (input.provider === 'instagram') {
+    const clientId = input.instagramClientId?.trim() ?? '';
+    if (!clientId) {
+      throw new Error('Instagram OAuth is not configured: missing INSTAGRAM_OAUTH_CLIENT_ID.');
+    }
+    const state = buildSignedState(
+      {
+        provider: 'instagram',
+        accountId: input.accountId,
+        userId: input.userId,
+        issuedAt: now,
+        expiresAt,
+        nonce,
+      },
+      input.stateSecret
+    );
+    const url = new URL(
+      (input.instagramAuthorizeUrl?.trim() || 'https://www.instagram.com/oauth/authorize').trim()
+    );
+    url.searchParams.set('client_id', clientId);
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set(
+      'scope',
+      splitScopes(
+        input.instagramScope,
+        'instagram_business_basic instagram_business_content_publish instagram_business_manage_insights'
+      ).join(',')
+    );
+    url.searchParams.set('state', state);
+    url.searchParams.set('enable_fb_login', '0');
+    url.searchParams.set('force_authentication', '1');
+    return url.toString();
+  }
+
   const clientId = input.linkedinClientId?.trim() ?? '';
   if (!clientId) throw new Error('LinkedIn OAuth is not configured: missing LINKEDIN_OAUTH_CLIENT_ID.');
 
@@ -274,6 +317,67 @@ export async function exchangeSocialOAuthCode(
     return parseTokenExchangeResponse(rawText, 'X');
   }
 
+  if (input.provider === 'instagram') {
+    const clientId = input.instagramClientId?.trim() ?? '';
+    const clientSecret = input.instagramClientSecret?.trim() ?? '';
+    if (!clientId || !clientSecret) {
+      throw new Error(
+        'Instagram OAuth is not configured: missing INSTAGRAM_OAUTH_CLIENT_ID or INSTAGRAM_OAUTH_CLIENT_SECRET.'
+      );
+    }
+    const tokenUrl = (
+      input.instagramTokenUrl?.trim() || 'https://api.instagram.com/oauth/access_token'
+    ).trim();
+    const form = new URLSearchParams();
+    form.set('client_id', clientId);
+    form.set('client_secret', clientSecret);
+    form.set('grant_type', 'authorization_code');
+    form.set('redirect_uri', redirectUri);
+    form.set('code', input.code);
+    const shortResponse = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+    const shortText = await shortResponse.text();
+    if (!shortResponse.ok) {
+      throw new Error(`Instagram OAuth token exchange failed (${shortResponse.status}): ${shortText}`);
+    }
+    const shortToken = parseTokenExchangeResponse(shortText, 'Instagram');
+    const graphBase = (
+      input.instagramGraphBaseUrl?.trim() || 'https://graph.instagram.com/v25.0'
+    ).replace(/\/+$/, '');
+    const exchangeUrl = new URL(`${graphBase}/access_token`);
+    exchangeUrl.searchParams.set('grant_type', 'ig_exchange_token');
+    exchangeUrl.searchParams.set('client_secret', clientSecret);
+    exchangeUrl.searchParams.set('access_token', shortToken.accessToken);
+    const longResponse = await fetch(exchangeUrl);
+    const longText = await longResponse.text();
+    if (!longResponse.ok) {
+      throw new Error(
+        `Instagram long-lived token exchange failed (${longResponse.status}): ${longText}`
+      );
+    }
+    const longToken = parseTokenExchangeResponse(longText, 'Instagram');
+    return {
+      ...longToken,
+      refreshToken: longToken.accessToken,
+      scopeList:
+        longToken.scopeList.length > 0
+          ? longToken.scopeList
+          : [
+              'instagram_business_basic',
+              'instagram_business_content_publish',
+              'instagram_business_manage_insights',
+            ],
+      raw: {
+        token_type: longToken.raw['token_type'] ?? 'bearer',
+        expires_in: longToken.raw['expires_in'] ?? null,
+        user_id: shortToken.raw['user_id'] ?? null,
+      },
+    };
+  }
+
   const clientId = input.linkedinClientId?.trim() ?? '';
   const clientSecret = input.linkedinClientSecret?.trim() ?? '';
   if (!clientId || !clientSecret) {
@@ -374,5 +478,54 @@ export async function refreshSocialOAuthToken(
     return parseTokenExchangeResponse(rawText, 'LinkedIn');
   }
 
+  if (input.provider === 'instagram') {
+    const graphBase = (
+      input.instagramGraphBaseUrl?.trim() || 'https://graph.instagram.com/v25.0'
+    ).replace(/\/+$/, '');
+    const refreshUrl = new URL(`${graphBase}/refresh_access_token`);
+    refreshUrl.searchParams.set('grant_type', 'ig_refresh_token');
+    refreshUrl.searchParams.set('access_token', refreshToken);
+    const response = await fetch(refreshUrl);
+    const rawText = await response.text();
+    if (!response.ok) {
+      throw new Error(`Instagram OAuth token refresh failed (${response.status}): ${rawText}`);
+    }
+    const refreshed = parseTokenExchangeResponse(rawText, 'Instagram');
+    return {
+      ...refreshed,
+      refreshToken: refreshed.accessToken,
+      raw: {
+        token_type: refreshed.raw['token_type'] ?? 'bearer',
+        expires_in: refreshed.raw['expires_in'] ?? null,
+      },
+    };
+  }
+
   throw new Error(`OAuth refresh is not yet implemented for provider ${input.provider}.`);
+}
+
+export async function fetchInstagramOAuthProfile(input: {
+  readonly accessToken: string;
+  readonly graphBaseUrl?: string;
+}): Promise<{ userId: string; username: string | null; accountType: string | null }> {
+  const graphBase = (
+    input.graphBaseUrl?.trim() || 'https://graph.instagram.com/v25.0'
+  ).replace(/\/+$/, '');
+  const url = new URL(`${graphBase}/me`);
+  url.searchParams.set('fields', 'user_id,username,account_type');
+  url.searchParams.set('access_token', input.accessToken);
+  const response = await fetch(url);
+  const rawText = await response.text();
+  if (!response.ok) {
+    throw new Error(`Instagram profile lookup failed (${response.status}): ${rawText}`);
+  }
+  const json = JSON.parse(rawText) as Record<string, unknown>;
+  const userId = String(json['user_id'] ?? json['id'] ?? '').trim();
+  if (!userId) throw new Error('Instagram profile lookup returned no user id.');
+  return {
+    userId,
+    username: typeof json['username'] === 'string' ? json['username'].trim() || null : null,
+    accountType:
+      typeof json['account_type'] === 'string' ? json['account_type'].trim() || null : null,
+  };
 }

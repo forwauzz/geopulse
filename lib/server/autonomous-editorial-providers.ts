@@ -37,12 +37,12 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
     async hero({ title, markdown }) {
       const key = env.OPENAI_API_KEY?.trim(); const base = env.EDITORIAL_HERO_PUBLIC_BASE?.replace(/\/$/, ''); const bucket = env.REPORT_FILES;
       if (!key || !base || !bucket) return null;
-      const response = await fetchImpl('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ model: env.OPENAI_IMAGE_MODEL || 'gpt-image-1', size: '1536x1024', n: 1, output_format: 'png', prompt: `Editorial blog hero, no text, no logos, no robots, no glowing AI icons. Warm off-white paper, charcoal ink, restrained antique gold, sophisticated magazine collage. Topic: ${title}. Show the idea through clear documents, systems, or evidence. Never include words or letters.` }), signal: AbortSignal.timeout(60_000) });
+      const response = await fetchImpl('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ model: env.OPENAI_IMAGE_MODEL || 'gpt-image-1', size: '1536x1024', n: 1, output_format: 'jpeg', quality: 'high', prompt: `Editorial blog hero, no text, no logos, no robots, no glowing AI icons. Warm off-white paper, charcoal ink, restrained antique gold, sophisticated magazine collage. Topic: ${title}. Show the idea through clear documents, systems, or evidence. Never include words or letters.` }), signal: AbortSignal.timeout(60_000) });
       if (!response.ok) return null;
       const payload = await response.json() as { data?: Array<{ b64_json?: string }> }; const encoded = payload.data?.[0]?.b64_json;
       if (!encoded) return null;
       const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0)); const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 80);
-      const objectKey = `editorial-heroes/${slug}-${Date.now()}.png`; await bucket.put(objectKey, bytes.buffer, { httpMetadata: { contentType: 'image/png' } });
+      const objectKey = `editorial-heroes/${slug}-${Date.now()}.jpg`; await bucket.put(objectKey, bytes.buffer, { httpMetadata: { contentType: 'image/jpeg' } });
       return { url: `${base}/${objectKey}`, alt: CLEAN_EDITORIAL_HERO_ALT };
     },
     async review({ title, markdown, sources, hero }) {
