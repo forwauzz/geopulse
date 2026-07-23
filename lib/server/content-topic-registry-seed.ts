@@ -214,9 +214,10 @@ export function buildTopicRegistrySeedItems(
         source_links: ['docs/13-topic-registry-v1.json'],
         brief_markdown: buildBriefMarkdown(title, pillar.pillar_title, topic.intent, topic.slug),
         draft_markdown: buildDraftMarkdown(title),
-        metadata: {
-          seeded_from_topic_registry: true,
-          topic_registry_version: registry.version,
+          metadata: {
+            seeded_from_topic_registry: true,
+            requires_editorial_rewrite: true,
+            topic_registry_version: registry.version,
           topic_registry_updated_at: registry.updated_at,
           topic_registry_pillar_id: pillar.pillar_id,
           topic_registry_pillar_slug: pillar.pillar_slug,

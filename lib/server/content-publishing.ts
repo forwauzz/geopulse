@@ -14,6 +14,17 @@ export type PublishableContentSnapshot = {
   readonly updated_at?: string | null;
 };
 
+const UNEDITED_TOPIC_REGISTRY_BODY =
+  /matters because operators need a reliable, repeatable way to improve ai search readiness without guessing/i;
+
+function isUneditedTopicRegistryDraft(item: PublishableContentSnapshot, markdown: string): boolean {
+  return (
+    item.metadata?.['seeded_from_topic_registry'] === true &&
+    item.metadata?.['topic_registry_status'] === 'planned' &&
+    UNEDITED_TOPIC_REGISTRY_BODY.test(markdown)
+  );
+}
+
 export type ContentPublishCheck = {
   readonly key: string;
   readonly label: string;
@@ -216,6 +227,16 @@ export function evaluateContentPublishChecks(item: PublishableContentSnapshot): 
       category: 'publish_contract',
       passed: Boolean(markdown),
       hint: 'Draft markdown is required.',
+    })
+  );
+  checks.push(
+    buildCheck({
+      key: 'topic_registry_editorial_rewrite',
+      label: 'Topic-registry seed has been replaced with an editorial draft',
+      category: 'publish_contract',
+      passed: !isUneditedTopicRegistryDraft(item, markdown),
+      hint:
+        'This is an unedited topic-registry planning seed. Replace its generic draft with original, source-backed editorial content before publishing.',
     })
   );
   checks.push(
