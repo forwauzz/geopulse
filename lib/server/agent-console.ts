@@ -8,6 +8,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { isAgentEnabled, type AgentFlagFeature } from './agent-flags';
 import { loadAutomationSetting } from './automation-settings';
 import { loadSelfImprovementSettings } from './self-improvement';
+import { resolveRevenueAgencyConfig } from './revenue-agency-agent';
+import { resolveSocialProofAgentConfig } from './social-proof-agent';
 
 export type AgentAudience = 'internal' | 'client';
 
@@ -74,6 +76,8 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     marketingSetting,
     cohortSetting,
     digestSetting,
+    socialProofSetting,
+    revenueAgencySetting,
     selfImprove,
     templatesTable,
     researchTable,
@@ -91,6 +95,8 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     loadAutomationSetting(supabase, 'marketing_autopilot'),
     loadAutomationSetting(supabase, 'competitor_benchmark'),
     loadAutomationSetting(supabase, 'engagement_digest'),
+    loadAutomationSetting(supabase, 'social_proof_agent'),
+    loadAutomationSetting(supabase, 'revenue_agency'),
     loadSelfImprovementSettings(supabase),
     tableExists(supabase, 'outreach_templates'),
     tableExists(supabase, 'research_watchlist'),
@@ -112,8 +118,48 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
   );
   const discoveryLive = env['COMPETITOR_DISCOVERY_MODE']?.trim().toLowerCase() === 'live';
   const gpmEnabled = env['GPM_SCHEDULE_ENABLED']?.trim().toLowerCase() === 'true';
+  const socialProof = resolveSocialProofAgentConfig(
+    socialProofSetting.config,
+    socialProofSetting.enabled,
+    socialProofSetting.killSwitch
+  );
+  const revenueAgency = resolveRevenueAgencyConfig(
+    revenueAgencySetting.config,
+    revenueAgencySetting.enabled,
+    revenueAgencySetting.killSwitch
+  );
 
   return [
+    {
+      key: 'revenue_agency',
+      name: 'Revenue Agency',
+      audience: 'internal',
+      description:
+        'Connects acquisition, audits, proof, conversion, and monitoring into one measured loop and points to the current bottleneck.',
+      control: 'flag',
+      flagFeature: 'revenue_agency',
+      enabled: revenueAgency.mode !== 'off',
+      killSwitch: revenueAgencySetting.killSwitch,
+      blockers: [
+        ...(resendReady ? [] : ['Resend email credentials missing — outreach and operator digests cannot send']),
+      ],
+      manageHint: 'Mode, pipeline health, and run-now live at the top of this page.',
+    },
+    {
+      key: 'social_proof',
+      name: 'Social distribution + proof',
+      audience: 'internal',
+      description:
+        'Turns verified articles, anonymous aggregate findings, and consent-safe before/after evidence into social drafts or publish jobs.',
+      control: 'flag',
+      flagFeature: 'social_proof_agent',
+      enabled: socialProof.mode !== 'off',
+      killSwitch: socialProofSetting.killSwitch,
+      blockers: channelConnected
+        ? []
+        : ['No connected distribution account — the agent can draft, but it cannot schedule or publish'],
+      manageHint: 'Mode and proof-type controls live at the top of this page.',
+    },
     {
       key: 'outreach',
       name: 'Outreach agent',

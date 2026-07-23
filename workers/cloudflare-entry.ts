@@ -39,6 +39,11 @@ import { runDueMonitorAudits } from '../lib/server/monitor-subscription';
 import { runEngagementDigest } from '../lib/server/engagement-digest';
 import { buildResearchDigestHtml, runResearchSweep } from '../lib/server/research-agent';
 import { isAgentEnabled } from '../lib/server/agent-flags';
+import { loadAutomationSetting } from '../lib/server/automation-settings';
+import {
+  resolveRevenueAgencyConfig,
+  runRevenueAgency,
+} from '../lib/server/revenue-agency-agent';
 import { registerSelfFetch } from './lib/fetch-gate';
 import { registerLlmVerdictCache } from './scan-engine/run-scan';
 
@@ -398,6 +403,42 @@ export default {
       // MARKETING_AUTOPILOT_HOUR_UTC (default 13:00 UTC). Proposes review-gated content briefs
       // for weak (uncovered) topics; never publishes. Self-gates on env flag + kill switch, so
       // this is a safe no-op until explicitly enabled.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        const setting = await loadAutomationSetting(supabase, 'revenue_agency');
+        const config = resolveRevenueAgencyConfig(
+          setting.config,
+          setting.enabled,
+          setting.killSwitch
+        );
+        if (config.mode !== 'off' && new Date().getUTCHours() === config.runHourUtc) {
+          stage('revenue_agency');
+          const result = await runRevenueAgency({
+            supabase,
+            appUrl: env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
+          });
+          if (result.status !== 'skipped') {
+            structuredLog(
+              'revenue_agency_cron_run',
+              {
+                status: result.status,
+                mode: result.mode,
+                focus: result.snapshot?.focus ?? null,
+                proof_status: result.proof?.status ?? null,
+                reason: result.reason ?? null,
+              },
+              result.status === 'failed' ? 'error' : 'info'
+            );
+          }
+        }
+      } catch (err) {
+        structuredError('revenue_agency_cron_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
       try {
         const mktEnv = env as unknown as MarketingAutopilotEnvLike;
         const mktCfg = resolveMarketingAutopilotConfig(mktEnv);
