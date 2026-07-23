@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
-import { importPlaybookDrafts } from '@/lib/server/content-draft-import';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { assertEditorialReadyForLaunch } from '@/lib/server/content-editorial-readiness';
 import { createContentDestinationAdminData } from '@/lib/server/content-destination-admin-data';
@@ -82,16 +81,6 @@ export async function updateContentDestinationConfig(formData: FormData) {
     throw error;
   }
 
-  revalidatePath('/dashboard/content');
-}
-
-export async function importContentMachineDrafts() {
-  const actionContext = await loadAdminActionContext();
-  if (!actionContext.ok) {
-    throw new Error(actionContext.message);
-  }
-
-  await importPlaybookDrafts(actionContext.adminDb, actionContext.user.id);
   revalidatePath('/dashboard/content');
 }
 
