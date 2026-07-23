@@ -27,7 +27,7 @@ export async function runAutonomousEditorialEngine(args: {
 
   const { data: candidates, error } = await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,topic_cluster,metadata')
+    .select('content_id,slug,title,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
     .eq('content_type', 'article')
     .in('status', ['brief', 'draft'])
     .order('updated_at', { ascending: true })
@@ -48,7 +48,19 @@ export async function runAutonomousEditorialEngine(args: {
   if (!review.approved) return { status: 'rejected', reason: review.reasons.join('; ') || 'review_failed' };
 
   const metadata = { ...(candidate.metadata ?? {}), autonomous_editorial: { generated_at: (args.now ?? new Date()).toISOString(), reviewer: 'passed', hero_provider: 'generated' }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
-  const checks = evaluateContentPublishChecks({ ...candidate, title: draft.title, status: 'draft', draft_markdown: draft.markdown, source_links: draft.sources, metadata });
+  const checks = evaluateContentPublishChecks({
+    ...candidate,
+    content_type: 'article',
+    title: draft.title,
+    status: 'draft',
+    draft_markdown: draft.markdown,
+    source_links: draft.sources,
+    canonical_url: candidate.slug ? `/blog/${candidate.slug}` : null,
+    cta_goal: 'free_scan',
+    source_type: 'autonomous_editorial',
+    metadata,
+    published_at: null,
+  });
   const failures = checks.filter((check) => !check.passed);
   if (failures.length > 0) return { status: 'rejected', reason: failures.map((check) => check.hint ?? check.label).join('; ') };
   const publish = prepareContentForPublish({

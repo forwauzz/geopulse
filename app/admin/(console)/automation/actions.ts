@@ -1,12 +1,14 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import { getAutonomousEditorialEnv, getPaymentApiEnv } from '@/lib/server/cf-env';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { loadAutomationSetting, updateAutomationSetting, configInt } from '@/lib/server/automation-settings';
 import { runSelfImprovementAudit } from '@/lib/server/self-improvement';
 import { runMarketingAutopilot } from '@/lib/server/marketing-autopilot';
+import { runAutonomousEditorialEngine } from '@/lib/server/autonomous-editorial-engine';
+import { createAutonomousEditorialProvider } from '@/lib/server/autonomous-editorial-providers';
 
 const AUTOMATION_PATH = '/admin/automation';
 
@@ -98,5 +100,18 @@ export async function runMarketingNow(): Promise<void> {
   const ctx = await requireConsole();
   if ('error' in ctx) return;
   await runMarketingAutopilot({ supabase: ctx.supabase, env: ctx.env, triggerSource: 'admin_manual', force: true });
+  revalidatePath(AUTOMATION_PATH);
+}
+
+/** Runs planner + writer + hero + reviewer + publish gates in the same authenticated control plane. */
+export async function runEditorialPipelineNow(): Promise<void> {
+  const ctx = await requireConsole();
+  if ('error' in ctx) return;
+  await runMarketingAutopilot({ supabase: ctx.supabase, env: ctx.env, triggerSource: 'admin_manual', force: true });
+  const editorialEnv = await getAutonomousEditorialEnv();
+  await runAutonomousEditorialEngine({
+    supabase: ctx.supabase,
+    provider: createAutonomousEditorialProvider(editorialEnv),
+  });
   revalidatePath(AUTOMATION_PATH);
 }

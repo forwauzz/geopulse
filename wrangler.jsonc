@@ -126,6 +126,9 @@
     "BENCHMARK_DAILY_RECAP_TIMEZONE": "America/Toronto",
 
     "DEEP_AUDIT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
+    // Public R2 base for generated editorial heroes. The autonomous engine refuses to publish
+    // when this is missing, so every post can render its verified hero on the canonical page.
+    "EDITORIAL_HERO_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
     // Full-audit crawl breadth. 1000 made every crawl run far longer than the report page's
     // poll window (and froze the progress bar near 5%, since percent = 5 + pagesDone/limit*85),
     // so reports appeared to "never generate". 30 pages is a representative site-wide sample

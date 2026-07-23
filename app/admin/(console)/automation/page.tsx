@@ -13,6 +13,7 @@ import {
   setDesignAgentFlag,
   runSelfImprovementNow,
   runMarketingNow,
+  runEditorialPipelineNow,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -143,7 +144,7 @@ export default async function AutomationConsolePage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-sans text-lg font-bold text-on-background">Marketing autopilot</h2>
-            <p className="mt-0.5 font-sans text-xs text-on-surface-variant">Proposes review-gated content briefs for weak topics. Never auto-publishes.</p>
+            <p className="mt-0.5 font-sans text-xs text-on-surface-variant">Plans from coverage gaps, drafts source-backed articles, generates a clean hero, reviews, and publishes only when every gate passes.</p>
           </div>
           <form action={runMarketingNow}>
             <button type="submit" className="inline-flex min-h-[36px] items-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-on-primary transition hover:bg-primary-dim">Run now</button>
@@ -159,6 +160,9 @@ export default async function AutomationConsolePage() {
           <input id="mkt-cap" name="cap" type="number" min={1} max={10} defaultValue={marketingCap}
             className="min-h-[38px] w-20 rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30" />
           <button type="submit" className="inline-flex min-h-[38px] items-center rounded-xl bg-surface-container px-4 text-sm font-semibold text-on-background transition hover:bg-surface-container-high">Save</button>
+        </form>
+        <form action={runEditorialPipelineNow} className="mt-3">
+          <button type="submit" className="inline-flex min-h-[36px] items-center gap-2 rounded-xl bg-tertiary px-4 text-sm font-semibold text-on-tertiary transition hover:opacity-90">Run editorial pipeline now</button>
         </form>
         {proposals.length > 0 ? (
           <ul className="mt-4 space-y-1">
