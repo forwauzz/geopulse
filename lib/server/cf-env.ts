@@ -3,6 +3,8 @@
  */
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { registerSelfFetch } from '@workers/lib/fetch-gate';
+import type { AutonomousEditorialEnv } from './autonomous-editorial-providers';
+import type { WorkersAiBinding } from './workers-ai';
 
 /** Route audits of our own domain through the self-reference binding (avoids the edge→origin 525). */
 function registerSelfAuditFetch(e: Record<string, unknown>): void {
@@ -372,6 +374,35 @@ export async function getAiBinding(): Promise<
       : undefined;
   } catch {
     return undefined;
+  }
+}
+
+/** Bindings needed by the Worker-backed autonomous editorial pipeline. */
+export async function getAutonomousEditorialEnv(): Promise<AutonomousEditorialEnv> {
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    const e = env as unknown as Record<string, unknown>;
+    const ai = e['AI'];
+    const reportFiles = e['REPORT_FILES'];
+    return {
+      AI: ai && typeof (ai as { run?: unknown }).run === 'function' ? ai as WorkersAiBinding : undefined,
+      OPENAI_API_KEY: pickEnvString(e, 'OPENAI_API_KEY'),
+      OPENAI_IMAGE_MODEL: pickEnvString(e, 'OPENAI_IMAGE_MODEL'),
+      EDITORIAL_HERO_PUBLIC_BASE: pickEnvString(e, 'EDITORIAL_HERO_PUBLIC_BASE'),
+      EDITORIAL_WRITER_MODEL: pickEnvString(e, 'EDITORIAL_WRITER_MODEL'),
+      EDITORIAL_REVIEWER_MODEL: pickEnvString(e, 'EDITORIAL_REVIEWER_MODEL'),
+      REPORT_FILES: reportFiles && typeof (reportFiles as { put?: unknown }).put === 'function'
+        ? reportFiles as AutonomousEditorialEnv['REPORT_FILES']
+        : undefined,
+    };
+  } catch {
+    return {
+      OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? '',
+      OPENAI_IMAGE_MODEL: process.env['OPENAI_IMAGE_MODEL'] ?? '',
+      EDITORIAL_HERO_PUBLIC_BASE: process.env['EDITORIAL_HERO_PUBLIC_BASE'] ?? '',
+      EDITORIAL_WRITER_MODEL: process.env['EDITORIAL_WRITER_MODEL'] ?? '',
+      EDITORIAL_REVIEWER_MODEL: process.env['EDITORIAL_REVIEWER_MODEL'] ?? '',
+    };
   }
 }
 
