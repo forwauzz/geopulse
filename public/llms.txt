@@ -9,6 +9,12 @@
 
 ## Priority pages
 - [Home](https://getgeopulse.com/)
+- [AI search optimization](https://getgeopulse.com/ai-search-optimization)
+- [AI visibility audit](https://getgeopulse.com/ai-visibility-audit)
+- [AI SEO audit](https://getgeopulse.com/ai-seo-audit)
+- [Generative engine optimization guide](https://getgeopulse.com/generative-engine-optimization)
+- [AI search readiness audit methodology](https://getgeopulse.com/methodology/ai-search-readiness-audit)
+- [AI search audits for agencies](https://getgeopulse.com/solutions/agencies)
 - [About](https://getgeopulse.com/about)
 - [Blog](https://getgeopulse.com/blog)
 - [Pricing](https://getgeopulse.com/pricing)
