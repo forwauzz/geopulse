@@ -3,11 +3,26 @@
 const ANON_COOKIE = 'gp_anon_id';
 const UTM_STORAGE_KEY = 'gp_utm';
 const UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'] as const;
+const ANON_COOKIE_MAX_AGE_SEC = 365 * 24 * 60 * 60;
 
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return match?.[1] ?? null;
+}
+
+/**
+ * Create a first-party, pseudonymous browser identifier once and retain it for attribution.
+ * This is deliberately not a fingerprint: it is a random UUID stored only in a first-party cookie.
+ */
+export function ensureAnonymousId(): string | null {
+  const existing = getCookie(ANON_COOKIE);
+  if (existing) return existing;
+  if (typeof document === 'undefined' || typeof crypto?.randomUUID !== 'function') return null;
+
+  const id = crypto.randomUUID();
+  document.cookie = `${ANON_COOKIE}=${id}; Path=/; Max-Age=${ANON_COOKIE_MAX_AGE_SEC}; SameSite=Lax; Secure`;
+  return getCookie(ANON_COOKIE) ?? id;
 }
 
 export type AttributionContext = {
@@ -58,6 +73,7 @@ function loadPersistedUtms(): StoredUtm {
  * Call once in a top-level layout or effect.
  */
 export function initAttribution(): void {
+  ensureAnonymousId();
   const fresh = captureUtmsFromUrl();
   if (fresh) {
     persistUtms(fresh);
