@@ -7,6 +7,7 @@ import {
   parseBrowserRenderMode,
   renderedHtmlImprovesContent,
   shouldUseBrowserRendering,
+  shouldUseBrowserRenderingAfterFetchFailure,
 } from './browser-rendering';
 
 describe('parseBrowserRenderMode', () => {
@@ -106,6 +107,27 @@ describe('shouldUseBrowserRendering', () => {
         '<html><body><main>content already present</main></body></html>'
       )
     ).toBe(true);
+  });
+});
+
+describe('shouldUseBrowserRenderingAfterFetchFailure', () => {
+  const configured = { mode: 'auto' as const, accountId: 'acct', apiToken: 'token' };
+
+  it('falls back for access-control and rate-limit responses', () => {
+    expect(shouldUseBrowserRenderingAfterFetchFailure(configured, 401)).toBe(true);
+    expect(shouldUseBrowserRenderingAfterFetchFailure(configured, 403)).toBe(true);
+    expect(shouldUseBrowserRenderingAfterFetchFailure(configured, 429)).toBe(true);
+  });
+
+  it('does not browser-render ordinary missing/server failures or unconfigured scans', () => {
+    expect(shouldUseBrowserRenderingAfterFetchFailure(configured, 404)).toBe(false);
+    expect(shouldUseBrowserRenderingAfterFetchFailure(configured, 500)).toBe(false);
+    expect(
+      shouldUseBrowserRenderingAfterFetchFailure(
+        { mode: 'auto', accountId: null, apiToken: null },
+        403
+      )
+    ).toBe(false);
   });
 });
 

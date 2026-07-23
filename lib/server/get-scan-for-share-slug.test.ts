@@ -16,7 +16,7 @@ type QueryResponse = { data: unknown; error: { message: string } | null };
 /** A thenable-free query builder whose terminal `.maybeSingle()` resolves the given response. */
 function queryBuilder(response: QueryResponse) {
   const builder: Record<string, unknown> = {};
-  for (const method of ['select', 'eq', 'limit']) {
+  for (const method of ['select', 'eq', 'order', 'limit']) {
     builder[method] = vi.fn(() => builder);
   }
   builder.maybeSingle = vi.fn(() => Promise.resolve(response));

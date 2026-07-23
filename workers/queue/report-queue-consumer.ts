@@ -55,6 +55,17 @@ export type ReportQueueBatch = {
   readonly messages: readonly QueueMessage[];
 };
 
+export function planDeepAuditCrawlRecovery(
+  fetchedPageCount: number,
+  hasPendingContinuation: boolean
+): { readonly shouldRunCrawl: boolean; readonly clearFailedPages: boolean } {
+  const hasFetchedPages = fetchedPageCount > 0;
+  return {
+    shouldRunCrawl: !hasFetchedPages || hasPendingContinuation,
+    clearFailedPages: !hasFetchedPages && !hasPendingContinuation,
+  };
+}
+
 function bodyToString(body: string | ArrayBuffer | Uint8Array): string {
   if (typeof body === 'string') return body;
   if (body instanceof ArrayBuffer) return new TextDecoder().decode(body);
@@ -541,12 +552,18 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     return;
   }
 
-  const { data: existingReport } = await supabase
+  const { data: existingReport, error: existingReportError } = await supabase
     .from('reports')
     .select('id')
     .eq('scan_id', job.scanId)
     .eq('type', 'deep_audit')
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
+
+  if (existingReportError) {
+    throw new Error(existingReportError.message);
+  }
 
   if (existingReport?.id) {
     structuredLog('report_job_already_delivered', { scanId: job.scanId });
@@ -577,16 +594,31 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       ? parseCrawlPending((runRow.config as Record<string, unknown>)['crawl_pending'])
       : null;
 
-  const { count: pageCount, error: countErr } = await supabase
+  const { count: fetchedPageCount, error: countErr } = await supabase
     .from('scan_pages')
     .select('id', { count: 'exact', head: true })
-    .eq('run_id', scanRunId);
+    .eq('run_id', scanRunId)
+    .eq('status', 'fetched');
 
   if (countErr) throw new Error(countErr.message);
 
-  const shouldRunCrawl = (pageCount ?? 0) === 0 || crawlPending !== null;
+  const crawlRecovery = planDeepAuditCrawlRecovery(
+    fetchedPageCount ?? 0,
+    crawlPending !== null
+  );
 
-  if (shouldRunCrawl) {
+  if (crawlRecovery.shouldRunCrawl) {
+    // A queue retry after a terminal seed-fetch error must restart the crawl. Leaving the prior
+    // error row in place both made the consumer think work existed and collided with the
+    // (run_id, normalized_url) unique key when the retry later succeeded.
+    if (crawlRecovery.clearFailedPages) {
+      const { error: clearFailedPagesError } = await supabase
+        .from('scan_pages')
+        .delete()
+        .eq('run_id', scanRunId);
+      if (clearFailedPagesError) throw new Error(clearFailedPagesError.message);
+    }
+
     const llm = new GeminiProvider({
       GEMINI_API_KEY: env.GEMINI_API_KEY,
       GEMINI_MODEL: effectiveModel,

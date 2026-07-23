@@ -90,6 +90,7 @@ export async function GET(
             .select('id')
             .eq('scan_id', id)
             .eq('status', 'complete')
+            .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
           adminDb
@@ -97,6 +98,7 @@ export async function GET(
             .select('id,pdf_url,markdown_url,email_delivered_at')
             .eq('scan_id', id)
             .eq('type', 'deep_audit')
+            .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
           // The full-audit run's live state drives report polling. In free mode there's no payment,
@@ -106,6 +108,7 @@ export async function GET(
             .from('scan_runs')
             .select('created_at, started_at, completed_at')
             .eq('scan_id', id)
+            .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle(),
         ]);
