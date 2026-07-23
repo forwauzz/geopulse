@@ -428,9 +428,7 @@ export default {
             supabase,
             provider: createAutonomousEditorialProvider(env as unknown as Record<string, unknown> as any),
           });
-          if (editorial.status !== 'skipped') {
-            structuredLog('autonomous_editorial_cron_run', editorial, editorial.status === 'failed' ? 'error' : 'info');
-          }
+          structuredLog('autonomous_editorial_cron_run', editorial, editorial.status === 'failed' ? 'error' : editorial.status === 'rejected' ? 'warning' : 'info');
         }
       } catch (err) {
         structuredError('marketing_autopilot_cron_error', {
