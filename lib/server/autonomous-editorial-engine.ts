@@ -39,7 +39,10 @@ export async function runAutonomousEditorialEngine(args: {
   const candidate = (candidates ?? []).find((row: any) =>
     row?.status === 'brief' ||
     row?.metadata?.proposed_by === 'marketing_autopilot' ||
-    (row?.status === 'archived' && row?.metadata?.seeded_from_topic_registry === true)
+    // The registry cleanup predates the metadata marker on some rows. An archived article with
+    // a topic is still safe to re-enter only through this full draft → hero → review → publish
+    // sequence; it never revives the archived seed body directly.
+    (row?.status === 'archived' && Boolean(row?.topic_cluster))
   );
   if (!candidate?.content_id || !candidate.topic_cluster) return { status: 'skipped', reason: 'no_candidate' };
 
