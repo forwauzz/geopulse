@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import {
   bulkAdvanceContentQueueStatus,
-  importContentMachineDrafts,
   publishApprovedBlogWave,
   publishReadyArticles,
   seedTopicRegistryBatchOne,
@@ -159,14 +158,6 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <form action={importContentMachineDrafts}>
-              <button
-                type="submit"
-                className="rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
-              >
-                Import local drafts
-              </button>
-            </form>
             <form action={seedTopicPagesFromClusters}>
               <button
                 type="submit"
@@ -276,10 +267,9 @@ export default async function ContentAdminPage({ searchParams }: PageProps) {
         </section>
 
         <div className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
-          <strong className="text-on-background">Import behavior:</strong> the import button reads
-          markdown files from <code>PLAYBOOK/content-machine-drafts</code> and upserts stable
-          content records by derived <code>content_id</code>. It is safe to rerun when draft files
-          change.
+          <strong className="text-on-background">Draft import:</strong> source Markdown is imported
+          during the content-preparation step, then reviewed and published here. The live dashboard
+          never reads repository files, so it remains compatible with Cloudflare Workers.
         </div>
         <div className="mt-3 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
           <strong className="text-on-background">Topic-page seeding:</strong> the seed button creates

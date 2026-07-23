@@ -57,7 +57,15 @@ function parseDraftFilename(filename: string): { kind: DraftKind; baseSlug: stri
       baseSlug: stripDatePrefix(filename.replace(/-newsletter\.md$/, '')),
     };
   }
+  if (/^\d{4}-\d{2}-\d{2}-.+\.md$/.test(filename)) {
+    return { kind: 'article', baseSlug: stripDatePrefix(filename.replace(/\.md$/, '')) };
+  }
   return null;
+}
+
+function extractSourceLinks(markdown: string, localPath: string): string[] {
+  const urls = Array.from(markdown.matchAll(/\[[^\]]+\]\((https?:\/\/[^\s)]+)\)/g), (match) => match[1]);
+  return Array.from(new Set([localPath, ...urls.filter((url): url is string => Boolean(url))]));
 }
 
 function extractTitle(markdown: string): string | null {
@@ -140,7 +148,10 @@ export function buildImportedContentItems(groups: Map<string, ImportGroup>): Imp
         keyword_cluster: null,
         cta_goal: ctaGoal,
         source_type: 'internal_plus_research',
-        source_links: [path.relative(process.cwd(), group.brief.fullPath).replace(/\\/g, '/')],
+        source_links: extractSourceLinks(
+          group.brief.markdown,
+          path.relative(process.cwd(), group.brief.fullPath).replace(/\\/g, '/')
+        ),
         brief_markdown: group.brief.markdown,
         draft_markdown: null,
         metadata: { imported_from_playbook: true, draft_kind: 'brief' },
@@ -160,7 +171,10 @@ export function buildImportedContentItems(groups: Map<string, ImportGroup>): Imp
         keyword_cluster: null,
         cta_goal: ctaGoal,
         source_type: 'internal_plus_research',
-        source_links: [path.relative(process.cwd(), group.article.fullPath).replace(/\\/g, '/')],
+        source_links: extractSourceLinks(
+          group.article.markdown,
+          path.relative(process.cwd(), group.article.fullPath).replace(/\\/g, '/')
+        ),
         brief_markdown: group.brief?.markdown ?? null,
         draft_markdown: group.article.markdown,
         metadata: { imported_from_playbook: true, draft_kind: 'article' },
@@ -180,7 +194,10 @@ export function buildImportedContentItems(groups: Map<string, ImportGroup>): Imp
         keyword_cluster: null,
         cta_goal: ctaGoal,
         source_type: 'internal_plus_research',
-        source_links: [path.relative(process.cwd(), group.newsletter.fullPath).replace(/\\/g, '/')],
+        source_links: extractSourceLinks(
+          group.newsletter.markdown,
+          path.relative(process.cwd(), group.newsletter.fullPath).replace(/\\/g, '/')
+        ),
         brief_markdown: group.brief?.markdown ?? null,
         draft_markdown: group.newsletter.markdown,
         metadata: { imported_from_playbook: true, draft_kind: 'newsletter' },

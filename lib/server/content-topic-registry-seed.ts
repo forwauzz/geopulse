@@ -1,5 +1,4 @@
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import topicRegistryJson from '@/docs/13-topic-registry-v1.json';
 
 type SupabaseLike = {
   from(table: string): any;
@@ -45,8 +44,6 @@ export type TopicRegistrySeedItem = {
   readonly draft_markdown: string;
   readonly metadata: Record<string, unknown>;
 };
-
-const TOPIC_REGISTRY_PATH = path.join(process.cwd(), 'docs', '13-topic-registry-v1.json');
 
 function isTopicIntent(value: unknown): value is TopicIntent {
   return (
@@ -236,8 +233,10 @@ export function buildTopicRegistrySeedItems(
 }
 
 export async function loadTopicRegistryFromDisk(): Promise<TopicRegistry> {
-  const raw = await readFile(TOPIC_REGISTRY_PATH, 'utf8');
-  return parseTopicRegistry(raw);
+  // This module runs in Cloudflare Workers as well as local scripts. Bundling the
+  // registry avoids a runtime filesystem read, which Workers intentionally do not
+  // implement.
+  return parseTopicRegistry(JSON.stringify(topicRegistryJson));
 }
 
 export async function seedTopicRegistryBatch(
