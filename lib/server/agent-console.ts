@@ -185,7 +185,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       key: 'marketing_autopilot',
       name: 'Marketing autopilot',
       audience: 'internal',
-      description: 'Proposes review-gated content briefs for weak topics (Loop 5b). Never auto-publishes.',
+      description: 'Plans from coverage gaps, drafts source-backed articles, generates clean editorial heroes, reviews them, and publishes only after every editorial gate passes.',
       control: 'flag',
       flagFeature: 'marketing_autopilot',
       enabled: marketingSetting.enabled && !marketingSetting.killSwitch,

@@ -30,6 +30,8 @@ import {
   runMarketingAutopilot,
   type MarketingAutopilotEnvLike,
 } from '../lib/server/marketing-autopilot';
+import { runAutonomousEditorialEngine } from '../lib/server/autonomous-editorial-engine';
+import { createAutonomousEditorialProvider } from '../lib/server/autonomous-editorial-providers';
 import { runDueRecurringAudits, type RecurringEnvLike } from '../lib/server/recurring-audits';
 import { runDueOutreach, type OutreachEnvLike } from '../lib/server/outreach';
 import { runCompetitorCohortSweep, type CohortEnvLike } from '../lib/server/competitor-cohorts';
@@ -417,6 +419,17 @@ export default {
               channel_access: result.channelAccess ?? null,
               reason: result.reason ?? null,
             }, result.ok ? 'info' : 'error');
+          }
+          // The editorial engine consumes the bounded brief queue after the planner. It is
+          // fail-closed: absent provider credentials, a clean hero, reviewer approval, or the
+          // existing publish checks it writes nothing and never publishes.
+          stage('autonomous_editorial');
+          const editorial = await runAutonomousEditorialEngine({
+            supabase,
+            provider: createAutonomousEditorialProvider(env as unknown as Record<string, unknown> as any),
+          });
+          if (editorial.status !== 'skipped') {
+            structuredLog('autonomous_editorial_cron_run', editorial, editorial.status === 'failed' ? 'error' : 'info');
           }
         }
       } catch (err) {
