@@ -79,6 +79,26 @@ describe('Social Proof Agent safeguards', () => {
     expect(candidate?.mediaAlt).toContain('AI visibility');
   });
 
+  it('normalizes relative canonical URLs before adding provider tracking', () => {
+    const candidate = buildEducationalCandidate(
+      {
+        id: 'article-relative',
+        title: 'Relative canonical article',
+        slug: 'relative-canonical',
+        canonical_url: '/blog/relative-canonical',
+        published_at: '2026-07-20T00:00:00Z',
+        metadata: {
+          hero_image_url: 'https://getgeopulse.com/media/relative.jpg',
+          hero_image_alt: 'Diagram for the relative canonical article',
+        },
+      },
+      'https://getgeopulse.com/'
+    );
+
+    expect(candidate?.ctaUrl).toBe('https://getgeopulse.com/blog/relative-canonical');
+    expect(candidate?.safeForAutonomousPublish).toBe(true);
+  });
+
   it('keeps client proof disabled by default even when draft generation is enabled', () => {
     const config = resolveSocialProofAgentConfig({ mode: 'draft' }, true, false);
     expect(config.clientProofEnabled).toBe(false);

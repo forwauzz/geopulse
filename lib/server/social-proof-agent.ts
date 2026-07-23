@@ -155,8 +155,20 @@ function isOwnedProofDomain(domain: string): boolean {
   return normalized === 'getgeopulse.com';
 }
 
+function normalizedAppUrl(appUrl: string): string {
+  try {
+    return new URL(appUrl || 'https://getgeopulse.com').toString();
+  } catch {
+    return 'https://getgeopulse.com/';
+  }
+}
+
+function absoluteContentUrl(rawUrl: string, appUrl: string): string {
+  return new URL(rawUrl, normalizedAppUrl(appUrl)).toString();
+}
+
 function buildTrackedCta(appUrl: string, content: string): string {
-  const url = new URL('/', appUrl || 'https://getgeopulse.com');
+  const url = new URL('/', normalizedAppUrl(appUrl));
   url.searchParams.set('utm_source', 'social');
   url.searchParams.set('utm_medium', 'organic');
   url.searchParams.set('utm_campaign', 'proof_agent');
@@ -283,9 +295,10 @@ export function buildEducationalCandidate(
   const heroAlt = readString(metadata['hero_image_alt']);
   if (!heroUrl || !heroAlt || !heroUrl.startsWith('https://')) return null;
 
-  const articleUrl =
-    readString(item.canonical_url) ??
-    new URL(`/blog/${encodeURIComponent(item.slug)}`, appUrl || 'https://getgeopulse.com').toString();
+  const articleUrl = absoluteContentUrl(
+    readString(item.canonical_url) ?? `/blog/${encodeURIComponent(item.slug)}`,
+    appUrl
+  );
   return {
     key: `educational-${item.id}`,
     kind: 'educational',
@@ -342,7 +355,7 @@ export function buildIndustryHumorCandidate(
 }
 
 function trackedProviderCta(rawUrl: string, provider: string, assetKey: string): string {
-  const url = new URL(rawUrl);
+  const url = new URL(rawUrl, 'https://getgeopulse.com');
   url.searchParams.set('utm_source', provider);
   url.searchParams.set('utm_medium', 'organic_social');
   url.searchParams.set('utm_campaign', 'autonomous_social');
