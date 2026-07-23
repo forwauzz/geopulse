@@ -39,6 +39,34 @@ const features = [
   },
 ] as const;
 
+const searchGuideLinks = [
+  {
+    href: '/ai-search-optimization',
+    title: 'AI search optimization',
+    body: 'The practical work that makes public pages easier for AI search systems to crawl and understand.',
+  },
+  {
+    href: '/ai-visibility-audit',
+    title: 'AI visibility audit',
+    body: 'What a readiness audit can check before you invest in deeper technical or content work.',
+  },
+  {
+    href: '/ai-seo-audit',
+    title: 'AI SEO audit',
+    body: 'A familiar AI SEO entry point for checking crawl, structure, trust, and extractability on a public website.',
+  },
+  {
+    href: '/generative-engine-optimization',
+    title: 'Generative engine optimization',
+    body: 'A plain-language guide to GEO, its relationship to SEO, and where it fits in a growth program.',
+  },
+  {
+    href: '/solutions/agencies',
+    title: 'AI search audits for agencies',
+    body: 'A repeatable client-audit workflow for agencies and SEO consultants that need practical evidence and handoffs.',
+  },
+] as const;
+
 const faqItems = [
   {
     question: 'What does GEO-Pulse check?',
@@ -146,8 +174,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = await loadBaseUrl();
   return buildPublicPageMetadata({
     baseUrl,
-    title: 'GEO-Pulse | AI Search Readiness',
-    description: SITE_DESCRIPTION,
+    title: 'AI Search Optimization Software & Website Readiness Audits | GEO-Pulse',
+    description:
+      'Run a free AI search readiness audit. GEO-Pulse finds crawl, structure, trust, and extractability gaps that make public websites harder for AI search to understand.',
     canonicalPath: '/',
     openGraphType: 'website',
   });
@@ -176,8 +205,9 @@ export default async function HomePage({
   });
   const homePageSchema = buildWebPageStructuredData({
     url: siteUrl,
-    title: 'GEO-Pulse | AI Search Readiness',
-    description: SITE_DESCRIPTION,
+    title: 'AI Search Optimization Software & Website Readiness Audits | GEO-Pulse',
+    description:
+      'Run a free AI search readiness audit. GEO-Pulse finds crawl, structure, trust, and extractability gaps that make public websites harder for AI search to understand.',
     siteUrl,
     dateModified: pageModifiedAt,
     authorName: SITE_EDITORIAL_NAME,
@@ -309,6 +339,35 @@ export default async function HomePage({
       </section>
 
       {/* Stats band — capability facts, in big bold numbers */}
+      <section className="bg-surface px-6 py-16 md:px-10 md:py-20">
+        <div data-reveal className="mx-auto max-w-screen-2xl">
+          <div className="max-w-3xl">
+            <p className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-primary">Learn the fundamentals</p>
+            <h2 className="mt-4 font-headline text-3xl font-semibold tracking-tight text-on-background md:text-5xl">
+              Practical guides for AI search readiness
+            </h2>
+            <p className="mt-5 text-base leading-8 text-on-surface-variant md:text-lg">
+              Use these guides to understand the work behind an audit, then apply the findings to the public pages that drive demand.
+            </p>
+          </div>
+          <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {searchGuideLinks.map((guide) => (
+              <Link
+                key={guide.href}
+                href={guide.href}
+                className="group rounded-3xl border border-outline-variant/20 bg-surface-container-low p-7 transition hover:border-primary/40 hover:bg-surface-container"
+              >
+                <h3 className="font-headline text-2xl font-semibold tracking-tight text-on-background group-hover:text-primary">
+                  {guide.title}
+                </h3>
+                <p className="mt-4 text-sm leading-7 text-on-surface-variant">{guide.body}</p>
+                <span className="mt-6 inline-flex text-sm font-semibold text-primary">Read the guide →</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="border-y border-outline-variant/15 bg-surface-container-low px-6 py-16 md:px-10 md:py-20">
         <div data-reveal className="mx-auto grid max-w-screen-2xl grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-4">
           {[
