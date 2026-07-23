@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type StructuredLogPrimitive = string | number | boolean | null | undefined;
 export type StructuredLogData = Record<string, StructuredLogPrimitive>;
@@ -54,17 +55,25 @@ async function persistStructuredLogEntry(args: {
   readonly level: StructuredLogLevel;
   readonly event: string;
   readonly data: Record<string, string | number | boolean | null>;
-}): Promise<void> {
+}, client?: SupabaseClient): Promise<void> {
   const config = resolveStructuredLogConfig();
-  if (!config.ok) return;
 
   try {
-    const supabase = createServiceRoleClient(config.supabaseUrl, config.serviceRoleKey);
-    await supabase.from('app_logs').insert({
+    // In Workers, server-action bindings are available through Cloudflare context but are not
+    // guaranteed to be mirrored into process.env. Prefer the already-authorized caller client.
+    let supabase: SupabaseClient;
+    if (client) {
+      supabase = client;
+    } else {
+      if (!config.ok) return;
+      supabase = createServiceRoleClient(config.supabaseUrl, config.serviceRoleKey);
+    }
+    const { error } = await supabase.from('app_logs').insert({
       level: args.level,
       event: args.event,
       data: args.data,
     });
+    if (error) throw error;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown';
     // eslint-disable-next-line no-console -- log persistence must never recurse into structured logging
@@ -93,6 +102,21 @@ export async function structuredLogAndWait(
   const sanitized = sanitizeStructuredLogData(data);
   writeConsoleLog(level, event, sanitized);
   await persistStructuredLogEntry({ level, event, data: sanitized });
+}
+
+/**
+ * Durable logging for server actions that already hold a service-role client. This avoids relying
+ * on process.env, which does not consistently expose Worker secrets to the OpenNext action runtime.
+ */
+export async function structuredLogWithClientAndWait(
+  client: SupabaseClient,
+  event: string,
+  data: StructuredLogData,
+  level: StructuredLogLevel = 'warning'
+): Promise<void> {
+  const sanitized = sanitizeStructuredLogData(data);
+  writeConsoleLog(level, event, sanitized);
+  await persistStructuredLogEntry({ level, event, data: sanitized }, client);
 }
 
 export function structuredLog(
