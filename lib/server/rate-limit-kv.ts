@@ -73,3 +73,25 @@ export async function checkCheckoutRateLimit(
   await kv.put(key, String(n + 1), { expirationTtl: CHECKOUT_WINDOW_SEC * 2 });
   return { ok: true };
 }
+
+const SESSION_EVENT_WINDOW_SEC = 60;
+const SESSION_EVENT_MAX_PER_IP = 30;
+
+/**
+ * Session/pageview attribution beacon: 30/min per IP. The client dedupes per session so a real
+ * visitor fires ~1; this cap only blocks a flood of the public write endpoint into marketing_events.
+ */
+export async function checkSessionEventRateLimit(
+  kv: KVNamespace | undefined,
+  ip: string
+): Promise<RateLimitResult> {
+  if (!kv) return { ok: true };
+  const key = `rl:sessionevt:ip:${ip}:${minuteBucket()}`;
+  const raw = await kv.get(key);
+  const n = raw ? Number.parseInt(raw, 10) : 0;
+  if (Number.isFinite(n) && n >= SESSION_EVENT_MAX_PER_IP) {
+    return { ok: false, code: 'ip', retryAfterSec: SESSION_EVENT_WINDOW_SEC };
+  }
+  await kv.put(key, String(n + 1), { expirationTtl: SESSION_EVENT_WINDOW_SEC * 2 });
+  return { ok: true };
+}

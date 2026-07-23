@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { Inter, Newsreader } from 'next/font/google';
+import Script from 'next/script';
 import './globals.css';
 import { AttributionInit } from '@/components/attribution-init';
+import { getCfWebAnalyticsToken } from '@/lib/server/cf-env';
 import { LongWaitProvider } from '@/components/long-wait-provider';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
@@ -52,11 +54,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cfBeaconToken = await getCfWebAnalyticsToken();
   return (
     <html lang="en">
       <head>
@@ -74,6 +77,14 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${newsreader.variable} flex min-h-screen flex-col overflow-x-hidden bg-surface font-body text-on-surface antialiased`}
       >
+        {cfBeaconToken ? (
+          <Script
+            id="cf-web-analytics"
+            strategy="afterInteractive"
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon={`{"token": "${cfBeaconToken}"}`}
+          />
+        ) : null}
         <LongWaitProvider>
           <AttributionInit />
           <SiteHeader />

@@ -383,4 +383,20 @@ export function getClientIp(request: Request): string {
   );
 }
 
+/**
+ * Cloudflare Web Analytics beacon token. Public (non-secret — it appears in the page HTML), read at
+ * runtime so it can live in wrangler.jsonc [vars]. Empty string when unset → the layout renders no
+ * beacon (fail-closed), so the feature is dark until the operator creates the Web Analytics site and
+ * sets NEXT_PUBLIC_CF_BEACON_TOKEN.
+ */
+export async function getCfWebAnalyticsToken(): Promise<string> {
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    const v = (env as unknown as Record<string, unknown>)['NEXT_PUBLIC_CF_BEACON_TOKEN'];
+    return typeof v === 'string' ? v.trim() : '';
+  } catch {
+    return (process.env['NEXT_PUBLIC_CF_BEACON_TOKEN'] ?? '').trim();
+  }
+}
+
 

@@ -46,6 +46,11 @@
     "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ5bnJsZ3R4cW5vbXhlbmFrYWZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzNjAwNzEsImV4cCI6MjA4OTkzNjA3MX0.mkPKKV8WL_uExFFtt_MWcAOV4Ens55Bysr3hAHLh2uM",
     "NEXT_PUBLIC_APP_URL": "https://getgeopulse.com/",
     "NEXT_PUBLIC_TURNSTILE_SITE_KEY": "0x4AAAAAACySl18X8egdbFEN",
+    // Cloudflare Web Analytics beacon token (public, appears in page HTML). Empty = no beacon
+    // rendered (fail-closed). Operator: Dashboard → Analytics & Logs → Web Analytics → add
+    // getgeopulse.com in MANUAL mode → paste the token here (not automatic mode, to avoid a
+    // double beacon). Gives unique visitors / page views / referrers.
+    "NEXT_PUBLIC_CF_BEACON_TOKEN": "",
     // OSS de-paywall flag. "false"/unset = full audit FREE for everyone (no Stripe); "true" = the
     // legacy paid ($29 deep audit) flow. getgeopulse.com is now free (OSS north star).
     "LEGACY_PAID_ENABLED": "false",
