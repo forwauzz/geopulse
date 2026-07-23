@@ -43,6 +43,7 @@ interface CloudflareEnv {
   GHOST_ADMIN_API_VERSION?: string;
   DEEP_AUDIT_INTERNAL_REWRITE_ENABLED?: string;
   DEEP_AUDIT_INTERNAL_REWRITE_MODEL?: string;
+  DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER?: string;
   /** Optional — set when R2 bucket exposes a public base URL for report links. */
   DEEP_AUDIT_R2_PUBLIC_BASE?: string;
   /** Optional R2 binding for deep-audit artifacts (DA-003). */
