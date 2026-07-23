@@ -63,6 +63,12 @@ describe('ensureDeepAuditJobQueued', () => {
                   return {
                     eq() {
                       return {
+                        order() {
+                          return this;
+                        },
+                        limit() {
+                          return this;
+                        },
                         maybeSingle: async () => ({ data: null, error: null }),
                       };
                     },
@@ -222,5 +228,42 @@ describe('ensureDeepAuditJobQueued', () => {
       },
     });
     expect(send).toHaveBeenCalledOnce();
+  });
+
+  it('does not enqueue a rerun when the latest report version is already delivered', async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const query = {
+      select() {
+        return this;
+      },
+      eq() {
+        return this;
+      },
+      order() {
+        return this;
+      },
+      limit() {
+        return this;
+      },
+      maybeSingle: async () => ({ data: { id: 'latest-report' }, error: null }),
+    };
+    const supabase = {
+      from(table: string) {
+        if (table !== 'reports') throw new Error(`unexpected table ${table}`);
+        return query;
+      },
+    } as any;
+
+    const result = await ensureDeepAuditJobQueued(
+      supabase,
+      envWithQueue(send),
+      sessionBase,
+      'buyer@example.com',
+      { id: 'pay-1', scan_id: 'scan-uuid' },
+      true
+    );
+
+    expect(result).toEqual({ ok: true, duplicate: true });
+    expect(send).not.toHaveBeenCalled();
   });
 });

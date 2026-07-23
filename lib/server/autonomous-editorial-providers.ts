@@ -14,6 +14,9 @@ export type AutonomousEditorialEnv = {
   readonly REPORT_FILES?: R2Bucket;
 };
 
+export const CLEAN_EDITORIAL_HERO_ALT =
+  'Editorial collage of documents, evidence, and connected systems on warm paper';
+
 function jsonFromModel(text: string): Record<string, unknown> | null {
   try { const value = JSON.parse(text); return value && typeof value === 'object' ? value as Record<string, unknown> : null; } catch { return null; }
 }
@@ -40,7 +43,7 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
       if (!encoded) return null;
       const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0)); const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 80);
       const objectKey = `editorial-heroes/${slug}-${Date.now()}.png`; await bucket.put(objectKey, bytes.buffer, { httpMetadata: { contentType: 'image/png' } });
-      return { url: `${base}/${objectKey}`, alt: `Editorial illustration for ${title}` };
+      return { url: `${base}/${objectKey}`, alt: CLEAN_EDITORIAL_HERO_ALT };
     },
     async review({ title, markdown, sources, hero }) {
       if (!hero.url.startsWith('https://') || /\b(ai|robot|future|innovation)\b/i.test(hero.alt) || sources.length === 0) return { approved: false, reasons: ['hero or sources fail policy'] };

@@ -3,6 +3,7 @@ import { fetchHtmlPage } from '../lib/fetch-gate';
 import { parseCrawlPending, runDeepAuditCrawl } from './deep-audit-crawl';
 import { auditPageFromHtml } from './run-scan';
 import { extractSameOriginLinks, normalizeUrlKey } from './crawl-url-utils';
+import { createCloudflareBrowserRenderClient } from './browser-rendering';
 
 vi.mock('../lib/fetch-gate', () => ({
   fetchHtmlPage: vi.fn(),
@@ -11,6 +12,14 @@ vi.mock('../lib/fetch-gate', () => ({
 vi.mock('./run-scan', () => ({
   auditPageFromHtml: vi.fn(),
 }));
+
+vi.mock('./browser-rendering', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./browser-rendering')>();
+  return {
+    ...actual,
+    createCloudflareBrowserRenderClient: vi.fn(actual.createCloudflareBrowserRenderClient),
+  };
+});
 
 vi.mock('./robots-and-sitemap', () => ({
   crawlDelayMsFromRobotsSeconds: vi.fn(() => 0),
@@ -329,6 +338,42 @@ describe('extractSameOriginLinks', () => {
 });
 
 describe('runDeepAuditCrawl', () => {
+  it('uses Browser Rendering when the direct seed fetch is rejected with HTTP 403', async () => {
+    const { client, state } = createFakeSupabase({ page_limit: 1, chunk_size: 1 });
+    vi.mocked(fetchHtmlPage).mockResolvedValue({
+      ok: false,
+      reason: 'Target returned HTTP 403',
+      status: 403,
+      headers: { server: 'cloudflare' },
+    });
+    vi.mocked(createCloudflareBrowserRenderClient).mockReturnValue({
+      renderHtml: vi.fn(async () => ({
+        ok: true as const,
+        html: `<html><body><main><h1>ALIE</h1><p>${'rendered content '.repeat(80)}</p></main></body></html>`,
+        browserMsUsed: 125,
+      })),
+    });
+
+    const result = await runDeepAuditCrawl(client as never, {} as never, {
+      runId: 'run-1',
+      seedUrl: 'https://alie.app/',
+      pageLimit: 1,
+      chunkSize: 1,
+      browserRender: { mode: 'auto', accountId: 'acct', apiToken: 'token' },
+    });
+
+    expect(result).toMatchObject({ ok: true, phase: 'complete' });
+    expect(state.scanPages.filter((row) => row.status === 'fetched')).toHaveLength(1);
+    expect(state.scanRuns[0]?.coverage_summary).toMatchObject({
+      pages_fetched: 1,
+      pages_errored: 0,
+      browser_render_attempted: 1,
+      browser_render_succeeded: 1,
+      browser_render_failed: 0,
+      browser_render_browser_ms_used: 125,
+    });
+  });
+
   it('requeues large crawls across chunks and records final chunk metrics', async () => {
     const { client, state } = createFakeSupabase({ page_limit: 4, chunk_size: 2 });
 

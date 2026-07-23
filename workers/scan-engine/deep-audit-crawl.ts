@@ -10,6 +10,7 @@ import {
   hasBrowserRenderingCredentials,
   renderedHtmlImprovesContent,
   shouldUseBrowserRendering,
+  shouldUseBrowserRenderingAfterFetchFailure,
 } from './browser-rendering';
 import { fetchHtmlPage } from '../lib/fetch-gate';
 import { MAX_DEEP_AUDIT_PAGE_LIMIT } from '../../lib/server/deep-audit-page-limit';
@@ -83,7 +84,74 @@ export type DeepAuditCrawlResult =
   | { ok: true; phase: 'partial' }
   | { ok: false; reason: string };
 
-type SeedFetchOk = { ok: true; html: string; finalUrl: string };
+type SeedFetchOk = { ok: true; html: string; finalUrl: string; browserRendered?: boolean };
+
+type AuditHtmlFetchResult =
+  | {
+      ok: true;
+      html: string;
+      finalUrl: string;
+      browserRendered: boolean;
+      browserRenderStats: BrowserRenderStats;
+    }
+  | {
+      ok: false;
+      reason: string;
+      browserRenderStats: BrowserRenderStats;
+    };
+
+function emptyBrowserRenderStats(): BrowserRenderStats {
+  return { attempted: 0, succeeded: 0, failed: 0, browserMsUsed: 0 };
+}
+
+async function fetchAuditHtml(
+  url: string,
+  browserRender: BrowserRenderConfig | undefined
+): Promise<AuditHtmlFetchResult> {
+  const direct = await fetchHtmlPage(url);
+  if (direct.ok) {
+    return {
+      ok: true,
+      html: direct.html,
+      finalUrl: direct.finalUrl,
+      browserRendered: false,
+      browserRenderStats: emptyBrowserRenderStats(),
+    };
+  }
+
+  if (!browserRender || !shouldUseBrowserRenderingAfterFetchFailure(browserRender, direct.status)) {
+    return { ok: false, reason: direct.reason, browserRenderStats: emptyBrowserRenderStats() };
+  }
+
+  const stats = emptyBrowserRenderStats();
+  stats.attempted = 1;
+  const client = createCloudflareBrowserRenderClient({
+    DEEP_AUDIT_BROWSER_RENDER_MODE: browserRender.mode,
+    CLOUDFLARE_ACCOUNT_ID: browserRender.accountId ?? undefined,
+    BROWSER_RENDERING_API_TOKEN: browserRender.apiToken ?? undefined,
+  });
+  const rendered = client
+    ? await client.renderHtml(url)
+    : { ok: false as const, reason: 'browser_rendering_not_configured' };
+  if (!rendered.ok) {
+    stats.failed = 1;
+    return {
+      ok: false,
+      reason: `${direct.reason}; browser rendering: ${rendered.reason}`,
+      browserRenderStats: stats,
+    };
+  }
+
+  stats.succeeded = 1;
+  stats.browserMsUsed = rendered.browserMsUsed ?? 0;
+  return {
+    ok: true,
+    html: rendered.html,
+    finalUrl: url,
+    browserRendered: true,
+    browserRenderStats: stats,
+  };
+}
 
 function extractSeedHtmlTitle(html: string): string {
   const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
@@ -281,7 +349,7 @@ async function startChunkedCrawl(
     await ingestSitemap(sm);
   }
 
-  const seedFetch = await fetchHtmlPage(seedUrl);
+  const seedFetch = await fetchAuditHtml(seedUrl, browserRender);
   if (!seedFetch.ok) {
     const seedNorm = normalizeUrlKey(seedUrl);
     const t0 = Date.now();
@@ -362,11 +430,20 @@ async function startChunkedCrawl(
     crawlDelayMs,
     sitemapNorms,
     seedNormFinal,
-    seedFetchCached: { ok: true, html: seedFetch.html, finalUrl: seedFetch.finalUrl },
+    seedFetchCached: {
+      ok: true,
+      html: seedFetch.html,
+      finalUrl: seedFetch.finalUrl,
+      browserRendered: seedFetch.browserRendered,
+    },
     robotsTxtContent: robotsRes.text,
     browserRender,
   });
   pagesErrored += sliceRes.pagesErroredDelta;
+  const initialBrowserRenderStats = mergeBrowserRenderStats(
+    seedFetch.browserRenderStats,
+    sliceRes.browserRenderStats
+  );
 
   if (end < ordered.length) {
     const { data: cfgRow } = await supabase.from('scan_runs').select('config').eq('id', runId).maybeSingle();
@@ -382,10 +459,10 @@ async function startChunkedCrawl(
         sitemap_urls_considered: smList.length,
         chunks_processed: 1,
         started_at: started,
-        browser_render_attempted: sliceRes.browserRenderStats.attempted,
-        browser_render_succeeded: sliceRes.browserRenderStats.succeeded,
-        browser_render_failed: sliceRes.browserRenderStats.failed,
-        browser_render_browser_ms_used: sliceRes.browserRenderStats.browserMsUsed,
+        browser_render_attempted: initialBrowserRenderStats.attempted,
+        browser_render_succeeded: initialBrowserRenderStats.succeeded,
+        browser_render_failed: initialBrowserRenderStats.failed,
+        browser_render_browser_ms_used: initialBrowserRenderStats.browserMsUsed,
       } satisfies CrawlPendingState,
     });
     const { error: cfgErr } = await supabase.from('scan_runs').update({ config: nextConfig }).eq('id', runId);
@@ -413,7 +490,7 @@ async function startChunkedCrawl(
     chunkSize,
     robotsStatus: robotsRes.status,
     sitemapCount: smList.length,
-    browserRenderStats: sliceRes.browserRenderStats,
+    browserRenderStats: initialBrowserRenderStats,
     browserRenderMode: browserRender?.mode ?? 'off',
     browserRenderEnabled: !!browserRender && browserRender.mode !== 'off' && hasBrowserRenderingCredentials(browserRender),
   });
@@ -621,15 +698,21 @@ async function processUrlSlice(
 
     let html: string;
     let finalUrl: string;
+    let browserRendered = false;
 
     if (isSeedPage && startIndex === 0 && seedFetchCached?.ok) {
       html = seedFetchCached.html;
       finalUrl = seedFetchCached.finalUrl;
+      browserRendered = seedFetchCached.browserRendered === true;
     } else if (isSeedPage) {
       if (crawlDelayMs > 0) {
         await sleep(crawlDelayMs);
       }
-      const fr = await fetchHtmlPage(seedUrl);
+      const fr = await fetchAuditHtml(seedUrl, browserRender);
+      Object.assign(
+        browserRenderStats,
+        mergeBrowserRenderStats(browserRenderStats, fr.browserRenderStats)
+      );
       const fetchMs = Date.now() - t0;
       if (!fr.ok) {
         pagesErroredDelta += 1;
@@ -648,11 +731,16 @@ async function processUrlSlice(
       }
       html = fr.html;
       finalUrl = fr.finalUrl;
+      browserRendered = fr.browserRendered;
     } else {
       if (crawlDelayMs > 0) {
         await sleep(crawlDelayMs);
       }
-      const fr = await fetchHtmlPage(targetUrl);
+      const fr = await fetchAuditHtml(targetUrl, browserRender);
+      Object.assign(
+        browserRenderStats,
+        mergeBrowserRenderStats(browserRenderStats, fr.browserRenderStats)
+      );
       const fetchMs = Date.now() - t0;
       if (!fr.ok) {
         pagesErroredDelta += 1;
@@ -671,12 +759,13 @@ async function processUrlSlice(
       }
       html = fr.html;
       finalUrl = fr.finalUrl;
+      browserRendered = fr.browserRendered;
     }
 
     const fetchMs = Date.now() - t0;
     let auditHtml = html;
 
-    if (browserRender && shouldUseBrowserRendering(browserRender, html)) {
+    if (browserRender && !browserRendered && shouldUseBrowserRendering(browserRender, html)) {
       browserRenderStats.attempted += 1;
       const client = createCloudflareBrowserRenderClient({
         DEEP_AUDIT_BROWSER_RENDER_MODE: browserRender.mode,

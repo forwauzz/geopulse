@@ -94,6 +94,7 @@ async function buildPublicShareRow(
       .select('id')
       .eq('scan_id', data.id)
       .eq('status', 'complete')
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
@@ -101,6 +102,7 @@ async function buildPublicShareRow(
       .select('id,pdf_url,markdown_url,email_delivered_at')
       .eq('scan_id', data.id)
       .eq('type', 'deep_audit')
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
     // A full-audit run's live state drives whether the report page keeps polling. In free mode
@@ -110,6 +112,7 @@ async function buildPublicShareRow(
       .from('scan_runs')
       .select('created_at, started_at, completed_at')
       .eq('scan_id', data.id)
+      .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]);

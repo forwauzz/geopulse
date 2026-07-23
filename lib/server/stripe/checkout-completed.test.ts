@@ -84,6 +84,12 @@ describe('handleCheckoutSessionCompleted', () => {
                   return {
                     eq() {
                       return {
+                        order() {
+                          return this;
+                        },
+                        limit() {
+                          return this;
+                        },
                         maybeSingle: async () => ({ data: null, error: null }),
                       };
                     },
@@ -199,6 +205,12 @@ describe('handleCheckoutSessionCompleted', () => {
                   return {
                     eq() {
                       return {
+                        order() {
+                          return this;
+                        },
+                        limit() {
+                          return this;
+                        },
                         maybeSingle: async () => ({ data: { id: 'rep-1' }, error: null }),
                       };
                     },

@@ -90,6 +90,19 @@ export function shouldUseBrowserRendering(config: BrowserRenderConfig, html: str
   return looksLikeSpaShell(html);
 }
 
+/**
+ * A direct Worker fetch can be rejected by a site's bot/WAF policy even though the public page is
+ * available in a real browser. In auto/force mode, retry only access-control/rate-limit responses
+ * through Browser Rendering. Do not turn ordinary 404/5xx failures into expensive browser work.
+ */
+export function shouldUseBrowserRenderingAfterFetchFailure(
+  config: BrowserRenderConfig,
+  status: number | undefined
+): boolean {
+  if (config.mode === 'off' || !hasBrowserRenderingCredentials(config)) return false;
+  return status === 401 || status === 403 || status === 429;
+}
+
 export function createCloudflareBrowserRenderClient(
   env: BrowserRenderEnv,
   deps?: { fetchImpl?: typeof fetch }

@@ -36,12 +36,18 @@ export async function ensureDeepAuditJobQueued(
     return { ok: false, reason: 'payment_missing_scan_id', status: 500 };
   }
 
-  const { data: report } = await supabase
+  const { data: report, error: reportLookupError } = await supabase
     .from('reports')
     .select('id')
     .eq('scan_id', payment.scan_id)
     .eq('type', 'deep_audit')
+    .order('created_at', { ascending: false })
+    .limit(1)
     .maybeSingle();
+
+  if (reportLookupError) {
+    return { ok: false, reason: reportLookupError.message, status: 500 };
+  }
 
   if (report?.id) {
     structuredLog('deep_audit_queue_skipped_existing_report', {
