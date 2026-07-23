@@ -30,15 +30,19 @@ export type SocialProofAgentConfig = {
   readonly auditScreenshotsEnabled: boolean;
   readonly aggregateDataEnabled: boolean;
   readonly educationalEnabled: boolean;
+  readonly industryHumorEnabled: boolean;
   readonly clientProofEnabled: boolean;
   readonly carouselEnabled: boolean;
   readonly reelsEnabled: boolean;
   readonly minAggregateSampleSize: number;
+  readonly timezone: string;
+  readonly morningHourLocal: number;
+  readonly eveningHourLocal: number;
 };
 
 export type SocialProofCandidate = {
   readonly key: string;
-  readonly kind: 'before_after' | 'aggregate' | 'educational';
+  readonly kind: 'before_after' | 'aggregate' | 'educational' | 'industry_humor';
   readonly title: string;
   readonly caption: string;
   readonly ctaUrl: string;
@@ -95,6 +99,13 @@ function readPositiveInt(
     : fallback;
 }
 
+function readHour(config: Record<string, unknown>, key: string, fallback: number): number {
+  const value = config[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 23
+    ? Math.floor(value)
+    : fallback;
+}
+
 export function resolveSocialProofAgentConfig(
   config: Record<string, unknown>,
   enabled: boolean,
@@ -115,10 +126,17 @@ export function resolveSocialProofAgentConfig(
     auditScreenshotsEnabled: readBoolean(config, 'audit_screenshots_enabled', false),
     aggregateDataEnabled: readBoolean(config, 'aggregate_data_enabled', true),
     educationalEnabled: readBoolean(config, 'educational_enabled', true),
+    industryHumorEnabled: readBoolean(config, 'industry_humor_enabled', true),
     clientProofEnabled: readBoolean(config, 'client_proof_enabled', false),
     carouselEnabled: readBoolean(config, 'carousel_enabled', true),
     reelsEnabled: readBoolean(config, 'reels_enabled', false),
     minAggregateSampleSize: readPositiveInt(config, 'min_aggregate_sample_size', 20, 500),
+    timezone:
+      typeof config['timezone'] === 'string' && config['timezone'].trim()
+        ? config['timezone'].trim()
+        : 'America/Toronto',
+    morningHourLocal: readHour(config, 'morning_hour_local', 9),
+    eveningHourLocal: readHour(config, 'evening_hour_local', 17),
   };
 }
 
@@ -282,7 +300,7 @@ export function buildEducationalCandidate(
     ctaUrl: articleUrl,
     contentItemId: item.id,
     mediaUrl: heroUrl,
-    mediaMimeType: 'image/png',
+    mediaMimeType: /\.(?:jpe?g)(?:\?|$)/i.test(heroUrl) ? 'image/jpeg' : 'image/png',
     mediaAlt: heroAlt,
     evidence: {
       content_item_id: item.id,
@@ -291,6 +309,98 @@ export function buildEducationalCandidate(
     },
     safeForAutonomousPublish: true,
   };
+}
+
+export function buildIndustryHumorCandidate(
+  item: ContentRow,
+  appUrl: string
+): SocialProofCandidate | null {
+  const educational = buildEducationalCandidate(item, appUrl);
+  if (!educational) return null;
+  return {
+    ...educational,
+    key: `industry-humor-${item.id}`,
+    kind: 'industry_humor',
+    title: `Agency reality check: ${item.title}`,
+    caption: [
+      `Client: “We rank on Google, so ChatGPT must recommend us too… right?”`,
+      ``,
+      `Agency: opens the AI-readiness audit`,
+      ``,
+      `The useful answer: search rankings and AI citations overlap, but they are not the same system.`,
+      ``,
+      `Save this for the next strategy call. Then run the free GEO-Pulse scan.`,
+      ``,
+      `#GenerativeEngineOptimization #AgencyLife #AISEO`,
+    ].join('\n'),
+    evidence: {
+      ...educational.evidence,
+      format: 'industry_humor',
+      claim_boundary: 'no_equivalence_between_search_rank_and_ai_citation',
+    },
+  };
+}
+
+function trackedProviderCta(rawUrl: string, provider: string, assetKey: string): string {
+  const url = new URL(rawUrl);
+  url.searchParams.set('utm_source', provider);
+  url.searchParams.set('utm_medium', 'organic_social');
+  url.searchParams.set('utm_campaign', 'autonomous_social');
+  url.searchParams.set('utm_content', assetKey.slice(0, 100));
+  return url.toString();
+}
+
+function localParts(date: Date, timezone: string): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    Number.parseInt(parts.find((part) => part.type === type)?.value ?? '0', 10);
+  return {
+    year: read('year'),
+    month: read('month'),
+    day: read('day'),
+    hour: read('hour') % 24,
+    minute: read('minute'),
+  };
+}
+
+export function instagramScheduleSlot(
+  now: Date,
+  timezone: string,
+  hourLocal: number
+): string {
+  const current = localParts(now, timezone);
+  const targetMinute = 30;
+  const targetPassed =
+    current.hour > hourLocal || (current.hour === hourLocal && current.minute >= targetMinute);
+  if (targetPassed) return new Date(now.getTime() + 2 * 60_000).toISOString();
+  for (let minutes = 0; minutes <= 24 * 60; minutes += 5) {
+    const candidate = new Date(now.getTime() + minutes * 60_000);
+    const local = localParts(candidate, timezone);
+    if (
+      local.year === current.year &&
+      local.month === current.month &&
+      local.day === current.day &&
+      local.hour === hourLocal &&
+      local.minute === targetMinute
+    ) {
+      return candidate.toISOString();
+    }
+  }
+  return new Date(now.getTime() + 2 * 60_000).toISOString();
 }
 
 function providerFamily(account: DistributionAccountRow | null): DistributionProviderFamily {
@@ -328,7 +438,9 @@ function candidateCanPublish(
   account: DistributionAccountRow | null
 ): boolean {
   if (!account || !candidate.safeForAutonomousPublish) return false;
-  if (account.provider_name === 'instagram') return Boolean(candidate.mediaUrl);
+  if (account.provider_name === 'instagram') {
+    return Boolean(candidate.mediaUrl && candidate.mediaMimeType === 'image/jpeg');
+  }
   return true;
 }
 
@@ -390,13 +502,36 @@ export async function runSocialProofAgent(args: {
         if (candidate) candidates.push(candidate);
       }
     }
+    if (config.industryHumorEnabled) {
+      for (const item of content) {
+        const candidate = buildIndustryHumorCandidate(item, args.appUrl);
+        if (candidate) candidates.push(candidate);
+      }
+    }
 
     const account = preferredAccount(accounts);
     const family = providerFamily(account);
+    const safeEducational = candidates.filter(
+      (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'educational'
+    );
+    const safeHumor = candidates.filter(
+      (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'industry_humor'
+    );
+    const interleavedSafe = safeEducational.flatMap((candidate, index) => [
+      candidate,
+      ...(safeHumor[index] ? [safeHumor[index]!] : []),
+    ]);
+    const orderedCandidates =
+      mode === 'autonomous'
+        ? [
+            ...interleavedSafe,
+            ...candidates.filter((candidate) => !interleavedSafe.includes(candidate)),
+          ]
+        : candidates;
     let assetsCreated = 0;
     let jobsCreated = 0;
 
-    for (const candidate of candidates) {
+    for (const candidate of orderedCandidates) {
       if (assetsCreated >= config.dailyCap) break;
       const assetId = makeAssetId(candidate, family);
       // A deterministic asset is immutable from the agent's perspective. This both rotates
@@ -414,7 +549,7 @@ export async function runSocialProofAgent(args: {
         bodyPlaintext: candidate.caption,
         captionText: candidate.caption,
         status: assetStatusForMode(mode),
-        ctaUrl: candidate.ctaUrl,
+        ctaUrl: trackedProviderCta(candidate.ctaUrl, account?.provider_name ?? 'social', candidate.key),
         metadata: {
           created_by_agent: 'social_proof_agent',
           proof_kind: candidate.kind,
@@ -425,6 +560,7 @@ export async function runSocialProofAgent(args: {
           audit_screenshots_enabled: config.auditScreenshotsEnabled,
           carousel_enabled: config.carouselEnabled,
           reels_enabled: config.reelsEnabled,
+          industry_humor_enabled: config.industryHumorEnabled,
         },
       });
       assetsCreated += 1;
@@ -453,8 +589,16 @@ export async function runSocialProofAgent(args: {
             jobId,
             distributionAssetId: asset.id,
             distributionAccountId: account.id,
-            publishMode: 'publish_now',
-            status: 'queued',
+            publishMode: account.provider_name === 'instagram' ? 'scheduled' : 'publish_now',
+            scheduledFor:
+              account.provider_name === 'instagram'
+                ? instagramScheduleSlot(
+                    args.now ?? new Date(),
+                    config.timezone,
+                    jobsCreated === 0 ? config.morningHourLocal : config.eveningHourLocal
+                  )
+                : null,
+            status: account.provider_name === 'instagram' ? 'scheduled' : 'queued',
           });
           jobsCreated += 1;
         }

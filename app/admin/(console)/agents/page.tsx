@@ -286,9 +286,18 @@ export default async function AdminAgentsPage() {
               </select>
             </label>
             <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
-              Daily cap
+              Posts per day
               <input name="dailyCap" type="number" min="1" max="5" defaultValue={social.dailyCap} className={`${inputClass} w-28`} />
             </label>
+            <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+              Morning
+              <input name="morningHourLocal" type="number" min="0" max="23" defaultValue={social.morningHourLocal} className={`${inputClass} w-24`} />
+            </label>
+            <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+              Evening
+              <input name="eveningHourLocal" type="number" min="0" max="23" defaultValue={social.eveningHourLocal} className={`${inputClass} w-24`} />
+            </label>
+            <input type="hidden" name="timezone" value={social.timezone} />
             <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
               Minimum aggregate sample
               <input name="minAggregateSampleSize" type="number" min="5" max="500" defaultValue={social.minAggregateSampleSize} className={`${inputClass} w-40`} />
@@ -297,6 +306,7 @@ export default async function AdminAgentsPage() {
 
           <div className="mt-4 grid gap-2 md:grid-cols-2">
             <Checkbox name="educationalEnabled" label="Published article insights" defaultChecked={social.educationalEnabled} />
+            <Checkbox name="industryHumorEnabled" label="Agency humor + industry memes" description="Light, useful posts for agency owners and SEO consultants; no unsupported claims." defaultChecked={social.industryHumorEnabled} />
             <Checkbox name="aggregateDataEnabled" label="Anonymous aggregate data" description="Directional product usage, never presented as an industry benchmark." defaultChecked={social.aggregateDataEnabled} />
             <Checkbox name="beforeAfterEnabled" label="Before-and-after proof" description="Own-site evidence by default; no ranking or traffic guarantees." defaultChecked={social.beforeAfterEnabled} />
             <Checkbox name="auditScreenshotsEnabled" label="Audit report screenshots" description="Only redacted or consented media can pass review." defaultChecked={social.auditScreenshotsEnabled} />

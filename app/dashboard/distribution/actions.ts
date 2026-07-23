@@ -740,8 +740,12 @@ export async function startSocialDistributionOauthConnect(formData: FormData): P
   const repo = createDistributionEngineRepository(context.adminDb);
   const account = await repo.getAccountById(parsed.data.distributionAccountId);
   if (!account) throw new Error('Distribution account not found.');
-  if (account.provider_name !== 'x' && account.provider_name !== 'linkedin') {
-    throw new Error('Social OAuth connect supports x/linkedin accounts only.');
+  if (
+    account.provider_name !== 'x' &&
+    account.provider_name !== 'linkedin' &&
+    account.provider_name !== 'instagram'
+  ) {
+    throw new Error('Social OAuth connect supports x, LinkedIn, and Instagram accounts only.');
   }
 
   const appUrl = process.env['NEXT_PUBLIC_APP_URL']?.trim() || context.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -758,11 +762,52 @@ export async function startSocialDistributionOauthConnect(formData: FormData): P
     stateSecret,
     xClientId: process.env['X_OAUTH_CLIENT_ID'],
     linkedinClientId: process.env['LINKEDIN_OAUTH_CLIENT_ID'],
+    instagramClientId: process.env['INSTAGRAM_OAUTH_CLIENT_ID'],
     xAuthorizeUrl: process.env['X_OAUTH_AUTH_URL'],
     linkedinAuthorizeUrl: process.env['LINKEDIN_OAUTH_AUTH_URL'],
+    instagramAuthorizeUrl: process.env['INSTAGRAM_OAUTH_AUTH_URL'],
     xScope: process.env['X_OAUTH_SCOPE'],
     linkedinScope: process.env['LINKEDIN_OAUTH_SCOPE'],
+    instagramScope: process.env['INSTAGRAM_OAUTH_SCOPE'],
   });
-
   redirect(authorizeUrl);
+}
+
+export async function startInstagramOauthConnect(): Promise<void> {
+  const context = await requireSocialOauthEnabled();
+  if (!context.ok) throw new Error(context.message);
+  const repo = createDistributionEngineRepository(context.adminDb);
+  const existing = await repo.getAccountByAccountId('instagram_geopulse');
+  const account = await repo.upsertAccount({
+    accountId: 'instagram_geopulse',
+    providerName: 'instagram',
+    accountLabel: 'GEO-Pulse Instagram',
+    externalAccountId: existing?.external_account_id ?? null,
+    status: existing?.status === 'connected' ? 'connected' : 'draft',
+    connectedByUserId: existing?.connected_by_user_id ?? context.user.id,
+    lastVerifiedAt: existing?.last_verified_at ?? null,
+    metadata: {
+      ...(existing?.metadata ?? {}),
+      source: 'instagram_quick_connect',
+    },
+  });
+  const appUrl = process.env['NEXT_PUBLIC_APP_URL']?.trim() || context.env.NEXT_PUBLIC_APP_URL?.trim();
+  const stateSecret =
+    process.env['SUPABASE_SERVICE_ROLE_KEY']?.trim() ||
+    context.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!appUrl || !stateSecret) {
+    throw new Error('Instagram OAuth is missing the app URL or state secret.');
+  }
+  redirect(
+    buildSocialOAuthAuthorizeUrl({
+      provider: 'instagram',
+      accountId: account.id,
+      userId: context.user.id,
+      appUrl,
+      stateSecret,
+      instagramClientId: process.env['INSTAGRAM_OAUTH_CLIENT_ID'],
+      instagramAuthorizeUrl: process.env['INSTAGRAM_OAUTH_AUTH_URL'],
+      instagramScope: process.env['INSTAGRAM_OAUTH_SCOPE'],
+    })
+  );
 }

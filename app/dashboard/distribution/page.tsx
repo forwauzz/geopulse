@@ -4,6 +4,7 @@ import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createDistributionEngineAdminData } from '@/lib/server/distribution-engine-admin-data';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
+import { startInstagramOauthConnect } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -263,7 +264,55 @@ export default async function DistributionAdminPage(props: {
           </div>
         ) : null}
 
+        <section className="mt-6 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float">
+          <div className="flex flex-wrap items-center gap-4">
+            <div
+              className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-[#833ab4] via-[#fd1d1d] to-[#fcb045] text-white"
+              aria-hidden
+            >
+              <svg viewBox="0 0 24 24" className="h-6 w-6 fill-none stroke-current" strokeWidth="2">
+                <rect x="3" y="3" width="18" height="18" rx="5" />
+                <circle cx="12" cy="12" r="4" />
+                <circle cx="17.5" cy="6.5" r="1" className="fill-current stroke-none" />
+              </svg>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="font-headline text-lg font-semibold text-on-background">Instagram</h2>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  overview.accounts.some((account) => account.provider_name === 'instagram' && account.status === 'connected')
+                    ? 'bg-primary/15 text-primary'
+                    : 'bg-surface-container-high text-on-surface-variant'
+                }`}>
+                  {overview.accounts.some((account) => account.provider_name === 'instagram' && account.status === 'connected')
+                    ? 'Connected'
+                    : 'Not connected'}
+                </span>
+              </div>
+              <p className="mt-1 font-body text-sm text-on-surface-variant">
+                Two quality-gated posts per day: practical GEO insight in the morning, agency-friendly education or humor in the evening.
+              </p>
+            </div>
+            {flags.socialOauthEnabled ? (
+              <form action={startInstagramOauthConnect}>
+                <button type="submit" className="rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary">
+                  {overview.accounts.some((account) => account.provider_name === 'instagram' && account.status === 'connected')
+                    ? 'Reconnect'
+                    : 'Connect Instagram'}
+                </button>
+              </form>
+            ) : null}
+            <Link href="/admin/agents" className="rounded-xl border border-outline-variant/30 px-4 py-2 font-body text-sm font-semibold text-on-background">
+              Content controls
+            </Link>
+          </div>
+        </section>
+
         {flags.writeEnabled ? (
+          <details className="mt-6">
+            <summary className="cursor-pointer font-body text-sm font-semibold text-on-surface-variant">
+              Advanced distribution controls
+            </summary>
           <DistributionEngineAdminControls
             contentOptions={contentItems.map((item) => ({
               id: item.id,
@@ -283,6 +332,7 @@ export default async function DistributionAdminPage(props: {
             }))}
             socialOauthEnabled={flags.socialOauthEnabled}
           />
+          </details>
         ) : (
           <div className="mt-6 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 font-body text-sm text-on-surface-variant">
             <strong className="text-on-background">Write controls disabled:</strong> the read-only

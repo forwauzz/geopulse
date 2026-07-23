@@ -55,6 +55,27 @@ describe('distribution-social-oauth', () => {
     expect(validated).toBeNull();
   });
 
+  it('builds Instagram Login with only publishing and insights scopes', () => {
+    const url = new URL(
+      buildSocialOAuthAuthorizeUrl({
+        provider: 'instagram',
+        accountId: 'acct-instagram',
+        userId: 'user-1',
+        appUrl: 'https://getgeopulse.com',
+        stateSecret: 'secret',
+        instagramClientId: '1854026362641864',
+      })
+    );
+    expect(url.origin).toBe('https://www.instagram.com');
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      'https://getgeopulse.com/api/admin/distribution/oauth/instagram/callback'
+    );
+    expect(url.searchParams.get('scope')).toBe(
+      'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights'
+    );
+    expect(url.searchParams.get('state')).toBeTruthy();
+  });
+
   it('exchanges linkedin code into normalized token payload', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -129,5 +150,42 @@ describe('distribution-social-oauth', () => {
     expect(token.refreshToken).toBe('linkedin-new-refresh-token');
     expect(token.scopeList).toEqual(['openid', 'profile', 'w_member_social']);
     expect(token.expiresAt).toBeTruthy();
+  });
+
+  it('exchanges and refreshes a long-lived Instagram token', async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ access_token: 'short', user_id: 'ig-123' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ access_token: 'long', token_type: 'bearer', expires_in: 5_184_000 }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ access_token: 'refreshed', token_type: 'bearer', expires_in: 5_184_000 }),
+      } as Response) as typeof fetch;
+
+    const token = await exchangeSocialOAuthCode({
+      provider: 'instagram',
+      code: 'code',
+      appUrl: 'https://getgeopulse.com',
+      instagramClientId: 'instagram-client',
+      instagramClientSecret: 'instagram-secret',
+    });
+    expect(token.accessToken).toBe('long');
+    expect(token.refreshToken).toBe('long');
+    expect(token.raw).toMatchObject({ user_id: 'ig-123' });
+
+    const refreshed = await refreshSocialOAuthToken({
+      provider: 'instagram',
+      refreshToken: token.refreshToken!,
+    });
+    expect(refreshed.accessToken).toBe('refreshed');
+    expect(refreshed.refreshToken).toBe('refreshed');
   });
 });
