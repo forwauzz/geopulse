@@ -12,6 +12,7 @@ import {
   runSocialProofAgent,
   type SocialProofAgentMode,
 } from '@/lib/server/social-proof-agent';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
 
 const TOGGLEABLE: ReadonlySet<AutomationFeature> = new Set<AutomationFeature>([
   'outreach_sweep',
@@ -113,6 +114,9 @@ export async function saveRevenueAgency(formData: FormData): Promise<void> {
         mode,
         run_hour_utc: intField(formData, 'runHourUtc', 14, 23, 0),
         social_proof_enabled: checked(formData, 'socialProofEnabled'),
+        nurture_enabled: checked(formData, 'nurtureEnabled'),
+        nurture_daily_cap: intField(formData, 'nurtureDailyCap', 5, 20),
+        nurture_delay_hours: intField(formData, 'nurtureDelayHours', 24, 168),
       },
     },
     ctx.user.id
@@ -139,7 +143,8 @@ export async function runRevenueAgencyNow(): Promise<void> {
     process.env['NEXT_PUBLIC_APP_URL']?.trim() ||
     ctx.env.NEXT_PUBLIC_APP_URL?.trim() ||
     'https://getgeopulse.com';
-  await runRevenueAgency({ supabase: ctx.adminDb, appUrl, force: true });
+  const env = await getPaymentApiEnv();
+  await runRevenueAgency({ supabase: ctx.adminDb, appUrl, env, force: true });
   revalidatePath('/admin/agents');
   revalidatePath('/dashboard/distribution');
 }

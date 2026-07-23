@@ -418,6 +418,7 @@ export default {
           const result = await runRevenueAgency({
             supabase,
             appUrl: env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
+            env,
           });
           if (result.status !== 'skipped') {
             structuredLog(
@@ -427,6 +428,8 @@ export default {
                 mode: result.mode,
                 focus: result.snapshot?.focus ?? null,
                 proof_status: result.proof?.status ?? null,
+                nurture_status: result.nurture?.status ?? null,
+                nurture_sent: result.nurture?.sent ?? 0,
                 reason: result.reason ?? null,
               },
               result.status === 'failed' ? 'error' : 'info'

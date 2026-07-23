@@ -238,6 +238,18 @@ export default async function AdminAgentsPage() {
             <input type="checkbox" name="socialProofEnabled" defaultChecked={revenue.socialProofEnabled} />
             Replenish proof queue
           </label>
+          <label className="flex items-center gap-2 pb-2 font-sans text-sm text-on-background">
+            <input type="checkbox" name="nurtureEnabled" defaultChecked={revenue.nurtureEnabled} />
+            Nurture opted-in leads
+          </label>
+          <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+            Daily email cap
+            <input name="nurtureDailyCap" type="number" min="1" max="20" defaultValue={revenue.nurtureDailyCap} className={`${inputClass} w-28`} />
+          </label>
+          <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+            Wait hours
+            <input name="nurtureDelayHours" type="number" min="1" max="168" defaultValue={revenue.nurtureDelayHours} className={`${inputClass} w-28`} />
+          </label>
           <button type="submit" className="rounded-xl border border-outline-variant/30 px-4 py-2 font-sans text-sm font-bold text-on-background">
             Save
           </button>

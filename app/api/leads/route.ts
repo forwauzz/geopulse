@@ -1,9 +1,11 @@
 import { z } from 'zod';
-import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
+import { getClientIp, getPaymentApiEnv } from '@/lib/server/cf-env';
 import { checkEmailLeadRateLimit, emailRateKey } from '@/lib/server/rate-limit-kv';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
+import { buildSavedPreviewEmail, sendLeadEmail } from '@/lib/server/lead-email';
+import { structuredLogWithClientAndWait } from '@/lib/server/structured-log';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +16,7 @@ const bodySchema = z.object({
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1),
   anonymous_id: z.string().max(128).nullish(),
+  marketingConsent: z.boolean().optional().default(false),
 });
 
 async function hashEmail(email: string): Promise<string> {
@@ -26,7 +29,7 @@ async function hashEmail(email: string): Promise<string> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const env = await getScanApiEnv();
+  const env = await getPaymentApiEnv();
 
   let json: unknown;
   try {
@@ -71,13 +74,17 @@ export async function POST(request: Request): Promise<Response> {
     env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const { error } = await supabase.from('leads').insert({
-    email: parsed.data.email,
-    url: parsed.data.url,
-    score: parsed.data.score,
-    scan_id: parsed.data.scanId,
-    source: 'organic',
-  });
+  const { data: lead, error } = await supabase
+    .from('leads')
+    .insert({
+      email: parsed.data.email,
+      url: parsed.data.url,
+      score: parsed.data.score,
+      scan_id: parsed.data.scanId,
+      source: 'organic',
+    })
+    .select('id')
+    .single();
 
   if (error) {
     return Response.json({ error: { code: 'db_error', message: error.message } }, { status: 500 });
@@ -86,9 +93,38 @@ export async function POST(request: Request): Promise<Response> {
   await emitMarketingEvent(supabase, 'lead_submitted', {
     anonymous_id: parsed.data.anonymous_id,
     scan_id: parsed.data.scanId,
+    lead_id: lead.id as string,
     email: parsed.data.email,
-    metadata: { url: parsed.data.url, score: parsed.data.score },
+    metadata: {
+      url: parsed.data.url,
+      score: parsed.data.score,
+      marketing_consent: parsed.data.marketingConsent,
+    },
   });
 
-  return Response.json({ ok: true });
+  const preview = buildSavedPreviewEmail({
+    appUrl: env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com',
+    scanId: parsed.data.scanId,
+    url: parsed.data.url,
+    score: parsed.data.score,
+  });
+  const delivery = await sendLeadEmail({
+    env,
+    to: parsed.data.email,
+    subject: preview.subject,
+    html: preview.html,
+  });
+  await structuredLogWithClientAndWait(
+    supabase,
+    'lead_preview_delivery',
+    {
+      lead_id: lead.id as string,
+      scan_id: parsed.data.scanId,
+      delivered: delivery.ok,
+      reason: delivery.reason ?? null,
+    },
+    delivery.ok ? 'info' : 'warning'
+  );
+
+  return Response.json({ ok: true, emailDelivered: delivery.ok });
 }
