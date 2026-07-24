@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   computeNextAudit,
+  computeDeliveryRetry,
   mintPrivateToken,
   monitorPriceIdForPlan,
   normalizeMonitorPlan,
@@ -90,6 +91,11 @@ describe('monitor-subscription pure helpers', () => {
     const from = Date.UTC(2026, 0, 1);
     const next = new Date(computeNextAudit(from)).getTime();
     expect(next - from).toBe(MONITOR_AUDIT_INTERVAL_DAYS * 24 * 60 * 60 * 1000);
+  });
+
+  it('retries failed delivery the next day instead of losing a monthly report', () => {
+    const from = Date.UTC(2026, 0, 1);
+    expect(new Date(computeDeliveryRetry(from)).getTime() - from).toBe(24 * 60 * 60 * 1000);
   });
 
   it('mintPrivateToken is 64 hex chars, dashless, and unique', () => {

@@ -4,6 +4,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<{ checkout?: string }> };
 
@@ -60,6 +61,10 @@ export default async function ResultsPage({ params, searchParams }: PageProps) {
   const query = searchParams ? await searchParams : undefined;
   const siteKey = getTurnstileSiteKey();
   const uiFlags = await loadUiFlags();
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 md:px-10 md:py-16">
@@ -69,6 +74,7 @@ export default async function ResultsPage({ params, searchParams }: PageProps) {
         checkoutState={query?.checkout ?? null}
         showCompetitorSearch={uiFlags.show_competitor_search}
         showMonitorSubscription={uiFlags.show_monitor_subscription}
+        monitorAccountEmail={user?.email ?? null}
       />
     </main>
   );

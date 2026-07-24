@@ -10,6 +10,10 @@ const handleInvoiceFailed = vi.fn();
 const emitMarketingEvent = vi.fn();
 const createServiceRoleClient = vi.fn();
 const getPaymentApiEnv = vi.fn();
+const handleMonitorCheckoutCompleted = vi.fn();
+const handleMonitorSubscriptionEvent = vi.fn();
+const handleMonitorInvoiceEvent = vi.fn();
+const markMonitorLeadConverted = vi.fn();
 
 vi.mock('@/lib/server/cf-env', () => ({
   getPaymentApiEnv,
@@ -39,6 +43,16 @@ vi.mock('@/lib/server/stripe/subscription-handlers', () => ({
   handleInvoiceFailed,
 }));
 
+vi.mock('@/lib/server/monitor-subscription', () => ({
+  handleMonitorCheckoutCompleted,
+  handleMonitorSubscriptionEvent,
+  handleMonitorInvoiceEvent,
+}));
+
+vi.mock('@/lib/server/monitor-lead-conversion', () => ({
+  markMonitorLeadConverted,
+}));
+
 vi.mock('@/lib/supabase/service-role', () => ({
   createServiceRoleClient,
 }));
@@ -50,6 +64,10 @@ vi.mock('@services/marketing-attribution/emit', () => ({
 describe('POST /api/webhooks/stripe', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    handleMonitorCheckoutCompleted.mockResolvedValue({ handled: false });
+    handleMonitorSubscriptionEvent.mockResolvedValue({ handled: false });
+    handleMonitorInvoiceEvent.mockResolvedValue({ handled: false });
+    markMonitorLeadConverted.mockResolvedValue(0);
   });
 
   it('rejects missing stripe signature', async () => {
@@ -282,5 +300,66 @@ describe('POST /api/webhooks/stripe', () => {
       })
     );
     expect(retrieveSession).not.toHaveBeenCalled();
+  });
+
+  it('links a monitor checkout to the account and emits one idempotent paid conversion key', async () => {
+    getPaymentApiEnv.mockResolvedValue({
+      STRIPE_SECRET_KEY: 'sk_test',
+      STRIPE_WEBHOOK_SECRET: 'whsec_test',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://supabase.example.com',
+      SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+    });
+    constructEvent.mockReturnValue({
+      id: 'evt_monitor_paid',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_monitor',
+          mode: 'subscription',
+          customer: 'cus_monitor',
+          subscription: 'sub_monitor',
+          customer_details: { email: 'owner@example.com' },
+          amount_total: 3900,
+          metadata: {
+            kind: 'monitor',
+            scan_id: '33333333-3333-4333-8333-333333333333',
+            user_id: 'user-1',
+          },
+        },
+      },
+    });
+    const chain: Record<string, unknown> = {};
+    for (const method of ['update', 'eq', 'is']) chain[method] = vi.fn(() => chain);
+    const supabase = { from: vi.fn(() => chain) };
+    createServiceRoleClient.mockReturnValue(supabase);
+    handleMonitorCheckoutCompleted.mockResolvedValue({ handled: true, ok: true });
+    markMonitorLeadConverted.mockResolvedValue(1);
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new Request('https://example.com/api/webhooks/stripe', {
+        method: 'POST',
+        headers: { 'stripe-signature': 'good' },
+        body: '{"id":"evt_monitor_paid"}',
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(handleMonitorCheckoutCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supabase,
+        session: expect.objectContaining({ id: 'cs_monitor' }),
+      })
+    );
+    expect(emitMarketingEvent).toHaveBeenCalledWith(
+      supabase,
+      'payment_completed',
+      expect.objectContaining({
+        idempotency_key: 'monitor_payment:evt_monitor_paid',
+        scan_id: '33333333-3333-4333-8333-333333333333',
+        user_id: 'user-1',
+        email: 'owner@example.com',
+      })
+    );
   });
 });

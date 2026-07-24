@@ -1,9 +1,9 @@
 /**
- * Anonymous subscription checkout for GEO-Pulse Monitoring ($39/mo · $390/yr).
+ * Account-managed subscription checkout for GEO-Pulse Monitoring ($39/mo · $390/yr).
  *
- * Mirrors the guest deep-audit checkout: no login required. A visitor who just ran the free audit
- * subscribes to monitor that site monthly. Stripe collects the email at checkout; the webhook seeds
- * the monitoring_subscriptions row (email-keyed) and the monthly cron re-audits + emails the report.
+ * A visitor runs the free audit, creates/signs into a free account, and subscribes to monitor that
+ * site monthly. Checkout reuses one Stripe customer per account; the webhook seeds the
+ * email-keyed monitoring row and the monthly cron re-audits + emails each versioned scorecard.
  *
  * Gated on the `show_monitor_subscription` UI flag (fail-closed) and configured monitor price ids.
  */
@@ -12,6 +12,7 @@ import { getClientIp, getPaymentApiEnv } from '@/lib/server/cf-env';
 import { checkCheckoutRateLimit } from '@/lib/server/rate-limit-kv';
 import { createStripeClient } from '@/lib/server/stripe-client';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { structuredLog } from '@/lib/server/structured-log';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
@@ -23,8 +24,6 @@ export const runtime = 'nodejs';
 
 const bodySchema = z.object({
   scanId: z.string().uuid(),
-  // Optional: Stripe Checkout collects the email itself. Passing it just prefills the field.
-  email: z.string().email().max(320).nullish(),
   plan: z.enum(['monthly', 'annual']).default('monthly'),
   turnstileToken: z.string().min(1),
 }).extend(optionalAttributionFields.shape);
@@ -82,6 +81,18 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  const userSupabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await userSupabase.auth.getUser();
+  const email = user?.email?.trim().toLowerCase() ?? '';
+  if (authError || !user || !email) {
+    return Response.json(
+      { error: { code: 'unauthenticated', message: 'Create or sign in to your free account first.' } },
+      { status: 401 }
+    );
+  }
 
   const { data: scan, error: scanErr } = await supabase
     .from('scans')
@@ -96,19 +107,122 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const stripe = createStripeClient(env.STRIPE_SECRET_KEY);
+  let domain: string;
+  try {
+    domain = new URL(scan.url as string).hostname.replace(/^www\./i, '').toLowerCase();
+  } catch {
+    return Response.json({ error: { code: 'invalid_scan', message: 'Scan URL is invalid' } }, { status: 400 });
+  }
+
+  const { data: existingMonitor } = await supabase
+    .from('monitoring_subscriptions')
+    .select('id,status')
+    .eq('email', email)
+    .eq('domain', domain)
+    .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existingMonitor) {
+    return Response.json(
+      {
+        error: {
+          code: 'already_subscribed',
+          message: existingMonitor.status === 'past_due'
+            ? 'This site is already monitored, but its payment needs attention. Open Billing to update it.'
+            : 'This site is already being monitored. Open Billing to manage it.',
+        },
+      },
+      { status: 409 }
+    );
+  }
+
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('stripe_customer_id')
+    .eq('id', user.id)
+    .maybeSingle();
+  let stripeCustomerId = userRow?.stripe_customer_id?.trim() ?? '';
+  if (!stripeCustomerId) {
+    try {
+      const customer = await stripe.customers.create({
+        email,
+        metadata: { user_id: user.id },
+      });
+      stripeCustomerId = customer.id;
+      const { error: customerLinkError } = await supabase
+        .from('users')
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq('id', user.id);
+      if (customerLinkError) {
+        structuredLog('monitor_customer_link_failed', {
+          userId: user.id,
+          stripeCustomerId,
+          error: customerLinkError.message,
+        }, 'error');
+        return Response.json(
+          { error: { code: 'db_error', message: 'Could not link your billing account. Please try again.' } },
+          { status: 500 }
+        );
+      }
+    } catch (error) {
+      return Response.json(
+        {
+          error: {
+            code: 'stripe_error',
+            message: error instanceof Error ? error.message : 'Could not create billing account',
+          },
+        },
+        { status: 502 }
+      );
+    }
+  }
+
+  let stripeSubscriptions;
+  try {
+    stripeSubscriptions = await stripe.subscriptions.list({
+      customer: stripeCustomerId,
+      status: 'all',
+      limit: 100,
+    });
+  } catch {
+    return Response.json(
+      { error: { code: 'stripe_error', message: 'Could not verify your current subscriptions. Please try again.' } },
+      { status: 502 }
+    );
+  }
+  const duplicateStripeSubscription = stripeSubscriptions.data.find((subscription) => {
+    if (!['active', 'trialing', 'past_due', 'incomplete'].includes(subscription.status)) return false;
+    if (subscription.metadata?.['kind'] !== 'monitor') return false;
+    try {
+      return new URL(subscription.metadata?.['monitored_url'] ?? '').hostname
+        .replace(/^www\./i, '')
+        .toLowerCase() === domain;
+    } catch {
+      return false;
+    }
+  });
+  if (duplicateStripeSubscription) {
+    return Response.json(
+      { error: { code: 'already_subscribed', message: 'This site already has a monitoring subscription. Open Billing to manage it.' } },
+      { status: 409 }
+    );
+  }
+
   const metadata = {
     kind: 'monitor',
     scan_id: scan.id as string,
     monitored_url: scan.url as string,
     plan,
+    user_id: user.id,
   };
 
   try {
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      // Stripe Checkout collects the email; prefill it only when the caller supplied one.
-      ...(parsed.data.email ? { customer_email: parsed.data.email } : {}),
+      customer: stripeCustomerId,
+      client_reference_id: user.id,
       success_url: `${baseUrl}/results/${scan.id}?checkout=subscribed`,
       cancel_url: `${baseUrl}/results/${scan.id}?checkout=cancel`,
       // Tax intentionally deferred — no GST/QST registration yet. Charge is flat, tax-exclusive.
@@ -130,7 +244,8 @@ export async function POST(request: Request): Promise<Response> {
     await emitMarketingEvent(supabase, 'checkout_started', {
       anonymous_id: parsed.data.anonymous_id,
       scan_id: scan.id as string,
-      email: parsed.data.email,
+      user_id: user.id,
+      email,
       utm_source: parsed.data.utm_source,
       utm_medium: parsed.data.utm_medium,
       utm_campaign: parsed.data.utm_campaign,

@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { ManageSubscriptionButton } from './manage-button';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,7 @@ function StatusBadge({ status }: { readonly status: string }) {
     trialing: { label: 'Trial', className: 'bg-gold/10 text-on-surface-variant' },
     past_due: { label: 'Past due', className: 'bg-error/10 text-error' },
     cancelled: { label: 'Cancelled', className: 'bg-surface-container-high text-on-surface-variant' },
+    canceled: { label: 'Cancelled', className: 'bg-surface-container-high text-on-surface-variant' },
     incomplete: { label: 'Incomplete', className: 'bg-surface-container-high text-on-surface-variant' },
   };
   const entry = map[status] ?? { label: status, className: 'bg-surface-container-high text-on-surface-variant' };
@@ -71,8 +74,28 @@ export default async function BillingPage() {
   ]);
 
   const sub = subResult.data;
+  const env = await getPaymentApiEnv();
+  const monitor =
+    user.email && env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
+      ? (
+          await createServiceRoleClient(
+            env.NEXT_PUBLIC_SUPABASE_URL,
+            env.SUPABASE_SERVICE_ROLE_KEY
+          )
+            .from('monitoring_subscriptions')
+            .select('domain,plan,status,current_period_end,next_audit_at,stripe_customer_id,created_at')
+            .eq('email', user.email.trim().toLowerCase())
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        ).data
+      : null;
   const scansUsed = userResult.data?.scans_this_month ?? 0;
-  const stripeCustomerId = userResult.data?.stripe_customer_id ?? sub?.stripe_customer_id ?? null;
+  const stripeCustomerId =
+    userResult.data?.stripe_customer_id ??
+    sub?.stripe_customer_id ??
+    monitor?.stripe_customer_id ??
+    null;
   const quota = sub ? (SCAN_QUOTA[sub.bundle_key] ?? null) : null;
 
   return (
@@ -93,6 +116,47 @@ export default async function BillingPage() {
           Dashboard
         </Link>
       </div>
+
+      {monitor ? (
+        <div className="rounded-2xl border border-primary/20 bg-surface-container-low shadow-float">
+          <div className="border-b border-outline-variant/10 px-6 py-4">
+            <h2 className="font-sans text-base font-semibold text-on-background">AI visibility monitoring</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              A fresh scorecard is created and emailed every month.
+            </p>
+          </div>
+          <div className="grid gap-5 px-6 py-5 sm:grid-cols-2">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Website</p>
+              <p className="mt-1 text-sm font-medium text-on-background">{monitor.domain ?? 'Your website'}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Status</p>
+              <div className="mt-1"><StatusBadge status={monitor.status} /></div>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Plan</p>
+              <p className="mt-1 text-sm font-medium text-on-background">
+                {monitor.plan === 'annual' ? '$390 CAD yearly' : '$39 CAD monthly'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">
+                {monitor.status === 'canceled' ? 'Access through' : 'Next report'}
+              </p>
+              <p className="mt-1 text-sm font-medium text-on-background">
+                {formatDate(monitor.status === 'canceled' ? monitor.current_period_end : monitor.next_audit_at)}
+              </p>
+            </div>
+          </div>
+          <div className="border-t border-outline-variant/10 px-6 py-5">
+            <ManageSubscriptionButton />
+            <p className="mt-2 text-xs text-on-surface-variant/70">
+              Update your card, download invoices, or cancel securely in Stripe.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       {sub ? (
         <>
@@ -159,7 +223,7 @@ export default async function BillingPage() {
             </div>
           </div>
         </>
-      ) : stripeCustomerId ? (
+      ) : !monitor && stripeCustomerId ? (
         <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low px-6 py-10 shadow-float">
           <p className="font-sans text-base font-semibold text-on-background">Billing account ready</p>
           <p className="mt-2 text-sm text-on-surface-variant">
@@ -172,7 +236,7 @@ export default async function BillingPage() {
             If your subscription just completed, wait a few seconds and refresh. The dashboard will catch up once Stripe webhook processing finishes.
           </p>
         </div>
-      ) : (
+      ) : !monitor ? (
         <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low px-6 py-10 text-center shadow-float">
           <p className="font-sans text-base font-semibold text-on-background">No active subscription</p>
           <p className="mt-2 text-sm text-on-surface-variant">
@@ -185,7 +249,7 @@ export default async function BillingPage() {
             View plans
           </Link>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }

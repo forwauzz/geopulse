@@ -2,9 +2,9 @@
  * GEO-Pulse Monitoring — the $39/mo (or $390/yr) subscription (migration 058).
  *
  * A cold visitor runs the free audit, then subscribes to have that site re-audited every month.
- * This is DECOUPLED from user_subscriptions / workspace provisioning: it is email-keyed and needs
- * no auth user. Access to the live stats is via an unguessable per-scan /share/<slug> link (issue
- * #128), delivered by email each month — the same capability the recurring-audit engine uses.
+ * This remains DECOUPLED from user_subscriptions / workspace provisioning and is email-keyed for
+ * compatibility, while new checkouts require an account and recurring scans are attached to the
+ * matching user. Email delivery uses an unguessable per-scan /share/<slug> link (issue #128).
  *
  * Stripe wiring is thin: checkout.session.completed seeds the row (it carries the customer email),
  * and the subscription/invoice lifecycle events flip status by stripe_subscription_id. The monthly
@@ -22,6 +22,7 @@ import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
 import { structuredLog, structuredError } from './structured-log';
+import { emitMarketingEvent } from '../../services/marketing-attribution/emit';
 
 export type MonitorPlan = 'monthly' | 'annual';
 export type MonitorStatus = 'active' | 'trialing' | 'past_due' | 'canceled' | 'incomplete';
@@ -31,6 +32,11 @@ export const MONITOR_AUDIT_INTERVAL_DAYS = 30;
 
 export function computeNextAudit(fromMs: number): string {
   return new Date(fromMs + MONITOR_AUDIT_INTERVAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/** Delivery failures retry on the next daily window instead of silently waiting another month. */
+export function computeDeliveryRetry(fromMs: number): string {
+  return new Date(fromMs + 24 * 60 * 60 * 1000).toISOString();
 }
 
 /** Unguessable capability token for the signed-out live-stats link (hex, no dashes). */
@@ -135,14 +141,19 @@ async function updateMonitorRowById(
   args: SeedMonitorArgs & { email: string }
 ): Promise<{ ok: boolean; created: false; token?: string; error?: string }> {
   const goingActive = (args.status === 'active' || args.status === 'trialing') && !existingNextAuditAt;
+  const domain = hostFromUrl(args.monitoredUrl);
   const { data, error } = await supabase
     .from('monitoring_subscriptions')
     .update({
+      email: args.email,
+      monitored_url: args.monitoredUrl,
+      domain,
       status: args.status,
       stripe_customer_id: args.stripeCustomerId,
       stripe_subscription_id: args.stripeSubscriptionId,
       stripe_price_id: args.stripePriceId,
       plan: args.plan,
+      origin_scan_id: args.originScanId,
       ...(goingActive ? { next_audit_at: computeNextAudit(args.nowMs) } : {}),
       updated_at: new Date(args.nowMs).toISOString(),
     })
@@ -310,10 +321,10 @@ async function sendMonitorAuditEmail(
   letterGrade: string,
   shareSlug: string,
   visibilityHtml = ''
-): Promise<void> {
+): Promise<boolean> {
   const key = env.RESEND_API_KEY?.trim();
   const from = env.RESEND_FROM_EMAIL?.trim();
-  if (!key || !from) return;
+  if (!key || !from) return false;
   const base = (env.NEXT_PUBLIC_APP_URL?.trim() || 'https://getgeopulse.com').replace(/\/$/, '');
   const link = `${base}/share/${shareSlug}`;
   const html = emailShell({
@@ -329,14 +340,15 @@ async function sendMonitorAuditEmail(
     footerNote: 'You are getting this because you subscribed to GEO-Pulse Monitoring. Reply to this email to cancel or manage your subscription.',
   });
   try {
-    await fetch('https://api.resend.com/emails', {
+    const response = await fetch('https://api.resend.com/emails', {
       signal: AbortSignal.timeout(15_000),
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ from, to, subject: `Your monthly GEO-Pulse report: ${scanUrl} scored ${score}/100`, html }),
     });
+    return response.ok;
   } catch {
-    /* best-effort */
+    return false;
   }
 }
 
@@ -374,47 +386,91 @@ export async function runDueMonitorAudits(args: {
       if (!scan.ok) {
         await supabase
           .from('monitoring_subscriptions')
-          .update({ last_audit_at: nowIso, next_audit_at: computeNextAudit(nowMs), last_error: scan.reason, updated_at: nowIso })
+          .update({ last_audit_at: nowIso, next_audit_at: computeDeliveryRetry(nowMs), last_error: scan.reason, updated_at: nowIso })
           .eq('id', sub.id);
         failed += 1;
         continue;
       }
       const shareSlug = mintShareSlug();
-      await supabase.from('scans').insert({
-        url: scan.finalUrl,
-        domain: scan.domain,
-        status: 'complete',
-        score: scan.output.score,
-        letter_grade: scan.output.letterGrade,
-        issues_json: scan.output.issues,
-        full_results_json: {
-          issues: scan.output.issues,
-          categoryScores: scan.output.categoryScores,
-          pageSample: scan.textSample.slice(0, 6000),
-        },
-        user_id: null,
-        run_source: 'monitor',
-        share_slug: shareSlug,
-      });
+      const { data: owner } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', sub.email.trim().toLowerCase())
+        .maybeSingle();
+      const { data: scanRow, error: scanInsertError } = await supabase
+        .from('scans')
+        .insert({
+          url: scan.finalUrl,
+          domain: scan.domain,
+          status: 'complete',
+          score: scan.output.score,
+          letter_grade: scan.output.letterGrade,
+          issues_json: scan.output.issues,
+          full_results_json: {
+            issues: scan.output.issues,
+            categoryScores: scan.output.categoryScores,
+            pageSample: scan.textSample.slice(0, 6000),
+            monitoringSubscriptionId: sub.id,
+            generatedAt: nowIso,
+          },
+          user_id: owner?.id ?? null,
+          run_source: 'monitor',
+          share_slug: shareSlug,
+        })
+        .select('id')
+        .single();
+      if (scanInsertError || !scanRow?.id) {
+        throw new Error(scanInsertError?.message ?? 'monitor_scan_insert_failed');
+      }
+
+      // Display-only visibility (free path): include the AI Visibility Performance block when the
+      // domain already has benchmark data. Reads existing metrics — runs no new benchmark.
+      const vis = await fetchLatestVisibilityForDomain(supabase, scan.domain);
+      const visibilityHtml = vis ? renderVisibilitySummary({ domain: scan.domain, metrics: vis }).html : '';
+      const delivered = await sendMonitorAuditEmail(
+        env,
+        sub.email,
+        scan.finalUrl,
+        scan.output.score,
+        scan.output.letterGrade,
+        shareSlug,
+        visibilityHtml
+      );
+      if (!delivered) {
+        await supabase
+          .from('monitoring_subscriptions')
+          .update({
+            last_audit_at: nowIso,
+            next_audit_at: computeDeliveryRetry(nowMs),
+            last_error: 'report_email_delivery_failed',
+            updated_at: nowIso,
+          })
+          .eq('id', sub.id);
+        failed += 1;
+        structuredError('monitor_report_delivery_failed', {
+          subscriptionId: sub.id,
+          scanId: scanRow.id,
+        });
+        continue;
+      }
+
       await supabase
         .from('monitoring_subscriptions')
         .update({ last_audit_at: nowIso, next_audit_at: computeNextAudit(nowMs), last_error: null, updated_at: nowIso })
         .eq('id', sub.id);
+      await emitMarketingEvent(supabase, 'report_delivered', {
+        idempotency_key: `monitor_report_delivered:${scanRow.id}`,
+        scan_id: scanRow.id as string,
+        user_id: owner?.id ?? null,
+        email: sub.email,
+        metadata: { kind: 'monitor', monitoring_subscription_id: sub.id },
+      });
       ran += 1;
-      try {
-        // Display-only visibility (free path): include the AI Visibility Performance block when the
-        // domain already has benchmark data. Reads existing metrics — runs no new benchmark.
-        const vis = await fetchLatestVisibilityForDomain(supabase, scan.domain);
-        const visibilityHtml = vis ? renderVisibilitySummary({ domain: scan.domain, metrics: vis }).html : '';
-        await sendMonitorAuditEmail(env, sub.email, scan.finalUrl, scan.output.score, scan.output.letterGrade, shareSlug, visibilityHtml);
-      } catch {
-        /* email is best-effort — never fails the run */
-      }
     } catch (err) {
       failed += 1;
       await supabase
         .from('monitoring_subscriptions')
-        .update({ next_audit_at: computeNextAudit(nowMs), last_error: err instanceof Error ? err.message : 'error', updated_at: nowIso })
+        .update({ next_audit_at: computeDeliveryRetry(nowMs), last_error: err instanceof Error ? err.message : 'error', updated_at: nowIso })
         .eq('id', sub.id);
       structuredError('monitor_audit_run_failed', { subscriptionId: sub.id, error: err instanceof Error ? err.message : 'error' });
     }
