@@ -28,6 +28,7 @@ describe('Revenue Agency control plane', () => {
       nurtureEnabled: true,
       nurtureDailyCap: 20,
       nurtureDelayHours: 0,
+      prospectingEnabled: false,
     });
   });
 

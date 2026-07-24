@@ -98,10 +98,13 @@ async function discoverAgencies(
   env: AgencyProspectingEnv,
   market: string,
   limit: number
-): Promise<{ name: string; url: string }[]> {
+): Promise<
+  | { ok: true; agencies: { name: string; url: string }[] }
+  | { ok: false; reason: string }
+> {
   const key = env.GEMINI_API_KEY?.trim();
-  if (!key) return [];
-  const model = env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash';
+  if (!key) return { ok: false, reason: 'gemini_api_key_missing' };
+  const model = env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
   const base = (env.GEMINI_ENDPOINT?.trim() || 'https://generativelanguage.googleapis.com/v1beta/models').replace(/\/$/, '');
   const prompt = [
     `Use Google Search to find ${String(limit)} independent digital marketing, SEO, or web agencies in ${market}.`,
@@ -118,9 +121,14 @@ async function discoverAgencies(
     }),
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) return [];
+  if (!response.ok) return { ok: false, reason: `gemini_http_${String(response.status)}` };
   const data = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-  return parseAgencyDiscovery(data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '');
+  const agencies = parseAgencyDiscovery(
+    data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? ''
+  );
+  return agencies.length > 0
+    ? { ok: true, agencies }
+    : { ok: false, reason: 'gemini_no_agencies_parsed' };
 }
 
 export async function runAgencyProspectingAgent(args: {
@@ -133,7 +141,17 @@ export async function runAgencyProspectingAgent(args: {
     return { status: 'skipped', discovered: 0, qualified: 0, saved: 0, reason: 'gemini_api_key_missing' };
   }
   const cap = Math.max(1, Math.min(10, Math.floor(args.dailyCap)));
-  const candidates = await discoverAgencies(args.env, args.market, cap * 2);
+  const discovery = await discoverAgencies(args.env, args.market, cap * 2);
+  if (!discovery.ok) {
+    return {
+      status: 'skipped',
+      discovered: 0,
+      qualified: 0,
+      saved: 0,
+      reason: discovery.reason,
+    };
+  }
+  const candidates = discovery.agencies;
   const rows: { email: string; url: string; name: null; company: string; city: string }[] = [];
 
   for (const candidate of candidates) {
