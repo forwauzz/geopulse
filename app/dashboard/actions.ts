@@ -89,11 +89,7 @@ export async function provisionMyWorkspaceForSubscription(formData: FormData): P
 
 const agencyClientSchema = z.object({
   agencyAccountId: z.string().uuid('Choose a valid agency account.'),
-  clientKey: z
-    .string()
-    .min(2, 'Enter a client key.')
-    .max(80, 'Client key is too long.')
-    .regex(/^[a-z0-9-]+$/, 'Use lowercase letters, numbers, and hyphens only.'),
+  clientKey: z.string().max(80, 'Client key is too long.').optional(),
   name: z.string().min(1, 'Enter a client name.').max(120, 'Client name is too long.'),
   primaryDomain: z.string().min(1, 'Enter a primary domain.').max(160, 'Primary domain is too long.'),
   vertical: z.string().max(80, 'Vertical is too long.').optional(),
@@ -133,6 +129,16 @@ function normalizeSiteUrl(value: string): string {
   url.search = '';
   url.pathname = '/';
   return url.toString();
+}
+
+function clientKeyFromName(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  return `${slug || 'client'}-${crypto.randomUUID().slice(0, 6)}`;
 }
 
 async function loadAgencyMemberActionContext(agencyAccountId: string): Promise<
@@ -239,7 +245,7 @@ export async function createAgencyClientFromDashboard(
     .from('agency_clients')
     .insert({
       agency_account_id: parsed.data.agencyAccountId,
-      client_key: parsed.data.clientKey,
+      client_key: parsed.data.clientKey || clientKeyFromName(parsed.data.name),
       name: parsed.data.name,
       display_name: parsed.data.name,
       website_domain: primaryDomain,
@@ -271,6 +277,7 @@ export async function createAgencyClientFromDashboard(
   }
 
   revalidatePath('/dashboard');
+  revalidatePath('/dashboard/clients');
   return { ok: true, message: 'Client created.' };
 }
 

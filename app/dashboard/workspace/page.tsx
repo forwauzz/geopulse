@@ -8,6 +8,8 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadUserSchedule } from '@/lib/server/recurring-audits';
 import { LocalTime } from '@/components/local-time';
 import { saveMyRecurringAudit, runMyRecurringAuditNow } from './actions';
+import { AgencyBrandingSettings } from '@/components/agency-branding-settings';
+import { getBrandSettingsView, resolveReportFilesPublicBase } from '@/lib/server/report-branding-settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,7 @@ type Props = {
     agencyClient?: string;
     startupWorkspace?: string;
     recurring?: string;
+    brand?: string;
   }>;
 };
 
@@ -83,6 +86,14 @@ export default async function WorkspacePage({ searchParams }: Props) {
       ? createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
       : null;
   const schedule = admin ? await loadUserSchedule(admin, user.id) : null;
+  const agencyBranding =
+    admin && selectedAgencyAccount
+      ? await getBrandSettingsView({
+          supabase: admin as never,
+          scope: { table: 'agency_accounts', id: selectedAgencyAccount.id },
+          publicBase: await resolveReportFilesPublicBase(),
+        }).catch(() => null)
+      : null;
   const recurInput =
     'min-h-[42px] w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30';
   const recurringNotice: { ok: boolean; text: string } | null = (() => {
@@ -174,6 +185,10 @@ export default async function WorkspacePage({ searchParams }: Props) {
           <span>Last run: <LocalTime iso={schedule?.lastRunAt ?? null} /></span>
         </div>
       </div>
+
+      {selectedAgencyAccount && agencyBranding ? (
+        <AgencyBrandingSettings accountId={selectedAgencyAccount.id} view={agencyBranding} status={sp.brand} />
+      ) : null}
 
       {/* ── Personal account ────────────────────────────────── */}
       <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-low shadow-float">

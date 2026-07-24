@@ -35,6 +35,14 @@ export default async function DashboardLayout({
   // adding another top-level nav row.
   let showAutomation = isPlatformAdmin;
   let showAgents = isPlatformAdmin;
+  const { data: agencyMembership } = await supabase
+    .from('agency_users')
+    .select('agency_account_id')
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .limit(1)
+    .maybeSingle();
+  const isAgencyWorkspace = Boolean(agencyMembership?.agency_account_id);
   if (!showAutomation || !showAgents) {
     const env = await getScanApiEnv();
     if (env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -56,6 +64,7 @@ export default async function DashboardLayout({
         navFlags={{ connectors: flags.show_connectors, billing: flags.show_billing, blog: flags.show_blog }}
         showAutomation={showAutomation}
         showAgents={showAgents}
+        isAgencyWorkspace={isAgencyWorkspace}
       >
         {children}
       </DashboardShell>

@@ -45,18 +45,9 @@ export function AgencyClientManagementView({
         <input type="hidden" name="agencyAccountId" value={agencyAccountId} />
         <h3 className="font-headline text-lg font-semibold text-on-background">Add client</h3>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Create a client workspace directly from the agency dashboard.
+          Add the business and website. GEO-Pulse handles the workspace details.
         </p>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="flex flex-col gap-2 text-sm text-on-background">
-            <span className="font-medium">Client key</span>
-            <input
-              name="clientKey"
-              required
-              placeholder="clinic-a"
-              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
-            />
-          </label>
+        <div className="mt-4 grid gap-4">
           <label className="flex flex-col gap-2 text-sm text-on-background">
             <span className="font-medium">Client name</span>
             <input
@@ -66,7 +57,7 @@ export function AgencyClientManagementView({
               className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
             />
           </label>
-          <label className="flex flex-col gap-2 text-sm text-on-background md:col-span-2">
+          <label className="flex flex-col gap-2 text-sm text-on-background">
             <span className="font-medium">Primary domain or site URL</span>
             <input
               name="primaryDomain"
@@ -76,26 +67,10 @@ export function AgencyClientManagementView({
             />
           </label>
           <label className="flex flex-col gap-2 text-sm text-on-background">
-            <span className="font-medium">Vertical</span>
+            <span className="font-medium">Industry <span className="font-normal text-on-surface-variant">(optional)</span></span>
             <input
               name="vertical"
-              placeholder="healthcare"
-              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm text-on-background">
-            <span className="font-medium">Subvertical</span>
-            <input
-              name="subvertical"
-              placeholder="medical_clinics"
-              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm text-on-background md:col-span-2">
-            <span className="font-medium">ICP tag</span>
-            <input
-              name="icpTag"
-              placeholder="medical_clinics"
+              placeholder="e.g. Healthcare"
               className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
             />
           </label>

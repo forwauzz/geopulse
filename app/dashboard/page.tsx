@@ -16,6 +16,8 @@ import { getTrackedPromptPanel, type TrackedPromptPanel } from '@/lib/server/tra
 import { CitationEvidencePanel } from '@/components/citation-evidence-panel';
 import { TrackedPromptsPanel } from '@/components/tracked-prompts-panel';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
+import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
+import { AgencyHome } from '@/components/agency-home';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +34,11 @@ export default async function DashboardHomePage({
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login?next=/dashboard');
+
+  const agencyWorkspace = await loadCurrentAgencyWorkspace({ userId: user.id, supabase });
+  if (agencyWorkspace) {
+    return <AgencyHome data={agencyWorkspace.data} />;
+  }
 
   // Attribute scans to the user's first startup workspace, if any.
   let startupWorkspaceId: string | null = null;

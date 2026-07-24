@@ -43,11 +43,11 @@ test.describe('agency dashboard home', () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test('renders history heading and agency user email', async ({ page }) => {
+  test('renders reports heading and agency user email', async ({ page }) => {
     await signInAsAgency(page);
     await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^reports$/i })).toBeVisible();
     // The email renders in both the (hidden) mobile drawer and the desktop sidebar — the first
     // DOM match can be the hidden copy, so assert on a visible instance.
     await expect(page.getByText(/agency@example\.com/i).filter({ visible: true }).first()).toBeVisible();
@@ -99,6 +99,34 @@ test.describe('agency dashboard home', () => {
   // NOTE: the "New client scan" button no longer exists anywhere in the app — it went with the
   // dashboard simplification, and scanning for a client now happens through the scan box on
   // /dashboard with the client context applied. Its test is dropped rather than rewritten.
+});
+
+test.describe('simplified agency experience', () => {
+  test('agency home leads with portfolio and attention', async ({ page }) => {
+    await signInAsAgency(page);
+    await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByRole('heading', { name: /e2e agency inc/i })).toBeVisible();
+    await expect(page.getByText(/client portfolio/i)).toBeVisible();
+    await expect(page.getByRole('link', { name: /e2e client co/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^clients$/i }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: /ai visibility/i }).filter({ visible: true })).toBeVisible();
+  });
+
+  test('client scorecard uses plain-language value labels', async ({ page }) => {
+    await signInAsAgency(page);
+    await page.goto(
+      '/dashboard/clients/00000000-0000-4000-8000-000000000202?agencyAccount=00000000-0000-4000-8000-000000000201',
+      { waitUntil: 'domcontentloaded' },
+    );
+
+    await expect(page.getByRole('heading', { name: /e2e client co/i })).toBeVisible();
+    await expect(page.getByText(/ai readiness score/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /how often ai recommends this client/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /visibility vs competitors/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /recurring client report/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /customer questions/i })).toBeVisible();
+  });
 });
 
 // ── Client context switching ────────────────────────────────────

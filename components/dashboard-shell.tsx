@@ -14,10 +14,11 @@ type Props = {
   readonly navFlags?: DashboardNavFlags;
   readonly showAutomation?: boolean;
   readonly showAgents?: boolean;
+  readonly isAgencyWorkspace?: boolean;
   readonly children: React.ReactNode;
 };
 
-export function DashboardShell({ userEmail, isAdmin, signOutAction, navFlags, showAutomation, showAgents, children }: Props) {
+export function DashboardShell({ userEmail, isAdmin, signOutAction, navFlags, showAutomation, showAgents, isAgencyWorkspace, children }: Props) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useLayoutEffect(() => {
@@ -55,6 +56,7 @@ export function DashboardShell({ userEmail, isAdmin, signOutAction, navFlags, sh
         navFlags={navFlags}
         showAutomation={showAutomation}
         showAgents={showAgents}
+        isAgencyWorkspace={isAgencyWorkspace}
         desktopCollapsed={sidebarCollapsed}
         onToggleDesktopCollapse={toggleSidebarCollapsed}
       />
