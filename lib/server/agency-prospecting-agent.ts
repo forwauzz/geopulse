@@ -6,6 +6,7 @@ export type AgencyProspectingEnv = {
   readonly GEMINI_API_KEY?: string;
   readonly GEMINI_MODEL?: string;
   readonly GEMINI_ENDPOINT?: string;
+  readonly AGENCY_PROSPECTING_GEMINI_MODEL?: string;
 };
 
 export type AgencyProspectingResult = {
@@ -44,6 +45,12 @@ export function parseAgencyDiscovery(raw: string): { name: string; url: string }
   } catch {
     return [];
   }
+}
+
+export function resolveAgencyProspectingModel(env: AgencyProspectingEnv): string {
+  // The platform-wide scan model can be a Flash Lite preview that does not
+  // support Google Search grounding. Prospecting needs a grounded-capable model.
+  return env.AGENCY_PROSPECTING_GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
 }
 
 export function selectPublicBusinessEmail(html: string, websiteUrl: string): string | null {
@@ -104,7 +111,7 @@ async function discoverAgencies(
 > {
   const key = env.GEMINI_API_KEY?.trim();
   if (!key) return { ok: false, reason: 'gemini_api_key_missing' };
-  const model = env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+  const model = resolveAgencyProspectingModel(env);
   const base = (env.GEMINI_ENDPOINT?.trim() || 'https://generativelanguage.googleapis.com/v1beta/models').replace(/\/$/, '');
   const prompt = [
     `Use Google Search to find ${String(limit)} independent digital marketing, SEO, or web agencies in ${market}.`,
