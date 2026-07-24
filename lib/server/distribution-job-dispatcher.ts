@@ -172,6 +172,44 @@ async function getDispatchableContentItem(
   };
 }
 
+export function canDispatchApprovedManualInstagramAsset(
+  account: Pick<DistributionAccountRow, 'provider_name'>,
+  asset: Pick<DistributionAssetRow, 'source_type' | 'provider_family' | 'status'>
+): boolean {
+  return (
+    account.provider_name === 'instagram' &&
+    asset.source_type === 'manual' &&
+    asset.provider_family === 'instagram' &&
+    asset.status === 'approved'
+  );
+}
+
+function buildSyntheticSocialContentItem(asset: DistributionAssetRow): DispatchableContentRow {
+  return {
+    id: asset.id,
+    content_id: asset.asset_id,
+    slug: asset.asset_id,
+    title: asset.title ?? asset.asset_id,
+    status: asset.status,
+    content_type: 'social_post',
+    target_persona: null,
+    primary_problem: null,
+    topic_cluster: null,
+    keyword_cluster: null,
+    cta_goal: 'free_scan',
+    source_type: asset.source_type,
+    source_links: asset.cta_url ? [asset.cta_url] : [],
+    brief_markdown: null,
+    draft_markdown: asset.body_markdown ?? asset.body_plaintext,
+    canonical_url: asset.cta_url,
+    metadata: asset.metadata,
+    published_at: null,
+    created_at: asset.created_at,
+    updated_at: asset.updated_at,
+    deliveries: [],
+  };
+}
+
 function readString(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
@@ -1461,8 +1499,11 @@ export async function dispatchDistributionJobById(
     if (!asset) {
       throw new Error('Distribution asset not found for job.');
     }
-    if (asset.source_type !== 'content_item') {
-      throw new Error('Only content_item sourced assets are dispatchable in the current runtime.');
+    const approvedManualInstagram = canDispatchApprovedManualInstagramAsset(account, asset);
+    if (asset.source_type !== 'content_item' && !approvedManualInstagram) {
+      throw new Error(
+        'Only content_item sourced assets or approved manual Instagram assets are dispatchable in the current runtime.'
+      );
     }
     const mediaRows = requiresMediaAttachments(asset.asset_type)
       ? await repo.listMediaForAsset(asset.id)
@@ -1478,10 +1519,16 @@ export async function dispatchDistributionJobById(
       }
     }
 
-    const item = await getDispatchableContentItem(supabase, asset);
-    if (!item) {
+    const canonicalItem =
+      asset.source_type === 'content_item'
+        ? await getDispatchableContentItem(supabase, asset)
+        : null;
+    if (!canonicalItem && !approvedManualInstagram) {
       throw new Error('Canonical content item not found for asset.');
     }
+    // Instagram publishes from the approved distribution asset and validated media rows. The
+    // synthetic row only satisfies the shared publisher contract for original social-only assets.
+    const item = canonicalItem ?? buildSyntheticSocialContentItem(asset);
 
     const tokenList =
       typeof (repo as any).listAccountTokensForAccount === 'function'
