@@ -50,7 +50,29 @@ export function parseAgencyDiscovery(raw: string): { name: string; url: string }
 export function resolveAgencyProspectingModel(env: AgencyProspectingEnv): string {
   // The platform-wide scan model can be a Flash Lite preview that does not
   // support Google Search grounding. Prospecting needs a grounded-capable model.
-  return env.AGENCY_PROSPECTING_GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+  return env.AGENCY_PROSPECTING_GEMINI_MODEL?.trim() || 'gemini-3.5-flash';
+}
+
+export async function describeGeminiFailure(response: Response): Promise<string> {
+  try {
+    const payload = await response.json() as {
+      error?: { status?: string; message?: string };
+    };
+    const status = payload.error?.status?.toUpperCase();
+    const message = payload.error?.message?.toLowerCase() ?? '';
+    if (response.status === 429 || status === 'RESOURCE_EXHAUSTED') {
+      return 'gemini_quota_or_billing_exhausted';
+    }
+    if (response.status === 404 || status === 'NOT_FOUND') {
+      return 'gemini_model_unavailable';
+    }
+    if (message.includes('api key') && message.includes('invalid')) {
+      return 'gemini_api_key_invalid';
+    }
+  } catch {
+    // Fall through to the HTTP status when the provider body is not JSON.
+  }
+  return `gemini_http_${String(response.status)}`;
 }
 
 export function selectPublicBusinessEmail(html: string, websiteUrl: string): string | null {
@@ -128,7 +150,7 @@ async function discoverAgencies(
     }),
     signal: AbortSignal.timeout(30_000),
   });
-  if (!response.ok) return { ok: false, reason: `gemini_http_${String(response.status)}` };
+  if (!response.ok) return { ok: false, reason: await describeGeminiFailure(response) };
   const data = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
   const agencies = parseAgencyDiscovery(
     data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? ''

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeGeminiFailure,
   parseAgencyDiscovery,
   resolveAgencyProspectingModel,
   selectPublicBusinessEmail,
@@ -29,9 +30,19 @@ describe('agency prospecting qualification', () => {
   it('does not reuse a platform scan model that lacks grounding support', () => {
     expect(resolveAgencyProspectingModel({
       GEMINI_MODEL: 'gemini-2.5-flash-lite-preview-06-17',
-    })).toBe('gemini-2.5-flash');
+    })).toBe('gemini-3.5-flash');
     expect(resolveAgencyProspectingModel({
       AGENCY_PROSPECTING_GEMINI_MODEL: 'gemini-2.5-pro',
     })).toBe('gemini-2.5-pro');
+  });
+
+  it('turns provider quota failures into an actionable operator reason', async () => {
+    const response = new Response(JSON.stringify({
+      error: {
+        status: 'RESOURCE_EXHAUSTED',
+        message: 'Please check your plan and billing details.',
+      },
+    }), { status: 429 });
+    await expect(describeGeminiFailure(response)).resolves.toBe('gemini_quota_or_billing_exhausted');
   });
 });
