@@ -57,4 +57,38 @@ describe('monitor checkout lead attribution', () => {
       expect.objectContaining({ lead_id: 'lead-1', scan_id: '33333333-3333-4333-8333-333333333333' })
     );
   });
+
+  it('attributes a paid monitor checkout even when no lead row matches', async () => {
+    const supabase = {
+      from(table: string) {
+        expect(table).toBe('leads');
+        return {
+          select() {
+            return {
+              eq: async () => ({ data: [], error: null }),
+              ilike: async () => ({ data: [], error: null }),
+            };
+          },
+        };
+      },
+    };
+
+    const count = await markMonitorLeadConverted({
+      supabase: supabase as never,
+      scanId: '33333333-3333-4333-8333-333333333333',
+      email: 'buyer@example.com',
+      stripeEventId: 'evt_monitor_2',
+      stripeSessionId: 'cs_monitor_2',
+    });
+
+    expect(count).toBe(0);
+    expect(emitMarketingEvent).toHaveBeenCalledWith(
+      supabase,
+      'payment_completed',
+      expect.objectContaining({
+        lead_id: null,
+        idempotency_key: 'stripe:evt_monitor_2:payment_completed',
+      })
+    );
+  });
 });

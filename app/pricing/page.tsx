@@ -247,7 +247,7 @@ export default async function PricingPage() {
         </Suspense>
       </div>
 
-      <section className="mt-12 grid gap-8 sm:grid-cols-2 xl:grid-cols-3">
+      <section id="agency-plans" className="mt-12 grid scroll-mt-24 gap-8 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
           <Suspense key={card.bundleKey} fallback={null}>
             <PricingBundleCard {...card} />

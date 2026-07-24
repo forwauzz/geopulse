@@ -5,6 +5,8 @@ import type { MarketingEventName } from './schema';
 import { canonicalizeSource, hashEmailSha256 } from './hash';
 
 export type EmitContext = {
+  event_id?: string;
+  idempotency_key?: string;
   anonymous_id?: string | null;
   scan_id?: string | null;
   lead_id?: string | null;
@@ -23,6 +25,15 @@ export type EmitContext = {
   metadata?: Record<string, unknown>;
 };
 
+export async function stableMarketingEventId(key: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`geo-pulse-marketing-event:${key}`);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  digest[6] = (digest[6]! & 0x0f) | 0x50;
+  digest[8] = (digest[8]! & 0x3f) | 0x80;
+  const hex = Array.from(digest.slice(0, 16), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 /**
  * Fire-and-forget attribution event emit.
  * Never throws — logs failures but does not propagate to caller.
@@ -36,8 +47,10 @@ export async function emitMarketingEvent(
     const emailHash = ctx.email ? await hashEmailSha256(ctx.email) : null;
     const source = ctx.utm_source ? canonicalizeSource(ctx.utm_source) : null;
 
+    const eventId = ctx.event_id
+      ?? (ctx.idempotency_key ? await stableMarketingEventId(ctx.idempotency_key) : crypto.randomUUID());
     const result = await ingestEvent(supabase, {
-      event_id: crypto.randomUUID(),
+      event_id: eventId,
       event_name: eventName,
       anonymous_id: ctx.anonymous_id ?? null,
       scan_id: ctx.scan_id ?? null,

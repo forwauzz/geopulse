@@ -8,6 +8,7 @@ export const MARKETING_EVENT_NAMES = [
   'checkout_started',
   'payment_completed',
   'report_delivered',
+  'report_viewed',
 ] as const;
 
 export type MarketingEventName = (typeof MARKETING_EVENT_NAMES)[number];

@@ -10,7 +10,6 @@ import {
 } from '@/components/report-viewer-sections';
 import { ReportStory } from '@/components/report-story';
 import {
-  extractToc,
   splitMarkdownSections,
   type ScanResponse,
   type ViewState,
@@ -127,13 +126,13 @@ export function ReportViewer({ scanId }: { scanId: string }) {
     return () => observer.disconnect();
   }, [state]);
 
-  const tocEntries = useMemo(
-    () => (state.phase === 'ready' ? extractToc(state.markdown) : []),
-    [state]
-  );
   const sections = useMemo(
     () => (state.phase === 'ready' ? splitMarkdownSections(state.markdown) : []),
     [state]
+  );
+  const tocEntries = useMemo(
+    () => sections.map((section) => ({ id: section.id, text: section.title, level: 2 })),
+    [sections]
   );
 
   async function resendReportEmail() {
@@ -318,6 +317,12 @@ export function ReportViewer({ scanId }: { scanId: string }) {
             </div>
           ) : null}
           <ReportStory scan={state.scan} />
+          <div className="pt-4">
+            <h2 className="font-sans text-2xl font-bold tracking-tight text-on-background">Full evidence</h2>
+            <p className="mt-1 font-body text-sm text-on-surface-variant">
+              Open a section when you need the supporting detail, implementation notes, or technical appendix.
+            </p>
+          </div>
           <SectionChips sections={sections} />
           <article>
             <ReportSections sections={sections} />

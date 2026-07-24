@@ -3,6 +3,8 @@ import type Stripe from 'stripe';
 import { structuredLog, structuredError } from '@/lib/server/structured-log';
 import { provisionWorkspaceForSubscription } from '@/lib/server/billing/provision-workspace-for-subscription';
 import { syncUserPlanFromSubscriptions } from '@/lib/server/subscription-plan-sync';
+import { sendSubscriptionWelcome } from '@/lib/server/subscription-lifecycle-email';
+import type { LeadEmailEnv } from '@/lib/server/lead-email';
 
 // ── Status mapping ───────────────────────────────────────────────────────────
 
@@ -36,7 +38,8 @@ function mapStripeStatus(stripeStatus: Stripe.Subscription['status']): UserSubSt
  */
 export async function handleSubscriptionUpserted(
   supabase: SupabaseClient,
-  subscription: Stripe.Subscription
+  subscription: Stripe.Subscription,
+  env?: LeadEmailEnv & { readonly NEXT_PUBLIC_APP_URL?: string }
 ): Promise<void> {
   const userId = subscription.metadata?.['user_id'];
   const bundleKey = subscription.metadata?.['bundle_key'];
@@ -136,6 +139,16 @@ export async function handleSubscriptionUpserted(
       startupWorkspaceId: provisioned.startupWorkspaceId ?? '',
       agencyAccountId: provisioned.agencyAccountId ?? '',
     }, 'info');
+    if (env) {
+      await sendSubscriptionWelcome({
+        supabase,
+        env,
+        userId,
+        subscriptionId: subscription.id,
+        bundleKey,
+        organizationName: organizationName || null,
+      });
+    }
   } else {
     structuredLog('subscription_upserted', {
       subscriptionId: subscription.id,

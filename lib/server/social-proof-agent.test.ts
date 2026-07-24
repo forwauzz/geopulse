@@ -5,6 +5,7 @@ import {
   buildEducationalCandidate,
   buildIndustryHumorCandidate,
   instagramScheduleSlot,
+  orderAutonomousCandidates,
   resolveSocialProofAgentConfig,
 } from './social-proof-agent';
 
@@ -125,6 +126,62 @@ describe('Social Proof Agent safeguards', () => {
     expect(candidate?.kind).toBe('industry_humor');
     expect(candidate?.safeForAutonomousPublish).toBe(true);
     expect(candidate?.caption).toContain('not the same system');
+  });
+
+  it('alternates formats without reusing the same media in one cadence', () => {
+    const candidate = (input: {
+      key: string;
+      kind: 'educational' | 'industry_humor';
+      contentItemId: string;
+      mediaUrl: string;
+    }) => ({
+      ...input,
+      title: input.key,
+      caption: input.key,
+      ctaUrl: 'https://getgeopulse.com',
+      mediaMimeType: 'image/jpeg',
+      mediaAlt: 'Editorial evidence collage',
+      evidence: {},
+      safeForAutonomousPublish: true,
+    });
+    const educationalOne = candidate({
+      key: 'educational-one',
+      kind: 'educational',
+      contentItemId: 'one',
+      mediaUrl: 'https://media.example.com/one.jpg',
+    });
+    const humorOne = candidate({
+      key: 'humor-one',
+      kind: 'industry_humor',
+      contentItemId: 'one',
+      mediaUrl: 'https://media.example.com/one.jpg',
+    });
+    const educationalTwo = candidate({
+      key: 'educational-two',
+      kind: 'educational',
+      contentItemId: 'two',
+      mediaUrl: 'https://media.example.com/two.jpg',
+    });
+    const humorTwo = candidate({
+      key: 'humor-two',
+      kind: 'industry_humor',
+      contentItemId: 'two',
+      mediaUrl: 'https://media.example.com/two.jpg',
+    });
+
+    const ordered = orderAutonomousCandidates([
+      educationalOne,
+      educationalTwo,
+      humorOne,
+      humorTwo,
+    ]);
+
+    expect(ordered.slice(0, 2).map((item) => item.key)).toEqual([
+      'educational-one',
+      'humor-two',
+    ]);
+    expect(new Set(ordered.map((item) => item.mediaUrl)).size).toBe(ordered.length);
+    expect(ordered.some((item) => item.key === 'humor-one')).toBe(false);
   });
 
   it('schedules Toronto posts at the local half-hour and sends a missed slot promptly', () => {

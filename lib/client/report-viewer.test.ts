@@ -28,7 +28,7 @@ describe('report viewer helpers', () => {
     ]);
   });
 
-  it('splits markdown into top-level sections and opens key sections by default', () => {
+  it('splits markdown into calm, collapsed evidence sections', () => {
     expect(
       splitMarkdownSections(
         '## Executive Summary\nhello\n\n## At a Glance\nquick\n\n## Immediate Wins\nwins\n\n## Priority Action Plan\nworld\n\n## Detailed Check Reference\nref\n\n## Technical Appendix\nappendix'
@@ -38,25 +38,25 @@ describe('report viewer helpers', () => {
         id: 'executive-summary',
         title: 'Executive Summary',
         content: '## Executive Summary\nhello',
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         id: 'at-a-glance',
         title: 'At a Glance',
         content: '## At a Glance\nquick',
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         id: 'immediate-wins',
         title: 'Immediate Wins',
         content: '## Immediate Wins\nwins',
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         id: 'priority-action-plan',
         title: 'Priority Action Plan',
         content: '## Priority Action Plan\nworld',
-        defaultOpen: true,
+        defaultOpen: false,
       },
       {
         id: 'detailed-check-reference',

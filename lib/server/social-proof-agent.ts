@@ -457,6 +457,42 @@ function candidateCanPublish(
   return true;
 }
 
+export function orderAutonomousCandidates(
+  candidates: ReadonlyArray<SocialProofCandidate>
+): SocialProofCandidate[] {
+  const educational = candidates.filter(
+    (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'educational'
+  );
+  const humor = candidates.filter(
+    (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'industry_humor'
+  );
+  const ordered: SocialProofCandidate[] = [];
+  const used = new Set<SocialProofCandidate>();
+  const usedMedia = new Set<string>();
+
+  const add = (candidate: SocialProofCandidate | undefined) => {
+    if (!candidate || used.has(candidate)) return;
+    if (candidate.mediaUrl && usedMedia.has(candidate.mediaUrl)) return;
+    ordered.push(candidate);
+    used.add(candidate);
+    if (candidate.mediaUrl) usedMedia.add(candidate.mediaUrl);
+  };
+
+  for (let index = 0; index < educational.length; index += 1) {
+    add(educational[index]);
+    // Use the next article for the lighter post. This prevents two same-day posts
+    // from reusing one hero while still alternating education and agency humor.
+    add(humor[index + 1]);
+  }
+
+  for (const candidate of candidates) {
+    if (used.has(candidate)) continue;
+    if (candidate.mediaUrl && usedMedia.has(candidate.mediaUrl)) continue;
+    add(candidate);
+  }
+  return ordered;
+}
+
 export async function runSocialProofAgent(args: {
   readonly supabase: SupabaseClient;
   readonly appUrl: string;
@@ -524,22 +560,9 @@ export async function runSocialProofAgent(args: {
 
     const account = preferredAccount(accounts);
     const family = providerFamily(account);
-    const safeEducational = candidates.filter(
-      (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'educational'
-    );
-    const safeHumor = candidates.filter(
-      (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'industry_humor'
-    );
-    const interleavedSafe = safeEducational.flatMap((candidate, index) => [
-      candidate,
-      ...(safeHumor[index] ? [safeHumor[index]!] : []),
-    ]);
     const orderedCandidates =
       mode === 'autonomous'
-        ? [
-            ...interleavedSafe,
-            ...candidates.filter((candidate) => !interleavedSafe.includes(candidate)),
-          ]
+        ? orderAutonomousCandidates(candidates)
         : candidates;
     let assetsCreated = 0;
     let jobsCreated = 0;
@@ -574,6 +597,10 @@ export async function runSocialProofAgent(args: {
           carousel_enabled: config.carouselEnabled,
           reels_enabled: config.reelsEnabled,
           industry_humor_enabled: config.industryHumorEnabled,
+          visual_contract:
+            account?.provider_name === 'instagram'
+              ? 'square_feed_safe_no_consecutive_media_reuse'
+              : 'provider_ready',
         },
       });
       assetsCreated += 1;

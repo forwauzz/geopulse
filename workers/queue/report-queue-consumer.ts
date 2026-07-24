@@ -40,6 +40,7 @@ import {
   updateStartupSlackDeliveryEventStatus,
 } from '../../lib/server/startup-slack-integration';
 import { formatStartupSlackMessage, type StartupSlackMessagePayload } from '../../lib/server/startup-slack-message';
+import { emitMarketingEvent } from '../../services/marketing-attribution/emit';
 
 const DLQ_NAME = 'geo-pulse-dlq';
 
@@ -903,6 +904,19 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
     throw new Error(repErr.message);
   }
   const reportId = typeof insertedReport?.id === 'string' ? insertedReport.id : null;
+
+  await emitMarketingEvent(supabase as never, 'report_delivered', {
+    scan_id: job.scanId,
+    payment_id: job.paymentId,
+    email: job.customerEmail,
+    idempotency_key: `report:${reportId ?? `${job.scanId}:${job.paymentId}`}:delivered`,
+    metadata: {
+      kind: 'deep_audit',
+      report_id: reportId,
+      payload_version: payload.version,
+      attached_pdf: attachPdf,
+    },
+  });
 
   try {
     await writeGeneratedReportEval(supabase as any, {

@@ -121,6 +121,9 @@ export async function saveRevenueAgency(formData: FormData): Promise<void> {
         nurture_enabled: checked(formData, 'nurtureEnabled'),
         nurture_daily_cap: intField(formData, 'nurtureDailyCap', 5, 20),
         nurture_delay_hours: intField(formData, 'nurtureDelayHours', 24, 168),
+        prospecting_enabled: checked(formData, 'prospectingEnabled'),
+        prospecting_daily_cap: intField(formData, 'prospectingDailyCap', 5, 10),
+        prospecting_markets: String(formData.get('prospectingMarkets') ?? '').trim() || 'Toronto, Canada',
       },
     },
     ctx.user.id

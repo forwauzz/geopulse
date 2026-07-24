@@ -242,6 +242,18 @@ export default async function AdminAgentsPage() {
             <input type="checkbox" name="nurtureEnabled" defaultChecked={revenue.nurtureEnabled} />
             Nurture opted-in leads
           </label>
+          <label className="flex items-center gap-2 pb-2 font-sans text-sm text-on-background">
+            <input type="checkbox" name="prospectingEnabled" defaultChecked={revenue.prospectingEnabled} />
+            Find qualified agencies
+          </label>
+          <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+            New contacts/day
+            <input name="prospectingDailyCap" type="number" min="1" max="10" defaultValue={revenue.prospectingDailyCap} className={`${inputClass} w-28`} />
+          </label>
+          <label className="grid min-w-64 flex-1 gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+            Markets (comma-separated)
+            <input name="prospectingMarkets" defaultValue={revenue.prospectingMarkets.join(', ')} className={inputClass} />
+          </label>
           <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
             Daily email cap
             <input name="nurtureDailyCap" type="number" min="1" max="20" defaultValue={revenue.nurtureDailyCap} className={`${inputClass} w-28`} />

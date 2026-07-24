@@ -15,6 +15,11 @@ import { runSocialProofAgent, type SocialProofAgentResult } from './social-proof
 import { structuredLogWithClientAndWait } from './structured-log';
 import { runRevenueNurtureAgent, type RevenueNurtureResult } from './revenue-nurture-agent';
 import type { LeadEmailEnv } from './lead-email';
+import {
+  runAgencyProspectingAgent,
+  type AgencyProspectingEnv,
+  type AgencyProspectingResult,
+} from './agency-prospecting-agent';
 
 export type RevenueAgencyMode = 'off' | 'observe' | 'assist' | 'autonomous';
 
@@ -25,6 +30,9 @@ export type RevenueAgencyConfig = {
   readonly nurtureEnabled: boolean;
   readonly nurtureDailyCap: number;
   readonly nurtureDelayHours: number;
+  readonly prospectingEnabled: boolean;
+  readonly prospectingDailyCap: number;
+  readonly prospectingMarkets: readonly string[];
 };
 
 export type RevenueStage = {
@@ -60,6 +68,7 @@ export type RevenueAgencyRunResult = {
   readonly snapshot?: RevenueAgencySnapshot;
   readonly proof?: SocialProofAgentResult;
   readonly nurture?: RevenueNurtureResult;
+  readonly prospecting?: AgencyProspectingResult;
   readonly reason?: string;
 };
 
@@ -92,6 +101,13 @@ export function resolveRevenueAgencyConfig(
       typeof config['nurture_enabled'] === 'boolean' ? config['nurture_enabled'] : false,
     nurtureDailyCap: positiveInt(config['nurture_daily_cap'], 5, 20),
     nurtureDelayHours: positiveInt(config['nurture_delay_hours'], 24, 168),
+    prospectingEnabled:
+      typeof config['prospecting_enabled'] === 'boolean' ? config['prospecting_enabled'] : false,
+    prospectingDailyCap: positiveInt(config['prospecting_daily_cap'], 5, 10),
+    prospectingMarkets:
+      typeof config['prospecting_markets'] === 'string'
+        ? config['prospecting_markets'].split(',').map((item) => item.trim()).filter(Boolean).slice(0, 12)
+        : ['Toronto, Canada'],
   };
 }
 
@@ -257,7 +273,7 @@ async function alreadyRanToday(supabase: SupabaseClient, now: Date): Promise<boo
 export async function runRevenueAgency(args: {
   readonly supabase: SupabaseClient;
   readonly appUrl: string;
-  readonly env?: LeadEmailEnv;
+  readonly env?: LeadEmailEnv & AgencyProspectingEnv;
   readonly force?: boolean;
   readonly now?: Date;
 }): Promise<RevenueAgencyRunResult> {
@@ -274,6 +290,17 @@ export async function runRevenueAgency(args: {
 
   try {
     const snapshot = await loadRevenueAgencySnapshot(args.supabase, now);
+    const marketIndex = Math.floor(now.getTime() / 86_400_000) % Math.max(config.prospectingMarkets.length, 1);
+    const market = config.prospectingMarkets[marketIndex] ?? 'Toronto, Canada';
+    const prospecting =
+      config.prospectingEnabled && mode === 'autonomous'
+        ? await runAgencyProspectingAgent({
+            supabase: args.supabase,
+            env: args.env ?? process.env,
+            market,
+            dailyCap: config.prospectingDailyCap,
+          })
+        : undefined;
     const proof =
       config.socialProofEnabled && (mode === 'assist' || mode === 'autonomous')
         ? await runSocialProofAgent({
@@ -309,10 +336,12 @@ export async function runRevenueAgency(args: {
         social_proof_status: proof?.status ?? null,
         nurture_status: nurture?.status ?? null,
         nurture_sent: nurture?.sent ?? 0,
+        prospecting_status: prospecting?.status ?? null,
+        prospecting_saved: prospecting?.saved ?? 0,
       },
       'info'
     );
-    return { status: 'completed', mode, snapshot, proof, nurture };
+    return { status: 'completed', mode, snapshot, proof, nurture, prospecting };
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'unknown';
     await structuredLogWithClientAndWait(

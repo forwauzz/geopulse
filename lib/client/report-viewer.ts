@@ -73,26 +73,9 @@ export type DisplayIssue = {
 };
 
 function shouldOpenByDefault(title: string): boolean {
-  const titleLower = title.toLowerCase();
-  if (
-    titleLower.includes('executive summary') ||
-    titleLower.includes('at a glance') ||
-    titleLower.includes('immediate wins') ||
-    titleLower.includes('priority action plan') ||
-    titleLower.includes('question-answer readiness')
-  ) {
-    return true;
-  }
-
-  if (
-    titleLower.includes('detailed check reference') ||
-    titleLower.includes('page-level reference') ||
-    titleLower.includes('technical appendix') ||
-    titleLower.includes('coverage summary')
-  ) {
-    return false;
-  }
-
+  void title;
+  // The visual story already presents the score, categories, and first actions. Keep the
+  // evidence library collapsed so a long audit opens as a calm summary, not a wall of text.
   return false;
 }
 
