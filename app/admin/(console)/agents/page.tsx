@@ -1,6 +1,7 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { loadAgentStatuses } from '@/lib/server/agent-console';
+import { loadFounderControlRoom } from '@/lib/server/founder-control-room';
 import { loadAutomationSetting } from '@/lib/server/automation-settings';
 import {
   loadRevenueAgencySnapshot,
@@ -109,6 +110,7 @@ export default async function AdminAgentsPage() {
     revenueSetting.killSwitch
   );
   const growthJudge = judgeGrowthLoop(revenueSnapshot);
+  const controlRoom = await loadFounderControlRoom(ctx.adminDb, agents, revenueSnapshot);
   const internal = agents.filter(
     (agent) =>
       agent.audience === 'internal' &&
@@ -180,6 +182,101 @@ export default async function AdminAgentsPage() {
           One simple place to control the growth loop. Nothing publishes unless its selected mode and safety gates allow it.
         </p>
       </header>
+
+      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+        <div className="flex items-start gap-3">
+          <span className="material-symbols-outlined rounded-xl bg-primary p-2 text-on-primary" aria-hidden>space_dashboard</span>
+          <div>
+            <p className="font-label text-[0.62rem] font-bold uppercase tracking-widest text-primary">Founder Control Room</p>
+            <h2 className="mt-1 font-sans text-xl font-black text-on-background">Maya&apos;s company brief</h2>
+            <p className="mt-1 max-w-3xl font-sans text-sm leading-6 text-on-surface-variant">{controlRoom.summary}</p>
+          </div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2 md:grid-cols-5">
+          {controlRoom.metrics.map((metric) => (
+            <div key={metric.label} className="rounded-xl bg-surface-container-low p-3">
+              <p className="font-label text-[0.6rem] font-bold uppercase tracking-wider text-on-surface-variant">{metric.label}</p>
+              <p className="mt-1 font-sans text-2xl font-black text-on-background">{metric.value}</p>
+              <p className="mt-1 font-sans text-[0.68rem] leading-4 text-on-surface-variant">{metric.detail}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 md:col-span-2">
+            <p className="font-label text-[0.62rem] font-bold uppercase tracking-wider text-primary">Current bottleneck</p>
+            <p className="mt-1 font-sans text-sm font-semibold leading-6 text-on-background">{controlRoom.currentBottleneck}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+            <p className="font-label text-[0.62rem] font-bold uppercase tracking-wider text-on-surface-variant">Founder decisions</p>
+            <p className="mt-1 font-sans text-sm leading-6 text-on-background">
+              {controlRoom.founderDecisions.length > 0 ? controlRoom.founderDecisions.join(' ') : 'None. The team can continue without you.'}
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-outline-variant/20 p-4">
+            <p className="flex items-center gap-2 font-sans text-sm font-bold text-on-background">
+              <span className="material-symbols-outlined text-[18px] text-amber-600" aria-hidden>psychology</span>
+              Elena&apos;s weekly learning brief
+            </p>
+            <p className="mt-2 font-sans text-sm font-semibold text-on-background">{controlRoom.learningBrief.headline}</p>
+            <p className="mt-1 font-sans text-xs leading-5 text-on-surface-variant">{controlRoom.learningBrief.observation}</p>
+            <p className="mt-2 font-sans text-xs font-semibold leading-5 text-primary">{controlRoom.learningBrief.recommendation}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant/20 p-4">
+            <p className="flex items-center gap-2 font-sans text-sm font-bold text-on-background">
+              <span className="material-symbols-outlined text-[18px] text-slate-600" aria-hidden>shield</span>
+              Marcus&apos;s incident watch
+            </p>
+            {controlRoom.incidents.length === 0 ? (
+              <p className="mt-2 font-sans text-sm text-on-surface-variant">No queue, report, social, Stripe, or schedule failures in the last 7 days.</p>
+            ) : (
+              <ul className="mt-2 space-y-1">
+                {controlRoom.incidents.slice(0, 4).map((incident) => (
+                  <li key={`${incident.event}-${incident.createdAt}`} className="font-sans text-xs text-amber-700 dark:text-amber-300">
+                    {incident.area}: {incident.event.replaceAll('_', ' ')}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2 className="font-sans text-lg font-bold text-on-background">Your AI team</h2>
+        <p className="font-sans text-sm text-on-surface-variant">Six owners, using the agents and schedules already running underneath.</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {controlRoom.workforce.map((member) => (
+            <article key={member.id} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-4">
+              <div className="flex items-center gap-3">
+                <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full font-sans text-sm font-black text-white ${member.color}`}>{member.initials}</span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-sans text-sm font-black text-on-background">{member.name}</h3>
+                    <span className="rounded-md bg-primary/10 px-1.5 py-0.5 font-label text-[0.55rem] font-bold uppercase tracking-wider text-primary">AI</span>
+                  </div>
+                  <p className="font-sans text-xs font-semibold text-on-surface-variant">{member.role}</p>
+                </div>
+                <span className="ml-auto"><StateDot enabled={member.enabled} /></span>
+              </div>
+              <p className="mt-3 font-sans text-xs leading-5 text-on-surface-variant">{member.job}</p>
+              <dl className="mt-3 space-y-2 border-t border-outline-variant/15 pt-3 font-sans text-xs">
+                <div><dt className="font-semibold text-on-surface-variant">Last action</dt><dd className="mt-0.5 text-on-background">{member.lastAction ? member.lastAction.event.replaceAll('_', ' ') : 'No recorded activity yet'}</dd></div>
+                <div><dt className="font-semibold text-on-surface-variant">Next action</dt><dd className="mt-0.5 leading-5 text-on-background">{member.nextAction}</dd></div>
+              </dl>
+              {member.blockers.length > 0 && <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-2 font-sans text-xs text-amber-800 dark:text-amber-200">{member.blockers[0]}</p>}
+              <div className="mt-3 flex flex-wrap gap-1">
+                {member.capabilities.map((capability) => (
+                  <span key={capability.key} className="rounded-full bg-surface-container px-2 py-1 font-label text-[0.58rem] font-semibold text-on-surface-variant">
+                    {capability.name} · {capability.blockers.length > 0 ? 'Repair' : 'Keep'}
+                  </span>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
