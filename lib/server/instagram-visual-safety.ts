@@ -8,6 +8,8 @@ export type InstagramVisualSafetyResult =
   | { readonly safe: true }
   | { readonly safe: false; readonly reason: string };
 
+export const INSTAGRAM_REEL_VALIDATION_VERSION = 'reel-v2';
+
 function numberFrom(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -52,7 +54,60 @@ export function validateInstagramVisualSafety(
   ) {
     return { safe: false, reason: 'meta_preview_approval_required' };
   }
+  if (video.metadata['has_audio'] !== true || numberFrom(video.metadata['audio_track_count'])! < 1) {
+    return { safe: false, reason: 'reel_audio_required' };
+  }
+  if (
+    video.metadata['mobile_text_legible'] !== true ||
+    video.metadata['spelling_checked'] !== true
+  ) {
+    return { safe: false, reason: 'reel_mobile_copy_unverified' };
+  }
+  if (
+    video.metadata['feed_preview_safe'] !== true ||
+    video.metadata['grid_preview_safe'] !== true ||
+    stringFrom(video.metadata['feed_preview_url']) === '' ||
+    stringFrom(video.metadata['grid_preview_url']) === ''
+  ) {
+    return { safe: false, reason: 'reel_feed_grid_preview_required' };
+  }
+  if (
+    video.metadata['cta_checked'] !== true ||
+    stringFrom(asset.cta_url) === '' ||
+    video.metadata['privacy_checked'] !== true ||
+    video.metadata['factual_claims_checked'] !== true
+  ) {
+    return { safe: false, reason: 'reel_content_safety_unverified' };
+  }
+  if (
+    video.metadata['duplicate_media_checked'] !== true ||
+    video.metadata['duplicate_media_match'] === true ||
+    video.metadata['template_rotation_checked'] !== true
+  ) {
+    return { safe: false, reason: 'reel_repetition_check_required' };
+  }
+  if (
+    stringFrom(video.metadata['validation_version']) !== INSTAGRAM_REEL_VALIDATION_VERSION ||
+    stringFrom(video.metadata['validated_at']) === '' ||
+    stringFrom(video.metadata['validated_by']) === ''
+  ) {
+    return { safe: false, reason: 'reel_validation_record_required' };
+  }
   return { safe: true };
+}
+
+export function findRepeatedInstagramMedia(
+  candidate: { readonly mediaFingerprint: string; readonly templateId: string },
+  recent: ReadonlyArray<{ readonly mediaFingerprint: string; readonly templateId: string }>
+): 'media' | 'template' | null {
+  const fingerprint = candidate.mediaFingerprint.trim();
+  const template = candidate.templateId.trim();
+  if (fingerprint && recent.some((item) => item.mediaFingerprint.trim() === fingerprint)) return 'media';
+  const recentTemplates = recent.slice(0, 3).map((item) => item.templateId.trim()).filter(Boolean);
+  if (template && recentTemplates.length >= 2 && recentTemplates.every((value) => value === template)) {
+    return 'template';
+  }
+  return null;
 }
 
 export function assertInstagramVisualSafety(

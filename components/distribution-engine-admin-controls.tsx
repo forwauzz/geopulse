@@ -797,6 +797,54 @@ export function DistributionEngineAdminControls({
               className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
             />
           </label>
+          <details className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-on-background">
+              Reel validation (video only)
+            </summary>
+            <p className="mt-2 text-xs leading-5 text-on-surface-variant">
+              A Reel cannot become provider-ready until all checks are recorded. Preview the full-screen, feed, and profile-grid crops in Meta first.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-xs font-medium text-on-background">
+                Width
+                <input name="reelWidth" type="number" placeholder="1080" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-on-background">
+                Height
+                <input name="reelHeight" type="number" placeholder="1920" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-on-background sm:col-span-2">
+                Feed preview URL
+                <input name="feedPreviewUrl" type="url" placeholder="https://…" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-on-background sm:col-span-2">
+                Grid preview URL
+                <input name="gridPreviewUrl" type="url" placeholder="https://…" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-on-background">
+                Media fingerprint
+                <input name="mediaFingerprint" placeholder="sha256…" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-on-background">
+                Template ID
+                <input name="templateId" placeholder="proof-01" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
+              </label>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {[
+                ['audioChecked', 'Audio is present'],
+                ['mobileCopyChecked', 'Text is legible and spelling checked'],
+                ['contentSafetyChecked', 'CTA, privacy, and factual claims checked'],
+                ['repetitionChecked', 'Media and template are not repetitive'],
+                ['metaPreviewApproved', 'Full-screen, feed, and grid previews approved in Meta'],
+              ].map(([name, label]) => (
+                <label key={name} className="flex items-start gap-2 text-xs text-on-background">
+                  <input type="checkbox" name={name} className="mt-0.5 h-4 w-4 rounded border-outline-variant text-primary" />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </details>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button

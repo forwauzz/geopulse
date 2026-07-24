@@ -2,6 +2,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { loadAgentStatuses } from '@/lib/server/agent-console';
 import { loadFounderControlRoom } from '@/lib/server/founder-control-room';
+import { INSTAGRAM_PROFILE_STRATEGY } from '@/lib/server/instagram-organic-strategy';
 import { loadAutomationSetting } from '@/lib/server/automation-settings';
 import {
   loadRevenueAgencySnapshot,
@@ -423,7 +424,7 @@ export default async function AdminAgentsPage() {
             <Checkbox name="auditScreenshotsEnabled" label="Audit report screenshots" description="Only redacted or consented media can pass review." defaultChecked={social.auditScreenshotsEnabled} />
             <Checkbox name="clientProofEnabled" label="Client proof" description="Still requires an explicit consent record and claim-safe evidence." defaultChecked={social.clientProofEnabled} />
             <Checkbox name="carouselEnabled" label="Carousels" defaultChecked={social.carouselEnabled} />
-            <Checkbox name="reelsEnabled" label="Reels" description="Publishing requires 9:16 media plus a recorded Meta preview approval." defaultChecked={social.reelsEnabled} />
+            <Checkbox name="reelsEnabled" label="Reels" description="Publishing requires 1080×1920, audio, safe feed/grid crops, checked copy and claims, unique media, and a recorded Meta preview approval." defaultChecked={social.reelsEnabled} />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -435,6 +436,29 @@ export default async function AdminAgentsPage() {
             </p>
           </div>
         </form>
+
+        <details className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low">
+          <summary className="cursor-pointer px-4 py-3 font-sans text-sm font-bold text-on-background">
+            Instagram profile + organic playbook
+          </summary>
+          <div className="grid gap-4 border-t border-outline-variant/15 px-4 py-4 text-sm md:grid-cols-2">
+            <div>
+              <p className="font-sans font-bold text-on-background">{INSTAGRAM_PROFILE_STRATEGY.name}</p>
+              <p className="mt-1 font-sans leading-6 text-on-surface-variant">{INSTAGRAM_PROFILE_STRATEGY.bio}</p>
+              <p className="mt-3 font-label text-[0.62rem] font-bold uppercase tracking-wider text-on-surface-variant">Highlights</p>
+              <p className="mt-1 font-sans text-xs leading-5 text-on-background">{INSTAGRAM_PROFILE_STRATEGY.highlights.join(' · ')}</p>
+            </div>
+            <div>
+              <p className="font-label text-[0.62rem] font-bold uppercase tracking-wider text-on-surface-variant">Pinned foundation</p>
+              <ol className="mt-1 list-decimal space-y-1 pl-4 font-sans text-xs leading-5 text-on-background">
+                {INSTAGRAM_PROFILE_STRATEGY.pinnedPosts.map((post) => <li key={post}>{post}</li>)}
+              </ol>
+              <p className="mt-3 font-sans text-xs leading-5 text-on-surface-variant">
+                Learning prioritizes qualified profile visits → scans → activated accounts → paid monitoring, with reach and follows used as supporting signals.
+              </p>
+            </div>
+          </div>
+        </details>
       </section>
 
       <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">

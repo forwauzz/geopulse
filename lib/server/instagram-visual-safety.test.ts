@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { validateInstagramVisualSafety } from './instagram-visual-safety';
+import {
+  findRepeatedInstagramMedia,
+  INSTAGRAM_REEL_VALIDATION_VERSION,
+  validateInstagramVisualSafety,
+} from './instagram-visual-safety';
 
-function asset(assetType: 'single_image_post' | 'short_video_post') {
-  return { asset_type: assetType } as never;
+function asset(assetType: 'single_image_post' | 'short_video_post', ctaUrl = 'https://getgeopulse.com/?utm_source=instagram') {
+  return { asset_type: assetType, cta_url: ctaUrl } as never;
 }
 
 function reel(metadata: Record<string, unknown>) {
@@ -12,6 +16,31 @@ function reel(metadata: Record<string, unknown>) {
     metadata,
   } as never;
 }
+
+const completeMetadata = {
+  width: 1080,
+  height: 1920,
+  safe_area_contract: 'reel_9x16_center_safe',
+  has_audio: true,
+  audio_track_count: 1,
+  mobile_text_legible: true,
+  spelling_checked: true,
+  feed_preview_safe: true,
+  grid_preview_safe: true,
+  feed_preview_url: 'https://cdn.example/feed.jpg',
+  grid_preview_url: 'https://cdn.example/grid.jpg',
+  cta_checked: true,
+  privacy_checked: true,
+  factual_claims_checked: true,
+  duplicate_media_checked: true,
+  duplicate_media_match: false,
+  template_rotation_checked: true,
+  meta_preview_approved: true,
+  meta_preview_approved_at: '2026-07-24T01:00:00Z',
+  validation_version: INSTAGRAM_REEL_VALIDATION_VERSION,
+  validated_at: '2026-07-24T01:00:00Z',
+  validated_by: 'founder',
+};
 
 describe('Instagram visual safety', () => {
   it('does not add a preview requirement to normal feed images', () => {
@@ -49,15 +78,48 @@ describe('Instagram visual safety', () => {
       validateInstagramVisualSafety(
         asset('short_video_post'),
         [
-          reel({
-            width: 1080,
-            height: 1920,
-            safe_area_contract: 'reel_9x16_center_safe',
-            meta_preview_approved: true,
-            meta_preview_approved_at: '2026-07-24T01:00:00Z',
-          }),
+          reel(completeMetadata),
         ]
       )
     ).toEqual({ safe: true });
+  });
+
+  it('blocks silent reels even when every visual preview passed', () => {
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({ ...completeMetadata, has_audio: false, audio_track_count: 0 }),
+      ])
+    ).toEqual({ safe: false, reason: 'reel_audio_required' });
+  });
+
+  it('blocks unverified claims, privacy, CTA, and repetitive media', () => {
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({ ...completeMetadata, privacy_checked: false }),
+      ])
+    ).toEqual({ safe: false, reason: 'reel_content_safety_unverified' });
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({ ...completeMetadata, duplicate_media_match: true }),
+      ])
+    ).toEqual({ safe: false, reason: 'reel_repetition_check_required' });
+  });
+
+  it('detects repeated media and overused templates', () => {
+    expect(
+      findRepeatedInstagramMedia(
+        { mediaFingerprint: 'same', templateId: 'new' },
+        [{ mediaFingerprint: 'same', templateId: 'old' }]
+      )
+    ).toBe('media');
+    expect(
+      findRepeatedInstagramMedia(
+        { mediaFingerprint: 'fresh', templateId: 'template-a' },
+        [
+          { mediaFingerprint: 'one', templateId: 'template-a' },
+          { mediaFingerprint: 'two', templateId: 'template-a' },
+        ]
+      )
+    ).toBe('template');
   });
 });
