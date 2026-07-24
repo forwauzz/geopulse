@@ -47,6 +47,7 @@ export type ScanApiEnv = {
   DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT?: string;
   TURNSTILE_SECRET_KEY: string;
   GEMINI_API_KEY: string;
+  OPENAI_API_KEY?: string;
   GEMINI_MODEL: string;
   GEMINI_ENDPOINT: string;
   BENCHMARK_EXECUTION_PROVIDER: string;
@@ -200,6 +201,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     ),
     TURNSTILE_SECRET_KEY: String(e['TURNSTILE_SECRET_KEY'] ?? ''),
     GEMINI_API_KEY: String(e['GEMINI_API_KEY'] ?? ''),
+    OPENAI_API_KEY: String(e['OPENAI_API_KEY'] ?? ''),
     GEMINI_MODEL: String(e['GEMINI_MODEL'] ?? 'gemini-2.0-flash'),
     GEMINI_ENDPOINT: String(
       e['GEMINI_ENDPOINT'] ?? 'https://generativelanguage.googleapis.com/v1beta/models'
@@ -254,6 +256,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
         process.env['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? '',
       TURNSTILE_SECRET_KEY: process.env['TURNSTILE_SECRET_KEY'] ?? '',
       GEMINI_API_KEY: process.env['GEMINI_API_KEY'] ?? '',
+      OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? '',
       GEMINI_MODEL: process.env['GEMINI_MODEL'] ?? 'gemini-2.0-flash',
       GEMINI_ENDPOINT:
         process.env['GEMINI_ENDPOINT'] ??
