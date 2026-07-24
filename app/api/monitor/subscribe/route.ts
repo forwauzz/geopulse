@@ -16,6 +16,8 @@ import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { structuredLog } from '@/lib/server/structured-log';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
 import { monitorPriceIdForPlan, normalizeMonitorPlan } from '@/lib/server/monitor-subscription';
+import { optionalAttributionFields } from '@services/marketing-attribution/attribution-params';
+import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 
 export const runtime = 'nodejs';
 
@@ -25,8 +27,7 @@ const bodySchema = z.object({
   email: z.string().email().max(320).nullish(),
   plan: z.enum(['monthly', 'annual']).default('monthly'),
   turnstileToken: z.string().min(1),
-  anonymous_id: z.string().max(128).nullish(),
-});
+}).extend(optionalAttributionFields.shape);
 
 export async function POST(request: Request): Promise<Response> {
   const env = await getPaymentApiEnv();
@@ -125,6 +126,26 @@ export async function POST(request: Request): Promise<Response> {
       plan,
       stripeSessionId: session.id,
     }, 'info');
+
+    await emitMarketingEvent(supabase, 'checkout_started', {
+      anonymous_id: parsed.data.anonymous_id,
+      scan_id: scan.id as string,
+      email: parsed.data.email,
+      utm_source: parsed.data.utm_source,
+      utm_medium: parsed.data.utm_medium,
+      utm_campaign: parsed.data.utm_campaign,
+      utm_content: parsed.data.utm_content,
+      utm_term: parsed.data.utm_term,
+      referrer_url: parsed.data.referrer_url,
+      landing_path: parsed.data.landing_path,
+      channel: parsed.data.utm_source ?? 'direct_or_unknown',
+      idempotency_key: `monitor_checkout:${session.id}`,
+      metadata: {
+        kind: 'monitor',
+        plan,
+        stripe_session_id: session.id,
+      },
+    });
 
     return Response.json({ url: session.url });
   } catch (e) {

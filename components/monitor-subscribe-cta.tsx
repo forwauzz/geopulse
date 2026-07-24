@@ -51,7 +51,7 @@ export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
           scanId,
           plan,
           turnstileToken: token,
-          anonymous_id: getAttributionContext().anonymous_id,
+          ...getAttributionContext(),
         }),
       });
       const data: unknown = await res.json().catch(() => null);

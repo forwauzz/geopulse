@@ -38,7 +38,11 @@ describe('autonomous editorial hero', () => {
     );
     expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toMatchObject({
       output_format: 'jpeg',
+      size: '1024x1024',
     });
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body)).prompt).toContain(
+      'central 80% safe area'
+    );
     expect(put.mock.calls[0]?.[2]).toMatchObject({
       httpMetadata: { contentType: 'image/jpeg' },
     });

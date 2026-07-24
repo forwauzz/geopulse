@@ -1,5 +1,9 @@
 import Link from 'next/link';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
+import {
+  buildSocialContentFunnels,
+  type SocialAttributionEvent,
+} from '@/lib/server/social-attribution';
 
 export const dynamic = 'force-dynamic';
 
@@ -71,8 +75,17 @@ export default async function AttributionAdminPage() {
     .order('payment_ts', { ascending: false })
     .limit(100);
 
-  if (funnelErr || convErr) {
-    const msg = funnelErr?.message ?? convErr?.message ?? 'Unknown error';
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: socialEvents, error: socialErr } = await adminDb
+    .schema('analytics')
+    .from('marketing_events')
+    .select('event_id,event_name,anonymous_id,scan_id,utm_campaign,utm_content')
+    .gte('event_ts', since)
+    .order('event_ts', { ascending: false })
+    .limit(5000);
+
+  if (funnelErr || convErr || socialErr) {
+    const msg = funnelErr?.message ?? convErr?.message ?? socialErr?.message ?? 'Unknown error';
     const isMissingAnalyticsSchema = /Invalid schema:\s*analytics/i.test(msg);
     return (
       <main className="mx-auto max-w-5xl px-6 py-16">
@@ -95,6 +108,7 @@ export default async function AttributionAdminPage() {
 
   const funnelRows = (funnel ?? []) as FunnelRow[];
   const conversionRows = (conversions ?? []) as ConversionRow[];
+  const socialRows = buildSocialContentFunnels((socialEvents ?? []) as SocialAttributionEvent[]);
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">
@@ -107,7 +121,7 @@ export default async function AttributionAdminPage() {
             Marketing attribution
           </h1>
           <p className="mt-1 font-body text-on-surface-variant">
-            Weekly funnel and first/last-touch conversions (v1).
+            See which posts create visits, scans, delivered reports, and customers.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -131,6 +145,45 @@ export default async function AttributionAdminPage() {
           </Link>
         </div>
       </div>
+
+      <section className="mt-10">
+        <h2 className="font-headline text-xl font-bold text-on-background">Social posts</h2>
+        <p className="mt-1 font-body text-sm text-on-surface-variant">
+          Last 90 days. Each row follows one autonomous post through the full customer journey.
+        </p>
+        <div className="mt-4 overflow-x-auto rounded-xl bg-surface-container-lowest shadow-float">
+          <table className="min-w-[900px] w-full border-collapse text-left font-body text-sm">
+            <thead className="bg-surface-container-low">
+              <tr className="text-on-surface-variant">
+                <th className="px-4 py-3">Post</th>
+                <th className="px-4 py-3 text-right">Visits</th>
+                <th className="px-4 py-3 text-right">Scans</th>
+                <th className="px-4 py-3 text-right">Sent</th>
+                <th className="px-4 py-3 text-right">Viewed</th>
+                <th className="px-4 py-3 text-right">Checkouts</th>
+                <th className="px-4 py-3 text-right">Paid</th>
+              </tr>
+            </thead>
+            <tbody>
+              {socialRows.length === 0 ? (
+                <tr><td className="px-4 py-6 text-on-surface-variant" colSpan={7}>No attributed social visits yet.</td></tr>
+              ) : socialRows.map((row) => (
+                <tr key={row.content} className="border-t border-outline-variant/10">
+                  <td className="max-w-[300px] truncate px-4 py-3 font-medium text-on-background" title={row.content}>
+                    {row.content}
+                  </td>
+                  <td className="px-4 py-3 text-right">{fmtNum(row.sessions)}</td>
+                  <td className="px-4 py-3 text-right">{fmtNum(row.scans)}</td>
+                  <td className="px-4 py-3 text-right">{fmtNum(row.reportsDelivered)}</td>
+                  <td className="px-4 py-3 text-right">{fmtNum(row.reportsViewed)}</td>
+                  <td className="px-4 py-3 text-right">{fmtNum(row.checkouts)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-on-background">{fmtNum(row.payments)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="mt-10">
         <h2 className="font-headline text-xl font-bold text-on-background">Weekly funnel</h2>

@@ -29,17 +29,19 @@ export async function markMonitorLeadConverted(args: {
   }
 
   const ids = [...new Set(matches.filter((lead) => !lead.converted).map((lead) => lead.id))];
-  if (ids.length === 0) return 0;
-  const { error: updateError } = await args.supabase
-    .from('leads')
-    .update({ converted: true, converted_at: new Date().toISOString() })
-    .in('id', ids);
-  if (updateError) throw new Error(`monitor_lead_update_failed:${updateError.message}`);
+  if (ids.length > 0) {
+    const { error: updateError } = await args.supabase
+      .from('leads')
+      .update({ converted: true, converted_at: new Date().toISOString() })
+      .in('id', ids);
+    if (updateError) throw new Error(`monitor_lead_update_failed:${updateError.message}`);
+  }
 
   await emitMarketingEvent(args.supabase, 'payment_completed', {
     scan_id: args.scanId,
-    lead_id: ids[0],
+    lead_id: ids[0] ?? null,
     email: args.email,
+    idempotency_key: `stripe:${args.stripeEventId}:payment_completed`,
     metadata: {
       kind: 'monitor',
       stripe_event_id: args.stripeEventId,

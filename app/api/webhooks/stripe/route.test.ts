@@ -149,7 +149,8 @@ describe('POST /api/webhooks/stripe', () => {
     expect(response.status).toBe(200);
     expect(handleSubscriptionUpserted).toHaveBeenCalledWith(
       supabase,
-      expect.objectContaining({ id: 'sub_123' })
+      expect.objectContaining({ id: 'sub_123' }),
+      expect.objectContaining({ STRIPE_SECRET_KEY: 'sk_test' })
     );
     expect(handleSubscriptionCancelled).not.toHaveBeenCalled();
     expect(handleInvoicePaid).not.toHaveBeenCalled();

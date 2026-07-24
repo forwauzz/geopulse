@@ -17,6 +17,7 @@ import {
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 import { markMonitorLeadConverted } from '@/lib/server/monitor-lead-conversion';
+import { sendTrialEndingReminder } from '@/lib/server/subscription-lifecycle-email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -71,7 +72,7 @@ export async function POST(request: Request): Promise<Response> {
           // Monitor subscriptions ($39/mo product) are email-keyed and must NOT provision a
           // workspace — route them to their own handler and skip the workspace path.
           const monitor = await handleMonitorSubscriptionEvent({ supabase: adminDb, subscription: sub, env, deleted: false, nowMs });
-          if (!monitor.handled) await handleSubscriptionUpserted(adminDb, sub);
+          if (!monitor.handled) await handleSubscriptionUpserted(adminDb, sub, env);
           break;
         }
 
@@ -96,13 +97,27 @@ export async function POST(request: Request): Promise<Response> {
           break;
         }
 
-        case 'customer.subscription.trial_will_end':
+        case 'customer.subscription.trial_will_end': {
+          const sub = event.data.object as Stripe.Subscription;
+          const userId = sub.metadata?.['user_id'];
+          const bundleKey = sub.metadata?.['bundle_key'];
+          const emailed = userId && bundleKey
+            ? await sendTrialEndingReminder({
+                supabase: adminDb,
+                env,
+                userId,
+                subscriptionId: sub.id,
+                bundleKey,
+              })
+            : false;
           // 3-day warning before trial ends. Log only — email reminders are future work.
           structuredLog('subscription_trial_will_end', {
             stripeEventId: event.id,
-            subscriptionId: (event.data.object as Stripe.Subscription).id,
+            subscriptionId: sub.id,
+            emailed,
           }, 'info');
           break;
+        }
       }
     } catch (err) {
       structuredError('subscription_event_handler_threw', {
