@@ -514,11 +514,9 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
             ? 'Account'
             : 'Personal workspace'}
         </p>
-        <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">
-          {agencyDashboard.accounts.length > 0 ? 'Reports' : 'History'}
-        </h1>
+        <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Reports</h1>
         <p className="mt-1 font-body text-sm text-on-surface-variant">
-          {agencyDashboard.accounts.length > 0 ? 'Open, download, and share client reports.' : 'Your past audits and workspace.'}
+          {agencyDashboard.accounts.length > 0 ? 'Open, download, and share client reports.' : 'Open your past audits and generated reports.'}
         </p>
       </div>
 

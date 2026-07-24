@@ -50,7 +50,7 @@ test.describe('startup dashboard home', () => {
     await signInAsStartup(page);
     await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^reports$/i })).toBeVisible();
     // The user email moved out of main and into the sidebar chrome, where it is truncated and
     // viewport-dependent — asserting its visibility here would only buy flakiness.
   });

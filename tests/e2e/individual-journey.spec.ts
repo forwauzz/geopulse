@@ -63,7 +63,7 @@ test.describe('authenticated dashboard home', () => {
     await signInAsIndividual(page);
     await page.goto(WORKSPACE_HOME, { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /^history$/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^reports$/i })).toBeVisible();
   });
 
   test('dashboard home includes scan hero section and URL field', async ({ page }) => {
