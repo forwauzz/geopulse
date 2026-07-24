@@ -337,7 +337,10 @@ export async function runRevenueAgency(args: {
         nurture_status: nurture?.status ?? null,
         nurture_sent: nurture?.sent ?? 0,
         prospecting_status: prospecting?.status ?? null,
+        prospecting_discovered: prospecting?.discovered ?? 0,
+        prospecting_qualified: prospecting?.qualified ?? 0,
         prospecting_saved: prospecting?.saved ?? 0,
+        prospecting_reason: prospecting?.reason ?? null,
       },
       'info'
     );
