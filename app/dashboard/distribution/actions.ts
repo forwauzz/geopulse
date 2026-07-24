@@ -145,6 +145,35 @@ const assetMediaSchema = z.object({
   mimeType: z.string().max(120, 'MIME type is too long.').optional(),
   altText: z.string().max(500, 'Alt text is too long.').optional(),
   caption: z.string().max(500, 'Caption is too long.').optional(),
+  reelWidth: z.coerce.number().int().min(0).optional(),
+  reelHeight: z.coerce.number().int().min(0).optional(),
+  feedPreviewUrl: z.string().url().optional().or(z.literal('')),
+  gridPreviewUrl: z.string().url().optional().or(z.literal('')),
+  mediaFingerprint: z.string().max(200).optional(),
+  templateId: z.string().max(120).optional(),
+  metaPreviewApproved: z.boolean(),
+  audioChecked: z.boolean(),
+  mobileCopyChecked: z.boolean(),
+  contentSafetyChecked: z.boolean(),
+  repetitionChecked: z.boolean(),
+}).superRefine((value, ctx) => {
+  if (value.mediaKind !== 'video' || (value.providerReadyStatus !== 'ready' && value.providerReadyStatus !== 'uploaded')) return;
+  const ready =
+    value.reelWidth === 1080 &&
+    value.reelHeight === 1920 &&
+    Boolean(value.feedPreviewUrl && value.gridPreviewUrl && value.mediaFingerprint && value.templateId) &&
+    value.metaPreviewApproved &&
+    value.audioChecked &&
+    value.mobileCopyChecked &&
+    value.contentSafetyChecked &&
+    value.repetitionChecked;
+  if (!ready) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'A provider-ready Reel needs every validation field and check.',
+      path: ['providerReadyStatus'],
+    });
+  }
 });
 
 const jobSchema = z
@@ -516,6 +545,17 @@ export async function saveDistributionAssetMedia(
     mimeType: normalizeText(formData.get('mimeType')),
     altText: normalizeText(formData.get('altText')),
     caption: normalizeText(formData.get('caption')),
+    reelWidth: normalizeText(formData.get('reelWidth')),
+    reelHeight: normalizeText(formData.get('reelHeight')),
+    feedPreviewUrl: normalizeText(formData.get('feedPreviewUrl')),
+    gridPreviewUrl: normalizeText(formData.get('gridPreviewUrl')),
+    mediaFingerprint: normalizeText(formData.get('mediaFingerprint')),
+    templateId: normalizeText(formData.get('templateId')),
+    metaPreviewApproved: formData.get('metaPreviewApproved') === 'on',
+    audioChecked: formData.get('audioChecked') === 'on',
+    mobileCopyChecked: formData.get('mobileCopyChecked') === 'on',
+    contentSafetyChecked: formData.get('contentSafetyChecked') === 'on',
+    repetitionChecked: formData.get('repetitionChecked') === 'on',
   });
 
   if (!parsed.success) {
@@ -552,6 +592,34 @@ export async function saveDistributionAssetMedia(
       metadata: {
         source: 'admin_manual_media_seed',
         updated_by_user_id: context.user.id,
+        ...(parsed.data.mediaKind === 'video'
+          ? {
+              width: parsed.data.reelWidth,
+              height: parsed.data.reelHeight,
+              safe_area_contract: 'reel_9x16_center_safe',
+              has_audio: parsed.data.audioChecked,
+              audio_track_count: parsed.data.audioChecked ? 1 : 0,
+              mobile_text_legible: parsed.data.mobileCopyChecked,
+              spelling_checked: parsed.data.mobileCopyChecked,
+              feed_preview_safe: parsed.data.metaPreviewApproved,
+              grid_preview_safe: parsed.data.metaPreviewApproved,
+              feed_preview_url: parsed.data.feedPreviewUrl,
+              grid_preview_url: parsed.data.gridPreviewUrl,
+              cta_checked: parsed.data.contentSafetyChecked,
+              privacy_checked: parsed.data.contentSafetyChecked,
+              factual_claims_checked: parsed.data.contentSafetyChecked,
+              duplicate_media_checked: parsed.data.repetitionChecked,
+              duplicate_media_match: false,
+              template_rotation_checked: parsed.data.repetitionChecked,
+              media_fingerprint: parsed.data.mediaFingerprint,
+              template_id: parsed.data.templateId,
+              meta_preview_approved: parsed.data.metaPreviewApproved,
+              meta_preview_approved_at: parsed.data.metaPreviewApproved ? new Date().toISOString() : null,
+              validation_version: 'reel-v2',
+              validated_at: new Date().toISOString(),
+              validated_by: context.user.id,
+            }
+          : {}),
       },
     }))
   );
