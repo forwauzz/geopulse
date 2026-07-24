@@ -18,8 +18,7 @@ export function judgeGrowthLoop(snapshot: RevenueAgencySnapshot): GrowthJudgeDec
   const conversionStalled =
     snapshot.completedScans >= 20 &&
     snapshot.convertedLeads === 0 &&
-    snapshot.activeMonitoring === 0 &&
-    snapshot.activeAgencyAccounts === 0;
+    snapshot.activeMonitoring === 0;
   const prospectCapacityAvailable = snapshot.activeProspects < 100;
   const enoughRecentProof = snapshot.publishedProof >= 8;
 
@@ -40,8 +39,8 @@ export function judgeGrowthLoop(snapshot: RevenueAgencySnapshot): GrowthJudgeDec
 
   return {
     bottleneck: snapshot.focus,
-    allowProspecting: prospectCapacityAvailable,
-    allowSocialProof: !enoughRecentProof,
+    allowProspecting: prospectCapacityAvailable && !conversionStalled,
+    allowSocialProof: !enoughRecentProof && !conversionStalled,
     allowNurture: snapshot.leads > 0,
     recommendation: conversionStalled
       ? 'Improve the report-to-monitoring and agency-trial handoff before increasing content volume.'
