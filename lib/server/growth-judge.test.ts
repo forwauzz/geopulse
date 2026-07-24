@@ -28,8 +28,15 @@ describe('Growth Judge', () => {
   it('targets conversion instead of blindly increasing proof volume', () => {
     const result = judgeGrowthLoop(snapshot());
     expect(result.recommendation).toContain('report-to-monitoring');
-    expect(result.allowSocialProof).toBe(true);
+    expect(result.allowProspecting).toBe(false);
+    expect(result.allowSocialProof).toBe(false);
     expect(result.allowNurture).toBe(false);
+  });
+
+  it('does not count a workspace by itself as evidence of paid conversion', () => {
+    const result = judgeGrowthLoop(snapshot({ activeAgencyAccounts: 3 }));
+    expect(result.recommendation).toContain('report-to-monitoring');
+    expect(result.allowProspecting).toBe(false);
   });
 
   it('stops prospect discovery at the active-queue ceiling', () => {
