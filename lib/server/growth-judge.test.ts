@@ -25,11 +25,11 @@ function snapshot(overrides: Partial<RevenueAgencySnapshot> = {}): RevenueAgency
 }
 
 describe('Growth Judge', () => {
-  it('targets conversion instead of blindly increasing proof volume', () => {
+  it('targets conversion without silencing the bounded organic learning loop', () => {
     const result = judgeGrowthLoop(snapshot());
     expect(result.recommendation).toContain('report-to-monitoring');
     expect(result.allowProspecting).toBe(false);
-    expect(result.allowSocialProof).toBe(false);
+    expect(result.allowSocialProof).toBe(true);
     expect(result.allowNurture).toBe(false);
   });
 
@@ -43,8 +43,8 @@ describe('Growth Judge', () => {
     expect(judgeGrowthLoop(snapshot({ activeProspects: 100 })).allowProspecting).toBe(false);
   });
 
-  it('pauses proof creation when the recent publishing cadence is already sufficient', () => {
-    expect(judgeGrowthLoop(snapshot({ publishedProof: 8 })).allowSocialProof).toBe(false);
+  it('keeps organic distribution active after prior posts because the agent enforces its daily cap', () => {
+    expect(judgeGrowthLoop(snapshot({ publishedProof: 80 })).allowSocialProof).toBe(true);
   });
 
   it('allows nurture only when consented leads exist', () => {

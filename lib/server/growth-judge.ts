@@ -20,7 +20,6 @@ export function judgeGrowthLoop(snapshot: RevenueAgencySnapshot): GrowthJudgeDec
     snapshot.convertedLeads === 0 &&
     snapshot.activeMonitoring === 0;
   const prospectCapacityAvailable = snapshot.activeProspects < 100;
-  const enoughRecentProof = snapshot.publishedProof >= 8;
 
   if (conversionStalled) {
     reasons.push(
@@ -30,9 +29,6 @@ export function judgeGrowthLoop(snapshot: RevenueAgencySnapshot): GrowthJudgeDec
   if (!prospectCapacityAvailable) {
     reasons.push('The active outreach queue reached its 100-prospect safety ceiling.');
   }
-  if (enoughRecentProof) {
-    reasons.push('The recent proof cadence is already sufficient; more volume is not the constraint.');
-  }
   if (snapshot.leads === 0) {
     reasons.push('There are no consented leads ready for nurture.');
   }
@@ -40,7 +36,11 @@ export function judgeGrowthLoop(snapshot: RevenueAgencySnapshot): GrowthJudgeDec
   return {
     bottleneck: snapshot.focus,
     allowProspecting: prospectCapacityAvailable && !conversionStalled,
-    allowSocialProof: !enoughRecentProof && !conversionStalled,
+    // Organic distribution is a bounded learning loop with its own daily cap,
+    // evidence rules, deduplication, and publish gates. A stalled paid funnel
+    // should pause prospecting volume, not silence the channel that is
+    // generating demand and learning what resonates.
+    allowSocialProof: true,
     allowNurture: snapshot.leads > 0,
     recommendation: conversionStalled
       ? 'Improve the report-to-monitoring and agency-trial handoff before increasing content volume.'

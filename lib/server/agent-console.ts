@@ -147,10 +147,10 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     },
     {
       key: 'social_proof',
-      name: 'Social distribution + proof',
+      name: 'Sofia + Jordan social loop',
       audience: 'internal',
       description:
-        'Turns verified articles, anonymous aggregate findings, and consent-safe before/after evidence into social drafts or publish jobs.',
+        'Researches source-linked trends, creates original 4:5 posts and carousels, schedules four daily slots, and feeds results back into the next slate.',
       control: 'flag',
       flagFeature: 'social_proof_agent',
       enabled: socialProof.mode !== 'off',

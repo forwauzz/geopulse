@@ -13,7 +13,7 @@
 
   "name": "geo-pulse",
   "main": "workers/cloudflare-entry.ts",
-  "compatibility_date": "2025-04-01",
+  "compatibility_date": "2026-07-24",
   "compatibility_flags": ["nodejs_compat"],
 
   // Workers Paid (upgraded 2026-07-22): raise the per-invocation CPU ceiling to 5 min so heavy
@@ -64,6 +64,10 @@
     "INSTAGRAM_OAUTH_TOKEN_URL": "https://api.instagram.com/oauth/access_token",
     "INSTAGRAM_OAUTH_SCOPE": "instagram_business_basic instagram_business_content_publish instagram_business_manage_insights",
     "INSTAGRAM_GRAPH_API_BASE_URL": "https://graph.instagram.com/v25.0",
+    // Sofia uses grounded search; Jordan renders original 4:5 cards with Browser Run and
+    // stores immutable provider-ready JPEGs in the existing R2 media bucket.
+    "SOCIAL_MEDIA_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
+    "SOCIAL_TREND_GEMINI_MODEL": "gemini-3.5-flash",
     "GEMINI_MODEL": "gemini-2.5-flash-lite-preview-06-17",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
     // Live local-competitor discovery uses Gemini with Google Search grounding.
@@ -206,6 +210,10 @@
   "ai": {
     "binding": "AI",
     "remote": true
+  },
+
+  "browser": {
+    "binding": "BROWSER"
   },
 
   "r2_buckets": [

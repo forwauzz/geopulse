@@ -27,8 +27,13 @@ function readyMedia(rows: ReadonlyArray<DistributionAssetMediaRow>): Distributio
 
 function captionFor(asset: DistributionAssetRow): string {
   const base = asset.caption_text?.trim() || asset.body_plaintext?.trim() || asset.title?.trim() || '';
-  const cta = asset.cta_url?.trim() || '';
-  const combined = cta && !base.includes(cta) ? `${base}\n\n${cta}` : base;
+  // URLs in Instagram captions are not clickable. Appending a long tracked URL made the
+  // automated posts look broken; the tracked destination remains on the asset while the
+  // public caption uses the account's link-in-bio path.
+  const combined =
+    asset.cta_url?.trim() && !/\blink in bio\b/i.test(base)
+      ? `${base}\n\nRun a free scan — link in bio.`
+      : base;
   return combined.slice(0, 2200);
 }
 

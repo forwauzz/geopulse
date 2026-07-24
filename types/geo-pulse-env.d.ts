@@ -5,6 +5,9 @@
 interface CloudflareEnv {
   SCAN_CACHE: KVNamespace;
   SCAN_QUEUE: Queue;
+  DISTRIBUTION_QUEUE?: Queue;
+  /** Cloudflare Browser Run binding used for deterministic social-card rendering. */
+  BROWSER: Fetcher;
   NEXT_PUBLIC_SUPABASE_URL: string;
   NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
   NEXT_PUBLIC_APP_URL: string;
@@ -14,6 +17,11 @@ interface CloudflareEnv {
   GEMINI_API_KEY: string;
   GEMINI_MODEL: string;
   GEMINI_ENDPOINT: string;
+  SOCIAL_TREND_GEMINI_MODEL?: string;
+  SOCIAL_TREND_OPENAI_MODEL?: string;
+  SOCIAL_MEDIA_PUBLIC_BASE?: string;
+  INSTAGRAM_GRAPH_API_BASE_URL?: string;
+  OPENAI_API_KEY?: string;
   BENCHMARK_EXECUTION_PROVIDER?: string;
   BENCHMARK_EXECUTION_API_KEY?: string;
   BENCHMARK_EXECUTION_MODEL?: string;

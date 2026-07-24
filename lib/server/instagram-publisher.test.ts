@@ -86,6 +86,7 @@ describe('Instagram publisher', () => {
     });
     const createBody = String(fetchImpl.mock.calls[0]?.[1]?.body);
     expect(createBody).toContain('image_url=https%3A%2F%2Fcdn.example.com%2Fhero.jpg');
-    expect(createBody).toContain('utm_source%3Dinstagram');
+    expect(createBody).toContain('link+in+bio');
+    expect(createBody).not.toContain('utm_source%3Dinstagram');
   });
 });

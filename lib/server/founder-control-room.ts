@@ -5,7 +5,7 @@ import type { RevenueAgencySnapshot } from './revenue-agency-agent';
 export type WorkforceDecision = 'Keep' | 'Repair' | 'Merge as capability' | 'Retire';
 
 export type WorkforceMember = {
-  readonly id: 'maya' | 'noah' | 'priya' | 'elena' | 'jordan' | 'marcus';
+  readonly id: 'maya' | 'noah' | 'priya' | 'elena' | 'sofia' | 'jordan' | 'marcus';
   readonly name: string;
   readonly role: string;
   readonly icon: string;
@@ -57,13 +57,23 @@ export const NAMED_WORKFORCE: readonly WorkforceMember[] = [
     capabilityKeys: ['research'],
   },
   {
+    id: 'sofia',
+    name: 'Sofia Chen',
+    role: 'Trend & Audience Researcher',
+    icon: 'travel_explore',
+    initials: 'SC',
+    color: 'bg-fuchsia-600',
+    job: 'Finds source-linked AI-search, agency, and small-business trends and hands Jordan a scored, original daily slate.',
+    capabilityKeys: ['social_proof'],
+  },
+  {
     id: 'jordan',
     name: 'Jordan Reyes',
-    role: 'Growth Director',
+    role: 'Social Producer & Publisher',
     icon: 'campaign',
     initials: 'JR',
     color: 'bg-rose-600',
-    job: 'Owns editorial, safe social proof, outreach, Instagram, and qualified organic demand.',
+    job: 'Turns Sofia’s slate and verified GEO-Pulse proof into original, crop-safe posts and schedules the daily mix.',
     capabilityKeys: ['marketing_autopilot', 'social_proof', 'outreach'],
   },
   {
@@ -118,6 +128,7 @@ const EVENT_HINTS: Record<WorkforceMember['id'], readonly string[]> = {
   noah: ['onboarding', 'activation', 'provision', 'recovery', 'checkout'],
   priya: ['report', 'gpm', 'monitor', 'competitor', 'outcome', 'audit'],
   elena: ['lead', 'outreach', 'funnel', 'conversion', 'customer_learning'],
+  sofia: ['sofia', 'social_trend', 'trend_research'],
   jordan: ['editorial', 'social', 'distribution', 'instagram', 'outreach'],
   marcus: ['failed', 'error', 'queue', 'schedule', 'stripe', 'self_improvement', 'cron'],
 };
@@ -141,6 +152,7 @@ function nextActionFor(member: WorkforceMember, snapshot: RevenueAgencySnapshot)
     ? 'Close the gap between completed scans and delivered reports.'
     : 'Verify customer actions and prepare the next monitoring update.';
   if (member.id === 'elena') return `Explain why ${snapshot.focus} is the weakest handoff in the weekly learning brief.`;
+  if (member.id === 'sofia') return 'Score today’s source-linked trends and prepare four distinct content angles.';
   if (member.id === 'jordan') return snapshot.proofAssets === 0
     ? 'Create a claim-safe proof asset from verified evidence.'
     : 'Distribute qualified proof without exceeding cadence limits.';

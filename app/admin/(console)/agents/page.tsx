@@ -372,16 +372,16 @@ export default async function AdminAgentsPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="font-sans text-lg font-bold text-on-background">Social distribution + proof</h2>
+              <h2 className="font-sans text-lg font-bold text-on-background">Sofia → Jordan</h2>
               <StateDot enabled={social.mode !== 'off'} />
             </div>
             <p className="mt-1 max-w-2xl font-sans text-sm text-on-surface-variant">
-              Turns verified GEO-Pulse evidence and published insights into safe, tracked social assets.
+              Sofia finds source-linked ideas. Jordan creates, checks, schedules, and learns from four varied daily posts.
             </p>
           </div>
           <form action={runSocialProofNow}>
             <button type="submit" className="rounded-xl bg-primary px-4 py-2 font-sans text-sm font-bold text-on-primary">
-              Create proof now
+              Prepare today
             </button>
           </form>
         </div>
@@ -402,12 +402,13 @@ export default async function AdminAgentsPage() {
               <input name="dailyCap" type="number" min="1" max="5" defaultValue={social.dailyCap} className={`${inputClass} w-28`} />
             </label>
             <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
-              Morning
-              <input name="morningHourLocal" type="number" min="0" max="23" defaultValue={social.morningHourLocal} className={`${inputClass} w-24`} />
-            </label>
-            <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
-              Evening
-              <input name="eveningHourLocal" type="number" min="0" max="23" defaultValue={social.eveningHourLocal} className={`${inputClass} w-24`} />
+              Posting times ({social.timezone})
+              <input
+                name="postingHoursLocal"
+                defaultValue={social.postingHoursLocal.join(', ')}
+                placeholder="9, 12, 15, 19"
+                className={`${inputClass} w-40`}
+              />
             </label>
             <input type="hidden" name="timezone" value={social.timezone} />
             <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
@@ -417,6 +418,8 @@ export default async function AdminAgentsPage() {
           </div>
 
           <div className="mt-4 grid gap-2 md:grid-cols-2">
+            <Checkbox name="trendResearchEnabled" label="Sofia trend research" description="Grounded, source-linked research; source media is never copied." defaultChecked={social.trendResearchEnabled} />
+            <Checkbox name="learningEnabled" label="Performance learning" description="Prioritize scans and qualified visits over vanity reach." defaultChecked={social.learningEnabled} />
             <Checkbox name="educationalEnabled" label="Published article insights" defaultChecked={social.educationalEnabled} />
             <Checkbox name="industryHumorEnabled" label="Agency humor + industry memes" description="Light, useful posts for agency owners and SEO consultants; no unsupported claims." defaultChecked={social.industryHumorEnabled} />
             <Checkbox name="aggregateDataEnabled" label="Anonymous aggregate data" description="Directional product usage, never presented as an industry benchmark." defaultChecked={social.aggregateDataEnabled} />
@@ -424,7 +427,7 @@ export default async function AdminAgentsPage() {
             <Checkbox name="auditScreenshotsEnabled" label="Audit report screenshots" description="Only redacted or consented media can pass review." defaultChecked={social.auditScreenshotsEnabled} />
             <Checkbox name="clientProofEnabled" label="Client proof" description="Still requires an explicit consent record and claim-safe evidence." defaultChecked={social.clientProofEnabled} />
             <Checkbox name="carouselEnabled" label="Carousels" defaultChecked={social.carouselEnabled} />
-            <Checkbox name="reelsEnabled" label="Reels" description="Publishing requires 1080×1920, audio, safe feed/grid crops, checked copy and claims, unique media, and a recorded Meta preview approval." defaultChecked={social.reelsEnabled} />
+            <Checkbox name="reelsEnabled" label="Reels" description="Reel concepts stay review-gated until 9:16 video, audio, grid/feed previews, and Meta preview approval all pass." defaultChecked={social.reelsEnabled} />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -432,7 +435,7 @@ export default async function AdminAgentsPage() {
               Save
             </button>
             <p className="font-sans text-xs text-on-surface-variant">
-              Approval and consent gates stay active even in autonomous mode.
+              Default rhythm: timely insight · agency humor · saveable carousel · product proof.
             </p>
           </div>
         </form>
