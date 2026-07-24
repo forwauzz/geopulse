@@ -96,7 +96,7 @@ export async function storeGpmReport(args: {
 
   if (args.bucket) {
     try {
-      const key = `gpm-reports/${config.id}/${windowDate}-${platform}.pdf`;
+      const key = `gpm-reports/${config.id}/${windowDate}-${platform}-${runGroupId}.pdf`;
       await args.bucket.put(key, pdfBytes, {
         httpMetadata: { contentType: 'application/pdf', cacheControl: 'private, max-age=3600' },
       });
@@ -116,17 +116,19 @@ export async function storeGpmReport(args: {
     }
   }
 
-  // 5. Persist report record — upsert so re-runs overwrite the same window slot
+  // 5. Persist a versioned record. Including the immutable run id in the stored window key
+  // preserves every recheck while the payload keeps the clean customer-facing cadence window.
+  const storedWindowKey = `${windowDate}@${runGroupId}`;
   const { data: inserted, error: insertErr } = await args.supabase
     .from('gpm_reports')
-    .upsert(
+    .insert(
       {
         config_id: config.id,
         run_group_id: runGroupId,
         startup_workspace_id: config.startup_workspace_id ?? null,
         agency_account_id: config.agency_account_id ?? null,
         platform,
-        window_date: windowDate,
+        window_date: storedWindowKey,
         pdf_r2_key: pdfR2Key,
         pdf_url: pdfUrl,
         report_payload_version: '1',
@@ -138,9 +140,10 @@ export async function storeGpmReport(args: {
           visibility_pct: payload.visibilityPct,
           industry_rank: payload.industryRank,
           prompt_count: payload.prompts.length,
+          cadence_window: windowDate,
+          report_run_group_id: runGroupId,
         },
-      },
-      { onConflict: 'config_id,platform,window_date' }
+      }
     )
     .select('id')
     .single();
@@ -154,7 +157,7 @@ export async function storeGpmReport(args: {
   const resendFrom = args.env.RESEND_FROM_EMAIL?.trim();
   if (config.report_email && resendKey && resendFrom) {
     try {
-      const idempotencyKey = `gpm-report/${config.id}/${platform}/${windowDate}`;
+      const idempotencyKey = `gpm-report/${config.id}/${platform}/${windowDate}/${runGroupId}`;
       const emailResult = await sendGpmReportEmail({
         apiKey: resendKey,
         from: resendFrom,

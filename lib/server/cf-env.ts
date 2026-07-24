@@ -79,6 +79,9 @@ export type PaymentApiEnv = ScanApiEnv & {
   STRIPE_PRICE_ID_MONITOR_ANNUAL?: string;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
+  ANTHROPIC_API_KEY?: string;
+  GPM_NARRATIVE_MODEL?: string;
+  GPM_REPORT_R2_PUBLIC_BASE?: string;
   KIT_API_KEY: string;
   BUTTONDOWN_API_KEY: string;
   GHOST_ADMIN_API_URL: string;
@@ -298,6 +301,9 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       STRIPE_PRICE_ID_MONITOR_ANNUAL: pickEnvString(e, 'STRIPE_PRICE_ID_MONITOR_ANNUAL'),
       RESEND_API_KEY: pickEnvString(e, 'RESEND_API_KEY'),
       RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
+      ANTHROPIC_API_KEY: pickEnvString(e, 'ANTHROPIC_API_KEY'),
+      GPM_NARRATIVE_MODEL: pickEnvString(e, 'GPM_NARRATIVE_MODEL'),
+      GPM_REPORT_R2_PUBLIC_BASE: pickEnvString(e, 'GPM_REPORT_R2_PUBLIC_BASE'),
       KIT_API_KEY: pickEnvString(e, 'KIT_API_KEY'),
       BUTTONDOWN_API_KEY: pickEnvString(e, 'BUTTONDOWN_API_KEY'),
       GHOST_ADMIN_API_URL: pickEnvString(e, 'GHOST_ADMIN_API_URL'),
@@ -343,6 +349,9 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       STRIPE_PRICE_ID_MONITOR_ANNUAL: process.env['STRIPE_PRICE_ID_MONITOR_ANNUAL'] ?? '',
       RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
+      ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY'] ?? '',
+      GPM_NARRATIVE_MODEL: process.env['GPM_NARRATIVE_MODEL'] ?? '',
+      GPM_REPORT_R2_PUBLIC_BASE: process.env['GPM_REPORT_R2_PUBLIC_BASE'] ?? '',
       KIT_API_KEY: process.env['KIT_API_KEY'] ?? '',
       BUTTONDOWN_API_KEY: process.env['BUTTONDOWN_API_KEY'] ?? '',
       GHOST_ADMIN_API_URL: process.env['GHOST_ADMIN_API_URL'] ?? '',

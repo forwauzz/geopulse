@@ -147,6 +147,8 @@ export async function executeGpmClientRun(args: {
   readonly triggerSource?: string;
   readonly reportEnv?: GpmReportStoreEnvLike;
   readonly reportBucket?: GpmR2BucketLike;
+  /** Unique suffix for a customer-requested recheck inside the normal cadence window. */
+  readonly runVersion?: string;
 }): Promise<GpmRunSummary> {
   const now = args.now ?? new Date();
   const cadence = args.config.cadence;
@@ -208,7 +210,9 @@ export async function executeGpmClientRun(args: {
       continue;
     }
 
-    const runKey = buildGpmRunKey(args.config.id, platform, windowDate);
+    const runKey = args.runVersion
+      ? `${buildGpmRunKey(args.config.id, platform, windowDate)}:recheck:${args.runVersion}`
+      : buildGpmRunKey(args.config.id, platform, windowDate);
     const existing = await repo.getRunGroupByScheduleKey(runKey);
     if (existing) {
       platformResults.push({ platform, status: 'skipped_existing', runGroupId: existing.id });
