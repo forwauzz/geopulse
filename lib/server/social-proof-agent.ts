@@ -17,8 +17,22 @@ import {
   createDistributionEngineRepository,
   type DistributionAccountRow,
   type DistributionAssetRow,
+  type DistributionAssetType,
   type DistributionProviderFamily,
 } from './distribution-engine-repository';
+import {
+  renderSocialCardSet,
+  type BrowserRunBinding,
+  type SocialMediaBucket,
+  type SocialRenderedMedia,
+} from './social-card-renderer';
+import {
+  buildDailySocialSlate,
+  discoverSocialTrends,
+  type SocialTrendEnv,
+  type SocialTrendIdea,
+} from './social-trend-agent';
+import { collectInstagramPerformance } from './instagram-performance-agent';
 import { structuredLogWithClientAndWait } from './structured-log';
 
 export type SocialProofAgentMode = 'off' | 'draft' | 'approval' | 'autonomous';
@@ -34,15 +48,32 @@ export type SocialProofAgentConfig = {
   readonly clientProofEnabled: boolean;
   readonly carouselEnabled: boolean;
   readonly reelsEnabled: boolean;
+  readonly trendResearchEnabled: boolean;
+  readonly learningEnabled: boolean;
   readonly minAggregateSampleSize: number;
   readonly timezone: string;
-  readonly morningHourLocal: number;
-  readonly eveningHourLocal: number;
+  readonly postingHoursLocal: readonly number[];
+};
+
+export type SocialProofMedia = {
+  readonly mediaKind: 'image' | 'carousel_slide';
+  readonly storageUrl: string;
+  readonly mimeType: string;
+  readonly altText: string;
+  readonly sortOrder: number;
+  readonly metadata: Record<string, unknown>;
 };
 
 export type SocialProofCandidate = {
   readonly key: string;
-  readonly kind: 'before_after' | 'aggregate' | 'educational' | 'industry_humor';
+  readonly kind:
+    | 'before_after'
+    | 'aggregate'
+    | 'educational'
+    | 'industry_humor'
+    | 'timely'
+    | 'carousel'
+    | 'proof_demo';
   readonly title: string;
   readonly caption: string;
   readonly ctaUrl: string;
@@ -50,7 +81,9 @@ export type SocialProofCandidate = {
   readonly mediaUrl: string | null;
   readonly mediaMimeType: string | null;
   readonly mediaAlt: string | null;
-  readonly evidence: Record<string, string | number | boolean | null>;
+  readonly media?: readonly SocialProofMedia[];
+  readonly assetType?: DistributionAssetType;
+  readonly evidence: Record<string, unknown>;
   readonly safeForAutonomousPublish: boolean;
 };
 
@@ -61,6 +94,13 @@ export type SocialProofAgentResult = {
   readonly assetsCreated: number;
   readonly jobsCreated: number;
   readonly reason?: string;
+};
+
+export type SocialProductionEnv = SocialTrendEnv & {
+  readonly BROWSER?: BrowserRunBinding;
+  readonly REPORT_FILES?: SocialMediaBucket;
+  readonly SOCIAL_MEDIA_PUBLIC_BASE?: string;
+  readonly INSTAGRAM_GRAPH_API_BASE_URL?: string;
 };
 
 type ScanRow = {
@@ -106,6 +146,27 @@ function readHour(config: Record<string, unknown>, key: string, fallback: number
     : fallback;
 }
 
+function readPostingHours(config: Record<string, unknown>): readonly number[] {
+  const raw = config['posting_hours_local'];
+  const values = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'string'
+      ? raw.split(',')
+      : [
+          readHour(config, 'morning_hour_local', 9),
+          12,
+          15,
+          readHour(config, 'evening_hour_local', 19),
+        ];
+  const hours = [...new Set(values
+    .map((value) => typeof value === 'number' ? value : Number.parseInt(String(value), 10))
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 23)
+    .map((value) => Math.floor(value)))]
+    .sort((a, b) => a - b)
+    .slice(0, 5);
+  return hours.length > 0 ? hours : [9, 12, 15, 19];
+}
+
 export function resolveSocialProofAgentConfig(
   config: Record<string, unknown>,
   enabled: boolean,
@@ -121,7 +182,7 @@ export function resolveSocialProofAgentConfig(
 
   return {
     mode,
-    dailyCap: readPositiveInt(config, 'daily_cap', 2, 5),
+    dailyCap: readPositiveInt(config, 'daily_cap', 4, 5),
     beforeAfterEnabled: readBoolean(config, 'before_after_enabled', true),
     auditScreenshotsEnabled: readBoolean(config, 'audit_screenshots_enabled', false),
     aggregateDataEnabled: readBoolean(config, 'aggregate_data_enabled', true),
@@ -130,13 +191,14 @@ export function resolveSocialProofAgentConfig(
     clientProofEnabled: readBoolean(config, 'client_proof_enabled', false),
     carouselEnabled: readBoolean(config, 'carousel_enabled', true),
     reelsEnabled: readBoolean(config, 'reels_enabled', false),
+    trendResearchEnabled: readBoolean(config, 'trend_research_enabled', true),
+    learningEnabled: readBoolean(config, 'learning_enabled', true),
     minAggregateSampleSize: readPositiveInt(config, 'min_aggregate_sample_size', 20, 500),
     timezone:
       typeof config['timezone'] === 'string' && config['timezone'].trim()
         ? config['timezone'].trim()
         : 'America/Toronto',
-    morningHourLocal: readHour(config, 'morning_hour_local', 9),
-    eveningHourLocal: readHour(config, 'evening_hour_local', 17),
+    postingHoursLocal: readPostingHours(config),
   };
 }
 
@@ -218,8 +280,8 @@ export function buildBeforeAfterCandidate(
       after_score: latest.score,
       delta,
     },
-    // Safe claim, but media must still be supplied/reviewed before a visual post can ship.
-    safeForAutonomousPublish: false,
+    // Own-site evidence is claim-safe; candidateCanPublish still requires rendered media.
+    safeForAutonomousPublish: true,
   };
 }
 
@@ -282,7 +344,7 @@ export function buildAggregateCandidate(
       failed_percentage: percentage,
       anonymized: true,
     },
-    safeForAutonomousPublish: false,
+    safeForAutonomousPublish: true,
   };
 }
 
@@ -335,6 +397,11 @@ export function buildIndustryHumorCandidate(
     key: `industry-humor-${item.id}`,
     kind: 'industry_humor',
     title: `Agency reality check: ${item.title}`,
+    // Jordan renders a distinct meme card. Reusing the article hero made the old feed
+    // repetitive and did not visually communicate humor.
+    mediaUrl: null,
+    mediaMimeType: null,
+    mediaAlt: null,
     caption: [
       `Client: “We rank on Google, so ChatGPT must recommend us too… right?”`,
       ``,
@@ -351,6 +418,221 @@ export function buildIndustryHumorCandidate(
       format: 'industry_humor',
       claim_boundary: 'no_equivalence_between_search_rank_and_ai_citation',
     },
+  };
+}
+
+export function buildEducationalCarouselCandidate(
+  item: ContentRow,
+  appUrl: string
+): SocialProofCandidate | null {
+  const educational = buildEducationalCandidate(item, appUrl);
+  if (!educational) return null;
+  return {
+    ...educational,
+    key: `carousel-${item.id}`,
+    kind: 'carousel',
+    title: item.title,
+    caption: [
+      item.title,
+      '',
+      'A saveable checklist for making the useful answer easier for people and AI systems to find.',
+      '',
+      'Save it for your next site or client review. Run a free scan — link in bio.',
+      '',
+      '#AIVisibility #GenerativeEngineOptimization #AgencyTools',
+    ].join('\n'),
+    mediaUrl: null,
+    mediaMimeType: null,
+    mediaAlt: null,
+    assetType: 'carousel_post',
+    evidence: {
+      ...educational.evidence,
+      format: 'original_checklist_carousel',
+      checklist_items: [
+        'Answer the core question early',
+        'Use concrete headings and stable terminology',
+        'Support claims with visible evidence',
+        'Make the next action obvious',
+      ],
+    },
+  };
+}
+
+export function buildProductDemoCandidate(appUrl: string): SocialProofCandidate {
+  return {
+    key: 'proof-demo-ai-readiness-audit-v1',
+    kind: 'proof_demo',
+    title: 'What an AI-readiness audit actually shows',
+    caption: [
+      'An AI-visibility score is only useful when it tells you what to fix.',
+      '',
+      'GEO-Pulse checks crawl access, extractability, structure, direct answers, and trust signals—then turns the findings into a prioritized next move.',
+      '',
+      'No ranking promises. Just observable problems and practical fixes.',
+      '',
+      'Run a free scan — link in bio.',
+      '',
+      '#AIVisibility #SEOAudit #AgencyTools',
+    ].join('\n'),
+    ctaUrl: buildTrackedCta(appUrl, 'proof-demo-ai-readiness-audit-v1'),
+    contentItemId: null,
+    mediaUrl: null,
+    mediaMimeType: null,
+    mediaAlt: null,
+    assetType: 'single_image_post',
+    evidence: {
+      source_label: 'GEO-Pulse product behavior',
+      product_truth: true,
+      claim_boundary: 'observable_readiness_signals_no_ranking_guarantee',
+    },
+    safeForAutonomousPublish: true,
+  };
+}
+
+function trendIdeaCandidate(idea: SocialTrendIdea, appUrl: string): SocialProofCandidate {
+  return {
+    key: `sofia-${idea.key}`,
+    kind:
+      idea.slot === 'timely'
+        ? 'timely'
+        : idea.slot === 'carousel'
+          ? 'carousel'
+          : idea.slot === 'proof'
+            ? 'proof_demo'
+            : 'industry_humor',
+    title: idea.title,
+    caption: idea.caption,
+    ctaUrl: buildTrackedCta(appUrl, `sofia-${idea.key}`),
+    contentItemId: null,
+    mediaUrl: null,
+    mediaMimeType: null,
+    mediaAlt: null,
+    assetType: idea.slot === 'carousel' ? 'carousel_post' : 'single_image_post',
+    evidence: {
+      research_agent: 'sofia',
+      source_url: idea.sourceUrl,
+      source_label: idea.sourceLabel,
+      source_type: idea.sourceType,
+      why_now: idea.whyNow,
+      audience: idea.audience,
+      score: idea.score,
+      discovered_at: idea.discoveredAt,
+      original_angle: idea.angle,
+      copied_media: false,
+    },
+    safeForAutonomousPublish: idea.safeForAutonomousPublish,
+  };
+}
+
+function cardKind(candidate: SocialProofCandidate):
+  | 'timely'
+  | 'humor'
+  | 'carousel'
+  | 'proof'
+  | 'educational' {
+  if (candidate.kind === 'industry_humor') return 'humor';
+  if (candidate.kind === 'carousel') return 'carousel';
+  if (
+    candidate.kind === 'before_after' ||
+    candidate.kind === 'aggregate' ||
+    candidate.kind === 'proof_demo'
+  ) {
+    return 'proof';
+  }
+  return candidate.kind === 'timely' ? 'timely' : 'educational';
+}
+
+function candidateBullets(candidate: SocialProofCandidate): string[] {
+  const evidence = candidate.evidence;
+  if (Array.isArray(evidence['checklist_items'])) {
+    return evidence['checklist_items']
+      .filter((value): value is string => typeof value === 'string')
+      .slice(0, 5);
+  }
+  if (candidate.kind === 'proof_demo') {
+    return ['Crawl access', 'Extractability', 'Page structure', 'Trust signals'];
+  }
+  if (candidate.kind === 'aggregate') {
+    return [
+      `${String(evidence['failed_percentage'] ?? '')}% failed this check`,
+      `${String(evidence['sample_size'] ?? '')} anonymous recent scans`,
+      'Directional product usage, not an industry benchmark',
+    ];
+  }
+  if (candidate.kind === 'before_after') {
+    return [
+      `Before: ${String(evidence['before_score'] ?? '')}/100`,
+      `After: ${String(evidence['after_score'] ?? '')}/100`,
+      'Observed on our own site; no ranking guarantee',
+    ];
+  }
+  const angle = typeof evidence['original_angle'] === 'string'
+    ? String(evidence['original_angle'])
+    : '';
+  return angle
+    ? angle.split(/[.;]\s+/).map((value) => value.trim()).filter(Boolean).slice(0, 4)
+    : [];
+}
+
+function candidateSupportingText(candidate: SocialProofCandidate): string {
+  const firstParagraph = candidate.caption
+    .split(/\n\s*\n/)
+    .map((value) => value.trim())
+    .find((value) => value && value !== candidate.title);
+  return (firstParagraph || candidate.caption).replace(/#\w+/g, '').trim().slice(0, 240);
+}
+
+async function materializeCandidateMedia(args: {
+  readonly candidate: SocialProofCandidate;
+  readonly env: SocialProductionEnv;
+  readonly dateKey: string;
+}): Promise<SocialProofCandidate> {
+  if (args.candidate.media && args.candidate.media.length > 0) return args.candidate;
+  if (
+    args.candidate.mediaUrl &&
+    args.candidate.mediaMimeType === 'image/jpeg'
+  ) {
+    return args.candidate;
+  }
+  const publicBase = args.env.SOCIAL_MEDIA_PUBLIC_BASE?.trim();
+  if (!args.env.BROWSER || !args.env.REPORT_FILES || !publicBase) return args.candidate;
+  const sourceLabel =
+    typeof args.candidate.evidence['source_label'] === 'string'
+      ? String(args.candidate.evidence['source_label'])
+      : null;
+  const media = await renderSocialCardSet({
+    browser: args.env.BROWSER,
+    bucket: args.env.REPORT_FILES,
+    publicBase,
+    dateKey: args.dateKey,
+    brief: {
+      key: args.candidate.key,
+      kind: cardKind(args.candidate),
+      eyebrow:
+        args.candidate.kind === 'industry_humor'
+          ? 'Agency reality'
+          : args.candidate.kind === 'aggregate' || args.candidate.kind === 'before_after'
+            ? 'What the evidence shows'
+            : args.candidate.kind === 'carousel'
+              ? 'Save this checklist'
+              : 'What changed',
+      headline: args.candidate.title,
+      supportingText: candidateSupportingText(args.candidate),
+      sourceLabel,
+      bullets: candidateBullets(args.candidate),
+    },
+  });
+  return {
+    ...args.candidate,
+    media: media.map((row: SocialRenderedMedia) => ({
+      mediaKind: row.mediaKind,
+      storageUrl: row.storageUrl,
+      mimeType: row.mimeType,
+      altText: row.altText,
+      sortOrder: row.sortOrder,
+      metadata: row.metadata,
+    })),
+    assetType: media.length > 1 ? 'carousel_post' : 'single_image_post',
   };
 }
 
@@ -395,18 +677,11 @@ export function instagramScheduleSlot(
   timezone: string,
   hourLocal: number
 ): string {
-  const current = localParts(now, timezone);
   const targetMinute = 30;
-  const targetPassed =
-    current.hour > hourLocal || (current.hour === hourLocal && current.minute >= targetMinute);
-  if (targetPassed) return new Date(now.getTime() + 2 * 60_000).toISOString();
-  for (let minutes = 0; minutes <= 24 * 60; minutes += 5) {
+  for (let minutes = 1; minutes <= 48 * 60; minutes += 1) {
     const candidate = new Date(now.getTime() + minutes * 60_000);
     const local = localParts(candidate, timezone);
     if (
-      local.year === current.year &&
-      local.month === current.month &&
-      local.day === current.day &&
       local.hour === hourLocal &&
       local.minute === targetMinute
     ) {
@@ -452,19 +727,32 @@ function candidateCanPublish(
 ): boolean {
   if (!account || !candidate.safeForAutonomousPublish) return false;
   if (account.provider_name === 'instagram') {
-    return Boolean(candidate.mediaUrl && candidate.mediaMimeType === 'image/jpeg');
+    if (candidate.assetType === 'carousel_post') {
+      return Boolean(
+        candidate.media &&
+        candidate.media.length >= 2 &&
+        candidate.media.every((row) => row.mimeType === 'image/jpeg')
+      );
+    }
+    return Boolean(
+      (candidate.mediaUrl && candidate.mediaMimeType === 'image/jpeg') ||
+      candidate.media?.some(
+        (row) => row.mediaKind === 'image' && row.mimeType === 'image/jpeg'
+      )
+    );
   }
   return true;
 }
 
 export function orderAutonomousCandidates(
-  candidates: ReadonlyArray<SocialProofCandidate>
+  candidates: ReadonlyArray<SocialProofCandidate>,
+  historicalPerformance: ReadonlyMap<SocialProofCandidate['kind'], number> = new Map()
 ): SocialProofCandidate[] {
-  const educational = candidates.filter(
-    (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'educational'
-  );
-  const humor = candidates.filter(
-    (candidate) => candidate.safeForAutonomousPublish && candidate.kind === 'industry_humor'
+  const ranked = [...candidates].sort(
+    (a, b) =>
+      (historicalPerformance.get(b.kind) ?? 0) -
+        (historicalPerformance.get(a.kind) ?? 0) ||
+      a.key.localeCompare(b.key)
   );
   const ordered: SocialProofCandidate[] = [];
   const used = new Set<SocialProofCandidate>();
@@ -478,14 +766,20 @@ export function orderAutonomousCandidates(
     if (candidate.mediaUrl) usedMedia.add(candidate.mediaUrl);
   };
 
-  for (let index = 0; index < educational.length; index += 1) {
-    add(educational[index]);
-    // Use the next article for the lighter post. This prevents two same-day posts
-    // from reusing one hero while still alternating education and agency humor.
-    add(humor[index + 1]);
+  const groups: ReadonlyArray<ReadonlyArray<SocialProofCandidate['kind']>> = [
+    ['timely'],
+    ['industry_humor'],
+    ['carousel'],
+    ['before_after', 'aggregate', 'proof_demo'],
+    ['educational'],
+  ];
+  for (const kinds of groups) {
+    add(ranked.find(
+      (candidate) => candidate.safeForAutonomousPublish && kinds.includes(candidate.kind)
+    ));
   }
 
-  for (const candidate of candidates) {
+  for (const candidate of ranked) {
     if (used.has(candidate)) continue;
     if (candidate.mediaUrl && usedMedia.has(candidate.mediaUrl)) continue;
     add(candidate);
@@ -493,9 +787,43 @@ export function orderAutonomousCandidates(
   return ordered;
 }
 
+function historicalPerformanceByKind(
+  assets: ReadonlyArray<DistributionAssetRow>
+): ReadonlyMap<SocialProofCandidate['kind'], number> {
+  const totals = new Map<SocialProofCandidate['kind'], { total: number; count: number }>();
+  for (const asset of assets) {
+    const kind = asset.metadata['proof_kind'];
+    const score = asset.metadata['performance_score'];
+    if (
+      (kind === 'before_after' ||
+        kind === 'aggregate' ||
+        kind === 'educational' ||
+        kind === 'industry_humor' ||
+        kind === 'timely' ||
+        kind === 'carousel' ||
+        kind === 'proof_demo') &&
+      typeof score === 'number' &&
+      Number.isFinite(score)
+    ) {
+      const row = totals.get(kind) ?? { total: 0, count: 0 };
+      row.total += score;
+      row.count += 1;
+      totals.set(kind, row);
+    }
+  }
+  return new Map(
+    [...totals].map(([kind, row]) => [kind, row.count > 0 ? row.total / row.count : 0])
+  );
+}
+
+function accountProviderIsInstagram(accounts: ReadonlyArray<DistributionAccountRow>): boolean {
+  return accounts.some((account) => account.provider_name === 'instagram');
+}
+
 export async function runSocialProofAgent(args: {
   readonly supabase: SupabaseClient;
   readonly appUrl: string;
+  readonly env?: SocialProductionEnv;
   readonly force?: boolean;
   readonly now?: Date;
 }): Promise<SocialProofAgentResult> {
@@ -515,7 +843,8 @@ export async function runSocialProofAgent(args: {
 
   try {
     const repo = createDistributionEngineRepository(args.supabase as never);
-    const [scanResult, contentResult, accounts] = await Promise.all([
+    const now = args.now ?? new Date();
+    const [scanResult, contentResult, accounts, existingAssets] = await Promise.all([
       args.supabase
         .from('scans')
         .select('id,domain,score,letter_grade,issues_json,run_source,created_at')
@@ -529,9 +858,23 @@ export async function runSocialProofAgent(args: {
         .order('published_at', { ascending: false })
         .limit(25),
       repo.listAccounts({ status: 'connected' }),
+      repo.listAssets({ providerFamily: 'instagram' }),
     ]);
     if (scanResult.error) throw scanResult.error;
     if (contentResult.error) throw contentResult.error;
+
+    let performanceLearning = { checked: 0, updated: 0, failed: 0 };
+    if (config.learningEnabled && accountProviderIsInstagram(accounts)) {
+      try {
+        performanceLearning = await collectInstagramPerformance({
+          supabase: args.supabase,
+          graphBaseUrl: args.env?.INSTAGRAM_GRAPH_API_BASE_URL,
+          now,
+        });
+      } catch {
+        performanceLearning = { checked: 0, updated: 0, failed: 1 };
+      }
+    }
 
     const scans = (scanResult.data ?? []) as ScanRow[];
     const content = (contentResult.data ?? []) as ContentRow[];
@@ -557,37 +900,93 @@ export async function runSocialProofAgent(args: {
         if (candidate) candidates.push(candidate);
       }
     }
+    if (config.carouselEnabled) {
+      for (const item of content) {
+        const candidate = buildEducationalCarouselCandidate(item, args.appUrl);
+        if (candidate) candidates.push(candidate);
+      }
+    }
+    candidates.push(buildProductDemoCandidate(args.appUrl));
+
+    let trendProvider: string | null = null;
+    let trendReason: string | null = null;
+    if (config.trendResearchEnabled && args.env) {
+      const discovery = await discoverSocialTrends(args.env, now);
+      if (discovery.ok) {
+        trendProvider = discovery.provider;
+        const recentlyUsed = new Set(
+          existingAssets
+            .map((asset) => asset.source_key ?? '')
+            .filter((key) => key.startsWith('sofia-'))
+            .map((key) => key.slice('sofia-'.length))
+        );
+        for (const idea of buildDailySocialSlate(discovery.ideas, recentlyUsed)) {
+          candidates.push(trendIdeaCandidate(idea, args.appUrl));
+        }
+      } else {
+        trendReason = discovery.reason;
+      }
+    }
 
     const account = preferredAccount(accounts);
     const family = providerFamily(account);
     const orderedCandidates =
       mode === 'autonomous'
-        ? orderAutonomousCandidates(candidates)
+        ? orderAutonomousCandidates(candidates, historicalPerformanceByKind(existingAssets))
         : candidates;
     let assetsCreated = 0;
     let jobsCreated = 0;
 
-    for (const candidate of orderedCandidates) {
+    for (const rawCandidate of orderedCandidates) {
       if (assetsCreated >= config.dailyCap) break;
-      const assetId = makeAssetId(candidate, family);
+      const assetId = makeAssetId(rawCandidate, family);
+      // A deterministic asset is immutable from the agent's perspective. Check before
+      // rendering so retries never spend Browser Run time on an existing post.
+      if (await repo.getAssetByAssetId(assetId)) continue;
+      let candidate = rawCandidate;
+      if (account?.provider_name === 'instagram' && args.env) {
+        try {
+          candidate = await materializeCandidateMedia({
+            candidate,
+            env: args.env,
+            dateKey: now.toISOString().slice(0, 10),
+          });
+        } catch (error) {
+          await structuredLogWithClientAndWait(
+            args.supabase,
+            'jordan_media_render_failed',
+            {
+              candidate_key: candidate.key,
+              reason: error instanceof Error ? error.message : 'unknown',
+            },
+            'error'
+          );
+        }
+      }
       // A deterministic asset is immutable from the agent's perspective. This both rotates
       // through the candidate pool on later runs and prevents a mode change from silently
       // promoting a previously reviewed/rejected draft.
-      if (await repo.getAssetByAssetId(assetId)) continue;
       const asset = await repo.upsertAsset({
         assetId,
         contentItemId: candidate.contentItemId,
         sourceType: candidate.contentItemId ? 'content_item' : 'manual',
         sourceKey: candidate.key,
-        assetType: candidate.mediaUrl ? 'single_image_post' : 'link_post',
+        assetType:
+          candidate.assetType ??
+          (candidate.media || candidate.mediaUrl ? 'single_image_post' : 'link_post'),
         providerFamily: family,
         title: candidate.title,
         bodyPlaintext: candidate.caption,
         captionText: candidate.caption,
-        status: assetStatusForMode(mode),
+        status:
+          mode === 'autonomous' && !candidate.safeForAutonomousPublish
+            ? 'review'
+            : assetStatusForMode(mode),
         ctaUrl: trackedProviderCta(candidate.ctaUrl, account?.provider_name ?? 'social', candidate.key),
         metadata: {
-          created_by_agent: 'social_proof_agent',
+          created_by_agent: 'jordan',
+          researched_by_agent:
+            candidate.evidence['research_agent'] === 'sofia' ? 'sofia' : null,
           proof_kind: candidate.kind,
           evidence: candidate.evidence,
           claim_boundary: 'observed_or_directional_no_ranking_guarantee',
@@ -597,9 +996,12 @@ export async function runSocialProofAgent(args: {
           carousel_enabled: config.carouselEnabled,
           reels_enabled: config.reelsEnabled,
           industry_humor_enabled: config.industryHumorEnabled,
+          trend_research_enabled: config.trendResearchEnabled,
+          learning_enabled: config.learningEnabled,
+          posting_hours_local: config.postingHoursLocal,
           visual_contract:
             account?.provider_name === 'instagram'
-              ? 'square_feed_safe_no_consecutive_media_reuse'
+              ? 'instagram_4x5_feed_and_profile_grid_safe'
               : 'provider_ready',
           reel_publish_contract:
             'Reels require 1080x1920, reel_9x16_center_safe metadata, and a recorded Meta preview approval.',
@@ -607,7 +1009,24 @@ export async function runSocialProofAgent(args: {
       });
       assetsCreated += 1;
 
-      if (candidate.mediaUrl) {
+      if (candidate.media && candidate.media.length > 0) {
+        await repo.replaceAssetMedia(
+          asset.id,
+          candidate.media.map((row) => ({
+            mediaKind: row.mediaKind,
+            storageUrl: row.storageUrl,
+            mimeType: row.mimeType,
+            altText: row.altText,
+            sortOrder: row.sortOrder,
+            providerReadyStatus: 'ready',
+            metadata: {
+              ...row.metadata,
+              proof_kind: candidate.kind,
+              source: 'jordan_original_render',
+            },
+          }))
+        );
+      } else if (candidate.mediaUrl) {
         await repo.replaceAssetMedia(asset.id, [
           {
             mediaKind: 'image',
@@ -642,10 +1061,12 @@ export async function runSocialProofAgent(args: {
             scheduledFor:
               account.provider_name === 'instagram'
                 ? instagramScheduleSlot(
-                    args.now ?? new Date(),
-                    config.timezone,
-                    jobsCreated === 0 ? config.morningHourLocal : config.eveningHourLocal
-                  )
+                     now,
+                     config.timezone,
+                     config.postingHoursLocal[
+                       Math.min(jobsCreated, config.postingHoursLocal.length - 1)
+                     ] ?? 19
+                   )
                 : null,
             status: account.provider_name === 'instagram' ? 'scheduled' : 'queued',
           });
@@ -672,6 +1093,11 @@ export async function runSocialProofAgent(args: {
         assets_created: assetsCreated,
         jobs_created: jobsCreated,
         account_provider: account?.provider_name ?? null,
+        trend_provider: trendProvider,
+        trend_reason: trendReason,
+        performance_checked: performanceLearning.checked,
+        performance_updated: performanceLearning.updated,
+        performance_failed: performanceLearning.failed,
       },
       'info'
     );

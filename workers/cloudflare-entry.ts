@@ -44,6 +44,7 @@ import {
   resolveRevenueAgencyConfig,
   runRevenueAgency,
 } from '../lib/server/revenue-agency-agent';
+import type { BrowserRunBinding } from '../lib/server/social-card-renderer';
 import { registerSelfFetch } from './lib/fetch-gate';
 import { registerLlmVerdictCache } from './scan-engine/run-scan';
 
@@ -418,7 +419,12 @@ export default {
           const result = await runRevenueAgency({
             supabase,
             appUrl: env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
-            env,
+            env: {
+              ...env,
+              // Wrangler currently emits Browser Run as Fetcher even though the deployed
+              // binding also exposes quickAction(). Keep the runtime boundary explicit.
+              BROWSER: env.BROWSER as unknown as BrowserRunBinding,
+            },
           });
           if (result.status !== 'skipped') {
             structuredLog(

@@ -40,7 +40,7 @@ describe('Social Proof Agent safeguards', () => {
 
     expect(candidate?.evidence).toMatchObject({ domain: 'getgeopulse.com', delta: 17 });
     expect(candidate?.caption).toContain('not a ranking or traffic guarantee');
-    expect(candidate?.safeForAutonomousPublish).toBe(false);
+    expect(candidate?.safeForAutonomousPublish).toBe(true);
   });
 
   it('requires a minimum anonymous sample and excludes internal benchmarks', () => {
@@ -177,14 +177,14 @@ describe('Social Proof Agent safeguards', () => {
     ]);
 
     expect(ordered.slice(0, 2).map((item) => item.key)).toEqual([
-      'educational-one',
-      'humor-two',
+      'humor-one',
+      'educational-two',
     ]);
     expect(new Set(ordered.map((item) => item.mediaUrl)).size).toBe(ordered.length);
-    expect(ordered.some((item) => item.key === 'humor-one')).toBe(false);
+    expect(ordered.some((item) => item.key === 'educational-one')).toBe(false);
   });
 
-  it('schedules Toronto posts at the local half-hour and sends a missed slot promptly', () => {
+  it('schedules Toronto posts at the next local half-hour without bunching missed slots', () => {
     expect(
       instagramScheduleSlot(
         new Date('2026-07-23T13:00:00.000Z'),
@@ -198,6 +198,6 @@ describe('Social Proof Agent safeguards', () => {
         'America/Toronto',
         9
       )
-    ).toBe('2026-07-23T14:02:00.000Z');
+    ).toBe('2026-07-24T13:30:00.000Z');
   });
 });

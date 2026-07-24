@@ -4,6 +4,7 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { registerSelfFetch } from '@workers/lib/fetch-gate';
 import type { AutonomousEditorialEnv } from './autonomous-editorial-providers';
+import type { SocialProductionEnv } from './social-proof-agent';
 import type { WorkersAiBinding } from './workers-ai';
 
 /** Route audits of our own domain through the self-reference binding (avoids the edge→origin 525). */
@@ -429,6 +430,43 @@ export async function getAutonomousEditorialEnv(): Promise<AutonomousEditorialEn
       EDITORIAL_HERO_PUBLIC_BASE: process.env['EDITORIAL_HERO_PUBLIC_BASE'] ?? '',
       EDITORIAL_WRITER_MODEL: process.env['EDITORIAL_WRITER_MODEL'] ?? '',
       EDITORIAL_REVIEWER_MODEL: process.env['EDITORIAL_REVIEWER_MODEL'] ?? '',
+    };
+  }
+}
+
+/** Bindings used by Sofia's grounded research and Jordan's original social-card renderer. */
+export async function getSocialProductionEnv(): Promise<SocialProductionEnv> {
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    const e = env as unknown as Record<string, unknown>;
+    const browser = e['BROWSER'];
+    const reportFiles = e['REPORT_FILES'];
+    return {
+      GEMINI_API_KEY: pickEnvString(e, 'GEMINI_API_KEY'),
+      GEMINI_ENDPOINT: pickEnvString(e, 'GEMINI_ENDPOINT'),
+      SOCIAL_TREND_GEMINI_MODEL: pickEnvString(e, 'SOCIAL_TREND_GEMINI_MODEL'),
+      OPENAI_API_KEY: pickEnvString(e, 'OPENAI_API_KEY'),
+      SOCIAL_TREND_OPENAI_MODEL: pickEnvString(e, 'SOCIAL_TREND_OPENAI_MODEL'),
+      SOCIAL_MEDIA_PUBLIC_BASE: pickEnvString(e, 'SOCIAL_MEDIA_PUBLIC_BASE'),
+      INSTAGRAM_GRAPH_API_BASE_URL: pickEnvString(e, 'INSTAGRAM_GRAPH_API_BASE_URL'),
+      BROWSER:
+        browser && typeof (browser as { quickAction?: unknown }).quickAction === 'function'
+          ? (browser as SocialProductionEnv['BROWSER'])
+          : undefined,
+      REPORT_FILES:
+        reportFiles && typeof (reportFiles as { put?: unknown }).put === 'function'
+          ? (reportFiles as SocialProductionEnv['REPORT_FILES'])
+          : undefined,
+    };
+  } catch {
+    return {
+      GEMINI_API_KEY: process.env['GEMINI_API_KEY'] ?? '',
+      GEMINI_ENDPOINT: process.env['GEMINI_ENDPOINT'] ?? '',
+      SOCIAL_TREND_GEMINI_MODEL: process.env['SOCIAL_TREND_GEMINI_MODEL'] ?? '',
+      OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? '',
+      SOCIAL_TREND_OPENAI_MODEL: process.env['SOCIAL_TREND_OPENAI_MODEL'] ?? '',
+      SOCIAL_MEDIA_PUBLIC_BASE: process.env['SOCIAL_MEDIA_PUBLIC_BASE'] ?? '',
+      INSTAGRAM_GRAPH_API_BASE_URL: process.env['INSTAGRAM_GRAPH_API_BASE_URL'] ?? '',
     };
   }
 }

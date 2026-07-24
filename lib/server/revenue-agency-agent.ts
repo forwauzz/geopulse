@@ -11,7 +11,11 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadAutomationSetting } from './automation-settings';
-import { runSocialProofAgent, type SocialProofAgentResult } from './social-proof-agent';
+import {
+  runSocialProofAgent,
+  type SocialProductionEnv,
+  type SocialProofAgentResult,
+} from './social-proof-agent';
 import { structuredLogWithClientAndWait } from './structured-log';
 import { runRevenueNurtureAgent, type RevenueNurtureResult } from './revenue-nurture-agent';
 import type { LeadEmailEnv } from './lead-email';
@@ -275,7 +279,7 @@ async function alreadyRanToday(supabase: SupabaseClient, now: Date): Promise<boo
 export async function runRevenueAgency(args: {
   readonly supabase: SupabaseClient;
   readonly appUrl: string;
-  readonly env?: LeadEmailEnv & AgencyProspectingEnv;
+  readonly env?: LeadEmailEnv & AgencyProspectingEnv & SocialProductionEnv;
   readonly force?: boolean;
   readonly now?: Date;
 }): Promise<RevenueAgencyRunResult> {
@@ -309,9 +313,10 @@ export async function runRevenueAgency(args: {
       judge.allowSocialProof &&
       (mode === 'assist' || mode === 'autonomous')
         ? await runSocialProofAgent({
-            supabase: args.supabase,
-            appUrl: args.appUrl,
-            now,
+          supabase: args.supabase,
+          appUrl: args.appUrl,
+          env: args.env,
+          now,
           })
         : undefined;
     const nurture =

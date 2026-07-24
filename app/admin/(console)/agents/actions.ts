@@ -12,7 +12,7 @@ import {
   runSocialProofAgent,
   type SocialProofAgentMode,
 } from '@/lib/server/social-proof-agent';
-import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import { getPaymentApiEnv, getSocialProductionEnv } from '@/lib/server/cf-env';
 
 const TOGGLEABLE: ReadonlySet<AutomationFeature> = new Set<AutomationFeature>([
   'outreach_sweep',
@@ -60,6 +60,15 @@ function intField(
   return Number.isFinite(parsed) && parsed >= min ? Math.min(parsed, max) : fallback;
 }
 
+function postingHours(formData: FormData): number[] {
+  const values = String(formData.get('postingHoursLocal') ?? '9,12,15,19')
+    .split(',')
+    .map((value) => Number.parseInt(value.trim(), 10))
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 23);
+  const unique = [...new Set(values)].sort((a, b) => a - b).slice(0, 5);
+  return unique.length > 0 ? unique : [9, 12, 15, 19];
+}
+
 export async function saveSocialProofAgent(formData: FormData): Promise<void> {
   const ctx = await loadAdminActionContext();
   if (!ctx.ok) return;
@@ -78,7 +87,7 @@ export async function saveSocialProofAgent(formData: FormData): Promise<void> {
       config: {
         ...current.config,
         mode,
-        daily_cap: intField(formData, 'dailyCap', 2, 5),
+        daily_cap: intField(formData, 'dailyCap', 4, 5),
         before_after_enabled: checked(formData, 'beforeAfterEnabled'),
         audit_screenshots_enabled: checked(formData, 'auditScreenshotsEnabled'),
         aggregate_data_enabled: checked(formData, 'aggregateDataEnabled'),
@@ -87,10 +96,11 @@ export async function saveSocialProofAgent(formData: FormData): Promise<void> {
         client_proof_enabled: checked(formData, 'clientProofEnabled'),
         carousel_enabled: checked(formData, 'carouselEnabled'),
         reels_enabled: checked(formData, 'reelsEnabled'),
+        trend_research_enabled: checked(formData, 'trendResearchEnabled'),
+        learning_enabled: checked(formData, 'learningEnabled'),
         min_aggregate_sample_size: intField(formData, 'minAggregateSampleSize', 20, 500),
         timezone: String(formData.get('timezone') ?? 'America/Toronto').trim() || 'America/Toronto',
-        morning_hour_local: intField(formData, 'morningHourLocal', 9, 23, 0),
-        evening_hour_local: intField(formData, 'eveningHourLocal', 17, 23, 0),
+        posting_hours_local: postingHours(formData),
       },
     },
     ctx.user.id
@@ -138,7 +148,12 @@ export async function runSocialProofNow(): Promise<void> {
     process.env['NEXT_PUBLIC_APP_URL']?.trim() ||
     ctx.env.NEXT_PUBLIC_APP_URL?.trim() ||
     'https://getgeopulse.com';
-  await runSocialProofAgent({ supabase: ctx.adminDb, appUrl, force: true });
+  await runSocialProofAgent({
+    supabase: ctx.adminDb,
+    appUrl,
+    env: await getSocialProductionEnv(),
+    force: true,
+  });
   revalidatePath('/admin/agents');
   revalidatePath('/dashboard/distribution');
 }
@@ -150,7 +165,10 @@ export async function runRevenueAgencyNow(): Promise<void> {
     process.env['NEXT_PUBLIC_APP_URL']?.trim() ||
     ctx.env.NEXT_PUBLIC_APP_URL?.trim() ||
     'https://getgeopulse.com';
-  const env = await getPaymentApiEnv();
+  const env = {
+    ...(await getPaymentApiEnv()),
+    ...(await getSocialProductionEnv()),
+  };
   await runRevenueAgency({ supabase: ctx.adminDb, appUrl, env, force: true });
   revalidatePath('/admin/agents');
   revalidatePath('/dashboard/distribution');

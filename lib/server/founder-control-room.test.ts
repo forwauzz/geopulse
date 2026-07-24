@@ -56,6 +56,7 @@ describe('founder control room', () => {
       'Noah Carter',
       'Priya Shah',
       'Elena Park',
+      'Sofia Chen',
       'Jordan Reyes',
       'Marcus Reed',
     ]);
