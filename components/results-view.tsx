@@ -52,6 +52,8 @@ type Props = {
   showCompetitorSearch?: boolean;
   /** Show the $39/mo monitoring subscribe CTA (UI flag `show_monitor_subscription`). */
   showMonitorSubscription?: boolean;
+  /** Signed-in email used for account-managed monitoring checkout. */
+  monitorAccountEmail?: string | null;
   /** When set, load the scan via the public share-slug route (issue #128) instead of by id. */
   shareSlug?: string;
 };
@@ -79,7 +81,7 @@ function domainFromUrl(url: string): string {
 const POLL_INTERVAL_MS = 10_000;
 const POLL_MAX_MS = 120_000;
 
-export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompetitorSearch = false, showMonitorSubscription = false, shareSlug }: Props) {
+export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompetitorSearch = false, showMonitorSubscription = false, monitorAccountEmail = null, shareSlug }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError>(null);
   const [data, setData] = useState<ScanData | null>(null);
@@ -313,7 +315,19 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         <div>
           <p className="font-headline font-semibold text-on-background">You're subscribed — welcome aboard</p>
           <p className="mt-1 font-body text-sm text-on-surface-variant">
-            We'll re-audit {host} every month and email your full report and competitor ranking, with a private link to your live stats. Your first report is on its way — check your inbox for the checkout receipt.
+            This scorecard is your baseline. We&apos;ll re-audit {host} every month and email the newest private report. You can update your card or cancel anytime in{' '}
+            <Link href="/dashboard/billing" className="font-semibold text-primary hover:underline">Billing</Link>.
+          </p>
+        </div>
+      </div>
+    ) : null}
+    {checkoutState === 'cancel' ? (
+      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low px-5 py-4">
+        <span className="material-symbols-outlined text-2xl text-on-surface-variant" aria-hidden>info</span>
+        <div>
+          <p className="font-headline font-semibold text-on-background">No charge was made</p>
+          <p className="mt-1 font-body text-sm text-on-surface-variant">
+            Checkout was closed. Your scorecard is still here, and you can start monitoring whenever you are ready.
           </p>
         </div>
       </div>
@@ -480,7 +494,12 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
           {/* Monetized recurring hook: subscribe to monitor this site monthly (flagged). Turnstile
               needs a site key, so only render when one is present. */}
           {showMonitorSubscription && turnstileSiteKey ? (
-            <MonitorSubscribeCTA siteKey={turnstileSiteKey} scanId={data.scanId} domain={host} />
+            <MonitorSubscribeCTA
+              siteKey={turnstileSiteKey}
+              scanId={data.scanId}
+              domain={host}
+              accountEmail={monitorAccountEmail}
+            />
           ) : null}
 
           {/* Dated 90-day plan + re-scan hook (spec C11) */}

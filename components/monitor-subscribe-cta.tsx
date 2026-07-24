@@ -1,6 +1,7 @@
 'use client';
 
 import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
+import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { getAttributionContext } from '@/lib/client/attribution';
 
@@ -8,6 +9,7 @@ type Props = {
   siteKey: string;
   scanId: string;
   domain: string;
+  accountEmail: string | null;
 };
 
 type Plan = 'monthly' | 'annual';
@@ -19,7 +21,7 @@ const VALUE_PROPS: readonly { icon: string; text: string }[] = [
   { icon: 'description', text: 'Full report delivered by email' },
 ];
 
-export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
+export function MonitorSubscribeCTA({ siteKey, scanId, domain, accountEmail }: Props) {
   const [plan, setPlan] = useState<Plan>('monthly');
   const [token, setToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,25 +130,42 @@ export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
       </div>
 
       <div className="mt-5 flex flex-col gap-3">
-        <Turnstile
-          ref={turnstileRef}
-          siteKey={siteKey}
-          onSuccess={setToken}
-          onExpire={() => setToken(null)}
-        />
-        {error ? <p className="font-body text-sm text-error">{error}</p> : null}
-        <button
-          type="button"
-          onClick={() => void subscribe()}
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 font-sans text-sm font-semibold text-on-primary transition hover:bg-primary-dim disabled:opacity-50"
-        >
-          <span className="material-symbols-outlined text-base" aria-hidden>bolt</span>
-          {loading ? 'Redirecting…' : `Subscribe — ${priceLabel}`}
-        </button>
-        <p className="text-center font-body text-xs text-on-surface-variant">
-          Secure checkout by Stripe. Enter your email at checkout — reports arrive there with a private link. No account, no password.
-        </p>
+        {accountEmail ? (
+          <>
+            <Turnstile
+              ref={turnstileRef}
+              siteKey={siteKey}
+              onSuccess={setToken}
+              onExpire={() => setToken(null)}
+            />
+            {error ? <p className="font-body text-sm text-error">{error}</p> : null}
+            <button
+              type="button"
+              onClick={() => void subscribe()}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 font-sans text-sm font-semibold text-on-primary transition hover:bg-primary-dim disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-base" aria-hidden>bolt</span>
+              {loading ? 'Redirecting…' : `Subscribe — ${priceLabel}`}
+            </button>
+            <p className="text-center font-body text-xs text-on-surface-variant">
+              Reports go to {accountEmail}. Manage or cancel anytime from Billing. Secure checkout by Stripe.
+            </p>
+          </>
+        ) : (
+          <>
+            <Link
+              href={`/login?mode=signup&next=${encodeURIComponent(`/results/${scanId}`)}`}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3.5 font-sans text-sm font-semibold text-on-primary transition hover:bg-primary-dim"
+            >
+              <span className="material-symbols-outlined text-base" aria-hidden>person_add</span>
+              Create free account to continue
+            </Link>
+            <p className="text-center font-body text-xs text-on-surface-variant">
+              Your account keeps every report together and gives you one place to manage billing. No card until Stripe checkout.
+            </p>
+          </>
+        )}
       </div>
     </section>
   );

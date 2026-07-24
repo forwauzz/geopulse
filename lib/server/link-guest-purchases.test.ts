@@ -56,6 +56,15 @@ describe('linkGuestPurchasesToUser', () => {
             },
           };
         }
+        if (table === 'monitoring_subscriptions') {
+          return {
+            select: () => ({
+              eq: () => ({
+                order: async () => ({ data: [], error: null }),
+              }),
+            }),
+          };
+        }
         throw new Error(`unexpected ${table}`);
       },
     } as unknown as SupabaseClient;
@@ -70,7 +79,16 @@ describe('linkGuestPurchasesToUser', () => {
   it('no-ops when list returns empty', async () => {
     const update = vi.fn();
     const supabase = {
-      from() {
+      from(table: string) {
+        if (table === 'monitoring_subscriptions') {
+          return {
+            select: () => ({
+              eq: () => ({
+                order: async () => ({ data: [], error: null }),
+              }),
+            }),
+          };
+        }
         return {
           select: () => ({
             eq: () => ({
