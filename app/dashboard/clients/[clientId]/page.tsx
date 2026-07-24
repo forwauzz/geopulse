@@ -8,7 +8,7 @@ import { loadEngineCitationMetrics, type EngineKey } from '@/lib/server/dashboar
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
-import { activateClientMonitoring, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
+import { activateClientMonitoring, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,11 +24,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -44,6 +44,19 @@ export default async function ClientScorecardPage({
   const { data, admin } = workspace;
   const account = data.accounts.find((item) => item.id === data.selectedAccountId)!;
   const client = account.clients.find((item) => item.id === clientId)!;
+  const { data: clientIdentity } = await admin
+    .from('agency_clients')
+    .select('metadata')
+    .eq('id', clientId)
+    .eq('agency_account_id', account.id)
+    .maybeSingle();
+  const shareToken = clientIdentity?.metadata && typeof clientIdentity.metadata === 'object'
+    && typeof (clientIdentity.metadata as Record<string, unknown>)['client_summary_share_token'] === 'string'
+    ? String((clientIdentity.metadata as Record<string, unknown>)['client_summary_share_token'])
+    : null;
+  const publicSummaryUrl = shareToken
+    ? `https://getgeopulse.com/client-summary/${client.id}?share=${shareToken}`
+    : null;
   const latestScan = data.scans.find((scan) => scan.agencyClientId === clientId) ?? null;
   const previousScan = latestScan
     ? data.scans.find((scan) => scan.agencyClientId === clientId && scan.id !== latestScan.id) ?? null
@@ -101,6 +114,15 @@ export default async function ClientScorecardPage({
         latestScan: latestScanDetail,
       })
     : null;
+  const { data: latestGpmReport } = configId
+    ? await admin
+        .from('gpm_reports')
+        .select('pdf_url,generated_at,platform')
+        .eq('config_id', configId)
+        .order('generated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
   const engineEntries = (Object.entries(engines) as Array<[EngineKey, { citationRate: number }]>);
 
   return (
@@ -120,8 +142,25 @@ export default async function ClientScorecardPage({
               <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check again
             </Link>
             {latestScan ? <Link href={`/results/${latestScan.id}/report`} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"><span className="material-symbols-outlined text-[18px]" aria-hidden>share</span> Share report</Link> : null}
+            <form action={createClientShareLink}>
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <button className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
+                <span className="material-symbols-outlined text-[18px]" aria-hidden>ios_share</span>
+                {shareToken ? 'Refresh share link' : 'Create client summary'}
+              </button>
+            </form>
           </div>
         </div>
+        {publicSummaryUrl ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-surface-container-low px-4 py-3">
+            <span className="material-symbols-outlined text-primary" aria-hidden>link</span>
+            <Link href={publicSummaryUrl} target="_blank" className="min-w-0 flex-1 truncate text-sm font-semibold text-primary hover:underline">
+              Open branded client summary
+            </Link>
+            <span className="text-xs text-on-surface-variant">{sp.share === 'created' ? 'Share link ready' : 'Anyone with this private link can view it'}</span>
+          </div>
+        ) : null}
       </header>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_2fr]">
@@ -246,6 +285,19 @@ export default async function ClientScorecardPage({
                 {sp.monitoring === 'saved' || sp.monitoring === 'activated' ? <span className="text-sm font-medium text-primary">{sp.monitoring === 'activated' ? 'Tracking started' : 'Saved'}</span> : null}
               </div>
               <p className="text-xs text-on-surface-variant">Tracking: {platformsEnabled.map((platform) => platform === 'chatgpt' ? 'ChatGPT' : platform === 'gemini' ? 'Gemini' : platform).join(' + ') || 'Not configured'}</p>
+              <div className="rounded-xl bg-surface-container-low p-3 text-sm">
+                {latestGpmReport ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-on-background">Latest report ready</p>
+                      <p className="mt-0.5 text-xs text-on-surface-variant">
+                        {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(latestGpmReport.generated_at))} · {String(latestGpmReport.platform) === 'chatgpt' ? 'ChatGPT' : 'Gemini'}
+                      </p>
+                    </div>
+                    {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">Delivered by email</span>}
+                  </div>
+                ) : <p className="text-on-surface-variant">The first report will appear after a visibility check.</p>}
+              </div>
             </form>
           ) : (
             <form action={activateClientMonitoring} className="mt-5 space-y-3">
@@ -325,6 +377,24 @@ export default async function ClientScorecardPage({
           <p className="mt-2 text-sm text-on-surface-variant">These are the questions potential customers ask ChatGPT and other AI engines. They appear after visibility tracking starts.</p>
         </section>
       )}
+      {configId ? (
+        <section className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="font-headline text-lg font-semibold text-on-background">Import customer questions</h2>
+              <p className="mt-1 text-sm text-on-surface-variant">Upload a CSV with a Prompt, Query, Question, or Keyword column. Existing questions are kept.</p>
+            </div>
+            <form action={importClientPromptCsv} className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <input type="hidden" name="configId" value={configId} />
+              <input name="promptCsv" type="file" accept=".csv,text/csv" required className="max-w-[220px] text-sm text-on-surface-variant file:mr-2 file:rounded-lg file:border-0 file:bg-surface-container file:px-3 file:py-2 file:font-semibold" />
+              <button className="rounded-xl bg-on-background px-4 py-2 text-sm font-semibold text-background">Import CSV</button>
+            </form>
+          </div>
+          {sp.promptImport ? <p className={`mt-3 text-sm font-medium ${sp.promptImport === 'imported' ? 'text-primary' : 'text-error'}`}>{sp.promptImport === 'imported' ? 'Questions imported' : 'No valid questions found in that file'}</p> : null}
+        </section>
+      ) : null}
       {evidence.length > 0 && domain ? <CitationEvidencePanel evidence={evidence} domain={domain} /> : null}
     </div>
   );
