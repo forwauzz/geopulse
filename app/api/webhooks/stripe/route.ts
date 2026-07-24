@@ -171,6 +171,34 @@ export async function POST(request: Request): Promise<Response> {
       stripeEventId: event.id,
       stripeSessionId: sessionObj.id,
     });
+    const userId = sessionObj.metadata?.['user_id'] ?? null;
+    const customerId = typeof sessionObj.customer === 'string'
+      ? sessionObj.customer
+      : sessionObj.customer?.id ?? null;
+    if (userId) {
+      if (customerId) {
+        await adminDb.from('users').update({ stripe_customer_id: customerId }).eq('id', userId);
+      }
+      if (scanId) {
+        await adminDb.from('scans').update({ user_id: userId }).eq('id', scanId).is('user_id', null);
+      }
+    }
+    await emitMarketingEvent(adminDb, 'payment_completed', {
+      idempotency_key: `monitor_payment:${event.id}`,
+      scan_id: scanId,
+      user_id: userId,
+      email,
+      metadata: {
+        kind: 'monitor',
+        stripe_event_id: event.id,
+        stripe_session_id: sessionObj.id,
+        stripe_subscription_id:
+          typeof sessionObj.subscription === 'string'
+            ? sessionObj.subscription
+            : sessionObj.subscription?.id ?? null,
+        amount_cents: sessionObj.amount_total ?? 0,
+      },
+    });
     structuredLog('monitor_checkout_seeded', {
       stripeEventId: event.id,
       sessionId: sessionObj.id,

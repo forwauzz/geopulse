@@ -54,6 +54,18 @@ export async function POST(): Promise<Response> {
     stripeCustomerId = subRow?.stripe_customer_id ?? '';
   }
 
+  if (!stripeCustomerId && user.email) {
+    const { data: monitorRow } = await adminDb
+      .from('monitoring_subscriptions')
+      .select('stripe_customer_id')
+      .eq('email', user.email.trim().toLowerCase())
+      .not('stripe_customer_id', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    stripeCustomerId = monitorRow?.stripe_customer_id ?? '';
+  }
+
   if (!stripeCustomerId) {
     return Response.json(
       { error: { code: 'no_customer', message: 'No billing account found for your user.' } },
