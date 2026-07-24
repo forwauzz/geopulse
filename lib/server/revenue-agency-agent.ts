@@ -20,6 +20,7 @@ import {
   type AgencyProspectingEnv,
   type AgencyProspectingResult,
 } from './agency-prospecting-agent';
+import { judgeGrowthLoop, type GrowthJudgeDecision } from './growth-judge';
 
 export type RevenueAgencyMode = 'off' | 'observe' | 'assist' | 'autonomous';
 
@@ -69,6 +70,7 @@ export type RevenueAgencyRunResult = {
   readonly proof?: SocialProofAgentResult;
   readonly nurture?: RevenueNurtureResult;
   readonly prospecting?: AgencyProspectingResult;
+  readonly judge?: GrowthJudgeDecision;
   readonly reason?: string;
 };
 
@@ -290,10 +292,11 @@ export async function runRevenueAgency(args: {
 
   try {
     const snapshot = await loadRevenueAgencySnapshot(args.supabase, now);
+    const judge = judgeGrowthLoop(snapshot);
     const marketIndex = Math.floor(now.getTime() / 86_400_000) % Math.max(config.prospectingMarkets.length, 1);
     const market = config.prospectingMarkets[marketIndex] ?? 'Toronto, Canada';
     const prospecting =
-      config.prospectingEnabled && mode === 'autonomous'
+      config.prospectingEnabled && mode === 'autonomous' && judge.allowProspecting
         ? await runAgencyProspectingAgent({
             supabase: args.supabase,
             env: args.env ?? process.env,
@@ -302,7 +305,9 @@ export async function runRevenueAgency(args: {
           })
         : undefined;
     const proof =
-      config.socialProofEnabled && (mode === 'assist' || mode === 'autonomous')
+      config.socialProofEnabled &&
+      judge.allowSocialProof &&
+      (mode === 'assist' || mode === 'autonomous')
         ? await runSocialProofAgent({
             supabase: args.supabase,
             appUrl: args.appUrl,
@@ -310,7 +315,7 @@ export async function runRevenueAgency(args: {
           })
         : undefined;
     const nurture =
-      config.nurtureEnabled && mode === 'autonomous'
+      config.nurtureEnabled && mode === 'autonomous' && judge.allowNurture
         ? await runRevenueNurtureAgent({
             supabase: args.supabase,
             appUrl: args.appUrl,
@@ -341,10 +346,15 @@ export async function runRevenueAgency(args: {
         prospecting_qualified: prospecting?.qualified ?? 0,
         prospecting_saved: prospecting?.saved ?? 0,
         prospecting_reason: prospecting?.reason ?? null,
+        growth_judge_bottleneck: judge.bottleneck,
+        growth_judge_recommendation: judge.recommendation,
+        growth_judge_allow_prospecting: judge.allowProspecting,
+        growth_judge_allow_social_proof: judge.allowSocialProof,
+        growth_judge_allow_nurture: judge.allowNurture,
       },
       'info'
     );
-    return { status: 'completed', mode, snapshot, proof, nurture, prospecting };
+    return { status: 'completed', mode, snapshot, proof, nurture, prospecting, judge };
   } catch (error) {
     const reason = error instanceof Error ? error.message : 'unknown';
     await structuredLogWithClientAndWait(

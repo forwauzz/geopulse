@@ -16,9 +16,7 @@ const VALUE_PROPS: readonly { icon: string; text: string }[] = [
   { icon: 'autorenew', text: 'Automatic re-audit every month' },
   { icon: 'trending_up', text: 'Your score tracked over time' },
   { icon: 'leaderboard', text: 'How you rank vs local competitors' },
-  { icon: 'notifications_active', text: 'Alerts when your score drops' },
   { icon: 'description', text: 'Full report delivered by email' },
-  { icon: 'history', text: 'Private history link — no login' },
 ];
 
 export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
@@ -88,13 +86,13 @@ export function MonitorSubscribeCTA({ siteKey, scanId, domain }: Props) {
 
   return (
     <section className="rounded-2xl border border-primary/25 bg-surface-container-lowest p-6 md:p-8">
-      <p className="font-label text-xs uppercase tracking-[0.22em] text-primary">Keep watching this site</p>
+      <p className="font-label text-xs uppercase tracking-[0.22em] text-primary">Recurring AI visibility</p>
       <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">
-        Monitor {domain} every month
+        Keep {domain} monitored
       </h2>
       <p className="mt-2 max-w-2xl font-body text-sm leading-6 text-on-surface-variant">
-        Your score today is a snapshot. AI search is moving fast — get a fresh audit, your competitor
-        ranking, and a full report emailed every month so you always know where you stand.
+        Today&rsquo;s audit is a snapshot. Get a fresh scan and report every month so you can see what
+        changed, what improved, and what to fix next.
       </p>
 
       <ul className="mt-5 grid gap-x-6 gap-y-2 sm:grid-cols-2">

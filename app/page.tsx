@@ -263,14 +263,14 @@ export default async function HomePage({
       <section className="relative overflow-hidden border-b border-outline-variant/15 px-6 pb-12 pt-10 text-center md:px-10 md:pb-20 md:pt-16">
         <div className="relative mx-auto max-w-6xl">
           <h1 className="mx-auto max-w-5xl font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl lg:text-8xl">
-            Stop guessing whether{' '}
+            See how{' '}
             <span
               className="box-decoration-clone inline-block -rotate-1 px-[0.12em]"
               style={{ backgroundImage: 'linear-gradient(transparent 12%, #fde047 12%, #fde047 84%, transparent 84%)' }}
             >
               AI
             </span>{' '}
-            is surfacing your company.
+            sees your business.
           </h1>
           <div className="mt-8">
             <AiEngineStrip />
@@ -279,9 +279,8 @@ export default async function HomePage({
             Editorially maintained by {SITE_EDITORIAL_NAME}.
           </p>
           <p className="mx-auto mt-6 max-w-3xl font-body text-base leading-7 text-on-surface-variant md:text-lg">
-            See, fix, and prove your AI visibility. GEO-Pulse shows where your company appears in AI
-            answers, turns gaps into prioritized improvements, and helps you verify whether visibility
-            is improving over time.
+            Check whether ChatGPT, Gemini, and Perplexity can understand and surface your company.
+            Get the gaps, what to fix first, and a clear way to track progress.
           </p>
           {uiFlags.show_monitor_subscription ? (
             <p className="mx-auto mt-6 inline-flex items-center gap-2.5 rounded-full border border-primary/40 bg-primary/10 px-5 py-2.5 font-sans text-base font-bold text-on-background shadow-sm md:text-lg">
@@ -322,7 +321,7 @@ export default async function HomePage({
               href={gapsCtaHref}
               className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
             >
-              See your AI visibility gaps
+              Check my AI visibility
             </Link>
             <Link
               href="/about"

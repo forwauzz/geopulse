@@ -601,6 +601,8 @@ export async function runSocialProofAgent(args: {
             account?.provider_name === 'instagram'
               ? 'square_feed_safe_no_consecutive_media_reuse'
               : 'provider_ready',
+          reel_publish_contract:
+            'Reels require 1080x1920, reel_9x16_center_safe metadata, and a recorded Meta preview approval.',
         },
       });
       assetsCreated += 1;
@@ -613,7 +615,14 @@ export async function runSocialProofAgent(args: {
             mimeType: candidate.mediaMimeType,
             altText: candidate.mediaAlt,
             providerReadyStatus: 'ready',
-            metadata: { proof_kind: candidate.kind, source: 'verified_editorial_hero' },
+            metadata: {
+              proof_kind: candidate.kind,
+              source: 'verified_editorial_hero',
+              width: 1024,
+              height: 1024,
+              aspect_ratio: '1:1',
+              safe_area_contract: 'central_80_percent',
+            },
           },
         ]);
       }

@@ -4,6 +4,7 @@ import type {
   DistributionAssetMediaRow,
   DistributionAssetRow,
 } from './distribution-engine-repository';
+import { assertInstagramVisualSafety } from './instagram-visual-safety';
 
 export type InstagramPublishResult = {
   readonly providerPublicationId: string;
@@ -127,6 +128,7 @@ export async function publishInstagramAsset(args: {
   readonly fetchImpl?: FetchLike;
   readonly sleep?: (ms: number) => Promise<void>;
 }): Promise<InstagramPublishResult> {
+  assertInstagramVisualSafety(args.asset, args.mediaRows);
   const instagramUserId =
     args.account.external_account_id?.trim() ||
     (typeof args.account.metadata['instagram_user_id'] === 'string'
