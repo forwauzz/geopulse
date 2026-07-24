@@ -7,7 +7,8 @@ import { getCitationEvidence } from '@/lib/server/citation-evidence';
 import { loadEngineCitationMetrics, type EngineKey } from '@/lib/server/dashboard-citation-metrics';
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
-import { saveClientMonitoring } from './actions';
+import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
+import { activateClientMonitoring, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,11 +24,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -44,6 +45,9 @@ export default async function ClientScorecardPage({
   const account = data.accounts.find((item) => item.id === data.selectedAccountId)!;
   const client = account.clients.find((item) => item.id === clientId)!;
   const latestScan = data.scans.find((scan) => scan.agencyClientId === clientId) ?? null;
+  const previousScan = latestScan
+    ? data.scans.find((scan) => scan.agencyClientId === clientId && scan.id !== latestScan.id) ?? null
+    : null;
   const domain = client.canonicalDomain ?? latestScan?.domain ?? null;
 
   const [engines, prompts, evidence, configResult] = domain
@@ -63,10 +67,12 @@ export default async function ClientScorecardPage({
   let configId: string | null = null;
   let cadence: string | null = null;
   let reportEmail: string | null = null;
+  let configMetadata: Record<string, unknown> = {};
+  let platformsEnabled: string[] = [];
   if (configResult.data?.id) {
     const { data: config } = await admin
       .from('client_benchmark_configs')
-      .select('id,competitor_list,cadence,report_email')
+      .select('id,competitor_list,cadence,report_email,metadata,platforms_enabled')
       .eq('agency_account_id', account.id)
       .eq('benchmark_domain_id', configResult.data.id)
       .maybeSingle();
@@ -74,8 +80,27 @@ export default async function ClientScorecardPage({
     configId = typeof config?.id === 'string' ? config.id : null;
     cadence = typeof config?.cadence === 'string' ? config.cadence : null;
     reportEmail = typeof config?.report_email === 'string' ? config.report_email : null;
+    configMetadata = config?.metadata && typeof config.metadata === 'object'
+      ? config.metadata as Record<string, unknown>
+      : {};
+    platformsEnabled = Array.isArray(config?.platforms_enabled) ? config.platforms_enabled : [];
   }
 
+  const { data: latestScanDetail } = latestScan
+    ? await admin
+        .from('scans')
+        .select('issues_json,full_results_json')
+        .eq('id', latestScan.id)
+        .maybeSingle()
+    : { data: null };
+  const outcome = domain
+    ? await loadClientOutcomeEngine({
+        supabase: admin,
+        domain,
+        configMetadata,
+        latestScan: latestScanDetail,
+      })
+    : null;
   const engineEntries = (Object.entries(engines) as Array<[EngineKey, { citationRate: number }]>);
 
   return (
@@ -120,6 +145,71 @@ export default async function ClientScorecardPage({
         </div>
       </section>
 
+      {outcome ? (
+        <section className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">What changed</p>
+              <h2 className="mt-2 font-headline text-xl font-semibold text-on-background">Outcome summary</h2>
+              <p className="mt-2 leading-relaxed text-on-surface-variant">{outcome.executiveSummary}</p>
+            </div>
+            {outcome.measured ? (
+              <div className="rounded-xl bg-surface-container-low px-5 py-4 text-right">
+                <p className="text-xs text-on-surface-variant">AI visibility</p>
+                <p className="mt-1 text-3xl font-bold text-on-background">{outcome.visibilityPct}%</p>
+                <p className={`mt-1 text-xs font-semibold ${outcome.trend === 'regressed' ? 'text-error' : 'text-primary'}`}>
+                  {outcome.deltaPct === null ? 'Baseline' : `${outcome.deltaPct > 0 ? '+' : ''}${outcome.deltaPct} points`}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-surface-container-low px-4 py-3 text-sm text-on-surface-variant">Baseline pending</div>
+            )}
+          </div>
+          {outcome.engines.length > 0 ? (
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              {outcome.engines.map((item) => (
+                <div key={item.engine} className="rounded-xl bg-surface-container-low p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-on-background">{ENGINE_LABEL[item.engine]}</p>
+                    <p className="text-xl font-bold text-on-background">{item.visibilityPct}%</p>
+                  </div>
+                  <p className="mt-2 text-xs text-on-surface-variant">
+                    {item.modelId} · {item.measuredAt ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.measuredAt)) : 'Time unavailable'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {latestScan?.score !== null && latestScan?.score !== undefined ? (
+            <div className="mt-3 rounded-xl border border-outline-variant/15 px-4 py-3 text-sm text-on-surface-variant">
+              Website audit: <span className="font-semibold text-on-background">{latestScan.score}/100</span>
+              {previousScan?.score !== null && previousScan?.score !== undefined
+                ? ` · ${latestScan.score - previousScan.score >= 0 ? '+' : ''}${latestScan.score - previousScan.score} points since the previous recheck`
+                : ' · first versioned baseline'}
+            </div>
+          ) : null}
+          <details className="mt-4 text-xs text-on-surface-variant">
+            <summary className="cursor-pointer font-semibold text-on-background">How this is measured</summary>
+            <p className="mt-2 max-w-3xl leading-relaxed">{outcome.methodology}</p>
+          </details>
+          {configId ? (
+            <form action={runClientVisibilityCheck} className="mt-5 flex flex-wrap items-center gap-3">
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <input type="hidden" name="configId" value={configId} />
+              <button className="inline-flex items-center gap-2 rounded-xl bg-on-background px-4 py-2.5 text-sm font-semibold text-background">
+                <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check visibility now
+              </button>
+              {sp.visibility ? (
+                <span className={`text-sm font-medium ${sp.visibility === 'checked' ? 'text-primary' : 'text-error'}`}>
+                  {sp.visibility === 'checked' ? 'New measurement saved' : sp.visibility === 'not_enabled' ? 'Monitoring is not included in this plan' : 'Check did not complete'}
+                </span>
+              ) : null}
+            </form>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float">
           <div className="flex items-start justify-between gap-4">
@@ -153,17 +243,81 @@ export default async function ClientScorecardPage({
               </label>
               <div className="flex items-center gap-3">
                 <button className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">Save delivery</button>
-                {sp.monitoring === 'saved' ? <span className="text-sm font-medium text-primary">Saved</span> : null}
+                {sp.monitoring === 'saved' || sp.monitoring === 'activated' ? <span className="text-sm font-medium text-primary">{sp.monitoring === 'activated' ? 'Tracking started' : 'Saved'}</span> : null}
               </div>
+              <p className="text-xs text-on-surface-variant">Tracking: {platformsEnabled.map((platform) => platform === 'chatgpt' ? 'ChatGPT' : platform === 'gemini' ? 'Gemini' : platform).join(' + ') || 'Not configured'}</p>
             </form>
           ) : (
-            <div className="mt-5">
-              <p className="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">AI visibility monitoring is not active for this client yet.</p>
-              <Link href="/pricing?bundle=agency_core" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">Activate monitoring <span className="material-symbols-outlined text-[16px]" aria-hidden>arrow_forward</span></Link>
-            </div>
+            <form action={activateClientMonitoring} className="mt-5 space-y-3">
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <input type="hidden" name="domain" value={domain ?? ''} />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-sm text-on-surface-variant">What the client sells
+                  <input name="topic" required placeholder="Vestibular physiotherapy" defaultValue={client.vertical ?? ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                </label>
+                <label className="text-sm text-on-surface-variant">Market
+                  <input name="location" required placeholder="Vancouver, BC" className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                </label>
+              </div>
+              <label className="block text-sm text-on-surface-variant">Buyer questions <span className="text-xs">(one per line)</span>
+                <textarea name="prompts" required rows={6} placeholder={'best vestibular therapy in Vancouver\nwhere can I get vertigo treatment in Vancouver?'} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+              </label>
+              <label className="block text-sm text-on-surface-variant">Competitors <span className="text-xs">(optional, one per line)</span>
+                <textarea name="competitorList" rows={3} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+              </label>
+              <label className="block text-sm text-on-surface-variant">Send reports to
+                <input name="reportEmail" type="email" required defaultValue={user.email ?? ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+              </label>
+              <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">
+                <span className="material-symbols-outlined text-[18px]" aria-hidden>monitoring</span> Start tracking
+              </button>
+              <p className="text-xs leading-relaxed text-on-surface-variant">Uses ChatGPT and Gemini. The first real measurement becomes the baseline; later checks show improvement or regression.</p>
+            </form>
           )}
         </div>
       </section>
+
+      {outcome && outcome.actions.length > 0 ? (
+        <section id="actions" className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Recommended next</p>
+              <h2 className="mt-2 font-headline text-xl font-semibold text-on-background">Prioritized actions</h2>
+              <p className="mt-1 text-sm text-on-surface-variant">High-impact work first. Marking an item done keeps an audit trail.</p>
+            </div>
+            <span className="material-symbols-outlined text-primary" aria-hidden>task_alt</span>
+          </div>
+          <div className="mt-5 divide-y divide-outline-variant/15">
+            {outcome.actions.map((action) => (
+              <article key={action.key} className="grid gap-3 py-4 md:grid-cols-[1fr_auto] md:items-start">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className={`font-semibold ${action.status === 'completed' ? 'text-on-surface-variant line-through' : 'text-on-background'}`}>{action.title}</h3>
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">{action.impact} impact</span>
+                    <span className="rounded-full bg-surface-container px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant">{action.effort} effort</span>
+                  </div>
+                  <p className="mt-2 text-sm text-on-surface-variant">{action.why}</p>
+                  <p className="mt-1 text-sm font-medium text-on-background">Next step: {action.nextStep}</p>
+                  {action.completedAt ? <p className="mt-1 text-xs text-on-surface-variant">Completed {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(action.completedAt))}</p> : null}
+                </div>
+                {configId ? (
+                  <form action={updateOutcomeActionStatus}>
+                    <input type="hidden" name="clientId" value={client.id} />
+                    <input type="hidden" name="agencyAccountId" value={account.id} />
+                    <input type="hidden" name="configId" value={configId} />
+                    <input type="hidden" name="actionKey" value={action.key} />
+                    <input type="hidden" name="status" value={action.status === 'completed' ? 'pending' : 'completed'} />
+                    <button className={`rounded-xl px-3 py-2 text-sm font-semibold ${action.status === 'completed' ? 'border border-outline-variant/20 text-on-background' : 'bg-on-background text-background'}`}>
+                      {action.status === 'completed' ? 'Reopen' : 'Mark done'}
+                    </button>
+                  </form>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {prompts?.tracked && domain ? <TrackedPromptsPanel panel={prompts} domain={domain} statusCode={sp.prompt} /> : (
         <section className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float">
