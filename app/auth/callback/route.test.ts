@@ -104,6 +104,21 @@ describe('GET /auth/callback', () => {
     });
   });
 
+  it('sends a fresh unbundled magic-link signup to welcome onboarding', async () => {
+    const supabase = makeSupabaseClient({
+      getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-new', email: 'new@example.com' } } }),
+    });
+    createServerClientMock.mockReturnValue(supabase);
+
+    const { GET } = await import('./route');
+    const response = await GET(
+      new NextRequest('https://example.com/auth/callback?code=abc123&mode=signup'),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://example.com/dashboard/welcome');
+  });
+
   it('returns the user to login with the original signup context when Supabase marks the link expired', async () => {
     const supabase = makeSupabaseClient({
       exchangeCodeForSession: vi.fn().mockResolvedValue({

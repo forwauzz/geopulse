@@ -77,6 +77,24 @@ describe('login actions', () => {
     });
   });
 
+  it('keeps an unbundled magic-link signup destination empty so callback onboarding can run', async () => {
+    signInWithOtp.mockResolvedValue({ error: null });
+
+    const { sendMagicLink } = await import('./actions');
+    const formData = new FormData();
+    formData.set('email', 'new@example.com');
+    formData.set('mode', 'signup');
+
+    await sendMagicLink(null, formData);
+
+    expect(signInWithOtp).toHaveBeenCalledWith({
+      email: 'new@example.com',
+      options: {
+        emailRedirectTo: 'https://getgeopulse.com/auth/callback?mode=signup',
+      },
+    });
+  });
+
   it('creates a password account, signs in, and resumes the selected bundle', async () => {
     createUser.mockResolvedValue({
       data: { user: { id: 'user-1' } },
@@ -112,6 +130,28 @@ describe('login actions', () => {
       password: 'password123',
     });
     expect(updateUserRows).toHaveBeenCalledWith({ full_name: 'Uzziel Tamon' });
+  });
+
+  it('sends a new unbundled password account to welcome onboarding', async () => {
+    createUser.mockResolvedValue({
+      data: { user: { id: 'user-new' } },
+      error: null,
+    });
+    signInWithPassword.mockResolvedValue({
+      data: { user: { id: 'user-new' } },
+      error: null,
+    });
+
+    const { signUpWithPassword } = await import('./actions');
+    const formData = new FormData();
+    formData.set('full_name', 'New User');
+    formData.set('email', 'new@example.com');
+    formData.set('password', 'password123');
+    formData.set('confirm_password', 'password123');
+
+    await expect(signUpWithPassword(null, formData)).rejects.toThrow(
+      'redirect:/dashboard/welcome'
+    );
   });
 
   it('resumes the selected bundle when an existing user signs in with password', async () => {

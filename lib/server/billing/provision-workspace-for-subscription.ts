@@ -48,6 +48,72 @@ function normalizeOrganizationName(value?: string | null): string | null {
   return trimmed.length > 0 ? trimmed.slice(0, 120) : null;
 }
 
+function canonicalDomainFromInput(value?: string | null): string | null {
+  const trimmed = value?.trim().toLowerCase() ?? '';
+  if (!trimmed) return null;
+  try {
+    const url = new URL(/^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    return url.hostname.replace(/^www\./, '').replace(/\.$/, '') || null;
+  } catch {
+    return null;
+  }
+}
+
+const PUBLIC_MAILBOX_DOMAINS = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'hotmail.com',
+  'outlook.com',
+  'live.com',
+  'icloud.com',
+  'me.com',
+  'yahoo.com',
+  'proton.me',
+  'protonmail.com',
+]);
+
+type ExistingAgencyAccount = {
+  readonly id: string;
+  readonly canonical_domain: string | null;
+  readonly created_at: string;
+};
+
+export function selectExistingAgencyAccount(
+  accounts: readonly ExistingAgencyAccount[],
+  preferredDomain: string | null,
+): ExistingAgencyAccount | null {
+  if (accounts.length === 0) return null;
+  const domainMatch = preferredDomain
+    ? accounts.find((account) => account.canonical_domain === preferredDomain)
+    : null;
+  return domainMatch ?? (accounts.length === 1 ? accounts[0] ?? null : null);
+}
+
+async function findExistingAgencyAccountForUser(
+  supabase: SupabaseClient,
+  userId: string,
+  preferredDomain: string | null,
+): Promise<ExistingAgencyAccount | null> {
+  const { data: memberships, error: membershipError } = await supabase
+    .from('agency_users')
+    .select('agency_account_id')
+    .eq('user_id', userId)
+    .eq('status', 'active');
+
+  if (membershipError || !memberships?.length) return null;
+  const ids = Array.from(new Set(memberships.map((row) => row.agency_account_id).filter(Boolean)));
+  if (ids.length === 0) return null;
+
+  const { data: accounts, error: accountError } = await supabase
+    .from('agency_accounts')
+    .select('id,canonical_domain,created_at')
+    .in('id', ids)
+    .in('status', ['pilot', 'active']);
+
+  if (accountError) return null;
+  return selectExistingAgencyAccount((accounts ?? []) as ExistingAgencyAccount[], preferredDomain);
+}
+
 /**
  * Builds a stable child-record key from the Stripe subscription id.
  * This keeps workspace/account provisioning idempotent under webhook retries.
@@ -173,26 +239,51 @@ async function provisionAgencyAccount(
   const accountKey = subscriptionProvisioningKey('agency', args.subscriptionId);
   const organizationName = normalizeOrganizationName(args.organizationName);
   const name = organizationName ?? displayNameFromSlug(slugFromEmail(args.userEmail));
+  const websiteDomain = canonicalDomainFromInput(args.websiteUrl);
+  const rawEmailDomain = canonicalDomainFromInput(args.userEmail.split('@').at(1));
+  const emailDomain =
+    rawEmailDomain && !PUBLIC_MAILBOX_DOMAINS.has(rawEmailDomain) ? rawEmailDomain : null;
+  const preferredDomain = websiteDomain ?? emailDomain;
+  const existingAccount = await findExistingAgencyAccountForUser(
+    supabase,
+    args.userId,
+    preferredDomain,
+  );
 
-  const { data: account, error: accErr } = await supabase
-    .from('agency_accounts')
-    .upsert(
-      {
-        account_key: accountKey,
-        name,
-        status: 'active',
-        billing_mode: 'public_checkout', // closest existing value for self-serve paid
-        metadata: {
-          source: 'self_serve',
-          bundle_key: args.bundleKey,
-          subscription_id: args.subscriptionId,
-          ...(organizationName ? { organization_name: organizationName } : {}),
-        },
-      },
-      { onConflict: 'account_key' }
-    )
-    .select('id')
-    .single();
+  const accountWrite = {
+    account_key: accountKey,
+    name,
+    website_domain: preferredDomain,
+    canonical_domain: preferredDomain,
+    status: 'active',
+    billing_mode: 'public_checkout',
+    metadata: {
+      source: 'self_serve',
+      bundle_key: args.bundleKey,
+      subscription_id: args.subscriptionId,
+      ...(organizationName ? { organization_name: organizationName } : {}),
+      ...(args.websiteUrl?.trim() ? { website_url: args.websiteUrl.trim() } : {}),
+    },
+  };
+
+  const { data: account, error: accErr } = existingAccount
+    ? await supabase
+        .from('agency_accounts')
+        .update({
+          status: 'active',
+          billing_mode: 'public_checkout',
+          ...(preferredDomain && !existingAccount.canonical_domain
+            ? { website_domain: preferredDomain, canonical_domain: preferredDomain }
+            : {}),
+        })
+        .eq('id', existingAccount.id)
+        .select('id')
+        .single()
+    : await supabase
+        .from('agency_accounts')
+        .upsert(accountWrite, { onConflict: 'account_key' })
+        .select('id')
+        .single();
 
   if (accErr || !account) {
     structuredError('provision_agency_account_failed', {
@@ -234,6 +325,7 @@ async function provisionAgencyAccount(
   structuredLog('provision_agency_account_created', {
     accountId: account.id,
     accountKey,
+    reusedExistingAccount: Boolean(existingAccount),
     userId: args.userId,
     bundleKey: args.bundleKey,
   }, 'info');

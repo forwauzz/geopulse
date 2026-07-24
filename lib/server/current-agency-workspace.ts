@@ -1,6 +1,7 @@
 import { getScanApiEnv } from './cf-env';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { getAgencyDashboardData, type AgencyDashboardData } from './agency-dashboard-data';
+import { reconcileAgencyHistoricalArtifacts } from './agency-artifact-reconciliation';
 
 export async function loadCurrentAgencyWorkspace(args: {
   readonly userId: string;
@@ -13,6 +14,9 @@ export async function loadCurrentAgencyWorkspace(args: {
     env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
       ? createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
       : args.supabase;
+  if (admin !== args.supabase) {
+    await reconcileAgencyHistoricalArtifacts({ supabase: admin, userId: args.userId });
+  }
   const data = await getAgencyDashboardData({
     supabase: args.supabase,
     userId: args.userId,
