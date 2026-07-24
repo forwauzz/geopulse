@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { AgencyClientManagementView } from '@/components/agency-client-management-view';
 import { DashboardScanHero } from '@/components/dashboard-scan-hero';
 import { DashboardHistoryChartsSection } from '@/components/dashboard-charts';
 import { buildDashboardHistoryCharts } from '@/lib/server/dashboard-history-charts';
@@ -515,11 +514,15 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
             ? 'Account'
             : 'Personal workspace'}
         </p>
-        <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">History</h1>
-        <p className="mt-1 font-body text-sm text-on-surface-variant">Your past audits and workspace.</p>
+        <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">
+          {agencyDashboard.accounts.length > 0 ? 'Reports' : 'History'}
+        </h1>
+        <p className="mt-1 font-body text-sm text-on-surface-variant">
+          {agencyDashboard.accounts.length > 0 ? 'Open, download, and share client reports.' : 'Your past audits and workspace.'}
+        </p>
       </div>
 
-      <DashboardScanHero
+      {agencyDashboard.accounts.length === 0 ? <DashboardScanHero
         siteKey={siteKey}
         defaultUrl={sp.url}
         agencyAccountId={agencyDashboard.selectedAccountId}
@@ -531,7 +534,7 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
         startupAccessBody={startupAccessBody}
         contextLine={scanHeroContextLine}
         authenticated
-      />
+      /> : null}
 
       {/* ── Startup workspace section ────────────────────────── */}
       {startupDashboard.workspaces.length > 0 ? (
@@ -860,27 +863,6 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
               ) : null}
 
               {/* Manage clients — collapsible disclosure */}
-              <details className="mt-5 rounded-xl border border-outline-variant/20 bg-surface-container-lowest">
-                <summary className="flex cursor-pointer select-none items-center justify-between px-5 py-3 text-sm font-semibold text-on-background hover:bg-surface-container-low rounded-xl transition">
-                  <span className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden>group</span>
-                    Manage clients
-                  </span>
-                  <span className="material-symbols-outlined text-[18px] text-on-surface-variant" aria-hidden>expand_more</span>
-                </summary>
-                <div className="border-t border-outline-variant/10 px-5 pb-5 pt-4">
-                  <AgencyClientManagementView
-                    agencyAccountId={selectedAgencyAccount?.id ?? ''}
-                    selectedClientId={selectedAgencyClient?.id ?? null}
-                    selectedClientName={selectedAgencyClient?.name ?? null}
-                    clientOptions={
-                      selectedAgencyAccount?.clients.map((c) => ({ id: c.id, name: c.name })) ?? []
-                    }
-                    selectedClientDomains={agencyDashboard.selectedClientDomains}
-                  />
-                </div>
-              </details>
-
               {agencyUiGates.reportHistory ? (
                 <ul className="mt-6 space-y-3">
                   {agencyDashboard.scans.length === 0 ? (

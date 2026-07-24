@@ -19,7 +19,7 @@ export function resolvePostSignupRedirect(args: {
   }
 
   if (args.isNewUser && !args.nextParam) {
-    return '/pricing?onboarding=1';
+    return '/dashboard/welcome';
   }
 
   return null;

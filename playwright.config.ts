@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const port = Number(process.env['PLAYWRIGHT_PORT'] ?? '3001');
 const baseURL = process.env['PLAYWRIGHT_BASE_URL'] ?? `http://127.0.0.1:${port}`;
+const chromeExecutable = process.env['PLAYWRIGHT_CHROME_EXECUTABLE'];
 const devCommand =
   process.platform === 'win32'
     ? `npm.cmd run dev -- --hostname 127.0.0.1 --port ${port}`
@@ -41,7 +42,11 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(chromeExecutable ? { video: 'off' as const } : {}),
+        ...(chromeExecutable ? { launchOptions: { executablePath: chromeExecutable } } : {}),
+      },
     },
   ],
 });

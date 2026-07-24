@@ -15,6 +15,7 @@ type DashboardSidebarProps = {
   /** Show the Automation area (granted users / admins). */
   readonly showAutomation?: boolean;
   readonly showAgents?: boolean;
+  readonly isAgencyWorkspace?: boolean;
   /** When true at `lg+`, nav shows icon rail (labels via tooltip / aria). */
   readonly desktopCollapsed?: boolean;
   readonly onToggleDesktopCollapse?: () => void;
@@ -113,7 +114,8 @@ function NavSection({
 
 // Home (/dashboard) is the search box, reached via the logo — so no "Dashboard" nav item.
 const WORKSPACE_NAV: readonly NavItem[] = [
-  { href: '/dashboard/history', label: 'History', icon: 'history', exact: true },
+  { href: '/dashboard', label: 'Home', icon: 'home', exact: true },
+  { href: '/dashboard/history', label: 'Reports', icon: 'description', exact: true },
   { href: '/dashboard/connectors', label: 'Connectors', icon: 'cable', exact: true },
   { href: '/dashboard/billing', label: 'Billing', icon: 'credit_card', exact: true },
   { href: '/dashboard/workspace', label: 'Settings', icon: 'settings', exact: true },
@@ -125,7 +127,8 @@ const WORKSPACE_NAV: readonly NavItem[] = [
 function buildWorkspaceNav(
   navFlags?: { connectors: boolean; billing: boolean; blog: boolean },
   showAutomation?: boolean,
-  showAgents?: boolean
+  showAgents?: boolean,
+  isAgencyWorkspace?: boolean
 ): readonly NavItem[] {
   const off = new Set<string>();
   if (navFlags) {
@@ -133,7 +136,14 @@ function buildWorkspaceNav(
     if (!navFlags.billing) off.add('/dashboard/billing');
     if (!navFlags.blog) off.add('/blog');
   }
-  const base = WORKSPACE_NAV.filter((item) => !off.has(item.href));
+  const filtered = WORKSPACE_NAV.filter((item) => !off.has(item.href));
+  const agencyItems: NavItem[] = isAgencyWorkspace
+    ? [
+        { href: '/dashboard/clients', label: 'Clients', icon: 'groups' },
+        { href: '/dashboard/visibility', label: 'AI visibility', icon: 'monitoring' },
+      ]
+    : [{ href: '/dashboard/visibility', label: 'AI visibility', icon: 'monitoring' }];
+  const base = [filtered[0]!, ...agencyItems, ...filtered.slice(1)];
   // Granted items go first: Fix Agent, then Automation.
   const granted: NavItem[] = [];
   if (showAgents) {
@@ -254,12 +264,13 @@ export function DashboardSidebar({
   navFlags,
   showAutomation,
   showAgents,
+  isAgencyWorkspace,
   desktopCollapsed = false,
   onToggleDesktopCollapse,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const workspaceNav = buildWorkspaceNav(navFlags, showAutomation, showAgents);
+  const workspaceNav = buildWorkspaceNav(navFlags, showAutomation, showAgents, isAgencyWorkspace);
 
   const closeMenu = () => setMobileOpen(false);
 

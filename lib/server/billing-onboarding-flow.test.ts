@@ -6,24 +6,26 @@ import {
   resolvePostSignupRedirect,
 } from './billing-onboarding-flow';
 
-describe('billing onboarding flow', () => {
-  it('routes a new signup into bundle resume and onboarding', () => {
-    expect(
-      resolvePostSignupRedirect({
-        nextParam: '/pricing',
-        bundleParam: 'startup_dev',
-        isNewUser: false,
-        organizationName: 'Acme Labs',
-      }),
-    ).toBe('/pricing?bundle=startup_dev&autosubscribe=1&organization_name=Acme+Labs');
-
+describe('resolvePostSignupRedirect', () => {
+  it('sends a new unbundled user to the short value-first welcome flow', () => {
     expect(
       resolvePostSignupRedirect({
         nextParam: null,
         bundleParam: null,
         isNewUser: true,
       }),
-    ).toBe('/pricing?onboarding=1');
+    ).toBe('/dashboard/welcome');
+  });
+
+  it('keeps a selected paid bundle on the self-serve checkout path', () => {
+    expect(
+      resolvePostSignupRedirect({
+        nextParam: '/pricing',
+        bundleParam: 'agency_core',
+        isNewUser: true,
+        organizationName: 'North Star Agency',
+      }),
+    ).toBe('/pricing?bundle=agency_core&autosubscribe=1&organization_name=North+Star+Agency');
   });
 
   it('builds the dashboard success URL and keeps provisioning state explicit', () => {
@@ -45,5 +47,15 @@ describe('billing onboarding flow', () => {
 
     expect(normalizeDeepAuditCheckoutMode('startup_bypass')).toBe('startup_bypass');
     expect(normalizeDeepAuditCheckoutMode('agency_bypass')).toBe('agency_bypass');
+  });
+
+  it('does not interrupt an existing user returning to a requested page', () => {
+    expect(
+      resolvePostSignupRedirect({
+        nextParam: '/dashboard/clients',
+        bundleParam: null,
+        isNewUser: false,
+      }),
+    ).toBeNull();
   });
 });
