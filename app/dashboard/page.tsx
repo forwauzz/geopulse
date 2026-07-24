@@ -18,6 +18,7 @@ import { TrackedPromptsPanel } from '@/components/tracked-prompts-panel';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { AgencyHome } from '@/components/agency-home';
+import { shouldRecoverOnboarding } from '@/lib/server/onboarding-recovery';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,6 +57,29 @@ export default async function DashboardHomePage({
       startupWorkspaceId = (data?.startup_workspace_id as string | undefined) ?? null;
     } catch {
       startupWorkspaceId = null;
+    }
+  }
+
+  if (!startupWorkspaceId && shouldRecoverOnboarding({
+    metadata: user.user_metadata,
+    hasAgencyWorkspace: false,
+    hasStartupWorkspace: false,
+    hasCompletedScan: false,
+  })) {
+    const { count } = await supabase
+      .from('scans')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .eq('status', 'complete');
+    if (
+      shouldRecoverOnboarding({
+        metadata: user.user_metadata,
+        hasAgencyWorkspace: false,
+        hasStartupWorkspace: false,
+        hasCompletedScan: (count ?? 0) > 0,
+      })
+    ) {
+      redirect('/dashboard/welcome');
     }
   }
 

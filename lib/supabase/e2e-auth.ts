@@ -18,7 +18,26 @@ const E2E_AGENCY_SCAN_ID = '00000000-0000-4000-8000-000000000203';
 type E2EAuthUser = {
   readonly id: string;
   readonly email: string;
+  readonly user_metadata?: {
+    readonly gp_onboarding_v1: {
+      readonly role: 'business' | 'agency';
+      readonly goal: 'visibility';
+      readonly website: null;
+      readonly completed_at: string;
+    };
+  };
 };
+
+function activatedUserMetadata(role: 'business' | 'agency'): NonNullable<E2EAuthUser['user_metadata']> {
+  return {
+    gp_onboarding_v1: {
+      role,
+      goal: 'visibility',
+      website: null,
+      completed_at: '2026-01-01T00:00:00.000Z',
+    },
+  };
+}
 
 export function isE2EAuthEnabled(): boolean {
   return process.env['E2E_AUTH_SESSIONS'] === '1' && process.env.NODE_ENV !== 'production';
@@ -38,6 +57,7 @@ export function resolveE2EAuthUserFromCookieValue(
     return {
       id: E2E_ADMIN_USER_ID,
       email: resolveAdminEmail(),
+      user_metadata: activatedUserMetadata('business'),
     };
   }
 
@@ -45,6 +65,7 @@ export function resolveE2EAuthUserFromCookieValue(
     return {
       id: E2E_AGENCY_USER_ID,
       email: 'agency@example.com',
+      user_metadata: activatedUserMetadata('agency'),
     };
   }
 

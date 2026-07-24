@@ -37,11 +37,11 @@ export type LoginActionState =
   | { ok: true; message: string }
   | { ok: false; message: string };
 
-function safeNextPath(raw: FormDataEntryValue | string | null | undefined): string {
+function safeNextPath(raw: FormDataEntryValue | string | null | undefined): string | null {
   if (typeof raw !== 'string' || raw.length === 0) {
-    return '/dashboard';
+    return null;
   }
-  return raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+  return raw.startsWith('/') && !raw.startsWith('//') ? raw : null;
 }
 
 function readTrimmedField(formData: FormData, name: string): string {
@@ -77,7 +77,9 @@ export async function sendMagicLink(
   }
 
   const redirectParams = new URLSearchParams();
-  redirectParams.set('next', nextPath);
+  if (nextPath) {
+    redirectParams.set('next', nextPath);
+  }
   if (mode === 'signup') {
     redirectParams.set('mode', 'signup');
   }
@@ -195,7 +197,7 @@ export async function signUpWithPassword(
     organizationName: normalizedOrganizationName || null,
     websiteUrl: normalizedWebsiteUrl || null,
   });
-  redirect(redirectTarget ?? nextPath);
+  redirect(redirectTarget ?? nextPath ?? '/dashboard');
 }
 
 export async function signInWithPassword(
@@ -239,5 +241,5 @@ export async function signInWithPassword(
     isNewUser: false,
     organizationName: readTrimmedField(formData, 'organization_name') || null,
   });
-  redirect(redirectTarget ?? nextPath);
+  redirect(redirectTarget ?? nextPath ?? '/dashboard');
 }
