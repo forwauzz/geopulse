@@ -7,6 +7,8 @@ export type AgencyProspectingEnv = {
   readonly GEMINI_MODEL?: string;
   readonly GEMINI_ENDPOINT?: string;
   readonly AGENCY_PROSPECTING_GEMINI_MODEL?: string;
+  readonly OPENAI_API_KEY?: string;
+  readonly AGENCY_PROSPECTING_OPENAI_MODEL?: string;
 };
 
 export type AgencyProspectingResult = {
@@ -75,6 +77,19 @@ export async function describeGeminiFailure(response: Response): Promise<string>
   return `gemini_http_${String(response.status)}`;
 }
 
+export function extractOpenAIResponseText(payload: unknown): string {
+  const output = (payload as {
+    output?: { type?: string; content?: { type?: string; text?: string }[] }[];
+  })?.output;
+  if (!Array.isArray(output)) return '';
+  return output
+    .filter((item) => item.type === 'message')
+    .flatMap((item) => item.content ?? [])
+    .filter((item) => item.type === 'output_text')
+    .map((item) => item.text ?? '')
+    .join('');
+}
+
 export function selectPublicBusinessEmail(html: string, websiteUrl: string): string | null {
   if (/do not (?:send|email).{0,40}(?:marketing|solicitation)|no unsolicited/i.test(html)) return null;
   const siteDomain = new URL(websiteUrl).hostname.replace(/^www\./, '').toLowerCase();
@@ -123,23 +138,18 @@ async function fetchHtml(url: string): Promise<string | null> {
   }
 }
 
-async function discoverAgencies(
+type AgencyDiscoveryResult =
+  | { ok: true; agencies: { name: string; url: string }[]; provider: 'gemini' | 'openai' }
+  | { ok: false; reason: string };
+
+async function discoverAgenciesWithGemini(
   env: AgencyProspectingEnv,
-  market: string,
-  limit: number
-): Promise<
-  | { ok: true; agencies: { name: string; url: string }[] }
-  | { ok: false; reason: string }
-> {
+  prompt: string
+): Promise<AgencyDiscoveryResult> {
   const key = env.GEMINI_API_KEY?.trim();
   if (!key) return { ok: false, reason: 'gemini_api_key_missing' };
   const model = resolveAgencyProspectingModel(env);
   const base = (env.GEMINI_ENDPOINT?.trim() || 'https://generativelanguage.googleapis.com/v1beta/models').replace(/\/$/, '');
-  const prompt = [
-    `Use Google Search to find ${String(limit)} independent digital marketing, SEO, or web agencies in ${market}.`,
-    'Return agencies with an official website. Exclude directories, freelancers without a business site, closed businesses, and duplicates.',
-    'Return only JSON: {"agencies":[{"name":"Agency name","url":"https://official-site.example/"}]}',
-  ].join('\n');
   const response = await fetch(`${base}/${model}:generateContent?key=${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -156,8 +166,54 @@ async function discoverAgencies(
     data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? ''
   );
   return agencies.length > 0
-    ? { ok: true, agencies }
+    ? { ok: true, agencies, provider: 'gemini' }
     : { ok: false, reason: 'gemini_no_agencies_parsed' };
+}
+
+async function discoverAgenciesWithOpenAI(
+  env: AgencyProspectingEnv,
+  prompt: string
+): Promise<AgencyDiscoveryResult> {
+  const key = env.OPENAI_API_KEY?.trim();
+  if (!key) return { ok: false, reason: 'openai_api_key_missing' };
+  const model = env.AGENCY_PROSPECTING_OPENAI_MODEL?.trim() || 'gpt-5.6-luna';
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      input: prompt,
+      tools: [{ type: 'web_search' }],
+      reasoning: { effort: 'low' },
+      max_output_tokens: 1800,
+    }),
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (!response.ok) return { ok: false, reason: `openai_http_${String(response.status)}` };
+  const agencies = parseAgencyDiscovery(extractOpenAIResponseText(await response.json()));
+  return agencies.length > 0
+    ? { ok: true, agencies, provider: 'openai' }
+    : { ok: false, reason: 'openai_no_agencies_parsed' };
+}
+
+export async function discoverAgencies(
+  env: AgencyProspectingEnv,
+  market: string,
+  limit: number
+): Promise<AgencyDiscoveryResult> {
+  const prompt = [
+    `Use web search to find ${String(limit)} independent digital marketing, SEO, or web agencies in ${market}.`,
+    'Return agencies with an official website. Exclude directories, freelancers without a business site, closed businesses, and duplicates.',
+    'Return only JSON: {"agencies":[{"name":"Agency name","url":"https://official-site.example/"}]}',
+  ].join('\n');
+  const gemini = await discoverAgenciesWithGemini(env, prompt);
+  if (gemini.ok) return gemini;
+  const openai = await discoverAgenciesWithOpenAI(env, prompt);
+  if (openai.ok) return openai;
+  return { ok: false, reason: `${gemini.reason};${openai.reason}` };
 }
 
 export async function runAgencyProspectingAgent(args: {
@@ -166,8 +222,8 @@ export async function runAgencyProspectingAgent(args: {
   readonly market: string;
   readonly dailyCap: number;
 }): Promise<AgencyProspectingResult> {
-  if (!args.env.GEMINI_API_KEY?.trim()) {
-    return { status: 'skipped', discovered: 0, qualified: 0, saved: 0, reason: 'gemini_api_key_missing' };
+  if (!args.env.GEMINI_API_KEY?.trim() && !args.env.OPENAI_API_KEY?.trim()) {
+    return { status: 'skipped', discovered: 0, qualified: 0, saved: 0, reason: 'grounded_provider_key_missing' };
   }
   const cap = Math.max(1, Math.min(10, Math.floor(args.dailyCap)));
   const discovery = await discoverAgencies(args.env, args.market, cap * 2);
@@ -207,7 +263,7 @@ export async function runAgencyProspectingAgent(args: {
   const saved = await importContacts(args.supabase, newRows, {
     segment: 'marketing-agencies',
     tags: ['agency', 'public-business-email', 'agent-qualified'],
-    source: 'gemini-grounded-search+official-website',
+    source: `${discovery.provider}-grounded-search+official-website`,
   });
   return {
     status: 'completed',

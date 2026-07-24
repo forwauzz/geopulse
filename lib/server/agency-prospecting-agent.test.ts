@@ -1,12 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   describeGeminiFailure,
+  discoverAgencies,
   parseAgencyDiscovery,
   resolveAgencyProspectingModel,
   selectPublicBusinessEmail,
 } from './agency-prospecting-agent';
 
 describe('agency prospecting qualification', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('deduplicates grounded agency domains', () => {
     expect(parseAgencyDiscovery(JSON.stringify({ agencies: [
       { name: 'A', url: 'https://agency.example/' },
@@ -44,5 +49,37 @@ describe('agency prospecting qualification', () => {
       },
     }), { status: 429 });
     await expect(describeGeminiFailure(response)).resolves.toBe('gemini_quota_or_billing_exhausted');
+  });
+
+  it('falls back to OpenAI grounded web search when Gemini quota is exhausted', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { status: 'RESOURCE_EXHAUSTED', message: 'Billing required.' },
+      }), { status: 429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        output: [{
+          type: 'message',
+          content: [{
+            type: 'output_text',
+            text: JSON.stringify({
+              agencies: [{ name: 'Grounded Agency', url: 'https://grounded.example/' }],
+            }),
+          }],
+        }],
+      }), { status: 200 }));
+
+    await expect(discoverAgencies({
+      GEMINI_API_KEY: 'gemini-test',
+      OPENAI_API_KEY: 'openai-test',
+    }, 'Toronto, Canada', 1)).resolves.toEqual({
+      ok: true,
+      provider: 'openai',
+      agencies: [{ name: 'Grounded Agency', url: 'https://grounded.example/' }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      model: 'gpt-5.6-luna',
+      tools: [{ type: 'web_search' }],
+    });
   });
 });
