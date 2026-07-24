@@ -6,6 +6,7 @@ import {
   loadRevenueAgencySnapshot,
   resolveRevenueAgencyConfig,
 } from '@/lib/server/revenue-agency-agent';
+import { judgeGrowthLoop } from '@/lib/server/growth-judge';
 import { resolveSocialProofAgentConfig } from '@/lib/server/social-proof-agent';
 import {
   runRevenueAgencyNow,
@@ -107,6 +108,7 @@ export default async function AdminAgentsPage() {
     revenueSetting.enabled,
     revenueSetting.killSwitch
   );
+  const growthJudge = judgeGrowthLoop(revenueSnapshot);
   const internal = agents.filter(
     (agent) =>
       agent.audience === 'internal' &&
@@ -217,7 +219,7 @@ export default async function AdminAgentsPage() {
         </div>
         <p className="mt-3 rounded-xl bg-surface-container-low px-3 py-2 font-sans text-xs text-on-surface-variant">
           <strong className="text-on-background">Current focus: {revenueSnapshot.focus}.</strong>{' '}
-          {revenueSnapshot.focusReason}
+          {growthJudge.recommendation}
         </p>
 
         <form action={saveRevenueAgency} className="mt-5 flex flex-wrap items-end gap-3 border-t border-outline-variant/20 pt-5">
@@ -324,7 +326,7 @@ export default async function AdminAgentsPage() {
             <Checkbox name="auditScreenshotsEnabled" label="Audit report screenshots" description="Only redacted or consented media can pass review." defaultChecked={social.auditScreenshotsEnabled} />
             <Checkbox name="clientProofEnabled" label="Client proof" description="Still requires an explicit consent record and claim-safe evidence." defaultChecked={social.clientProofEnabled} />
             <Checkbox name="carouselEnabled" label="Carousels" defaultChecked={social.carouselEnabled} />
-            <Checkbox name="reelsEnabled" label="Reels" description="Enabled for generation; publishing still requires provider-ready media." defaultChecked={social.reelsEnabled} />
+            <Checkbox name="reelsEnabled" label="Reels" description="Publishing requires 9:16 media plus a recorded Meta preview approval." defaultChecked={social.reelsEnabled} />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
