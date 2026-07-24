@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ContentDestinationPublishError } from './content-destination-adapters';
 import { refreshSocialOAuthToken } from './distribution-social-oauth';
-import { dispatchDistributionJobById, dispatchDistributionJobs } from './distribution-job-dispatcher';
+import {
+  canDispatchApprovedManualInstagramAsset,
+  dispatchDistributionJobById,
+  dispatchDistributionJobs,
+} from './distribution-job-dispatcher';
 
 vi.mock('./distribution-social-oauth', async () => {
   const actual = await vi.importActual<typeof import('./distribution-social-oauth')>(
@@ -55,6 +59,27 @@ const baseEnv = {
 };
 
 describe('dispatchDistributionJobs', () => {
+  it('allows only approved manual Instagram assets through the social-only path', () => {
+    expect(
+      canDispatchApprovedManualInstagramAsset(
+        { provider_name: 'instagram' },
+        { source_type: 'manual', provider_family: 'instagram', status: 'approved' }
+      )
+    ).toBe(true);
+    expect(
+      canDispatchApprovedManualInstagramAsset(
+        { provider_name: 'x' },
+        { source_type: 'manual', provider_family: 'x', status: 'approved' }
+      )
+    ).toBe(false);
+    expect(
+      canDispatchApprovedManualInstagramAsset(
+        { provider_name: 'instagram' },
+        { source_type: 'manual', provider_family: 'instagram', status: 'review' }
+      )
+    ).toBe(false);
+  });
+
   it('dispatches due content-item jobs and records a successful attempt', async () => {
     const repo = {
       listDispatchableJobs: vi.fn().mockResolvedValue([
@@ -303,7 +328,8 @@ describe('dispatchDistributionJobs', () => {
           status: 'failed',
           destination_url: null,
           provider_post_id: null,
-          last_error: 'Only content_item sourced assets are dispatchable in the current runtime.',
+          last_error:
+            'Only content_item sourced assets or approved manual Instagram assets are dispatchable in the current runtime.',
           created_by_user_id: 'user-1',
           completed_at: '2026-04-02T01:00:00.000Z',
           created_at: '2026-04-02T00:00:00.000Z',
@@ -370,7 +396,8 @@ describe('dispatchDistributionJobs', () => {
       expect.objectContaining({
         distributionJobId: 'job-row-2',
         attemptNumber: 1,
-        errorMessage: 'Only content_item sourced assets are dispatchable in the current runtime.',
+        errorMessage:
+          'Only content_item sourced assets or approved manual Instagram assets are dispatchable in the current runtime.',
       })
     );
   });
