@@ -514,6 +514,7 @@ function trendIdeaCandidate(idea: SocialTrendIdea, appUrl: string): SocialProofC
       source_label: idea.sourceLabel,
       source_type: idea.sourceType,
       why_now: idea.whyNow,
+      hook: idea.hook,
       audience: idea.audience,
       score: idea.score,
       discovered_at: idea.discoveredAt,

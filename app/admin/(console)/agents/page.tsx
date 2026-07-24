@@ -10,6 +10,7 @@ import {
 } from '@/lib/server/revenue-agency-agent';
 import { judgeGrowthLoop } from '@/lib/server/growth-judge';
 import { resolveSocialProofAgentConfig } from '@/lib/server/social-proof-agent';
+import { loadSofiaResearchHandoffs } from '@/lib/server/sofia-research';
 import {
   runRevenueAgencyNow,
   runSocialProofNow,
@@ -94,11 +95,12 @@ export default async function AdminAgentsPage() {
     env = process.env as unknown as Record<string, string | undefined>;
   }
 
-  const [agents, socialSetting, revenueSetting, revenueSnapshot] = await Promise.all([
+  const [agents, socialSetting, revenueSetting, revenueSnapshot, sofiaResearch] = await Promise.all([
     loadAgentStatuses(ctx.adminDb, env),
     loadAutomationSetting(ctx.adminDb, 'social_proof_agent'),
     loadAutomationSetting(ctx.adminDb, 'revenue_agency'),
     loadRevenueAgencySnapshot(ctx.adminDb),
+    loadSofiaResearchHandoffs(ctx.adminDb),
   ]);
   const social = resolveSocialProofAgentConfig(
     socialSetting.config,
@@ -439,6 +441,76 @@ export default async function AdminAgentsPage() {
             </p>
           </div>
         </form>
+
+        <details className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low">
+          <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-sans text-sm font-bold text-on-background">
+            <span className="inline-flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>travel_explore</span>
+              Sofia research
+            </span>
+            <span className="font-label text-[0.62rem] uppercase tracking-wider text-on-surface-variant">
+              {sofiaResearch.length} saved handoff{sofiaResearch.length === 1 ? '' : 's'}
+            </span>
+          </summary>
+          <div className="border-t border-outline-variant/15 px-4 py-4">
+            <p className="font-sans text-xs leading-5 text-on-surface-variant">
+              Sofia saves the source, hook, why-now note, audience, and original angle that Jordan used.
+              Third-party screenshots and media are never copied; Jordan creates original GEO-Pulse assets.
+            </p>
+            {sofiaResearch.length === 0 ? (
+              <p className="mt-3 rounded-lg bg-surface-container-lowest px-3 py-3 font-sans text-sm text-on-surface-variant">
+                No saved handoffs yet. Sofia’s next successful research run will appear here.
+              </p>
+            ) : (
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {sofiaResearch.map((note) => (
+                  <article key={note.assetId} className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-sans text-sm font-bold leading-5 text-on-background">{note.hook}</p>
+                        <p className="mt-1 font-label text-[0.62rem] uppercase tracking-wider text-on-surface-variant">
+                          {note.audience.replace('_', ' ')}
+                          {note.score !== null ? ` · ${note.score}/100` : ''}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-green-500/15 px-2 py-0.5 font-sans text-[0.68rem] font-semibold capitalize text-green-700 dark:text-green-300">
+                        {note.jobStatus ?? note.assetStatus}
+                      </span>
+                    </div>
+                    {note.whyNow ? (
+                      <p className="mt-3 font-sans text-xs leading-5 text-on-surface-variant">
+                        <span className="font-semibold text-on-background">Why now:</span> {note.whyNow}
+                      </p>
+                    ) : null}
+                    {note.angle ? (
+                      <p className="mt-2 font-sans text-xs leading-5 text-on-surface-variant">
+                        <span className="font-semibold text-on-background">Jordan’s angle:</span> {note.angle}
+                      </p>
+                    ) : null}
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                      <a
+                        href={note.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-semibold text-primary"
+                      >
+                        {note.sourceLabel}
+                        <span className="material-symbols-outlined text-[14px]" aria-hidden>open_in_new</span>
+                      </a>
+                      <span className="text-on-surface-variant">
+                        {new Date(note.discoveredAt).toLocaleDateString('en-CA', {
+                          month: 'short',
+                          day: 'numeric',
+                          timeZone: social.timezone,
+                        })}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
 
         <details className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low">
           <summary className="cursor-pointer px-4 py-3 font-sans text-sm font-bold text-on-background">
