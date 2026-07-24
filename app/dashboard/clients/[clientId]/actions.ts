@@ -9,6 +9,7 @@ import { getAutonomousEditorialEnv, getPaymentApiEnv, getScanApiEnv } from '@/li
 import { createBenchmarkExecutionAdapter } from '@/lib/server/benchmark-execution';
 import { buildGpmEntitlementsMap } from '@/lib/server/geo-performance-entitlements';
 import { executeGpmClientRun, resolveGpmPlatformModelMap } from '@/lib/server/geo-performance-schedule';
+import { parsePromptCsv } from '@/lib/server/prompt-csv';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -335,4 +336,101 @@ export async function runClientVisibilityCheck(formData: FormData): Promise<void
   const launched = summary.platformResults.filter((result) => result.status === 'launched').length;
   revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
   redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&visibility=${launched > 0 ? 'checked' : 'failed'}`);
+}
+
+export async function createClientShareLink(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    clientId: z.string().uuid(),
+    agencyAccountId: z.string().uuid(),
+  }).safeParse({
+    clientId: formData.get('clientId'),
+    agencyAccountId: formData.get('agencyAccountId'),
+  });
+  if (!parsed.success) return;
+  const auth = await authorizedAdmin(parsed.data);
+  if (!auth) return;
+  const { admin, user } = auth;
+  const { data: client } = await admin
+    .from('agency_clients')
+    .select('metadata')
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  if (!client) return;
+  const metadata = client.metadata && typeof client.metadata === 'object'
+    ? client.metadata as Record<string, unknown>
+    : {};
+  const existing = typeof metadata['client_summary_share_token'] === 'string'
+    ? metadata['client_summary_share_token']
+    : null;
+  const token = existing || crypto.randomUUID().replaceAll('-', '');
+  await admin
+    .from('agency_clients')
+    .update({
+      metadata: {
+        ...metadata,
+        client_summary_share_token: token,
+        client_summary_shared_at: new Date().toISOString(),
+        client_summary_shared_by_user_id: user.id,
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId);
+  revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
+  redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&share=created`);
+}
+
+export async function importClientPromptCsv(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    clientId: z.string().uuid(),
+    agencyAccountId: z.string().uuid(),
+    configId: z.string().uuid(),
+  }).safeParse({
+    clientId: formData.get('clientId'),
+    agencyAccountId: formData.get('agencyAccountId'),
+    configId: formData.get('configId'),
+  });
+  const file = formData.get('promptCsv');
+  if (!parsed.success || !(file instanceof File) || file.size <= 0 || file.size > 250_000) return;
+  const auth = await authorizedAdmin(parsed.data);
+  if (!auth) return;
+  const { admin, user } = auth;
+  const prompts = parsePromptCsv(await file.text());
+  if (prompts.length === 0) {
+    redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&promptImport=invalid`);
+  }
+  const { data: config } = await admin
+    .from('client_benchmark_configs')
+    .select('query_set_id')
+    .eq('id', parsed.data.configId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  if (!config?.query_set_id) return;
+  const { data: existingRows } = await admin
+    .from('benchmark_queries')
+    .select('query_text')
+    .eq('query_set_id', config.query_set_id);
+  const existing = new Set(((existingRows ?? []) as Array<{ query_text: string }>).map((row) => row.query_text.trim().toLowerCase()));
+  const remaining = Math.max(0, 20 - existing.size);
+  const additions = prompts.filter((prompt) => !existing.has(prompt.toLowerCase())).slice(0, remaining);
+  if (additions.length > 0) {
+    const importedAt = new Date().toISOString();
+    await admin.from('benchmark_queries').insert(additions.map((queryText, index) => ({
+      query_set_id: config.query_set_id,
+      query_key: `csv-${String(existing.size + index + 1).padStart(2, '0')}-${slugify(queryText)}`,
+      query_text: queryText,
+      intent_type: 'discovery',
+      topic: 'customer_import',
+      weight: 1,
+      metadata: {
+        source: 'agency_csv_import',
+        imported_at: importedAt,
+        imported_by_user_id: user.id,
+        original_filename: file.name.slice(0, 120),
+      },
+    })));
+  }
+  revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
+  redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&promptImport=imported`);
 }

@@ -110,7 +110,7 @@ test.describe('simplified agency experience', () => {
     await expect(page.getByText(/client portfolio/i)).toBeVisible();
     await expect(page.getByRole('link', { name: /e2e client co/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /^clients$/i }).filter({ visible: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: /ai visibility/i }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'AI visibility', exact: true }).filter({ visible: true })).toBeVisible();
   });
 
   test('client scorecard uses plain-language value labels', async ({ page }) => {

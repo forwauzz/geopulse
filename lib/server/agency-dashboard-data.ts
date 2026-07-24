@@ -191,6 +191,68 @@ export async function getAgencyDashboardData(args: {
 
   if (scansError || reportsError) throw scansError ?? reportsError;
 
+  // Recover account-owned historical scans that predate agency attribution. We only search the
+  // active clients' exact canonical domains, and the caller's RLS still applies. This prevents
+  // an older scan from disappearing merely because the client record was created later.
+  const clientsInScope = selectedClientId
+    ? selectedAccountClients.filter((client) => client.id === selectedClientId)
+    : selectedAccountClients;
+  const clientByDomain = new Map(
+    clientsInScope
+      .filter((client) => Boolean(client.canonical_domain))
+      .map((client) => [client.canonical_domain!.toLowerCase().replace(/^www\./, ''), client] as const),
+  );
+  const combinedScans = [...((scans ?? []) as Array<Record<string, any>>)];
+  const knownScanIds = new Set(combinedScans.map((scan) => String(scan['id'])));
+  const recoveredScanIds: string[] = [];
+  if (clientByDomain.size > 0) {
+    try {
+      const domainAliases = Array.from(clientByDomain.keys()).flatMap((domain) => [domain, `www.${domain}`]);
+      const { data: historicalScans } = await supabase
+        .from('scans')
+        .select('id,agency_account_id,agency_client_id,url,domain,score,letter_grade,created_at,run_source')
+        .in('domain', domainAliases)
+        .is('agency_client_id', null)
+        .order('created_at', { ascending: false });
+      for (const row of (historicalScans ?? []) as Array<Record<string, any>>) {
+        const id = String(row['id']);
+        if (knownScanIds.has(id)) continue;
+        const canonical = String(row['domain'] ?? '').toLowerCase().replace(/^www\./, '');
+        const matchedClient = clientByDomain.get(canonical);
+        if (!matchedClient) continue;
+        combinedScans.push({
+          ...row,
+          agency_account_id: matchedClient.agency_account_id,
+          agency_client_id: matchedClient.id,
+        });
+        knownScanIds.add(id);
+        recoveredScanIds.push(id);
+      }
+    } catch {
+      // Historical recovery is additive; the already-attributed portfolio must still render.
+    }
+  }
+  combinedScans.sort((a, b) => String(b['created_at']).localeCompare(String(a['created_at'])));
+
+  const combinedReports = [...((reports ?? []) as Array<Record<string, any>>)];
+  if (recoveredScanIds.length > 0) {
+    const { data: historicalReports } = await supabase
+      .from('reports')
+      .select('id,scan_id,agency_account_id,agency_client_id,type,email_delivered_at,pdf_generated_at,pdf_url')
+      .in('scan_id', recoveredScanIds)
+      .order('created_at', { ascending: false });
+    const reportIds = new Set(combinedReports.map((report) => String(report['id'])));
+    for (const row of (historicalReports ?? []) as Array<Record<string, any>>) {
+      if (reportIds.has(String(row['id']))) continue;
+      const recoveredScan = combinedScans.find((scan) => scan['id'] === row['scan_id']);
+      combinedReports.push({
+        ...row,
+        agency_account_id: recoveredScan?.['agency_account_id'] ?? selectedAccountId,
+        agency_client_id: recoveredScan?.['agency_client_id'] ?? null,
+      });
+    }
+  }
+
   const { data: domains, error: domainsError } =
     selectedClientIds.length > 0
       ? await supabase
@@ -236,7 +298,7 @@ export async function getAgencyDashboardData(args: {
     })),
     selectedAccountId,
     selectedClientId,
-    scans: ((scans ?? []) as Array<{
+    scans: (combinedScans as Array<{
       id: string;
       agency_account_id: string | null;
       agency_client_id: string | null;
@@ -273,7 +335,7 @@ export async function getAgencyDashboardData(args: {
       siteUrl: row.site_url,
       isPrimary: row.is_primary,
     })),
-    reports: ((reports ?? []) as Array<{
+    reports: (combinedReports as Array<{
       id: string;
       scan_id: string | null;
       agency_account_id: string | null;

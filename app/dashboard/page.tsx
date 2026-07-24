@@ -19,6 +19,7 @@ import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { AgencyHome } from '@/components/agency-home';
 import { shouldRecoverOnboarding } from '@/lib/server/onboarding-recovery';
+import { loadAgencyPortfolio } from '@/lib/server/agency-portfolio';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,14 @@ export default async function DashboardHomePage({
 
   const agencyWorkspace = await loadCurrentAgencyWorkspace({ userId: user.id, supabase });
   if (agencyWorkspace) {
-    return <AgencyHome data={agencyWorkspace.data} />;
+    const account = agencyWorkspace.data.accounts.find((item) => item.id === agencyWorkspace.data.selectedAccountId)
+      ?? agencyWorkspace.data.accounts[0]!;
+    const portfolio = await loadAgencyPortfolio({
+      supabase: agencyWorkspace.admin,
+      data: agencyWorkspace.data,
+      account,
+    });
+    return <AgencyHome data={agencyWorkspace.data} portfolio={portfolio} />;
   }
 
   // Attribute scans to the user's first startup workspace, if any.

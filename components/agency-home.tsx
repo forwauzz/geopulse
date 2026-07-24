@@ -1,23 +1,34 @@
 import Link from 'next/link';
 import type { AgencyDashboardData } from '@/lib/server/agency-dashboard-data';
+import type { AgencyPortfolioRow } from '@/lib/server/agency-portfolio';
 
 function daysSince(value: string): number {
   return Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
 }
 
-export function AgencyHome({ data }: { readonly data: AgencyDashboardData }) {
+function changeText(value: number | null): string {
+  if (value === null) return 'Baseline';
+  if (value === 0) return 'No change';
+  return `${value > 0 ? '+' : ''}${Math.round(value * 10) / 10}`;
+}
+
+export function AgencyHome({
+  data,
+  portfolio,
+}: {
+  readonly data: AgencyDashboardData;
+  readonly portfolio: readonly AgencyPortfolioRow[];
+}) {
   const account = data.accounts.find((item) => item.id === data.selectedAccountId) ?? data.accounts[0] ?? null;
   if (!account) return null;
 
-  const latestByClient = new Map<string, (typeof data.scans)[number]>();
-  for (const scan of data.scans) {
-    if (scan.agencyClientId && !latestByClient.has(scan.agencyClientId)) latestByClient.set(scan.agencyClientId, scan);
-  }
-  const clientsNeedingAttention = account.clients.filter((client) => {
-    const scan = latestByClient.get(client.id);
-    return !scan || scan.score === null || scan.score < 70 || daysSince(scan.createdAt) > 30;
-  });
-  const deliveredReports = data.reports.filter((report) => report.emailDeliveredAt || report.pdfGeneratedAt).length;
+  const clientsNeedingAttention = portfolio.filter((client) => (
+    client.readinessScore === null
+    || client.readinessScore < 70
+    || (client.measuredAt ? daysSince(client.measuredAt) > 30 : true)
+    || (client.visibilityChange !== null && client.visibilityChange < 0)
+  ));
+  const deliveredReports = portfolio.filter((client) => client.reportStatus === 'ready').length;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 py-4">
@@ -26,7 +37,7 @@ export function AgencyHome({ data }: { readonly data: AgencyDashboardData }) {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Agency home</p>
           <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">{account.name}</h1>
           <p className="mt-2 max-w-2xl text-on-surface-variant">
-            See who needs attention, open a client scorecard, or add a new client.
+            See who needs attention and the next action to take—without opening every account.
           </p>
         </div>
         <Link
@@ -56,43 +67,65 @@ export function AgencyHome({ data }: { readonly data: AgencyDashboardData }) {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="font-headline text-xl font-semibold text-on-background">Client portfolio</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">Latest AI visibility snapshot for every client.</p>
+            <p className="mt-1 text-sm text-on-surface-variant">Readiness, AI visibility, competitors, and the next action in one view.</p>
           </div>
           <Link href="/dashboard/clients" className="text-sm font-semibold text-primary hover:underline">View all</Link>
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          {account.clients.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-outline-variant/30 p-8 text-center lg:col-span-2">
+        <div className="mt-4 space-y-3">
+          {portfolio.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-outline-variant/30 p-8 text-center">
               <h3 className="font-semibold text-on-background">Add your first client</h3>
               <p className="mt-2 text-sm text-on-surface-variant">You only need their business name and website.</p>
               <Link href={`/dashboard/clients?agencyAccount=${account.id}&manage=1`} className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">
                 Add client
               </Link>
             </div>
-          ) : account.clients.map((client) => {
-            const scan = latestByClient.get(client.id);
-            const needsAttention = !scan || scan.score === null || scan.score < 70 || daysSince(scan.createdAt) > 30;
+          ) : portfolio.map((client) => {
+            const needsAttention = clientsNeedingAttention.some((item) => item.clientId === client.clientId);
             return (
               <Link
-                key={client.id}
-                href={`/dashboard/clients/${client.id}?agencyAccount=${account.id}`}
-                className="group rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-5 shadow-float transition hover:-translate-y-0.5 hover:border-primary/30"
+                key={client.clientId}
+                href={`/dashboard/clients/${client.clientId}?agencyAccount=${account.id}`}
+                className="group block rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-5 shadow-float transition hover:-translate-y-0.5 hover:border-primary/30"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <h3 className="font-semibold text-on-background">{client.name}</h3>
-                    <p className="mt-1 text-sm text-on-surface-variant">{client.canonicalDomain ?? 'Website not set'}</p>
+                    <h3 className="font-semibold text-on-background">{client.clientName}</h3>
+                    <p className="mt-1 text-sm text-on-surface-variant">{client.domain ?? 'Website not set'}</p>
                   </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${needsAttention ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'}`}>
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${needsAttention ? 'bg-amber-500/10 text-amber-700' : 'bg-emerald-500/10 text-emerald-700'}`}>
                     {needsAttention ? 'Needs attention' : 'On track'}
                   </span>
                 </div>
-                <div className="mt-6 flex items-end justify-between">
+                <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[0.8fr_0.8fr_1fr_1.5fr_auto] lg:items-end">
                   <div>
                     <p className="text-xs text-on-surface-variant">AI readiness</p>
-                    <p className="mt-1 text-3xl font-bold text-on-background">{scan?.score ?? '—'}{scan?.score !== null && scan?.score !== undefined ? <span className="text-sm font-normal text-on-surface-variant">/100</span> : null}</p>
+                    <p className="mt-1 text-2xl font-bold text-on-background">
+                      {client.readinessScore ?? '—'}
+                      {client.readinessScore !== null ? <span className="text-xs font-normal text-on-surface-variant">/100 · {changeText(client.readinessChange)}</span> : null}
+                    </p>
                   </div>
-                  <span className="material-symbols-outlined text-on-surface-variant transition group-hover:translate-x-1 group-hover:text-primary" aria-hidden>arrow_forward</span>
+                  <div>
+                    <p className="text-xs text-on-surface-variant">AI visibility</p>
+                    <p className="mt-1 text-2xl font-bold text-on-background">
+                      {client.visibilityPct !== null ? `${client.visibilityPct}%` : '—'}
+                      {client.visibilityPct !== null ? <span className="text-xs font-normal text-on-surface-variant"> · {changeText(client.visibilityChange)}</span> : null}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-on-surface-variant">Leading competitor</p>
+                    <p className="mt-1 truncate text-sm font-semibold text-on-background">{client.leadingCompetitor ?? 'Baseline pending'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-on-surface-variant">Next action</p>
+                    <p className="mt-1 line-clamp-2 text-sm font-semibold text-on-background">{client.nextAction}</p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 lg:justify-end">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${client.reportStatus === 'ready' ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                      {client.reportStatus === 'ready' ? 'Report ready' : client.reportStatus === 'scheduled' ? 'Scheduled' : 'Not started'}
+                    </span>
+                    <span className="material-symbols-outlined text-on-surface-variant transition group-hover:translate-x-1 group-hover:text-primary" aria-hidden>arrow_forward</span>
+                  </div>
                 </div>
               </Link>
             );
