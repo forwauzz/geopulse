@@ -290,7 +290,7 @@ export default async function DistributionAdminPage(props: {
                 </span>
               </div>
               <p className="mt-1 font-body text-sm text-on-surface-variant">
-                Two quality-gated posts per day: practical GEO insight in the morning, agency-friendly education or humor in the evening.
+                Four quality-gated posts per day: timely insight, agency humor, a saveable carousel, and product proof.
               </p>
             </div>
             {flags.socialOauthEnabled ? (
