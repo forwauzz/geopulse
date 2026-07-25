@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ScanForm } from '@/components/scan-form';
 import { AiEngineStrip } from '@/components/ai-engines';
+import { ScanForm } from '@/components/scan-form';
 import { ScrollReveal } from '@/components/scroll-reveal';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
@@ -13,6 +13,7 @@ import {
   SITE_DESCRIPTION,
   toAbsoluteUrl,
 } from '@/lib/server/public-site-seo';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
 
@@ -190,6 +191,10 @@ export default async function HomePage({
   const { url: prefillUrl, agencyAccount, agencyClient } = await searchParams;
   const baseUrl = await loadBaseUrl();
   const siteKey = getTurnstileSiteKey();
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
   // When Pricing is hidden by the App Settings flag, point CTAs at sign-in instead.
   const uiFlags = await loadUiFlags();
@@ -290,13 +295,14 @@ export default async function HomePage({
             </p>
           ) : null}
           <div id="audit" className="mx-auto mt-10 max-w-5xl scroll-mt-28">
-            {siteKey ? (
+            {siteKey || user ? (
               <ScanForm
                 variant="hero"
                 siteKey={siteKey}
                 defaultUrl={prefillUrl}
                 agencyAccountId={agencyAccount ?? null}
                 agencyClientId={agencyClient ?? null}
+                skipTurnstile={Boolean(user)}
               />
             ) : (
               <div className="space-y-3 rounded-3xl border border-error/20 bg-surface-container-low p-6 text-left text-error shadow-float">

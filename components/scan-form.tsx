@@ -166,6 +166,15 @@ export function ScanForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, token]);
 
+  useEffect(() => {
+    if (!pending) return;
+    const timeout = window.setTimeout(() => {
+      setPending(false);
+      setError('Verification took too long. Refresh the page and try again.');
+    }, 15_000);
+    return () => window.clearTimeout(timeout);
+  }, [pending]);
+
   return (
     <form
       onSubmit={onSubmit}

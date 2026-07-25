@@ -5,6 +5,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { getBrandSettingsView, resolveReportFilesPublicBase } from '@/lib/server/report-branding-settings';
+import { PrintScorecardButton } from '@/components/print-scorecard-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -103,6 +104,7 @@ export default async function ClientSummaryPage({
 
   return (
     <main className="min-h-screen bg-[#f4f3ef] px-4 py-8 text-[#171713] md:px-8 print:bg-white print:p-0">
+      <PrintScorecardButton />
       <div className="mx-auto max-w-5xl overflow-hidden rounded-[28px] bg-white shadow-xl print:max-w-none print:rounded-none print:shadow-none">
         <section className="min-h-[760px] p-7 md:p-12 print:min-h-[100vh]" style={{ borderTop: `8px solid ${brandColor}` }}>
           <header className="flex flex-wrap items-start justify-between gap-4 border-b border-black/10 pb-7">
