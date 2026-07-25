@@ -202,5 +202,12 @@ describe('Social Proof Agent safeguards', () => {
         9
       )
     ).toBe('2026-07-24T13:00:00.000Z');
+    expect(
+      instagramScheduleSlot(
+        new Date('2026-07-23T14:12:34.567Z'),
+        'America/Toronto',
+        17
+      )
+    ).toBe('2026-07-23T21:00:00.000Z');
   });
 });

@@ -701,8 +701,10 @@ export function instagramScheduleSlot(
   // the hour so the time shown in the UI/database is a time we can actually
   // honor, instead of advertising :30 and dispatching at the following hour.
   const targetMinute = 0;
+  const minuteBoundary = new Date(now);
+  minuteBoundary.setUTCSeconds(0, 0);
   for (let minutes = 1; minutes <= 48 * 60; minutes += 1) {
-    const candidate = new Date(now.getTime() + minutes * 60_000);
+    const candidate = new Date(minuteBoundary.getTime() + minutes * 60_000);
     const local = localParts(candidate, timezone);
     if (
       local.hour === hourLocal &&
