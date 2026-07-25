@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { CitationEvidencePanel } from '@/components/citation-evidence-panel';
+import { ClientScorecardShareControls } from '@/components/client-scorecard-share-controls';
 import { TrackedPromptsPanel } from '@/components/tracked-prompts-panel';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getCitationEvidence } from '@/lib/server/citation-evidence';
@@ -142,23 +143,24 @@ export default async function ClientScorecardPage({
               <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check again
             </Link>
             {latestScan ? <Link href={`/results/${latestScan.id}/report`} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"><span className="material-symbols-outlined text-[18px]" aria-hidden>share</span> Share report</Link> : null}
-            <form action={createClientShareLink}>
-              <input type="hidden" name="clientId" value={client.id} />
-              <input type="hidden" name="agencyAccountId" value={account.id} />
-              <button className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
-                <span className="material-symbols-outlined text-[18px]" aria-hidden>ios_share</span>
-                {shareToken ? 'Refresh share link' : 'Create client summary'}
-              </button>
-            </form>
+            {!shareToken ? (
+              <form action={createClientShareLink}>
+                <input type="hidden" name="clientId" value={client.id} />
+                <input type="hidden" name="agencyAccountId" value={account.id} />
+                <button className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
+                  <span className="material-symbols-outlined text-[18px]" aria-hidden>ios_share</span>
+                  Create client scorecard
+                </button>
+              </form>
+            ) : null}
           </div>
         </div>
         {publicSummaryUrl ? (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-surface-container-low px-4 py-3">
-            <span className="material-symbols-outlined text-primary" aria-hidden>link</span>
-            <Link href={publicSummaryUrl} target="_blank" className="min-w-0 flex-1 truncate text-sm font-semibold text-primary hover:underline">
-              Open branded client summary
-            </Link>
-            <span className="text-xs text-on-surface-variant">{sp.share === 'created' ? 'Share link ready' : 'Anyone with this private link can view it'}</span>
+          <div className="mt-4 rounded-xl bg-surface-container-low px-4 py-3">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              Customer-ready scorecard
+            </p>
+            <ClientScorecardShareControls summaryUrl={publicSummaryUrl} />
           </div>
         ) : null}
       </header>
