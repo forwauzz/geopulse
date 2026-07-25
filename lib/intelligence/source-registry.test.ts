@@ -35,6 +35,8 @@ describe('intelligence source registry', () => {
       'worker.distribution_queue',
       'worker.cron',
       'r2.audit_artifacts',
+      'public.intelligence_evidence_objects',
+      'public.intelligence_evidence_edges',
     ];
 
     for (const id of required) expect(ids.has(id), id).toBe(true);
