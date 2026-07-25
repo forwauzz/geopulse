@@ -116,6 +116,21 @@ export type IdentityCandidate = {
   readonly ownerId?: string | null;
 };
 
+export type IdentityOwner = {
+  readonly ownerType: NonNullable<IdentityCandidate['ownerType']>;
+  readonly ownerId: string | null;
+};
+
+/** Invalid legacy owner shapes stay unowned; identity must never invent a tenant link. */
+export function validIdentityOwner(candidate: IdentityCandidate): IdentityOwner | null {
+  if (!candidate.ownerType) return null;
+  const ownerId = candidate.ownerId?.trim() || null;
+  if (candidate.ownerType === 'internal_benchmark') {
+    return ownerId === null ? { ownerType: candidate.ownerType, ownerId: null } : null;
+  }
+  return ownerId ? { ownerType: candidate.ownerType, ownerId } : null;
+}
+
 export type IdentityPlan =
   | {
       readonly status: 'mapped';

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   NOT_APPLICABLE_PROTOCOL_VALUE,
   UNKNOWN_PROTOCOL_VALUE,
+  aggregateMeasurementWindowCoverage,
   evaluateMeasurementLaneCompatibility,
   inferProvider,
   measurementLaneFingerprint,
+  normalizeMeasurementWindowTimestamp,
   type MeasurementLaneProtocol,
 } from './measurement-lane';
 
@@ -95,5 +97,19 @@ describe('measurement lane protocol', () => {
     ['custom', 'unknown'],
   ])('infers provider for %s', (model, provider) => {
     expect(inferProvider(model)).toBe(provider);
+  });
+
+  it('normalizes legacy UTC hour keys without guessing a local timezone', () => {
+    expect(normalizeMeasurementWindowTimestamp('2026-07-11T12')).toBe(
+      '2026-07-11T12:00:00.000Z'
+    );
+    expect(normalizeMeasurementWindowTimestamp('not-a-time')).toBeNull();
+  });
+
+  it('aggregates duplicate lane/window run groups instead of choosing one', () => {
+    expect(aggregateMeasurementWindowCoverage([
+      { expected: 10, observed: 10, qualityState: 'complete' },
+      { expected: 10, observed: 5, qualityState: 'partial' },
+    ])).toEqual({ expected: 20, observed: 15, qualityState: 'partial' });
   });
 });

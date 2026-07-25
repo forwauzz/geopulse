@@ -12,6 +12,7 @@ import {
 } from '../lib/intelligence/quality-policy';
 
 const PAGE_SIZE = 1_000;
+const WRITE_BATCH_SIZE = 250;
 const APPLY_CONFIRMATION = '--confirm=INT-006';
 const HISTORY_START = '2026-04-01T00:00:00.000Z';
 const REQUIRED_PAIRED_MODES = ['grounded_site', 'ungrounded_inference'] as const;
@@ -20,6 +21,24 @@ type Row = Record<string, unknown>;
 
 function hasFlag(flag: string): boolean {
   return process.argv.slice(2).includes(flag);
+}
+
+async function upsertBatch(
+  client: Client,
+  table: string,
+  rows: readonly Record<string, unknown>[],
+  onConflict: string,
+  offset: number
+): Promise<void> {
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const result = await client.from(table).upsert(rows, { onConflict });
+    if (!result.error) return;
+    const retryable = /fetch failed|bad gateway|timeout|temporar/i.test(result.error.message);
+    if (!retryable || attempt === 5) {
+      throw new Error(`${table} upsert failed at row ${offset}: ${result.error.message}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+  }
 }
 function text(row: Row, field: string): string | null {
   const value = row[field];
@@ -296,12 +315,14 @@ async function main(): Promise<void> {
       evidence_refs: item.evidenceRefs,
     };
   });
-  for (let offset = 0; offset < rows.length; offset += PAGE_SIZE) {
-    const write = await client.from('intelligence_run_quality_classifications').upsert(
-      rows.slice(offset, offset + PAGE_SIZE),
-      { onConflict: 'stable_classification_id' }
+  for (let offset = 0; offset < rows.length; offset += WRITE_BATCH_SIZE) {
+    await upsertBatch(
+      client,
+      'intelligence_run_quality_classifications',
+      rows.slice(offset, offset + WRITE_BATCH_SIZE),
+      'stable_classification_id',
+      offset
     );
-    if (write.error) throw write.error;
   }
   const windowRows = result.assessments.map((item) => {
     const indexed = runIndex.get(`${item.sourceKind}:${item.sourceId}`);
@@ -320,12 +341,14 @@ async function main(): Promise<void> {
       source_snapshot: item.sourceSnapshot,
     };
   });
-  for (let offset = 0; offset < windowRows.length; offset += PAGE_SIZE) {
-    const write = await client.from('intelligence_window_quality_assessments').upsert(
-      windowRows.slice(offset, offset + PAGE_SIZE),
-      { onConflict: 'policy_version,source_kind,source_id,source_snapshot' }
+  for (let offset = 0; offset < windowRows.length; offset += WRITE_BATCH_SIZE) {
+    await upsertBatch(
+      client,
+      'intelligence_window_quality_assessments',
+      windowRows.slice(offset, offset + WRITE_BATCH_SIZE),
+      'policy_version,source_kind,source_id,source_snapshot',
+      offset
     );
-    if (write.error) throw write.error;
   }
   const observedAt = new Date().toISOString();
   const alerts = [
@@ -343,11 +366,14 @@ async function main(): Promise<void> {
       observed_at: observedAt,
     })),
   ];
-  if (alerts.length) {
-    const write = await client.from('intelligence_quality_alerts').upsert(alerts, {
-      onConflict: 'policy_version,alert_key,observed_at',
-    });
-    if (write.error) throw write.error;
+  for (let offset = 0; offset < alerts.length; offset += WRITE_BATCH_SIZE) {
+    await upsertBatch(
+      client,
+      'intelligence_quality_alerts',
+      alerts.slice(offset, offset + WRITE_BATCH_SIZE),
+      'policy_version,alert_key,observed_at',
+      offset
+    );
   }
   console.log(`Applied ${rows.length} classifications, ${windowRows.length} window gates, and ${alerts.length} alerts.`);
 }
