@@ -49,6 +49,7 @@
     "intelligence:runs:backfill": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-run-index-backfill.ts",
     "intelligence:evidence:backfill": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-evidence-backfill.ts",
     "intelligence:quality:classify": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-quality-classify.ts",
+    "intelligence:marts:preview": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-marts-preview.ts",
     "report:layer-one:rewrite-prompt": "node ./node_modules/tsx/dist/cli.mjs scripts/layer-one-report-rewrite-prompt.ts"
   },
   "dependencies": {
