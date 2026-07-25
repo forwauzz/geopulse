@@ -24,6 +24,8 @@ import { structuredLog } from './structured-log';
 type BenchmarkRunnerResult = {
   readonly runGroupId: string;
   readonly queryRunCount: number;
+  readonly completedQueryCount: number;
+  readonly failedQueryCount: number;
   readonly skippedQueryCount: number;
 };
 
@@ -267,6 +269,8 @@ export async function runBenchmarkGroupSkeleton(
   return {
     runGroupId: runGroup.id,
     queryRunCount: queryRuns.length,
+    completedQueryCount,
+    failedQueryCount,
     skippedQueryCount: skippedQueryCount,
   };
 }

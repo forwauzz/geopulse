@@ -228,6 +228,8 @@ export async function loadClientOutcomeEngine(args: {
     }>).filter((row) =>
       typeof row.citation_rate === 'number'
       && row.metrics?.['run_mode'] === 'blind_discovery'
+      && typeof row.metrics?.['completed_runs'] === 'number'
+      && row.metrics['completed_runs'] > 0
       && engineForModelId(row.model_id) !== null
     );
 

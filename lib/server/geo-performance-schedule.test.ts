@@ -10,8 +10,8 @@ import {
 describe('GPM measurement contract', () => {
   it('uses blind buyer discovery and rejects all-skipped runs as measurements', () => {
     expect(GPM_RUN_MODE).toBe('blind_discovery');
-    expect(gpmRunHasCompletedQuestions({ queryRunCount: 8, skippedQueryCount: 8 })).toBe(false);
-    expect(gpmRunHasCompletedQuestions({ queryRunCount: 8, skippedQueryCount: 0 })).toBe(true);
+    expect(gpmRunHasCompletedQuestions({ completedQueryCount: 0 })).toBe(false);
+    expect(gpmRunHasCompletedQuestions({ completedQueryCount: 8 })).toBe(true);
   });
 });
 
