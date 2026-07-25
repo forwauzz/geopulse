@@ -174,5 +174,8 @@ describe('Jordan Reel render handoff', () => {
     expect(repo.updateJob).toHaveBeenCalledWith('job-row', expect.objectContaining({
       status: 'scheduled',
     }));
+    expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'approved',
+    }));
   });
 });

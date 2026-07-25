@@ -697,7 +697,10 @@ export function instagramScheduleSlot(
   timezone: string,
   hourLocal: number
 ): string {
-  const targetMinute = 30;
+  // The distribution dispatcher runs on the hourly Worker cron. Store slots on
+  // the hour so the time shown in the UI/database is a time we can actually
+  // honor, instead of advertising :30 and dispatching at the following hour.
+  const targetMinute = 0;
   for (let minutes = 1; minutes <= 48 * 60; minutes += 1) {
     const candidate = new Date(now.getTime() + minutes * 60_000);
     const local = localParts(candidate, timezone);
