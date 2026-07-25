@@ -20,6 +20,7 @@ import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspac
 import { AgencyHome } from '@/components/agency-home';
 import { shouldRecoverOnboarding } from '@/lib/server/onboarding-recovery';
 import { loadAgencyPortfolio } from '@/lib/server/agency-portfolio';
+import { loadUiFlags } from '@/lib/server/app-ui-flags';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,6 +109,19 @@ export default async function DashboardHomePage({
   }
 
   const view = buildAuditDashboardView(scanRows);
+  const uiFlags = await loadUiFlags();
+  let isMonitored = false;
+  if (admin && user.email && view.latest?.domain) {
+    const { data: monitor } = await admin
+      .from('monitoring_subscriptions')
+      .select('id')
+      .eq('email', user.email.trim().toLowerCase())
+      .eq('domain', view.latest.domain)
+      .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
+      .limit(1)
+      .maybeSingle();
+    isMonitored = Boolean(monitor?.id);
+  }
 
   // Real citation data where the audited domain is in the benchmark system; {} otherwise.
   let engineCitations: Partial<Record<EngineKey, EngineCitationMetric>> = {};
@@ -139,7 +153,13 @@ export default async function DashboardHomePage({
           authenticated
         />
       </div>
-      <AuditDashboardOverview view={view} engineCitations={engineCitations} marketPosition={marketPosition} />
+      <AuditDashboardOverview
+        view={view}
+        engineCitations={engineCitations}
+        marketPosition={marketPosition}
+        showMonitorSubscription={uiFlags.show_monitor_subscription}
+        isMonitored={isMonitored}
+      />
       {promptPanel?.tracked && view.latest?.domain ? (
         <div className="mx-auto w-full max-w-6xl">
           <TrackedPromptsPanel panel={promptPanel} domain={view.latest.domain} statusCode={sp.prompt} />

@@ -15,6 +15,7 @@ import {
   type ViewState,
 } from '@/lib/client/report-viewer';
 import { reportLoadingJourneyFor } from '@/lib/client/loading-journeys';
+import { MonitorSubscribeCTA } from '@/components/monitor-subscribe-cta';
 
 const REPORT_POLL_INTERVAL_MS = 4000;
 // Crawl (up to DEEP_AUDIT_DEFAULT_PAGE_LIMIT pages) + LLM report assembly can run past 2 min on
@@ -22,7 +23,17 @@ const REPORT_POLL_INTERVAL_MS = 4000;
 // reporting "no report available" while it's still being built.
 const REPORT_POLL_MAX_MS = 240000;
 
-export function ReportViewer({ scanId }: { scanId: string }) {
+export function ReportViewer({
+  scanId,
+  showMonitorSubscription = false,
+  turnstileSiteKey = null,
+  monitorAccountEmail = null,
+}: {
+  scanId: string;
+  showMonitorSubscription?: boolean;
+  turnstileSiteKey?: string | null;
+  monitorAccountEmail?: string | null;
+}) {
   const [state, setState] = useState<ViewState>({ phase: 'loading' });
   const [deliveryState, setDeliveryState] = useState<
     { status: 'idle' | 'sending' | 'sent' | 'error'; message: string | null }
@@ -315,6 +326,23 @@ export function ReportViewer({ scanId }: { scanId: string }) {
                 from the single-page scorecard you saw first.
               </p>
             </div>
+          ) : null}
+          {showMonitorSubscription && turnstileSiteKey ? (
+            <MonitorSubscribeCTA
+              siteKey={turnstileSiteKey}
+              scanId={state.scan.scanId}
+              domain={
+                state.scan.domain ??
+                (() => {
+                  try {
+                    return new URL(state.scan.url).hostname.replace(/^www\./i, '');
+                  } catch {
+                    return state.scan.url;
+                  }
+                })()
+              }
+              accountEmail={monitorAccountEmail}
+            />
           ) : null}
           <ReportStory scan={state.scan} />
           <div className="pt-4">

@@ -137,11 +137,15 @@ export function AuditDashboardOverview({
   view,
   engineCitations = {},
   marketPosition = null,
+  showMonitorSubscription = false,
+  isMonitored = false,
 }: {
   view: AuditDashboardView;
   engineCitations?: Partial<Record<EngineKey, EngineCitationMetric>>;
   /** Anonymized cohort rank ("#7 of 29 …"), same computation as the PDF. Null when out of cohort. */
   marketPosition?: MarketPosition | null;
+  showMonitorSubscription?: boolean;
+  isMonitored?: boolean;
 }) {
   const { latest } = view;
   const anyEngineTracked = Object.keys(engineCitations).length > 0;
@@ -168,17 +172,35 @@ export function AuditDashboardOverview({
             )}
           </h2>
         </div>
-        {marketPosition ? (
-          <div className="rounded-xl border-l-2 border-gold/60 bg-surface-container-lowest px-4 py-2.5">
-            <p className="font-sans text-2xl font-black tabular-nums leading-none text-primary">
-              #{marketPosition.rank}
-              <span className="text-sm font-semibold text-on-surface-variant"> of {marketPosition.of}</span>
-            </p>
-            <p className="mt-1 text-[11px] leading-tight text-on-surface-variant">
-              {marketPosition.vertical} in {marketPosition.geoRegion} · median {marketPosition.medianScore}/100
-            </p>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {latest && showMonitorSubscription ? (
+            isMonitored ? (
+              <span className="inline-flex items-center gap-2 rounded-xl bg-green-100 px-4 py-2.5 text-sm font-semibold text-green-800 dark:bg-green-500/15 dark:text-green-200">
+                <span className="material-symbols-outlined text-[18px]" aria-hidden>check_circle</span>
+                Monthly monitoring active
+              </span>
+            ) : (
+              <Link
+                href={`/results/${latest.scanId}#monitoring`}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary transition hover:bg-primary-dim"
+              >
+                <span className="material-symbols-outlined text-[18px]" aria-hidden>monitoring</span>
+                Start monthly monitoring
+              </Link>
+            )
+          ) : null}
+          {marketPosition ? (
+            <div className="rounded-xl border-l-2 border-gold/60 bg-surface-container-lowest px-4 py-2.5">
+              <p className="font-sans text-2xl font-black tabular-nums leading-none text-primary">
+                #{marketPosition.rank}
+                <span className="text-sm font-semibold text-on-surface-variant"> of {marketPosition.of}</span>
+              </p>
+              <p className="mt-1 text-[11px] leading-tight text-on-surface-variant">
+                {marketPosition.vertical} in {marketPosition.geoRegion} · median {marketPosition.medianScore}/100
+              </p>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* KPI row — all real measurements from the latest audit */}

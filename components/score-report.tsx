@@ -130,6 +130,7 @@ export function ScoreReport({
   deepAuditSlot,
   benchmark,
   competitorSlot,
+  primaryActionSlot,
 }: {
   data: ScoreReportData;
   /** OSS default false = full audit is free for everyone. true = steer to Stripe (legacy paid). */
@@ -141,6 +142,8 @@ export function ScoreReport({
   benchmark?: ScoreBenchmark;
   /** Optional interactive competitor comparison; replaces the generic peer strip when given. */
   competitorSlot?: React.ReactNode;
+  /** The single commercial next step, placed immediately after the score and competitor context. */
+  primaryActionSlot?: React.ReactNode;
 }) {
   const { score, letterGrade, domain, url, categoryScores, issues } = data;
   const v = marketingVerdict(score);
@@ -238,6 +241,12 @@ export function ScoreReport({
               <PeerStrip score={score} benchmark={benchmark} />
             ) : null)}
           </Step>
+
+          {primaryActionSlot ? (
+            <div className="mb-12" data-testid="scorecard-primary-action">
+              {primaryActionSlot}
+            </div>
+          ) : null}
 
           {/* STEP 2 — PILLARS */}
           <Step n={2} id="s2" title="Where you stand" blurb="Your score comes from five things AI cares about. The free scan covers three; the full report adds the last two.">
