@@ -34,13 +34,18 @@ async function loadBaseUrl(): Promise<string> {
 
 export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = await loadBaseUrl();
-  return buildPublicPageMetadata({
-    baseUrl,
-    title: 'Sign in | GEO-Pulse',
-    description: 'Sign in to GEO-Pulse to access dashboards, saved audits, and paid reports.',
-    canonicalPath: '/login',
-    openGraphType: 'website',
-  });
+  return {
+    ...buildPublicPageMetadata({
+      baseUrl,
+      title: 'Sign in | GEO-Pulse',
+      description: 'Sign in to GEO-Pulse to access dashboards, saved audits, and paid reports.',
+      canonicalPath: '/login',
+      openGraphType: 'website',
+    }),
+    // Search Console showed Google selecting /login for branded searches.
+    // Keep authentication usable while directing search demand to public pages.
+    robots: { index: false, follow: true },
+  };
 }
 
 export default async function LoginPage({ searchParams }: Props) {

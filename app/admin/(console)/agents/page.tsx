@@ -1,4 +1,5 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
+import Image from 'next/image';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { loadAgentStatuses } from '@/lib/server/agent-console';
 import { loadFounderControlRoom } from '@/lib/server/founder-control-room';
@@ -255,7 +256,13 @@ export default async function AdminAgentsPage() {
           {controlRoom.workforce.map((member) => (
             <article key={member.id} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-4">
               <div className="flex items-center gap-3">
-                <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-full font-sans text-sm font-black text-white ${member.color}`}>{member.initials}</span>
+                <Image
+                  src={member.avatar}
+                  alt={`${member.name}, ${member.role}`}
+                  width={88}
+                  height={88}
+                  className="h-12 w-12 shrink-0 rounded-full border-2 border-surface-container-lowest object-cover shadow-sm"
+                />
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-sans text-sm font-black text-on-background">{member.name}</h3>

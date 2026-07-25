@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { affordableTaskCount, classifySearchConsoleOpportunity } from './autonomous-seo-agent';
+import {
+  affordableTaskCount,
+  aggregateSearchConsoleRows,
+  classifySearchConsoleOpportunity,
+} from './autonomous-seo-agent';
 
 describe('autonomous SEO spend guard', () => {
   it('never schedules beyond the hard monthly budget', () => {
@@ -9,6 +13,20 @@ describe('autonomous SEO spend guard', () => {
 });
 
 describe('Search Console opportunity classification', () => {
+  it('combines page rows before measuring a query', () => {
+    expect(aggregateSearchConsoleRows([
+      { query: 'Geo Pulse', page: '/', clicks: 1, impressions: 24, ctr: 1 / 24, position: 7.5 },
+      { query: 'geo pulse', page: '/login', clicks: 0, impressions: 1, ctr: 0, position: 39 },
+    ])).toEqual([{
+      query: 'Geo Pulse',
+      page: '/',
+      clicks: 1,
+      impressions: 25,
+      ctr: 0.04,
+      position: 8.76,
+    }]);
+  });
+
   it('finds a striking-distance query', () => {
     expect(classifySearchConsoleOpportunity({
       query: 'ai visibility platform',

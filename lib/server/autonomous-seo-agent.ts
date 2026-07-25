@@ -97,6 +97,53 @@ export function classifySearchConsoleOpportunity(row: SearchConsoleRow): SeoOppo
   return null;
 }
 
+export function aggregateSearchConsoleRows(rows: readonly SearchConsoleRow[]): SearchConsoleRow[] {
+  const grouped = new Map<string, {
+    query: string;
+    clicks: number;
+    impressions: number;
+    weightedPosition: number;
+    fallbackPosition: number;
+    rowCount: number;
+    primaryPage: string | null;
+    primaryPageImpressions: number;
+  }>();
+  for (const row of rows) {
+    const key = row.query.trim().toLowerCase();
+    if (!key) continue;
+    const current = grouped.get(key) ?? {
+      query: row.query.trim(),
+      clicks: 0,
+      impressions: 0,
+      weightedPosition: 0,
+      fallbackPosition: 0,
+      rowCount: 0,
+      primaryPage: null,
+      primaryPageImpressions: -1,
+    };
+    current.clicks += row.clicks;
+    current.impressions += row.impressions;
+    current.weightedPosition += row.position * row.impressions;
+    current.fallbackPosition += row.position;
+    current.rowCount += 1;
+    if (row.impressions > current.primaryPageImpressions) {
+      current.primaryPage = row.page;
+      current.primaryPageImpressions = row.impressions;
+    }
+    grouped.set(key, current);
+  }
+  return [...grouped.values()].map((row) => ({
+    query: row.query,
+    page: row.primaryPage,
+    clicks: row.clicks,
+    impressions: row.impressions,
+    ctr: row.impressions > 0 ? row.clicks / row.impressions : 0,
+    position: row.impressions > 0
+      ? row.weightedPosition / row.impressions
+      : row.fallbackPosition / Math.max(row.rowCount, 1),
+  }));
+}
+
 function slugify(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 72);
 }
@@ -146,7 +193,10 @@ async function proposeOneContentBrief(db: Db, now: Date): Promise<void> {
     .from('seo_opportunities')
     .select('id,title,evidence,recommendation,metadata,seo_keywords(keyword)')
     .eq('status', 'queued')
-    .neq('kind', 'technical')
+    // New articles are appropriate for a proven content gap. Striking-distance
+    // and CTR opportunities belong on the existing ranking page, not in a
+    // duplicate SEO blog post.
+    .eq('kind', 'content_gap')
     .order('priority', { ascending: true })
     .order('last_seen_at', { ascending: false })
     .limit(1);
@@ -213,13 +263,14 @@ async function syncSearchConsole(input: {
   end.setUTCDate(end.getUTCDate() - 2);
   const start = new Date(end);
   start.setUTCDate(start.getUTCDate() - 27);
-  const rows = await fetchSearchConsoleRows({
+  const rawRows = await fetchSearchConsoleRows({
     accessToken,
     siteUrl: input.siteUrl,
     startDate: isoDate(start),
     endDate: isoDate(end),
     rowLimit: 2_500,
   });
+  const rows = aggregateSearchConsoleRows(rawRows);
   let opportunities = 0;
   for (const row of rows) {
     const { data: keyword } = await input.db.from('seo_keywords').upsert({
@@ -250,7 +301,7 @@ async function syncSearchConsole(input: {
     last_error: null,
     updated_at: input.now.toISOString(),
   }).eq('provider', 'google_search_console');
-  return { rows: rows.length, opportunities };
+  return { rows: rawRows.length, opportunities };
 }
 
 async function completeReadyRankTasks(input: {
@@ -414,6 +465,13 @@ export async function runAutonomousSeoAgent(args: {
           keywords: selected.map((keyword: any) => ({ keywordId: keyword.id, keyword: keyword.keyword })),
         });
         const accepted = queued.filter((task) => task.id && task.statusCode >= 20_000 && task.statusCode < 30_000);
+        if (queued.length > 0 && accepted.length === 0) {
+          const providerSummary = queued
+            .slice(0, 3)
+            .map((task) => `${task.statusCode}:${task.statusMessage}`)
+            .join('|');
+          throw new Error(`dataforseo_tasks_rejected:${providerSummary || 'unknown_provider_response'}`);
+        }
         if (accepted.length) {
           await args.supabase.from('seo_rank_tasks').insert(accepted.map((task) => ({
             provider_task_id: task.id,

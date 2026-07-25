@@ -11,6 +11,7 @@ export type WorkforceMember = {
   readonly icon: string;
   readonly initials: string;
   readonly color: string;
+  readonly avatar: string;
   readonly job: string;
   readonly capabilityKeys: readonly string[];
 };
@@ -23,6 +24,7 @@ export const NAMED_WORKFORCE: readonly WorkforceMember[] = [
     icon: 'assistant',
     initials: 'MB',
     color: 'bg-violet-600',
+    avatar: '/team/maya-brooks.webp',
     job: 'Runs the company loop, names the commercial bottleneck, and escalates only decisions that need you.',
     capabilityKeys: ['revenue_agency', 'engagement_digest'],
   },
@@ -33,18 +35,20 @@ export const NAMED_WORKFORCE: readonly WorkforceMember[] = [
     icon: 'rocket_launch',
     initials: 'NC',
     color: 'bg-sky-600',
+    avatar: '/team/noah-carter.webp',
     job: 'Owns signup, onboarding, workspace provisioning, first value, and recovery.',
     capabilityKeys: ['recurring_audits'],
   },
   {
     id: 'priya',
     name: 'Priya Shah',
-    role: 'Customer Outcomes Strategist',
+    role: 'SEO & Customer Outcomes Strategist',
     icon: 'insights',
     initials: 'PS',
     color: 'bg-emerald-600',
-    job: 'Turns audits into fixes, verifies progress, and delivers monitoring, reports, and competitor evidence.',
-    capabilityKeys: ['design', 'gpm', 'competitor_discovery', 'competitor_benchmark'],
+    avatar: '/team/priya-shah.webp',
+    job: 'Owns organic-search growth, turns search evidence into work, verifies progress, and delivers monitoring and competitor intelligence.',
+    capabilityKeys: ['seo_owner', 'design', 'gpm', 'competitor_discovery', 'competitor_benchmark'],
   },
   {
     id: 'elena',
@@ -53,6 +57,7 @@ export const NAMED_WORKFORCE: readonly WorkforceMember[] = [
     icon: 'psychology',
     initials: 'EP',
     color: 'bg-amber-600',
+    avatar: '/team/elena-park.webp',
     job: 'Learns from real funnel activity and reports the weakest activation-to-revenue handoff every week.',
     capabilityKeys: ['research'],
   },
@@ -63,6 +68,7 @@ export const NAMED_WORKFORCE: readonly WorkforceMember[] = [
     icon: 'travel_explore',
     initials: 'SC',
     color: 'bg-fuchsia-600',
+    avatar: '/team/sofia-chen.webp',
     job: 'Finds source-linked AI-search, agency, and small-business trends and hands Jordan a scored, original daily slate.',
     capabilityKeys: ['social_proof'],
   },
@@ -73,6 +79,7 @@ export const NAMED_WORKFORCE: readonly WorkforceMember[] = [
     icon: 'campaign',
     initials: 'JR',
     color: 'bg-rose-600',
+    avatar: '/team/jordan-reyes.webp',
     job: 'Turns Sofia’s slate and verified GEO-Pulse proof into original, crop-safe posts and schedules the daily mix.',
     capabilityKeys: ['marketing_autopilot', 'social_proof', 'outreach'],
   },
@@ -83,6 +90,7 @@ export const NAMED_WORKFORCE: readonly WorkforceMember[] = [
     icon: 'shield',
     initials: 'MR',
     color: 'bg-slate-700',
+    avatar: '/team/marcus-reed.webp',
     job: 'Watches queues, report delivery, social publishing, Stripe, schedules, and self-improvement.',
     capabilityKeys: ['self_improvement', 'benchmark'],
   },

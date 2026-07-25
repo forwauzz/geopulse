@@ -1,7 +1,9 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { loadAgentStatuses } from '@/lib/server/agent-console';
+import { teamAvatar } from '@/lib/team-directory';
 import {
   loadCampaignControlRoom,
   type CampaignHealth,
@@ -132,7 +134,10 @@ export default async function AdminCampaignsPage({
           <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">Maya · AI Chief of Staff</p>
+                <div className="flex items-center gap-3">
+                  <Image src="/team/maya-brooks.webp" alt="Maya Brooks, AI Chief of Staff" width={80} height={80} className="h-11 w-11 rounded-full object-cover shadow-sm" />
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">Maya · AI Chief of Staff</p>
+                </div>
                 <h2 className="mt-2 font-headline text-xl font-bold text-on-background">The whip list</h2>
                 <p className="mt-1 text-sm text-on-surface-variant">Only exceptions appear here. Every item has an owner and a place to resolve it.</p>
               </div>
@@ -146,7 +151,10 @@ export default async function AdminCampaignsPage({
                       action.severity === 'now' ? 'bg-red-500/15 text-red-700 dark:text-red-300' : action.severity === 'today' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-surface-container text-on-surface-variant'
                     }`}>{action.severity}</span>
                     <div>
-                      <p className="font-semibold text-on-background">{action.owner}: {action.title}</p>
+                      <div className="flex items-center gap-2">
+                        {teamAvatar(action.owner) ? <Image src={teamAvatar(action.owner)!} alt="" width={48} height={48} className="h-7 w-7 rounded-full object-cover" /> : null}
+                        <p className="font-semibold text-on-background">{action.owner}: {action.title}</p>
+                      </div>
                       <p className="mt-1 text-sm leading-6 text-on-surface-variant">{action.detail}</p>
                       <p className="mt-2 text-xs leading-5 text-on-surface-variant">
                         <span className="font-bold text-on-background">
@@ -209,7 +217,12 @@ export default async function AdminCampaignsPage({
                       <p className="font-semibold text-on-background">{campaign.name}</p>
                       <p className="mt-1 max-w-md text-xs leading-5 text-on-surface-variant">{campaign.channel} · {campaign.detail}</p>
                     </td>
-                    <td className="px-4 py-4 text-on-background">{campaign.owner}</td>
+                    <td className="px-4 py-4 text-on-background">
+                      <span className="inline-flex items-center gap-2">
+                        {teamAvatar(campaign.owner) ? <Image src={teamAvatar(campaign.owner)!} alt="" width={48} height={48} className="h-7 w-7 rounded-full object-cover" /> : null}
+                        {campaign.owner}
+                      </span>
+                    </td>
                     <td className="px-4 py-4"><HealthBadge health={campaign.health} /><p className="mt-1 text-xs text-on-surface-variant">{campaign.status}</p></td>
                     <td className="px-4 py-4 text-on-surface-variant">{fmt(campaign.lastActivityAt)}</td>
                     <td className="px-4 py-4 text-on-surface-variant">{fmt(campaign.nextActivityAt)}</td>

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Image from 'next/image';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { loadSelfImprovementSettings } from '@/lib/server/self-improvement';
@@ -154,8 +155,14 @@ export default async function AutomationConsolePage() {
       <section className={card}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-sans text-lg font-bold text-on-background">Autonomous SEO owner</h2>
-            <p className="mt-0.5 font-sans text-xs text-on-surface-variant">Search Console finds real demand; capped rank checks validate competitors; qualified gaps become owned editorial work.</p>
+            <div className="flex items-center gap-3">
+              <Image src="/team/priya-shah.webp" alt="Priya Shah, SEO and Customer Outcomes Strategist" width={80} height={80} className="h-11 w-11 rounded-full object-cover shadow-sm" />
+              <div>
+                <h2 className="font-sans text-lg font-bold text-on-background">Priya · Autonomous SEO owner</h2>
+                <p className="font-sans text-xs font-semibold text-emerald-700 dark:text-emerald-300">SEO & Customer Outcomes Strategist</p>
+              </div>
+            </div>
+            <p className="mt-2 font-sans text-xs text-on-surface-variant">Search Console finds real demand; capped rank checks validate competitors; qualified gaps become owned editorial work.</p>
           </div>
           <div className="flex gap-2">
             <a href="/api/admin/seo/google/start" className="inline-flex min-h-[36px] items-center rounded-xl bg-surface-container px-4 text-sm font-semibold text-on-background transition hover:bg-surface-container-high">
