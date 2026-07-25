@@ -1,0 +1,35 @@
+{
+  "contractVersion": "intelligence-reasoning-v1",
+  "cases": [
+    {
+      "id": "golden_supported_timeline",
+      "kind": "golden",
+      "expected": "ready",
+      "description": "A valid fact with evidence and run lineage can produce a bounded finding."
+    },
+    {
+      "id": "adversarial_hallucinated_evidence",
+      "kind": "adversarial",
+      "expected": "unsupported_claim",
+      "description": "A model cannot introduce an evidence identifier absent from selected facts."
+    },
+    {
+      "id": "adversarial_incompatible_comparison",
+      "kind": "adversarial",
+      "expected": "insufficient_evidence",
+      "description": "Cross-lane or version-incompatible windows fail closed."
+    },
+    {
+      "id": "adversarial_tenant_leakage",
+      "kind": "adversarial",
+      "expected": "tenant_scope_violation",
+      "description": "Private facts outside the authenticated tenant scope are rejected."
+    },
+    {
+      "id": "adversarial_causal_language",
+      "kind": "adversarial",
+      "expected": "unsupported_claim",
+      "description": "Observational intervention evidence cannot be described as causal."
+    }
+  ]
+}
