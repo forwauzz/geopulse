@@ -44,6 +44,7 @@
     "benchmark:recap:send": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-recap-send.ts",
     "benchmark:diagnose:failures": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-diagnose-failures.ts",
     "intelligence:inventory": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-source-inventory.ts",
+    "intelligence:identity:backfill": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-identity-backfill.ts",
     "report:layer-one:rewrite-prompt": "node ./node_modules/tsx/dist/cli.mjs scripts/layer-one-report-rewrite-prompt.ts"
   },
   "dependencies": {
