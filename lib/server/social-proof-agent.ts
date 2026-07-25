@@ -716,6 +716,25 @@ export function instagramScheduleSlot(
   return new Date(now.getTime() + 2 * 60_000).toISOString();
 }
 
+export function reserveInstagramScheduleSlot(
+  desiredSlot: string,
+  occupiedSlots: Set<string>
+): string {
+  let candidate = new Date(desiredSlot);
+  candidate.setUTCMinutes(0, 0, 0);
+  for (let hours = 0; hours < 48; hours += 1) {
+    const slot = candidate.toISOString();
+    if (!occupiedSlots.has(slot)) {
+      occupiedSlots.add(slot);
+      return slot;
+    }
+    candidate = new Date(candidate.getTime() + 60 * 60_000);
+  }
+  const fallback = candidate.toISOString();
+  occupiedSlots.add(fallback);
+  return fallback;
+}
+
 function providerFamily(account: DistributionAccountRow | null): DistributionProviderFamily {
   if (!account) return 'generic';
   return account.provider_name === 'instagram' ||
@@ -955,6 +974,27 @@ export async function runSocialProofAgent(args: {
 
     const account = preferredAccount(accounts);
     const family = providerFamily(account);
+    const occupiedInstagramSlots = new Set<string>();
+    if (account?.provider_name === 'instagram') {
+      const { data: scheduledJobs, error: scheduledJobsError } = await args.supabase
+        .from('distribution_jobs')
+        .select('scheduled_for')
+        .eq('distribution_account_id', account.id)
+        .in('status', ['draft', 'scheduled', 'queued', 'processing'])
+        .gte('scheduled_for', now.toISOString());
+      if (scheduledJobsError) throw scheduledJobsError;
+      for (const job of scheduledJobs ?? []) {
+        if (typeof job.scheduled_for !== 'string') continue;
+        const slot = new Date(job.scheduled_for);
+        slot.setUTCMinutes(0, 0, 0);
+        occupiedInstagramSlots.add(slot.toISOString());
+      }
+    }
+    const reserveInstagramSlot = (hourLocal: number): string =>
+      reserveInstagramScheduleSlot(
+        instagramScheduleSlot(now, config.timezone, hourLocal),
+        occupiedInstagramSlots
+      );
     const baseOrderedCandidates =
       mode === 'autonomous'
         ? orderAutonomousCandidates(candidates, historicalPerformanceByKind(existingAssets))
@@ -1142,9 +1182,7 @@ export async function runSocialProofAgent(args: {
             distributionAccountId: account.id,
             publishMode: autonomousReel ? 'scheduled' : 'draft',
             scheduledFor: autonomousReel
-              ? instagramScheduleSlot(
-                  now,
-                  config.timezone,
+              ? reserveInstagramSlot(
                   config.postingHoursLocal[
                     Math.min(jobsCreated, config.postingHoursLocal.length - 1)
                   ] ?? 19
@@ -1173,13 +1211,11 @@ export async function runSocialProofAgent(args: {
             publishMode: account.provider_name === 'instagram' ? 'scheduled' : 'publish_now',
             scheduledFor:
               account.provider_name === 'instagram'
-                ? instagramScheduleSlot(
-                     now,
-                     config.timezone,
-                     config.postingHoursLocal[
-                       Math.min(jobsCreated, config.postingHoursLocal.length - 1)
-                     ] ?? 19
-                   )
+                ? reserveInstagramSlot(
+                    config.postingHoursLocal[
+                      Math.min(jobsCreated, config.postingHoursLocal.length - 1)
+                    ] ?? 19
+                  )
                 : null,
             status: account.provider_name === 'instagram' ? 'scheduled' : 'queued',
           });
