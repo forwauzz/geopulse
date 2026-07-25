@@ -56,13 +56,18 @@ export function validateInstagramVisualSafety(
     video.metadata['automated_crop_suite_approved'] === true &&
     video.metadata['crop_safe_zone_checked'] === true &&
     video.metadata['reels_preview_safe'] === true &&
-    stringFrom(video.metadata['automated_crop_suite_version']) === 'jordan-crop-suite-v1' &&
+    stringFrom(video.metadata['automated_crop_suite_version']) === 'jordan-crop-suite-v2' &&
+    stringFrom(video.metadata['production_validation_version']) === 'jordan-reel-v2' &&
     stringFrom(video.metadata['renderer']) === 'github_actions_hyperframes';
   if (!manualMetaPreviewApproved && !automatedCropSuiteApproved) {
     return { safe: false, reason: 'meta_preview_approval_required' };
   }
   if (video.metadata['has_audio'] !== true || numberFrom(video.metadata['audio_track_count'])! < 1) {
     return { safe: false, reason: 'reel_audio_required' };
+  }
+  const durationSeconds = numberFrom(video.metadata['duration_seconds']);
+  if (!durationSeconds || durationSeconds < 14 || durationSeconds > 20) {
+    return { safe: false, reason: 'reel_pacing_unverified' };
   }
   if (
     video.metadata['mobile_text_legible'] !== true ||

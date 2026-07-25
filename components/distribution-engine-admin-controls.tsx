@@ -814,6 +814,10 @@ export function DistributionEngineAdminControls({
                 <input name="reelHeight" type="number" placeholder="1920" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
               </label>
               <label className="grid gap-1 text-xs font-medium text-on-background sm:col-span-2">
+                Duration in seconds (14–20)
+                <input name="reelDurationSeconds" type="number" min="14" max="20" step="0.1" placeholder="15" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-xs font-medium text-on-background sm:col-span-2">
                 Feed preview URL
                 <input name="feedPreviewUrl" type="url" placeholder="https://…" className="rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2" />
               </label>

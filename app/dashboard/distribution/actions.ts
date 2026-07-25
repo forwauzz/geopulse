@@ -147,6 +147,7 @@ const assetMediaSchema = z.object({
   caption: z.string().max(500, 'Caption is too long.').optional(),
   reelWidth: z.coerce.number().int().min(0).optional(),
   reelHeight: z.coerce.number().int().min(0).optional(),
+  reelDurationSeconds: z.coerce.number().min(0).optional(),
   feedPreviewUrl: z.string().url().optional().or(z.literal('')),
   gridPreviewUrl: z.string().url().optional().or(z.literal('')),
   mediaFingerprint: z.string().max(200).optional(),
@@ -161,6 +162,7 @@ const assetMediaSchema = z.object({
   const ready =
     value.reelWidth === 1080 &&
     value.reelHeight === 1920 &&
+    Boolean(value.reelDurationSeconds && value.reelDurationSeconds >= 14 && value.reelDurationSeconds <= 20) &&
     Boolean(value.feedPreviewUrl && value.gridPreviewUrl && value.mediaFingerprint && value.templateId) &&
     value.metaPreviewApproved &&
     value.audioChecked &&
@@ -547,6 +549,7 @@ export async function saveDistributionAssetMedia(
     caption: normalizeText(formData.get('caption')),
     reelWidth: normalizeText(formData.get('reelWidth')),
     reelHeight: normalizeText(formData.get('reelHeight')),
+    reelDurationSeconds: normalizeText(formData.get('reelDurationSeconds')),
     feedPreviewUrl: normalizeText(formData.get('feedPreviewUrl')),
     gridPreviewUrl: normalizeText(formData.get('gridPreviewUrl')),
     mediaFingerprint: normalizeText(formData.get('mediaFingerprint')),
@@ -596,6 +599,7 @@ export async function saveDistributionAssetMedia(
           ? {
               width: parsed.data.reelWidth,
               height: parsed.data.reelHeight,
+              duration_seconds: parsed.data.reelDurationSeconds,
               safe_area_contract: 'reel_9x16_center_safe',
               has_audio: parsed.data.audioChecked,
               audio_track_count: parsed.data.audioChecked ? 1 : 0,

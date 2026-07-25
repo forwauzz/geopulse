@@ -3,7 +3,7 @@ import type {
   DistributionJobRow,
 } from './distribution-engine-repository';
 
-export const JORDAN_REEL_VALIDATION_VERSION = 'jordan-reel-v1';
+export const JORDAN_REEL_VALIDATION_VERSION = 'jordan-reel-v2';
 export const DEFAULT_REEL_DAYS_LOCAL = [0, 2, 4, 6] as const;
 
 export type JordanReelCategory = 'timely' | 'educational' | 'humor' | 'proof';
@@ -163,11 +163,17 @@ function cleanLine(value: string, max: number): string {
 }
 
 function words(value: string, maxWords: number, maxChars: number): string {
-  return cleanLine(value, maxChars)
+  const selected = cleanLine(value, Math.max(maxChars * 2, 200))
     .split(' ')
     .filter(Boolean)
     .slice(0, maxWords)
     .join(' ');
+  if (selected.length <= maxChars) return selected;
+  const completeWords = selected.split(' ');
+  while (completeWords.length > 1 && completeWords.join(' ').length > maxChars) {
+    completeWords.pop();
+  }
+  return completeWords.join(' ');
 }
 
 function categoryFor(kind: string): JordanReelCategory {
@@ -193,13 +199,13 @@ export function chooseJordanReelSource<T extends ReelSource>(
 export function buildJordanReelScript(source: ReelSource): JordanReelScript {
   const hook = words(
     String(source.evidence['trend_hook'] ?? source.evidence['hook'] ?? source.title),
-    9,
+    10,
     72
   );
   const angle = words(
     String(source.evidence['original_angle'] ?? source.caption),
-    13,
-    100
+    12,
+    96
   );
   const titleWords = words(source.title, 7, 58);
   const comparisonTop = words(

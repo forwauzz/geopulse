@@ -40,7 +40,7 @@ export async function runCampaignChiefOfStaffCheck(args: {
     || '';
   const resendKey = args.env['RESEND_API_KEY']?.trim() ?? '';
   const resendFrom = args.env['RESEND_FROM_EMAIL']?.trim() ?? '';
-  if (urgent > 0 && now.getUTCHours() === 12 && recipient && resendKey && resendFrom) {
+  if (room.actions.length > 0 && now.getUTCHours() === 12 && recipient && resendKey && resendFrom) {
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
     const { count } = await args.supabase
@@ -50,9 +50,8 @@ export async function runCampaignChiefOfStaffCheck(args: {
       .gte('created_at', dayStart.toISOString());
     if ((count ?? 0) === 0) {
       const rows = room.actions
-        .filter((action) => action.severity === 'now')
         .slice(0, 12)
-        .map((action) => `<li style="margin:0 0 12px"><strong>${escapeHtml(action.owner)}: ${escapeHtml(action.title)}</strong><br/>${escapeHtml(action.detail)}</li>`)
+        .map((action) => `<li style="margin:0 0 16px"><strong>${escapeHtml(action.owner)}: ${escapeHtml(action.title)}</strong><br/>${escapeHtml(action.detail)}<br/><em>Next: ${escapeHtml(action.playbook)}</em></li>`)
         .join('');
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -60,7 +59,7 @@ export async function runCampaignChiefOfStaffCheck(args: {
         body: JSON.stringify({
           from: resendFrom,
           to: [recipient],
-          subject: `Maya: ${urgent} campaign exception${urgent === 1 ? '' : 's'} need action`,
+          subject: `Maya: ${room.actions.length} campaign action${room.actions.length === 1 ? '' : 's'} need owners`,
           html: `<h1>Chief of Staff campaign brief</h1><p>${escapeHtml(room.summary)}</p><ol>${rows}</ol><p><a href="https://getgeopulse.com/admin/campaigns">Open Campaigns</a></p>`,
         }),
       });

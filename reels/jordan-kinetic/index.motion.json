@@ -1,9 +1,16 @@
 {
-  "duration": 9,
+  "duration": 15,
   "assertions": [
-    { "kind": "appearsBy", "selector": "#scene-hook .hero", "bySec": 0.6 },
+    { "kind": "appearsBy", "selector": "#scene-hook .hero", "bySec": 0.9 },
     { "kind": "before", "a": "#scene-hook .hero", "b": "#scene-cta .hero" },
-    { "kind": "staysInFrame", "selector": "#scene-compare .top" },
-    { "kind": "keepsMoving", "withinSelector": "#reel-content", "maxStaticSec": 1.5 }
+    { "kind": "staysInFrame", "selector": "#scene-hook .hero" },
+    { "kind": "staysInFrame", "selector": "#scene-tension .hero" },
+    { "kind": "staysInFrame", "selector": "#scene-compare .top .hero" },
+    { "kind": "staysInFrame", "selector": "#scene-compare .bottom .hero" },
+    { "kind": "staysInFrame", "selector": "#diagnostic-copy" },
+    { "kind": "staysInFrame", "selector": "#diagnostic-measure" },
+    { "kind": "staysInFrame", "selector": "#scene-cta .hero" },
+    { "kind": "staysInFrame", "selector": "#scene-cta .url" },
+    { "kind": "keepsMoving", "withinSelector": "#reel-content", "maxStaticSec": 2.8 }
   ]
 }

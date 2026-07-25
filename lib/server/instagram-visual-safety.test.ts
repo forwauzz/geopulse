@@ -23,6 +23,7 @@ const completeMetadata = {
   safe_area_contract: 'reel_9x16_center_safe',
   has_audio: true,
   audio_track_count: 1,
+  duration_seconds: 15,
   mobile_text_legible: true,
   spelling_checked: true,
   feed_preview_safe: true,
@@ -95,7 +96,8 @@ describe('Instagram visual safety', () => {
           reels_preview_safe: true,
           crop_safe_zone_checked: true,
           automated_crop_suite_approved: true,
-          automated_crop_suite_version: 'jordan-crop-suite-v1',
+          automated_crop_suite_version: 'jordan-crop-suite-v2',
+          production_validation_version: 'jordan-reel-v2',
         }),
       ])
     ).toEqual({ safe: true });
@@ -112,7 +114,8 @@ describe('Instagram visual safety', () => {
           reels_preview_safe: true,
           crop_safe_zone_checked: true,
           automated_crop_suite_approved: true,
-          automated_crop_suite_version: 'jordan-crop-suite-v1',
+          automated_crop_suite_version: 'jordan-crop-suite-v2',
+          production_validation_version: 'jordan-reel-v2',
         }),
       ])
     ).toEqual({ safe: false, reason: 'meta_preview_approval_required' });
@@ -124,6 +127,14 @@ describe('Instagram visual safety', () => {
         reel({ ...completeMetadata, has_audio: false, audio_track_count: 0 }),
       ])
     ).toEqual({ safe: false, reason: 'reel_audio_required' });
+  });
+
+  it('blocks Reels that are too fast to read', () => {
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({ ...completeMetadata, duration_seconds: 9 }),
+      ])
+    ).toEqual({ safe: false, reason: 'reel_pacing_unverified' });
   });
 
   it('blocks unverified claims, privacy, CTA, and repetitive media', () => {

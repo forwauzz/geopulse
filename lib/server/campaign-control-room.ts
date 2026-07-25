@@ -22,8 +22,10 @@ export type ChiefOfStaffAction = {
   readonly key: string;
   readonly severity: 'now' | 'today' | 'watch';
   readonly owner: string;
+  readonly resolution: 'agent' | 'approval' | 'external';
   readonly title: string;
   readonly detail: string;
+  readonly playbook: string;
   readonly href: string;
 };
 
@@ -87,6 +89,41 @@ function laneCounts(items: CampaignItem[]): CampaignControlRoom['laneCounts'] {
       blocked: rows.filter((item) => item.health === 'blocked').length,
     }];
   })) as CampaignControlRoom['laneCounts'];
+}
+
+function remediationFor(campaign: CampaignItem): Pick<ChiefOfStaffAction, 'resolution' | 'playbook'> {
+  if (campaign.lane === 'email') {
+    return {
+      resolution: 'approval',
+      playbook: 'Jordan verifies freshness, audience, and links. Maya asks the founder for send approval when a provider draft is stale; Jordan then publishes it.',
+    };
+  }
+  if (campaign.lane === 'social') {
+    return {
+      resolution: 'agent',
+      playbook: 'Jordan regenerates unsafe creative or retries a retryable delivery. Maya verifies the replacement before the schedule is restored.',
+    };
+  }
+  if (campaign.lane === 'prospecting') {
+    return {
+      resolution: campaign.detail.includes('HTTP 403') ? 'external' : 'agent',
+      playbook: campaign.detail.includes('HTTP 403')
+        ? 'Elena replaces or skips the blocked target rather than repeatedly hitting a site that refuses access.'
+        : 'Elena retries transient fetch or delivery failures on the next outreach pass; Maya escalates repeated failures.',
+    };
+  }
+  if (campaign.lane === 'competitors') {
+    return {
+      resolution: 'agent',
+      playbook: 'Priya reruns the cohort measurement; Marcus takes over if the failure is infrastructure-related.',
+    };
+  }
+  return {
+    resolution: 'agent',
+    playbook: campaign.owner === 'Priya'
+      ? 'Priya launches the missing client measurement and confirms the first report was delivered.'
+      : 'Marcus diagnoses the failed model run, retries safely, and records the replacement run before Maya closes the exception.',
+  };
 }
 
 export function summarizeCampaignHealth(
@@ -314,14 +351,19 @@ export async function loadCampaignControlRoom(args: {
 
   const actions: ChiefOfStaffAction[] = campaigns
     .filter((campaign) => campaign.health !== 'healthy')
-    .map((campaign) => ({
-      key: campaign.id,
-      severity: campaign.health === 'blocked' ? 'now' as const : 'today' as const,
-      owner: campaign.owner,
-      title: `${campaign.name}: ${campaign.status}`,
-      detail: campaign.detail,
-      href: campaign.href,
-    }));
+    .map((campaign) => {
+      const remediation = remediationFor(campaign);
+      return {
+        key: campaign.id,
+        severity: campaign.health === 'blocked' ? 'now' as const : 'today' as const,
+        owner: campaign.owner,
+        resolution: remediation.resolution,
+        title: `${campaign.name}: ${campaign.status}`,
+        detail: campaign.detail,
+        playbook: remediation.playbook,
+        href: campaign.href,
+      };
+    });
 
   for (const agent of args.agents) {
     if (agent.enabled && agent.blockers.length === 0) continue;
@@ -329,8 +371,12 @@ export async function loadCampaignControlRoom(args: {
       key: `agent:${agent.key}`,
       severity: agent.blockers.length > 0 ? 'now' : 'watch',
       owner: agent.key === 'social_proof' || agent.key === 'marketing_autopilot' ? 'Jordan' : 'Maya',
+      resolution: 'agent',
       title: `${agent.name} ${agent.enabled ? 'is blocked' : 'is paused'}`,
       detail: agent.blockers.join(' ') || 'This capability is switched off.',
+      playbook: agent.blockers.length > 0
+        ? 'Maya routes the missing dependency or configuration to the named capability owner and verifies the next successful run.'
+        : 'Maya confirms whether this pause is intentional before changing the switch.',
       href: '/admin/agents',
     });
   }
@@ -343,8 +389,10 @@ export async function loadCampaignControlRoom(args: {
       key: 'cron:heartbeat',
       severity: 'now',
       owner: 'Marcus',
+      resolution: 'agent',
       title: 'Hourly campaign scheduler heartbeat is stale',
       detail: 'No cron-stage heartbeat was recorded in the last two hours. Check the deployed Worker trigger and logs.',
+      playbook: 'Marcus checks the Cloudflare trigger and last completed stage, restores the scheduler, and waits for a fresh heartbeat before Maya closes the incident.',
       href: '/admin/logs',
     });
   }

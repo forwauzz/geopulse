@@ -142,7 +142,7 @@ describe('Jordan Reel render handoff', () => {
       validation: {
         width: 1080,
         height: 1920,
-        durationSeconds: 9,
+        durationSeconds: 15,
         audioTrackCount: 1,
         feedPreviewSafe: true,
         gridPreviewSafe: true,
@@ -166,6 +166,8 @@ describe('Jordan Reel render handoff', () => {
           mediaKind: 'video',
           metadata: expect.objectContaining({
             automated_crop_suite_approved: true,
+            automated_crop_suite_version: 'jordan-crop-suite-v2',
+            production_validation_version: 'jordan-reel-v2',
             validation_version: 'reel-v2',
           }),
         }),

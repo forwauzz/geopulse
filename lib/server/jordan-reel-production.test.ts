@@ -97,4 +97,17 @@ describe('Jordan autonomous Reel production', () => {
     expect(script.tension.length).toBeLessThanOrEqual(100);
     expect(script.url).toBe('getgeopulse.com');
   });
+
+  it('never truncates a Reel line in the middle of a word', () => {
+    const script = buildJordanReelScript({
+      ...source,
+      evidence: {
+        ...source.evidence,
+        hook: 'The next SEO brief may include actions, not just rankings.',
+        original_angle: 'Create slides covering plain-language entity definition, audience, use cases, service area, proof, limitations, and next action.',
+      },
+    });
+    expect(script.hook).toBe('The next SEO brief may include actions, not just rankings');
+    expect(script.tension).not.toMatch(/\s[a-z]$/);
+  });
 });

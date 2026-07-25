@@ -175,7 +175,7 @@ function assertJpeg(bytes: Uint8Array): void {
 
 function validateRenderReport(report: JordanReelRenderValidation): void {
   if (report.width !== 1080 || report.height !== 1920) throw new Error('invalid_dimensions');
-  if (!Number.isFinite(report.durationSeconds) || report.durationSeconds < 7 || report.durationSeconds > 15) {
+  if (!Number.isFinite(report.durationSeconds) || report.durationSeconds < 14 || report.durationSeconds > 20) {
     throw new Error('invalid_duration');
   }
   if (!Number.isFinite(report.audioTrackCount) || report.audioTrackCount < 1) {
@@ -323,7 +323,7 @@ export async function completeJordanReelRender(args: {
         duplicate_media_match: false,
         template_rotation_checked: true,
         automated_crop_suite_approved: true,
-        automated_crop_suite_version: 'jordan-crop-suite-v1',
+        automated_crop_suite_version: 'jordan-crop-suite-v2',
         crop_safe_zone_checked: true,
         validation_version: INSTAGRAM_REEL_VALIDATION_VERSION,
         production_validation_version: JORDAN_REEL_VALIDATION_VERSION,

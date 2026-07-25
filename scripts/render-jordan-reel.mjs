@@ -30,14 +30,13 @@ try {
   execFileSync('ffmpeg', [
     '-y',
     '-f', 'lavfi',
-    '-i', 'sine=frequency=72:sample_rate=48000:duration=9',
+    '-i', 'sine=frequency=72:sample_rate=48000:duration=15',
     '-filter_complex',
-    'volume=0.055,tremolo=f=2.4:d=0.68,afade=t=in:st=0:d=0.25,afade=t=out:st=8.35:d=0.65',
+    'volume=0.055,tremolo=f=2.4:d=0.68,afade=t=in:st=0:d=0.25,afade=t=out:st=14.2:d=0.8',
     join(working, 'assets', 'pulse-bed.wav'),
   ], { stdio: 'inherit' });
 
-  const variablesPath = join(working, 'variables.json');
-  writeFileSync(variablesPath, JSON.stringify({
+  const renderVariables = {
     hook: claim.script.hook,
     tension: claim.script.tension,
     comparisonTop: claim.script.comparisonTop,
@@ -47,7 +46,32 @@ try {
     url: claim.script.url,
     sourceLabel: claim.script.sourceLabel,
     variant: claim.templateId,
-  }, null, 2));
+  };
+  const variablesPath = join(working, 'variables.json');
+  writeFileSync(variablesPath, JSON.stringify(renderVariables, null, 2));
+
+  // `check` audits schema defaults, while `render` accepts a variables file.
+  // Put the exact production copy into the temporary schema so the crop and
+  // overflow gate evaluates what Jordan will actually publish.
+  const compositionPath = join(working, 'index.html');
+  const compositionHtml = readFileSync(compositionPath, 'utf8');
+  const schemaMatch = compositionHtml.match(/data-composition-variables='([^']+)'/s);
+  if (!schemaMatch) throw new Error('composition_variable_schema_missing');
+  const schema = JSON.parse(schemaMatch[1]);
+  const productionSchema = schema.map((entry) => (
+    Object.hasOwn(renderVariables, entry.id)
+      ? { ...entry, default: renderVariables[entry.id] }
+      : entry
+  ));
+  const escapedSchema = JSON.stringify(productionSchema)
+    .replaceAll('&', '&amp;')
+    .replaceAll("'", '&#39;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+  writeFileSync(
+    compositionPath,
+    compositionHtml.replace(schemaMatch[0], `data-composition-variables='${escapedSchema}'`)
+  );
 
   execFileSync(
     process.platform === 'win32' ? 'npx.cmd' : 'npx',
@@ -55,6 +79,9 @@ try {
       '--yes',
       'hyperframes@0.7.71',
       'check',
+      '--at-transitions',
+      '--frame-check=severity=error;seek=.2,.5,.8;tol=2',
+      '--strict',
     ],
     { cwd: working, stdio: 'inherit' }
   );
@@ -89,7 +116,7 @@ try {
   const audioTracks = probe.streams.filter((stream) => stream.codec_type === 'audio').length;
   const durationSeconds = Number.parseFloat(probe.format?.duration ?? '0');
   if (videoStream?.width !== 1080 || videoStream?.height !== 1920) throw new Error('render_dimensions_invalid');
-  if (!Number.isFinite(durationSeconds) || durationSeconds < 7 || durationSeconds > 15) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds < 14 || durationSeconds > 20) {
     throw new Error('render_duration_invalid');
   }
   if (audioTracks < 1) throw new Error('render_audio_missing');
@@ -97,9 +124,9 @@ try {
   const thumbnailPath = join(working, 'previews', 'thumbnail.jpg');
   const feedPath = join(working, 'previews', 'feed-4x5.jpg');
   const gridPath = join(working, 'previews', 'grid-1x1.jpg');
-  execFileSync('ffmpeg', ['-y', '-ss', '4', '-i', videoPath, '-frames:v', '1', '-update', '1', '-q:v', '2', thumbnailPath], { stdio: 'inherit' });
-  execFileSync('ffmpeg', ['-y', '-ss', '4', '-i', videoPath, '-vf', 'crop=1080:1350:0:285', '-frames:v', '1', '-update', '1', '-q:v', '2', feedPath], { stdio: 'inherit' });
-  execFileSync('ffmpeg', ['-y', '-ss', '4', '-i', videoPath, '-vf', 'crop=1080:1080:0:420', '-frames:v', '1', '-update', '1', '-q:v', '2', gridPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', '7.5', '-i', videoPath, '-frames:v', '1', '-update', '1', '-q:v', '2', thumbnailPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', '7.5', '-i', videoPath, '-vf', 'crop=1080:1350:0:285', '-frames:v', '1', '-update', '1', '-q:v', '2', feedPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', '7.5', '-i', videoPath, '-vf', 'crop=1080:1080:0:420', '-frames:v', '1', '-update', '1', '-q:v', '2', gridPath], { stdio: 'inherit' });
 
   const form = new FormData();
   form.set('assetId', claim.assetId);

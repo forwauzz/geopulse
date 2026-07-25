@@ -148,6 +148,12 @@ export default async function AdminCampaignsPage({
                     <div>
                       <p className="font-semibold text-on-background">{action.owner}: {action.title}</p>
                       <p className="mt-1 text-sm leading-6 text-on-surface-variant">{action.detail}</p>
+                      <p className="mt-2 text-xs leading-5 text-on-surface-variant">
+                        <span className="font-bold text-on-background">
+                          {action.resolution === 'approval' ? 'Approval needed' : action.resolution === 'external' ? 'External blocker' : `${action.owner} can fix`}
+                        </span>
+                        {' · '}{action.playbook}
+                      </p>
                     </div>
                     <Link href={action.href} className="text-sm font-semibold text-primary hover:underline">Fix it</Link>
                   </article>
