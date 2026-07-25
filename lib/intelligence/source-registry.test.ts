@@ -42,6 +42,12 @@ describe('intelligence source registry', () => {
       'public.intelligence_window_quality_assessments',
       'public.intelligence_quarantine_events',
       'public.intelligence_quality_alerts',
+      'public.intelligence_metric_definitions',
+      'public.intelligence_mart_domain_measurement_timeline',
+      'public.intelligence_mart_lane_window_health',
+      'public.intelligence_mart_domain_query_model_outcomes',
+      'public.intelligence_mart_domain_page_feature_snapshots',
+      'public.intelligence_mart_intervention_outcomes',
     ];
 
     for (const id of required) expect(ids.has(id), id).toBe(true);
