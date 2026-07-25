@@ -12,6 +12,7 @@ import { hexToRgb01 } from '@workers/report/report-branding';
 import { detectImageType, MAX_LOGO_BYTES } from '@workers/scan-engine/parse-brand-signals';
 import { fetchBrandLogo } from '@workers/report/fetch-brand-logo';
 import { publicObjectUrl } from '@workers/report/r2-report-storage';
+import { z } from 'zod';
 
 export type BrandScopeTable = 'startup_workspaces' | 'agency_accounts' | 'agency_clients';
 
@@ -52,6 +53,7 @@ export type BrandSettingsView = {
   readonly logoMime: string | null;
   /** Public URL for previewing the stored logo, when a public base is configured. */
   readonly logoUrl: string | null;
+  readonly replyToEmail: string;
 };
 
 export type BrandFieldsInput = {
@@ -59,6 +61,7 @@ export type BrandFieldsInput = {
   readonly primaryHex: string;
   readonly footerNote: string;
   readonly showPoweredBy: boolean;
+  readonly replyToEmail?: string;
 };
 
 export type BrandMutationResult = { ok: true } | { ok: false; code: string };
@@ -138,6 +141,7 @@ export async function getBrandSettingsView(args: {
     logoKey,
     logoMime: typeof brand['logoMime'] === 'string' ? (brand['logoMime'] as string) : null,
     logoUrl: logoKey && args.publicBase ? publicObjectUrl(args.publicBase, logoKey) : null,
+    replyToEmail: typeof brand['replyToEmail'] === 'string' ? (brand['replyToEmail'] as string) : '',
   };
 }
 
@@ -150,9 +154,13 @@ export async function saveBrandFields(args: {
   const companyName = args.fields.companyName.trim().slice(0, 80);
   const footerNote = args.fields.footerNote.trim().slice(0, 160);
   const primaryHex = args.fields.primaryHex.trim();
+  const replyToEmail = (args.fields.replyToEmail ?? '').trim().toLowerCase();
 
   if (primaryHex && !hexToRgb01(primaryHex)) {
     return { ok: false, code: 'brand_invalid_color' };
+  }
+  if (replyToEmail && !z.string().email().max(320).safeParse(replyToEmail).success) {
+    return { ok: false, code: 'brand_invalid_email' };
   }
 
   await writeBrand(args.supabase, args.scope, (brand) => ({
@@ -161,6 +169,7 @@ export async function saveBrandFields(args: {
     primary: primaryHex || undefined,
     footerNote: footerNote || undefined,
     showPoweredBy: args.fields.showPoweredBy,
+    ...(args.fields.replyToEmail !== undefined ? { replyToEmail: replyToEmail || undefined } : {}),
   }));
   return { ok: true };
 }

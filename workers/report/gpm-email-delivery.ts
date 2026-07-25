@@ -1,5 +1,6 @@
 import { escapeHtml, uint8ToBase64 } from './resend-delivery-helpers';
 import type { GpmReportPayload } from '@/lib/server/geo-performance-report-payload';
+import { GEO_PULSE_BRAND, type BrandConfig } from './report-branding';
 
 export type GpmEmailResult = { ok: true } | { ok: false; message: string };
 
@@ -47,8 +48,12 @@ function buildGpmEmailHtml(input: {
   narrative: string | null;
   pdfUrl: string | null;
   attachPdf: boolean;
+  brand?: BrandConfig;
 }): string {
   const { payload, narrative, pdfUrl, attachPdf } = input;
+  const brand = input.brand ?? GEO_PULSE_BRAND;
+  const brandColor = `rgb(${Math.round(brand.primary.r * 255)},${Math.round(brand.primary.g * 255)},${Math.round(brand.primary.b * 255)})`;
+  const brandInk = `rgb(${Math.round(brand.onPrimary.r * 255)},${Math.round(brand.onPrimary.g * 255)},${Math.round(brand.onPrimary.b * 255)})`;
   const { domain, topic, location, platform, windowDate,
           visibilityPct, citationRate, industryRank,
           prompts, opportunities, competitors } = payload;
@@ -145,11 +150,11 @@ function buildGpmEmailHtml(input: {
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:#FFFFFF;border-radius:12px;overflow:hidden;max-width:600px;">
 
   <!-- Header -->
-  <tr><td style="background:#565E74;padding:0;">
+  <tr><td style="background:${brandColor};padding:0;">
     <div style="background:${pColor};height:4px;"></div>
     <div style="padding:20px 32px;">
-      <span style="color:#fff;font-size:20px;font-weight:700;letter-spacing:-0.5px;">GEO-Pulse</span>
-      <span style="color:rgba(255,255,255,0.65);font-size:13px;margin-left:12px;">GEO Performance Report</span>
+      <span style="color:${brandInk};font-size:20px;font-weight:700;letter-spacing:-0.5px;">${escapeHtml(brand.companyName)}</span>
+      <span style="color:${brandInk};opacity:.72;font-size:13px;margin-left:12px;">AI Visibility Report</span>
     </div>
   </td></tr>
 
@@ -178,7 +183,7 @@ function buildGpmEmailHtml(input: {
   <tr><td style="padding:28px 32px;border-top:1px solid #F1F4F4;margin-top:24px;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="color:#ABB4B5;font-size:11px;">Powered by GEO-Pulse</td>
+        <td style="color:#ABB4B5;font-size:11px;">${escapeHtml(brand.footerNote ?? (brand.showPoweredBy ? 'Powered by GEO-Pulse' : brand.companyName))}</td>
         <td style="color:#ABB4B5;font-size:11px;text-align:right;">${escapeHtml(dateStr)}</td>
       </tr>
     </table>
@@ -198,6 +203,9 @@ export async function sendGpmReportEmail(input: {
   readonly apiKey: string;
   readonly from: string;
   readonly to: string;
+  readonly recipients?: readonly string[];
+  readonly replyTo?: string | null;
+  readonly brand?: BrandConfig;
   readonly payload: GpmReportPayload;
   readonly narrative?: string | null;
   readonly pdfBytes?: Uint8Array;
@@ -211,6 +219,7 @@ export async function sendGpmReportEmail(input: {
     narrative: input.narrative ?? null,
     pdfUrl: input.pdfUrl ?? null,
     attachPdf,
+    brand: input.brand,
   });
 
   const { domain, topic, location } = input.payload;
@@ -219,10 +228,11 @@ export async function sendGpmReportEmail(input: {
 
   const body: Record<string, unknown> = {
     from: input.from,
-    to: [input.to],
+    to: input.recipients?.length ? input.recipients : [input.to],
     subject,
     html,
   };
+  if (input.replyTo) body['reply_to'] = input.replyTo;
 
   if (attachPdf && input.pdfBytes) {
     const filename = `geo-performance-${domain}-${input.payload.windowDate}-${input.payload.platform}.pdf`;

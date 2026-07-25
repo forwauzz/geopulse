@@ -13,6 +13,7 @@ type Props = {
   siteKey: string;
   scanId: string;
   mode?: DeepAuditCheckoutMode;
+  defaultEmail?: string | null;
 };
 
 function turnstileUserMessage(serverMessage: string): string {
@@ -35,9 +36,9 @@ function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
   return 'Get the expanded multi-page audit with full check breakdowns, coverage details, and a prioritized action plan. One-time purchase, no subscription. After payment, we send the finished report to the email collected in Stripe checkout.';
 }
 
-export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe' }: Props) {
+export function DeepAuditCheckout({ siteKey, scanId, mode = 'stripe', defaultEmail }: Props) {
   const [token, setToken] = useState<string | null>(null);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(defaultEmail ?? '');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const isFree = mode === 'free';

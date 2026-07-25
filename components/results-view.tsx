@@ -362,6 +362,15 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       }
       deepAuditSlot={
         <div className="space-y-6">
+          {showCheckout ? (
+            <a href="#full-audit-checkout" className="flex items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/5 px-5 py-4 text-left transition hover:bg-primary/10">
+              <span>
+                <span className="block font-headline font-semibold text-on-background">Get the full multi-page report</span>
+                <span className="mt-1 block text-sm text-on-surface-variant">Complete crawl, prioritized fixes, PDF, and email delivery.</span>
+              </span>
+              <span className="material-symbols-outlined text-primary" aria-hidden>arrow_downward</span>
+            </a>
+          ) : null}
           {/* Access & Eligibility Matrix — the per-destination headline diagnostic */}
           {data.accessMatrix && <AccessMatrixView matrix={data.accessMatrix} />}
 
@@ -496,6 +505,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
                   siteKey={turnstileSiteKey}
                   scanId={data.scanId}
                   mode={data.checkoutMode}
+                  defaultEmail={monitorAccountEmail}
                 />
               </div>
             </section>
