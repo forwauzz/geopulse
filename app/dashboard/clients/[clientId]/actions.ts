@@ -10,13 +10,14 @@ import { createBenchmarkExecutionAdapter } from '@/lib/server/benchmark-executio
 import { buildGpmEntitlementsMap } from '@/lib/server/geo-performance-entitlements';
 import { executeGpmClientRun, resolveGpmPlatformModelMap } from '@/lib/server/geo-performance-schedule';
 import { parsePromptCsv } from '@/lib/server/prompt-csv';
+import { parseReportRecipients } from '@/lib/shared/report-recipients';
 
 const schema = z.object({
   clientId: z.string().uuid(),
   agencyAccountId: z.string().uuid(),
   configId: z.string().uuid(),
   cadence: z.enum(['monthly', 'biweekly', 'weekly']),
-  reportEmail: z.string().trim().email().or(z.literal('')),
+  reportEmail: z.string().trim().max(1800),
   competitorList: z.string().max(1200),
 });
 
@@ -26,7 +27,7 @@ const activateSchema = z.object({
   domain: z.string().trim().min(3).max(255),
   topic: z.string().trim().min(2).max(120),
   location: z.string().trim().min(2).max(120),
-  reportEmail: z.string().trim().email(),
+  reportEmail: z.string().trim().max(1800),
   prompts: z.string().max(6000),
   competitorList: z.string().max(2400),
 });
@@ -102,6 +103,17 @@ export async function saveClientMonitoring(formData: FormData): Promise<void> {
   const auth = await authorizedAdmin(parsed.data);
   if (!auth) return;
   const { admin } = auth;
+  const recipients = parseReportRecipients(parsed.data.reportEmail);
+  if (parsed.data.reportEmail.trim() && recipients.length === 0) return;
+  const { data: currentConfig } = await admin
+    .from('client_benchmark_configs')
+    .select('metadata')
+    .eq('id', parsed.data.configId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  const currentMetadata = currentConfig?.metadata && typeof currentConfig.metadata === 'object'
+    ? currentConfig.metadata as Record<string, unknown>
+    : {};
 
   const competitors = Array.from(
     new Set(
@@ -115,8 +127,9 @@ export async function saveClientMonitoring(formData: FormData): Promise<void> {
     .from('client_benchmark_configs')
     .update({
       cadence: parsed.data.cadence,
-      report_email: parsed.data.reportEmail || null,
+      report_email: recipients[0] ?? null,
       competitor_list: competitors,
+      metadata: { ...currentMetadata, report_recipients: recipients },
       updated_at: new Date().toISOString(),
     })
     .eq('id', parsed.data.configId)
@@ -141,6 +154,8 @@ export async function activateClientMonitoring(formData: FormData): Promise<void
   const auth = await authorizedAdmin(parsed.data);
   if (!auth) return;
   const { admin, user } = auth;
+  const recipients = parseReportRecipients(parsed.data.reportEmail);
+  if (recipients.length === 0) return;
   const canonical = canonicalizeDomain(parsed.data.domain);
   const prompts = uniqueLines(parsed.data.prompts, 20);
   if (!canonical || prompts.length === 0) return;
@@ -210,7 +225,7 @@ export async function activateClientMonitoring(formData: FormData): Promise<void
       competitor_list: competitors,
       cadence: 'monthly',
       platforms_enabled: ['chatgpt', 'gemini'],
-      report_email: parsed.data.reportEmail,
+      report_email: recipients[0]!,
       metadata: {
         setup_source: 'agency_client_scorecard',
         setup_at: now,
@@ -218,6 +233,7 @@ export async function activateClientMonitoring(formData: FormData): Promise<void
         prompt_source: 'customer_supplied',
         prompt_count: prompts.length,
         outcome_action_events: [],
+        report_recipients: recipients,
       },
     };
   const { data: existingConfig } = await admin

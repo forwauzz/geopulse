@@ -31,6 +31,7 @@ export type BrandConfig = {
   readonly footerNote: string | null;
   /** False only for partner tiers that have paid to remove our mark. */
   readonly showPoweredBy: boolean;
+  readonly replyToEmail?: string | null;
 };
 
 const NEAR_BLACK: Rgb01 = { r: 0.11, g: 0.12, b: 0.13 };
@@ -44,6 +45,7 @@ export const GEO_PULSE_BRAND: BrandConfig = {
   onPrimary: WHITE,
   footerNote: null,
   showPoweredBy: true,
+  replyToEmail: null,
 };
 
 export function hexToRgb01(hex: string): Rgb01 | null {
@@ -152,5 +154,6 @@ export function parseBrandConfig(metadata: unknown): BrandConfig {
     footerNote: readString(source, 'footerNote', 160),
     // Removing our mark is a paid capability, so it is opt-IN and defaults to showing.
     showPoweredBy: source['showPoweredBy'] === false ? false : true,
+    replyToEmail: readString(source, 'replyToEmail', 320),
   };
 }

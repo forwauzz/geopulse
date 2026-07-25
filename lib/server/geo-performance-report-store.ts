@@ -6,6 +6,8 @@ import { structuredLog, structuredError } from './structured-log';
 import type { ClientBenchmarkConfigRow } from './benchmark-repository';
 import { sendGpmReportEmail } from '../../workers/report/gpm-email-delivery';
 import type { GpmReportPayload } from './geo-performance-report-payload';
+import { parseBrandConfig } from '../../workers/report/report-branding';
+import { recipientsFromMetadata } from '../shared/report-recipients';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,26 @@ export async function storeGpmReport(args: {
   readonly env: GpmReportStoreEnvLike;
 }): Promise<GpmReportStoreResult> {
   const { config, runGroupId, platform, windowDate, measuredCanonicalDomain } = args;
+  let brand = parseBrandConfig(null);
+  try {
+    if (config.agency_account_id) {
+      const { data: agency } = await args.supabase
+        .from('agency_accounts')
+        .select('metadata')
+        .eq('id', config.agency_account_id)
+        .maybeSingle();
+      brand = parseBrandConfig(agency?.metadata);
+    } else if (config.startup_workspace_id) {
+      const { data: workspace } = await args.supabase
+        .from('startup_workspaces')
+        .select('metadata')
+        .eq('id', config.startup_workspace_id)
+        .maybeSingle();
+      brand = parseBrandConfig(workspace?.metadata);
+    }
+  } catch {
+    // Branding is presentation-only; a lookup failure must never block report generation.
+  }
 
   structuredLog('gpm_report_store_started', {
     config_id: config.id,
@@ -88,7 +110,7 @@ export async function storeGpmReport(args: {
   }
 
   // 3. Render PDF
-  const pdfBytes = await buildGpmReportPdf(payload, { narrative });
+  const pdfBytes = await buildGpmReportPdf(payload, { narrative, brand });
 
   // 4. Upload to R2 if bucket is available
   let pdfR2Key: string | null = null;
@@ -155,13 +177,17 @@ export async function storeGpmReport(args: {
   // 6. Send email report if configured (non-fatal)
   const resendKey  = args.env.RESEND_API_KEY?.trim();
   const resendFrom = args.env.RESEND_FROM_EMAIL?.trim();
-  if (config.report_email && resendKey && resendFrom) {
+  const recipients = recipientsFromMetadata(config.report_email, config.metadata);
+  if (recipients.length > 0 && resendKey && resendFrom) {
     try {
       const idempotencyKey = `gpm-report/${config.id}/${platform}/${windowDate}/${runGroupId}`;
       const emailResult = await sendGpmReportEmail({
         apiKey: resendKey,
         from: resendFrom,
-        to: config.report_email,
+        to: recipients[0]!,
+        recipients,
+        replyTo: brand.replyToEmail,
+        brand,
         payload,
         narrative,
         pdfBytes: pdfUrl ? undefined : pdfBytes,
@@ -175,7 +201,7 @@ export async function storeGpmReport(args: {
           message: emailResult.message,
         });
       } else {
-        structuredLog('gpm_report_email_sent', { config_id: config.id, report_id: reportId, to: config.report_email });
+        structuredLog('gpm_report_email_sent', { config_id: config.id, report_id: reportId, recipient_count: recipients.length });
       }
     } catch (err) {
       structuredError('gpm_report_email_exception', {

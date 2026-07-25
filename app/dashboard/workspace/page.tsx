@@ -131,7 +131,26 @@ export default async function WorkspacePage({ searchParams }: Props) {
         </Link>
       </div>
 
-      {/* ── Recurring audit (self-serve, all users) ─────────── */}
+      {selectedAgencyAccount ? (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-5 shadow-float md:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">Agency subscription</p>
+              <h2 className="mt-2 font-headline text-lg font-bold text-on-background">One agency plan covers your client reporting</h2>
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-on-surface-variant">
+                The $39 monthly monitoring offer is for an individual business. It is not an extra charge for every agency client. Your current plan, renewal, invoices, and upgrade options live in Billing.
+              </p>
+            </div>
+            <Link href="/dashboard/billing" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>credit_card</span>
+              Plan &amp; billing
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Personal/startup recurring audits. Agencies schedule delivery per client. */}
+      {!selectedAgencyAccount ? (
       <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 shadow-float md:p-6">
         <h2 className="font-sans text-lg font-bold text-on-background">Recurring audit</h2>
         <p className="mt-0.5 font-sans text-sm text-on-surface-variant">
@@ -185,6 +204,7 @@ export default async function WorkspacePage({ searchParams }: Props) {
           <span>Last run: <LocalTime iso={schedule?.lastRunAt ?? null} /></span>
         </div>
       </div>
+      ) : null}
 
       {selectedAgencyAccount && agencyBranding ? (
         <AgencyBrandingSettings accountId={selectedAgencyAccount.id} view={agencyBranding} status={sp.brand} />

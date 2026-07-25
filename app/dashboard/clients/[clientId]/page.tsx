@@ -10,6 +10,8 @@ import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspac
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
 import { activateClientMonitoring, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
+import { PendingSubmitButton } from '@/components/pending-submit-button';
+import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
 
 export const dynamic = 'force-dynamic';
 
@@ -125,6 +127,7 @@ export default async function ClientScorecardPage({
         .maybeSingle()
     : { data: null };
   const engineEntries = (Object.entries(engines) as Array<[EngineKey, { citationRate: number }]>);
+  const reportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 py-4">
@@ -238,9 +241,11 @@ export default async function ClientScorecardPage({
               <input type="hidden" name="clientId" value={client.id} />
               <input type="hidden" name="agencyAccountId" value={account.id} />
               <input type="hidden" name="configId" value={configId} />
-              <button className="inline-flex items-center gap-2 rounded-xl bg-on-background px-4 py-2.5 text-sm font-semibold text-background">
-                <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check visibility now
-              </button>
+              <PendingSubmitButton
+                idleLabel="Check visibility now"
+                pendingLabel="Checking ChatGPT + Gemini…"
+                className="inline-flex items-center gap-2 rounded-xl bg-on-background px-4 py-2.5 text-sm font-semibold text-background"
+              />
               {sp.visibility ? (
                 <span className={`text-sm font-medium ${sp.visibility === 'checked' ? 'text-primary' : 'text-error'}`}>
                   {sp.visibility === 'checked' ? 'New measurement saved' : sp.visibility === 'not_enabled' ? 'Monitoring is not included in this plan' : 'Check did not complete'}
@@ -251,7 +256,7 @@ export default async function ClientScorecardPage({
         </section>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float">
           <div className="flex items-start justify-between gap-4">
             <div><h2 className="font-headline text-lg font-semibold text-on-background">Visibility vs competitors</h2><p className="mt-1 text-sm text-on-surface-variant">Brands tracked in the same buyer questions.</p></div>
@@ -275,8 +280,9 @@ export default async function ClientScorecardPage({
                     <option value="monthly">Monthly</option><option value="biweekly">Every two weeks</option><option value="weekly">Weekly</option>
                   </select>
                 </label>
-                <label className="text-sm text-on-surface-variant">Send to
-                  <input name="reportEmail" type="email" defaultValue={reportEmail ?? ''} placeholder="client@company.com" className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                <label className="text-sm text-on-surface-variant sm:col-span-2">Recipients
+                  <textarea name="reportEmail" defaultValue={reportRecipients.join('\n')} rows={3} placeholder={'client@company.com\njack@lifter.ca'} className="mt-1 w-full resize-y rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                  <span className="mt-1 block text-xs leading-relaxed">Up to 5 emails, one per line. Add the client, agency owner, and website manager here.</span>
                 </label>
               </div>
               <label className="block text-sm text-on-surface-variant">Competitors <span className="text-xs">(one per line)</span>
@@ -286,7 +292,10 @@ export default async function ClientScorecardPage({
                 <button className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary">Save delivery</button>
                 {sp.monitoring === 'saved' || sp.monitoring === 'activated' ? <span className="text-sm font-medium text-primary">{sp.monitoring === 'activated' ? 'Tracking started' : 'Saved'}</span> : null}
               </div>
-              <p className="text-xs text-on-surface-variant">Tracking: {platformsEnabled.map((platform) => platform === 'chatgpt' ? 'ChatGPT' : platform === 'gemini' ? 'Gemini' : platform).join(' + ') || 'Not configured'}</p>
+              <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 py-3 text-xs leading-relaxed text-on-surface-variant">
+                <p><strong className="text-on-background">Delivery:</strong> sent from reports@getgeopulse.com with your saved agency branding. Replies use your agency reply-to email when configured.</p>
+                <p className="mt-1">Tracking: {platformsEnabled.map((platform) => platform === 'chatgpt' ? 'ChatGPT' : platform === 'gemini' ? 'Gemini' : platform).join(' + ') || 'Not configured'}</p>
+              </div>
               <div className="rounded-xl bg-surface-container-low p-3 text-sm">
                 {latestGpmReport ? (
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -321,7 +330,8 @@ export default async function ClientScorecardPage({
                 <textarea name="competitorList" rows={3} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
               </label>
               <label className="block text-sm text-on-surface-variant">Send reports to
-                <input name="reportEmail" type="email" required defaultValue={user.email ?? ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                <textarea name="reportEmail" required rows={3} defaultValue={user.email ?? ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                <span className="mt-1 block text-xs">Up to 5 emails, one per line.</span>
               </label>
               <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">
                 <span className="material-symbols-outlined text-[18px]" aria-hidden>monitoring</span> Start tracking

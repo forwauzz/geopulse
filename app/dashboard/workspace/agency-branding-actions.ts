@@ -52,6 +52,7 @@ export async function saveAgencyBranding(formData: FormData): Promise<void> {
       primaryHex: String(formData.get('primaryHex') ?? ''),
       footerNote: String(formData.get('footerNote') ?? ''),
       showPoweredBy: formData.get('showPoweredBy') === 'on',
+      replyToEmail: String(formData.get('replyToEmail') ?? ''),
     },
   });
   revalidatePath('/dashboard/workspace');

@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
 import type { GpmReportPayload } from './geo-performance-report-payload';
+import { GEO_PULSE_BRAND, type BrandConfig } from '../../workers/report/report-branding';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,10 @@ function wrapLine(text: string, maxChars: number): string[] {
   }
   if (cur) lines.push(cur);
   return lines;
+}
+
+function pdfSafeText(text: string, maxChars: number): string {
+  return text.replace(/[^\x20-\x7e]/g, '?').slice(0, maxChars);
 }
 
 function fmtPct(v: number): string {
@@ -85,13 +90,15 @@ class GpmPdfBuilder {
   private pageNum = 0;
   private footerDomain = '';
   private footerPeriod = '';
+  private brand: BrandConfig = GEO_PULSE_BRAND;
 
-  async init(domain: string, period: string): Promise<void> {
+  async init(domain: string, period: string, brand: BrandConfig): Promise<void> {
     this.doc = await PDFDocument.create();
     this.font = await this.doc.embedFont(StandardFonts.Helvetica);
     this.fontBold = await this.doc.embedFont(StandardFonts.HelveticaBold);
     this.footerDomain = domain;
     this.footerPeriod = period;
+    this.brand = brand;
     this.newPage();
   }
 
@@ -124,20 +131,22 @@ class GpmPdfBuilder {
     const { domain, topic, location, windowDate, platform } = payload;
     const period = formatWindowDate(windowDate);
     const pColor = platformColor(platform);
+    const brandColor = rgb(this.brand.primary.r, this.brand.primary.g, this.brand.primary.b);
+    const brandInk = rgb(this.brand.onPrimary.r, this.brand.onPrimary.g, this.brand.onPrimary.b);
 
     // Full-bleed dark background
-    this.page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: PRIMARY });
+    this.page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: brandColor });
 
     // Accent stripe left edge
     this.page.drawRectangle({ x: 0, y: 0, width: 6, height: PAGE_H, color: pColor });
 
     // Logo + report type
     const logoY = PAGE_H - 72;
-    this.page.drawText('GEO-Pulse', {
-      x: MARGIN, y: logoY, size: 22, font: this.fontBold, color: WHITE,
+    this.page.drawText(pdfSafeText(this.brand.companyName, 42), {
+      x: MARGIN, y: logoY, size: 22, font: this.fontBold, color: brandInk,
     });
     this.page.drawText('GEO Performance Report', {
-      x: MARGIN, y: logoY - 22, size: 11, font: this.font, color: rgb(0.75, 0.78, 0.84),
+      x: MARGIN, y: logoY - 22, size: 11, font: this.font, color: brandInk,
     });
 
     // Separator
@@ -151,7 +160,7 @@ class GpmPdfBuilder {
     // Domain + topic/location
     const domainY = PAGE_H / 2 + 60;
     this.page.drawText(domain, {
-      x: MARGIN, y: domainY, size: 32, font: this.fontBold, color: WHITE,
+      x: MARGIN, y: domainY, size: 32, font: this.fontBold, color: brandInk,
     });
     this.page.drawText(`${topic} \u00b7 ${location}`, {
       x: MARGIN, y: domainY - 28, size: 12, font: this.font, color: rgb(0.8, 0.82, 0.87),
@@ -502,11 +511,11 @@ class GpmPdfBuilder {
 
 export async function buildGpmReportPdf(
   payload: GpmReportPayload,
-  options?: { readonly narrative?: string }
+  options?: { readonly narrative?: string; readonly brand?: BrandConfig }
 ): Promise<Uint8Array> {
   const period = formatWindowDate(payload.windowDate);
   const builder = new GpmPdfBuilder();
-  await builder.init(payload.domain, period);
+  await builder.init(payload.domain, period, options?.brand ?? GEO_PULSE_BRAND);
 
   builder.drawCover(payload);
   if (options?.narrative) {

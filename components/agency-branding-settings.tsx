@@ -14,6 +14,7 @@ const STATUS: Record<string, string> = {
   storage_unavailable: 'Logo storage is temporarily unavailable.',
   logo_invalid: 'Use a valid PNG or JPEG logo.',
   brand_invalid_color: 'Enter a valid hex colour such as #1a2b3c.',
+  brand_invalid_email: 'Enter a valid reply-to email.',
 };
 
 export function AgencyBrandingSettings({
@@ -29,7 +30,7 @@ export function AgencyBrandingSettings({
     <section className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-5 shadow-float md:p-6">
       <div>
         <h2 className="font-headline text-lg font-bold text-on-background">Client report branding</h2>
-        <p className="mt-1 text-sm text-on-surface-variant">Your name, colour, and logo appear on every new agency PDF.</p>
+        <p className="mt-1 text-sm text-on-surface-variant">Your name and colour appear on recurring visibility reports; your logo also appears on customer scorecards and full audit PDFs.</p>
       </div>
       {status && STATUS[status] ? <p className="mt-4 rounded-xl bg-primary/10 px-4 py-3 text-sm text-on-background">{STATUS[status]}</p> : null}
       <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -46,6 +47,10 @@ export function AgencyBrandingSettings({
           </label>
           <label className="block text-sm font-medium text-on-background">Footer note
             <input name="footerNote" defaultValue={view.footerNote} maxLength={160} placeholder="Prepared for your client by Your Agency" className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 py-2.5" />
+          </label>
+          <label className="block text-sm font-medium text-on-background">Reply-to email
+            <input name="replyToEmail" type="email" defaultValue={view.replyToEmail} maxLength={320} placeholder="jack@youragency.com" className="mt-2 w-full rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 py-2.5" />
+            <span className="mt-1 block text-xs font-normal text-on-surface-variant">Client replies go here. Delivery still uses GEO-Pulse infrastructure.</span>
           </label>
           <label className="flex items-center gap-2 text-sm text-on-background">
             <input type="checkbox" name="showPoweredBy" defaultChecked={view.showPoweredBy} className="h-4 w-4 accent-primary" />

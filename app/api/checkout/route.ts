@@ -22,7 +22,7 @@ const bodySchema = z.object({
   scanId: z.string().uuid(),
   turnstileToken: z.string().min(1),
   anonymous_id: z.string().max(128).nullish(),
-  // Free (OSS) mode: delivery email for anonymous users (logged-in users use their session email).
+  // Free mode: prefill from the session in the UI, but respect an explicit edited address.
   email: z.string().email().max(320).nullish(),
 });
 
@@ -125,7 +125,7 @@ export async function POST(request: Request): Promise<Response> {
   // queue it directly (same path as an entitlement bypass), no Stripe. Needs a delivery email:
   // the session email for logged-in users, otherwise one supplied in the request body.
   if (!isLegacyPaidEnabled(env.LEGACY_PAID_ENABLED)) {
-    const freeEmail = sessionUserEmail ?? parsed.data.email ?? null;
+    const freeEmail = parsed.data.email?.trim().toLowerCase() ?? sessionUserEmail ?? null;
     if (!freeEmail) {
       return Response.json(
         { error: { code: 'email_required', message: 'Enter an email so we can send your report.' } },
