@@ -14,6 +14,13 @@ const BUNDLE_NAMES: Record<string, string> = {
   agency_pro: 'Agency Pro',
 };
 
+const BUNDLE_PRICES: Record<string, string> = {
+  startup_lite: 'Free',
+  startup_dev: '$19.75 USD / month',
+  agency_core: '$49.99 USD / month',
+  agency_pro: '$129.99 USD / month',
+};
+
 const SCAN_QUOTA: Record<string, number | null> = {
   startup_lite: 3,
   startup_dev: null,
@@ -170,6 +177,9 @@ export default async function BillingPage() {
                 <p className="mt-1 text-sm font-medium text-on-background">
                   {BUNDLE_NAMES[sub.bundle_key] ?? sub.bundle_key}
                 </p>
+                {BUNDLE_PRICES[sub.bundle_key] ? (
+                  <p className="mt-1 text-xs text-on-surface-variant">{BUNDLE_PRICES[sub.bundle_key]}</p>
+                ) : null}
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant">Status</p>
@@ -189,7 +199,12 @@ export default async function BillingPage() {
               ) : null}
             </div>
             <div className="border-t border-outline-variant/10 px-6 py-5">
-              <ManageSubscriptionButton />
+              <div className="flex flex-wrap gap-3">
+                <ManageSubscriptionButton />
+                <Link href="/pricing" className="inline-flex items-center rounded-xl border border-outline-variant/25 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background transition hover:bg-surface-container-high">
+                  {sub.bundle_key === 'agency_core' ? 'Compare & upgrade' : 'Compare plans'}
+                </Link>
+              </div>
               <p className="mt-2 text-xs text-on-surface-variant/70">
                 Update payment method, download invoices, or cancel - managed via Stripe.
               </p>
