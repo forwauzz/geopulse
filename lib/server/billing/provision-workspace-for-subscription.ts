@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { provisionCustomerVisibilityBaseline } from '@/lib/server/customer-visibility-baseline';
 import { structuredLog, structuredError } from '@/lib/server/structured-log';
 
 export type ProvisionWorkspaceArgs = {
@@ -219,6 +220,27 @@ async function provisionStartupWorkspace(
     .from('user_subscriptions')
     .update({ startup_workspace_id: workspace.id })
     .eq('stripe_subscription_id', args.subscriptionId);
+
+  if (canonicalDomain) {
+    await supabase.from('startup_workspace_domains').upsert(
+      {
+        startup_workspace_id: workspace.id,
+        domain: canonicalDomain,
+        canonical_domain: canonicalDomain,
+        site_url: websiteUrl ?? `https://${canonicalDomain}`,
+        is_primary: true,
+        metadata: { source: 'self_serve_subscription' },
+      },
+      { onConflict: 'startup_workspace_id,canonical_domain' }
+    );
+    await provisionCustomerVisibilityBaseline(supabase, {
+      startupWorkspaceId: workspace.id,
+      domain: canonicalDomain,
+      companyName: name,
+      source: 'startup_onboarding',
+      reportEmail: args.userEmail,
+    });
+  }
 
   structuredLog('provision_startup_workspace_created', {
     workspaceId: workspace.id,

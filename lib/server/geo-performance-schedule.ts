@@ -403,7 +403,7 @@ export async function runGpmScheduledSweep(args: {
   });
 
   for (const config of allConfigs) {
-    const entitlement = args.entitlementsByConfigId.get(config.id) ?? {
+    const configuredEntitlement = args.entitlementsByConfigId.get(config.id) ?? {
       enabled: false,
       tier: null,
       maxPromptsPerRun: null,
@@ -412,6 +412,24 @@ export async function runGpmScheduledSweep(args: {
       platformsAllowed: [] as const,
       source: 'service_default',
     };
+    const configMetadata =
+      config.metadata && typeof config.metadata === 'object'
+        ? config.metadata as Record<string, unknown>
+        : {};
+    // Every customer gets one activation baseline, including a free onboarding
+    // workspace. Paid entitlement controls every recurring run after that.
+    const activationBaselineQueued = configMetadata['baseline_status'] === 'queued';
+    const entitlement = !configuredEntitlement.enabled && activationBaselineQueued
+      ? {
+          enabled: true,
+          tier: null,
+          maxPromptsPerRun: 10,
+          allowedCadences: ['monthly'] as const,
+          deliverySurfaces: [] as const,
+          platformsAllowed: ['chatgpt', 'gemini'] as const,
+          source: 'activation_baseline',
+        }
+      : configuredEntitlement;
 
     try {
       const summary = await executeGpmClientRun({
@@ -425,6 +443,32 @@ export async function runGpmScheduledSweep(args: {
         reportEnv: args.env,
         reportBucket: args.reportBucket,
       });
+      if (activationBaselineQueued && !summary.entitlementBlocked && !summary.skippedMissingConfig) {
+        const launched = summary.platformResults.filter((result) => result.status === 'launched');
+        const failed = summary.platformResults.filter((result) => result.status === 'failed');
+        const existing = summary.platformResults.filter((result) => result.status === 'skipped_existing');
+        const baselineStatus =
+          failed.length > 0 && launched.length === 0 && existing.length === 0
+            ? 'failed'
+            : launched.length > 0 || existing.length > 0
+              ? 'measured'
+              : 'queued';
+        await args.supabase
+          .from('client_benchmark_configs')
+          .update({
+            metadata: {
+              ...configMetadata,
+              baseline_status: baselineStatus,
+              baseline_completed_at: baselineStatus === 'measured' ? now.toISOString() : null,
+              baseline_run_group_ids: summary.platformResults
+                .map((result) => result.runGroupId)
+                .filter(Boolean),
+              baseline_error: baselineStatus === 'failed' ? 'all_platforms_failed' : null,
+            },
+            updated_at: now.toISOString(),
+          })
+          .eq('id', config.id);
+      }
 
       if (summary.entitlementBlocked) {
         blockedConfigs += 1;

@@ -2,7 +2,9 @@
 
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
+import { ensureFreeVisibilityWorkspace } from '@/lib/server/customer-visibility-baseline';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 const schema = z.object({
   role: z.enum(['business', 'agency']),
@@ -39,6 +41,18 @@ export async function completeWelcome(formData: FormData): Promise<void> {
     const params = new URLSearchParams({ bundle: 'agency_core' });
     if (parsed.data.website) params.set('website_url', parsed.data.website);
     redirect(`/pricing?${params.toString()}`);
+  }
+  if (parsed.data.website) {
+    const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
+    const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+    if (url && key) {
+      await ensureFreeVisibilityWorkspace({
+        supabase: createServiceRoleClient(url, key),
+        userId: user.id,
+        userEmail: user.email,
+        domain: parsed.data.website,
+      });
+    }
   }
   const query = parsed.data.website ? `?url=${encodeURIComponent(parsed.data.website)}` : '';
   redirect(`/dashboard${query}`);

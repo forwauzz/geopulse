@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { redirect } from 'next/navigation';
 import { resolveAgencyFeatureEntitlements, validateAgencyContext } from '@/lib/server/agency-access';
 import { provisionWorkspaceForSubscription } from '@/lib/server/billing/provision-workspace-for-subscription';
+import { provisionCustomerVisibilityBaseline } from '@/lib/server/customer-visibility-baseline';
 import { structuredLog } from '@/lib/server/structured-log';
 import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscription-provisioning-gap';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -276,9 +277,24 @@ export async function createAgencyClientFromDashboard(
     return { ok: false, message: domainError.message };
   }
 
+  const baseline = await provisionCustomerVisibilityBaseline(context.adminDb, {
+    agencyAccountId: parsed.data.agencyAccountId,
+    domain: primaryDomain,
+    companyName: parsed.data.name,
+    vertical: parsed.data.vertical,
+    subvertical: parsed.data.subvertical,
+    source: 'agency_client_creation',
+  });
+
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/clients');
-  return { ok: true, message: 'Client created.' };
+  revalidatePath('/dashboard/visibility');
+  return {
+    ok: true,
+    message: baseline.ok
+      ? `Client created. ${baseline.promptCount} baseline questions are queued for measurement.`
+      : 'Client created. Baseline setup will retry automatically.',
+  };
 }
 
 export async function addAgencyClientDomainFromDashboard(
