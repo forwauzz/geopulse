@@ -187,20 +187,20 @@ describe('Social Proof Agent safeguards', () => {
     expect(ordered.some((item) => item.key === 'educational-one')).toBe(false);
   });
 
-  it('schedules Toronto posts at the next local half-hour without bunching missed slots', () => {
+  it('schedules Toronto posts on an hourly dispatch boundary without bunching missed slots', () => {
     expect(
       instagramScheduleSlot(
         new Date('2026-07-23T13:00:00.000Z'),
         'America/Toronto',
         17
       )
-    ).toBe('2026-07-23T21:30:00.000Z');
+    ).toBe('2026-07-23T21:00:00.000Z');
     expect(
       instagramScheduleSlot(
         new Date('2026-07-23T14:00:00.000Z'),
         'America/Toronto',
         9
       )
-    ).toBe('2026-07-24T13:30:00.000Z');
+    ).toBe('2026-07-24T13:00:00.000Z');
   });
 });

@@ -384,7 +384,10 @@ export async function completeJordanReelRender(args: {
     title: asset.title,
     bodyPlaintext: asset.body_plaintext,
     captionText: asset.caption_text,
-    status: scheduled ? 'scheduled' : 'review',
+    // A completed render has passed the Reel validation suite. Scheduled
+    // manual Instagram assets must remain `approved` because the dispatcher
+    // intentionally rejects every other manual-asset state.
+    status: scheduled ? 'approved' : 'review',
     ctaUrl: asset.cta_url,
     metadata: {
       reel_render_status: 'complete',
