@@ -3,11 +3,14 @@ import {
   IDENTITY_NORMALIZATION_VERSION,
   findIdentityCollisions,
   planIdentity,
+  validIdentityOwner,
   type IdentityCandidate,
   type IdentityPlan,
 } from '../lib/intelligence/identity';
 
 const PAGE_SIZE = 1_000;
+// Keep REST write bodies below edge/proxy request-inspection limits.
+const WRITE_BATCH_SIZE = 50;
 const APPLY_CONFIRMATION = '--confirm=INT-002';
 
 type Client = ReturnType<typeof createServiceRoleClient>;
@@ -21,7 +24,7 @@ async function fetchAll(client: Client, table: string, columns: string): Promise
   const rows: Row[] = [];
   for (let offset = 0; ; offset += PAGE_SIZE) {
     const result = await client.from(table).select(columns).range(offset, offset + PAGE_SIZE - 1);
-    if (result.error) throw result.error;
+    if (result.error) throw new Error(`Domain upsert failed: ${result.error.message}`);
     const page = (result.data ?? []) as unknown as Row[];
     rows.push(...page);
     if (page.length < PAGE_SIZE) break;
@@ -205,13 +208,22 @@ async function applyPlans(client: Client, plans: readonly IdentityPlan[]): Promi
     if (result.error) throw result.error;
   }
 
-  const domainResult = await client
-    .from('intelligence_domains')
-    .select('id,normalized_host')
-    .in('normalized_host', domainRows.map((row) => row.normalized_host));
-  if (domainResult.error) throw domainResult.error;
+  const domainData: Row[] = [];
+  for (let offset = 0; offset < domainRows.length; offset += WRITE_BATCH_SIZE) {
+    const domainResult = await client
+      .from('intelligence_domains')
+      .select('id,normalized_host')
+      .in(
+        'normalized_host',
+        domainRows.slice(offset, offset + WRITE_BATCH_SIZE).map((row) => row.normalized_host)
+      );
+    if (domainResult.error) {
+      throw new Error(`Domain lookup failed at row ${offset}: ${domainResult.error.message}`);
+    }
+    domainData.push(...((domainResult.data ?? []) as unknown as Row[]));
+  }
   const domainIds = new Map(
-    ((domainResult.data ?? []) as unknown as Row[]).map((row) => [text(row, 'normalized_host')!, id(row)])
+    domainData.map((row) => [text(row, 'normalized_host')!, id(row)])
   );
 
   const aliasRows = [...new Map(mapped.flatMap((plan) => {
@@ -238,7 +250,7 @@ async function applyPlans(client: Client, plans: readonly IdentityPlan[]): Promi
     const result = await client.from('intelligence_domain_aliases').upsert(aliasRows, {
       onConflict: 'domain_id,alias_host',
     });
-    if (result.error) throw result.error;
+    if (result.error) throw new Error(`Alias upsert failed: ${result.error.message}`);
   }
 
   const pageRows = [...new Map(mapped.flatMap((plan) => plan.page ? [[
@@ -255,37 +267,61 @@ async function applyPlans(client: Client, plans: readonly IdentityPlan[]): Promi
       onConflict: 'normalized_url',
       ignoreDuplicates: true,
     });
-    if (result.error) throw result.error;
+    if (result.error) throw new Error(`Page upsert failed: ${result.error.message}`);
   }
 
-  const pageResult = pageRows.length === 0
-    ? { data: [], error: null }
-    : await client
-        .from('intelligence_pages')
-        .select('id,normalized_url')
-        .in('normalized_url', pageRows.map((row) => row.normalized_url));
-  if (pageResult.error) throw pageResult.error;
+  const pageData: Row[] = [];
+  for (let offset = 0; offset < pageRows.length; offset += WRITE_BATCH_SIZE) {
+    const pageResult = await client
+      .from('intelligence_pages')
+      .select('id,normalized_url')
+      .in(
+        'normalized_url',
+        pageRows.slice(offset, offset + WRITE_BATCH_SIZE).map((row) => row.normalized_url)
+      );
+    if (pageResult.error) {
+      throw new Error(`Page lookup failed at row ${offset}: ${pageResult.error.message}`);
+    }
+    pageData.push(...((pageResult.data ?? []) as unknown as Row[]));
+  }
   const pageIds = new Map(
-    ((pageResult.data ?? []) as unknown as Row[]).map((row) => [text(row, 'normalized_url')!, id(row)])
+    pageData.map((row) => [text(row, 'normalized_url')!, id(row)])
   );
 
   const ownerRows = [...new Map(mapped.flatMap((plan) => {
-    if (!plan.candidate.ownerType) return [];
+    const owner = validIdentityOwner(plan.candidate);
+    if (!owner) return [];
     const domainId = domainIds.get(plan.domain.normalizedHost)!;
-    const ownerId = plan.candidate.ownerId ?? null;
-    return [[`${domainId}:${plan.candidate.ownerType}:${ownerId ?? 'internal'}`, {
+    return [[`${domainId}:${owner.ownerType}:${owner.ownerId ?? 'internal'}`, {
       domain_id: domainId,
-      owner_type: plan.candidate.ownerType,
-      owner_id: ownerId,
-      visibility: plan.candidate.ownerType === 'internal_benchmark' ? 'internal' : 'tenant',
+      owner_type: owner.ownerType,
+      owner_id: owner.ownerId,
+      visibility: owner.ownerType === 'internal_benchmark' ? 'internal' : 'tenant',
     }]];
   })).values()];
-  if (ownerRows.length > 0) {
-    const result = await client.from('intelligence_domain_owners').upsert(ownerRows, {
-      onConflict: 'domain_id,owner_type,owner_id',
-      ignoreDuplicates: true,
-    });
-    if (result.error) throw result.error;
+  const existingOwnerRows = await fetchAll(
+    client,
+    'intelligence_domain_owners',
+    'domain_id,owner_type,owner_id'
+  );
+  const existingOwnerKeys = new Set(
+    existingOwnerRows.map((row) =>
+      `${id(row, 'domain_id')}:${text(row, 'owner_type')}:${text(row, 'owner_id') ?? 'internal'}`
+    )
+  );
+  const missingOwnerRows = ownerRows.filter((row) =>
+    !existingOwnerKeys.has(`${row.domain_id}:${row.owner_type}:${row.owner_id ?? 'internal'}`)
+  );
+  for (let offset = 0; offset < missingOwnerRows.length; offset += WRITE_BATCH_SIZE) {
+    const ownerBatch = missingOwnerRows.slice(offset, offset + WRITE_BATCH_SIZE);
+    const result = await client
+      .from('intelligence_domain_owners')
+      .insert(ownerBatch);
+    if (result.error) {
+      throw new Error(
+        `Owner insert failed at row ${offset} (${ownerBatch[0]?.owner_type ?? 'unknown'}): ${result.error.message}`
+      );
+    }
   }
 
   const mappingRows = plans.map((plan) => {
@@ -316,13 +352,13 @@ async function applyPlans(client: Client, plans: readonly IdentityPlan[]): Promi
       normalization_version: IDENTITY_NORMALIZATION_VERSION,
     };
   });
-  for (let offset = 0; offset < mappingRows.length; offset += PAGE_SIZE) {
+  for (let offset = 0; offset < mappingRows.length; offset += WRITE_BATCH_SIZE) {
     const result = await client
       .from('intelligence_source_identity_maps')
-      .upsert(mappingRows.slice(offset, offset + PAGE_SIZE), {
+      .upsert(mappingRows.slice(offset, offset + WRITE_BATCH_SIZE), {
         onConflict: 'source_kind,source_id',
       });
-    if (result.error) throw result.error;
+    if (result.error) throw new Error(`Identity mapping upsert failed at row ${offset}: ${result.error.message}`);
   }
 }
 

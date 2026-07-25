@@ -3,13 +3,16 @@ import {
   MEASUREMENT_LANE_PROTOCOL_VERSION,
   NOT_APPLICABLE_PROTOCOL_VALUE,
   UNKNOWN_PROTOCOL_VALUE,
+  aggregateMeasurementWindowCoverage,
   inferProvider,
   measurementLaneFingerprint,
+  normalizeMeasurementWindowTimestamp,
   type MeasurementFrameKind,
   type MeasurementLaneProtocol,
 } from '../lib/intelligence/measurement-lane';
 
 const PAGE_SIZE = 1_000;
+const WRITE_BATCH_SIZE = 25;
 const APPLY_CONFIRMATION = '--confirm=INT-003';
 type Client = ReturnType<typeof createServiceRoleClient>;
 type Row = Record<string, unknown>;
@@ -153,7 +156,9 @@ async function main(): Promise<void> {
       fingerprint,
       protocol,
       windowKey,
-      scheduledFor: metadataText(run, 'schedule_window_utc'),
+      scheduledFor: normalizeMeasurementWindowTimestamp(
+        metadataText(run, 'schedule_window_utc')
+      ),
       startedAt: text(run, 'started_at'),
       completedAt: text(run, 'completed_at'),
       expected,
@@ -231,36 +236,55 @@ async function main(): Promise<void> {
       ? 'legacy_unknown'
       : 'verified',
   }));
-  const laneUpsert = await client.from('intelligence_measurement_lanes').upsert(laneRows, {
-    onConflict: 'fingerprint',
-  });
-  if (laneUpsert.error) throw laneUpsert.error;
+  for (let offset = 0; offset < laneRows.length; offset += WRITE_BATCH_SIZE) {
+    const laneUpsert = await client.from('intelligence_measurement_lanes').upsert(
+      laneRows.slice(offset, offset + WRITE_BATCH_SIZE),
+      { onConflict: 'fingerprint' }
+    );
+    if (laneUpsert.error) {
+      throw new Error(`Lane upsert failed at row ${offset}: ${laneUpsert.error.message}`);
+    }
+  }
   const laneResult = await client
     .from('intelligence_measurement_lanes')
     .select('id,fingerprint')
     .in('fingerprint', laneRows.map((row) => row.fingerprint));
-  if (laneResult.error) throw laneResult.error;
+  if (laneResult.error) throw new Error(`Lane lookup failed: ${laneResult.error.message}`);
   const laneIds = new Map(
     ((laneResult.data ?? []) as unknown as Row[]).map((row) => [String(row['fingerprint']), String(row['id'])])
   );
 
-  const windowRows = plans.map((plan) => ({
-    lane_id: laneIds.get(plan.fingerprint)!,
-    window_key: plan.windowKey,
-    scheduled_for: plan.scheduledFor,
-    started_at: plan.startedAt,
-    completed_at: plan.completedAt,
-    expected_coverage: { query_runs: plan.expected },
-    observed_coverage: { query_runs: plan.observed },
-    quality_state: plan.qualityState,
-    source_schedule_key: plan.sourceScheduleKey,
-  }));
-  for (let offset = 0; offset < windowRows.length; offset += PAGE_SIZE) {
+  const plansByWindow = new Map<string, typeof plans>();
+  for (const plan of plans) {
+    const key = `${laneIds.get(plan.fingerprint)!}:${plan.windowKey}`;
+    plansByWindow.set(key, [...(plansByWindow.get(key) ?? []), plan]);
+  }
+  const windowRows = [...plansByWindow.entries()].map(([key, groupedPlans]) => {
+    const first = groupedPlans[0]!;
+    const coverage = aggregateMeasurementWindowCoverage(groupedPlans);
+    const started = groupedPlans.flatMap((plan) => plan.startedAt ? [plan.startedAt] : []).sort();
+    const completed = groupedPlans.flatMap((plan) => plan.completedAt ? [plan.completedAt] : []).sort();
+    return {
+      lane_id: laneIds.get(first.fingerprint)!,
+      window_key: first.windowKey,
+      scheduled_for: groupedPlans.find((plan) => plan.scheduledFor)?.scheduledFor ?? null,
+      started_at: started[0] ?? null,
+      completed_at: completed.at(-1) ?? null,
+      expected_coverage: { query_runs: coverage.expected },
+      observed_coverage: { query_runs: coverage.observed },
+      quality_state: coverage.qualityState,
+      source_schedule_key: groupedPlans.find((plan) => plan.sourceScheduleKey)?.sourceScheduleKey ?? null,
+      metadata: { source_run_group_count: groupedPlans.length, aggregate_key: key },
+    };
+  });
+  for (let offset = 0; offset < windowRows.length; offset += WRITE_BATCH_SIZE) {
     const result = await client.from('intelligence_measurement_windows').upsert(
-      windowRows.slice(offset, offset + PAGE_SIZE),
+      windowRows.slice(offset, offset + WRITE_BATCH_SIZE),
       { onConflict: 'lane_id,window_key' }
     );
-    if (result.error) throw result.error;
+    if (result.error) {
+      throw new Error(`Window upsert failed at row ${offset}: ${result.error.message}`);
+    }
   }
   const windowResult = await fetchAll(
     client,
@@ -296,12 +320,14 @@ async function main(): Promise<void> {
         : null,
     })),
   ];
-  for (let offset = 0; offset < mappingRows.length; offset += PAGE_SIZE) {
+  for (let offset = 0; offset < mappingRows.length; offset += WRITE_BATCH_SIZE) {
     const result = await client.from('intelligence_measurement_run_mappings').upsert(
-      mappingRows.slice(offset, offset + PAGE_SIZE),
+      mappingRows.slice(offset, offset + WRITE_BATCH_SIZE),
       { onConflict: 'source_kind,source_id' }
     );
-    if (result.error) throw result.error;
+    if (result.error) {
+      throw new Error(`Lane mapping upsert failed at row ${offset}: ${result.error.message}`);
+    }
   }
   console.log('Measurement lane/window backfill applied idempotently.');
 }

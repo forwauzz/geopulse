@@ -4,6 +4,36 @@ export const MEASUREMENT_LANE_PROTOCOL_VERSION = 'measurement-lane-v1';
 export const UNKNOWN_PROTOCOL_VALUE = 'unknown';
 export const NOT_APPLICABLE_PROTOCOL_VALUE = 'not_applicable';
 
+/** Converts legacy UTC hour keys (YYYY-MM-DDTHH) into valid timestamptz values. */
+export function normalizeMeasurementWindowTimestamp(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(trimmed)) {
+    return `${trimmed}:00:00.000Z`;
+  }
+  const timestamp = Date.parse(trimmed);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+export function aggregateMeasurementWindowCoverage(
+  inputs: readonly {
+    readonly expected: number;
+    readonly observed: number;
+    readonly qualityState: string;
+  }[]
+): { expected: number; observed: number; qualityState: string } {
+  const expected = inputs.reduce((sum, input) => sum + input.expected, 0);
+  const observed = inputs.reduce((sum, input) => sum + input.observed, 0);
+  const states = inputs.map((input) => input.qualityState);
+  const qualityState =
+    expected > 0 && observed >= expected ? 'complete'
+    : observed > 0 ? 'partial'
+    : states.includes('running') ? 'running'
+    : states.length > 0 && states.every((state) => state === 'failed') ? 'failed'
+    : 'unknown';
+  return { expected, observed, qualityState };
+}
+
 export type MeasurementFrameKind =
   | 'broad_vertical'
   | 'business_counsel'

@@ -162,7 +162,9 @@ async function main(): Promise<void> {
       verifiedRecommendationCount: verifiedRecommendationIds.size,
       compatibleOutcomePairCount: 0,
       compatibleOutcomePairStatus: 'not_available',
-      reason: 'canonical intelligence migration chain not yet applied',
+      reason: recommendations.length === 0
+        ? 'no_recommendations_available'
+        : 'use_intelligence_mart_intervention_outcomes_for_materialized_pairs',
     },
   }, null, 2));
 }

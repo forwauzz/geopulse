@@ -5,6 +5,7 @@ import {
   normalizeDomainIdentity,
   normalizePageIdentity,
   planIdentity,
+  validIdentityOwner,
 } from './identity';
 
 describe('canonical intelligence identity', () => {
@@ -61,5 +62,22 @@ describe('canonical intelligence identity', () => {
       planIdentity({ sourceKind: 'benchmark_domain', sourceId: '2', sourceTable: 'benchmark_domains', domainInput: 'www.example.com' }),
     ]);
     expect(collisions.get('example.com')).toEqual(['example.com', 'www.example.com']);
+  });
+
+  it('does not invent tenant ownership for ownerless historical records', () => {
+    expect(validIdentityOwner({
+      sourceKind: 'recurring_schedule',
+      sourceId: 'legacy',
+      sourceTable: 'recurring_audit_schedules',
+      ownerType: 'user',
+      ownerId: null,
+    })).toBeNull();
+    expect(validIdentityOwner({
+      sourceKind: 'benchmark_domain',
+      sourceId: 'benchmark',
+      sourceTable: 'benchmark_domains',
+      ownerType: 'internal_benchmark',
+      ownerId: null,
+    })).toEqual({ ownerType: 'internal_benchmark', ownerId: null });
   });
 });

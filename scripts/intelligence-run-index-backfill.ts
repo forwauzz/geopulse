@@ -12,12 +12,32 @@ import {
 import { inferProvider } from '../lib/intelligence/measurement-lane';
 
 const PAGE_SIZE = 1_000;
+const WRITE_BATCH_SIZE = 250;
 const APPLY_CONFIRMATION = '--confirm=INT-004';
 type Client = ReturnType<typeof createServiceRoleClient>;
 type Row = Record<string, unknown>;
 
 function hasFlag(flag: string): boolean {
   return process.argv.slice(2).includes(flag);
+}
+
+async function upsertRunBatch(
+  client: Client,
+  rows: readonly Row[],
+  offset: number,
+  stage: string
+): Promise<void> {
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const result = await client.from('intelligence_runs').upsert(rows, {
+      onConflict: 'source_kind,source_id',
+    });
+    if (!result.error) return;
+    const retryable = /fetch failed|bad gateway|timeout|temporar/i.test(result.error.message);
+    if (!retryable || attempt === 5) {
+      throw new Error(`${stage} failed at row ${offset}: ${result.error.message}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+  }
 }
 function text(row: Row, field: string): string | null {
   const value = row[field];
@@ -300,11 +320,13 @@ async function main(): Promise<void> {
       metadata: candidate.metadata ?? {},
     };
   });
-  for (let offset = 0; offset < rows.length; offset += PAGE_SIZE) {
-    const result = await client.from('intelligence_runs').upsert(rows.slice(offset, offset + PAGE_SIZE), {
-      onConflict: 'source_kind,source_id',
-    });
-    if (result.error) throw result.error;
+  for (let offset = 0; offset < rows.length; offset += WRITE_BATCH_SIZE) {
+    await upsertRunBatch(
+      client,
+      rows.slice(offset, offset + WRITE_BATCH_SIZE),
+      offset,
+      'Run index upsert'
+    );
   }
   const indexed = await fetchAll(client, 'intelligence_runs', 'id,source_kind,source_id,source_snapshot');
   const indexedByKey = new Map(indexed.map((row) => [`${row['source_kind']}:${row['source_id']}`, row]));
@@ -315,11 +337,13 @@ async function main(): Promise<void> {
       : undefined;
     return { ...row, parent_run_id: parent?.['id'] ?? null };
   });
-  for (let offset = 0; offset < rowsWithParents.length; offset += PAGE_SIZE) {
-    const result = await client.from('intelligence_runs').upsert(rowsWithParents.slice(offset, offset + PAGE_SIZE), {
-      onConflict: 'source_kind,source_id',
-    });
-    if (result.error) throw result.error;
+  for (let offset = 0; offset < rowsWithParents.length; offset += WRITE_BATCH_SIZE) {
+    await upsertRunBatch(
+      client,
+      rowsWithParents.slice(offset, offset + WRITE_BATCH_SIZE),
+      offset,
+      'Run parent-link upsert'
+    );
   }
   const afterCandidates = await buildCandidates(client);
   if (aggregateSnapshot(afterCandidates) !== sourceSnapshot) {

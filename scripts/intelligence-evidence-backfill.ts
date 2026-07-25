@@ -10,12 +10,31 @@ import {
 } from '../lib/intelligence/evidence';
 
 const PAGE_SIZE = 1_000;
+const WRITE_BATCH_SIZE = 250;
 const APPLY_CONFIRMATION = '--confirm=INT-005';
 type Client = ReturnType<typeof createServiceRoleClient>;
 type Row = Record<string, unknown>;
 
 function hasFlag(flag: string): boolean {
   return process.argv.slice(2).includes(flag);
+}
+
+async function upsertBatch(
+  client: Client,
+  table: string,
+  rows: readonly Record<string, unknown>[],
+  onConflict: string,
+  offset: number
+): Promise<void> {
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    const result = await client.from(table).upsert(rows, { onConflict });
+    if (!result.error) return;
+    const retryable = /fetch failed|bad gateway|timeout|temporar/i.test(result.error.message);
+    if (!retryable || attempt === 5) {
+      throw new Error(`${table} upsert failed at row ${offset}: ${result.error.message}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+  }
 }
 function text(row: Row, field: string): string | null {
   const value = row[field];
@@ -254,12 +273,14 @@ async function main(): Promise<void> {
       metadata: candidate.metadata ?? {},
     };
   });
-  for (let offset = 0; offset < records.length; offset += PAGE_SIZE) {
-    const result = await client.from('intelligence_evidence_objects').upsert(
-      records.slice(offset, offset + PAGE_SIZE),
-      { onConflict: 'source_kind,source_id,evidence_kind' }
+  for (let offset = 0; offset < records.length; offset += WRITE_BATCH_SIZE) {
+    await upsertBatch(
+      client,
+      'intelligence_evidence_objects',
+      records.slice(offset, offset + WRITE_BATCH_SIZE),
+      'source_kind,source_id,evidence_kind',
+      offset
     );
-    if (result.error) throw result.error;
   }
 
   const evidenceRows = await fetchAll(client, 'intelligence_evidence_objects', 'id,source_kind,source_id,evidence_kind');
@@ -279,11 +300,14 @@ async function main(): Promise<void> {
       if (child) edges.push({ from_evidence_id: child['id'], to_evidence_id: parent['id'], relation: 'parsed_from' });
     }
   }
-  if (edges.length) {
-    const result = await client.from('intelligence_evidence_edges').upsert(edges, {
-      onConflict: 'from_evidence_id,to_evidence_id,relation',
-    });
-    if (result.error) throw result.error;
+  for (let offset = 0; offset < edges.length; offset += WRITE_BATCH_SIZE) {
+    await upsertBatch(
+      client,
+      'intelligence_evidence_edges',
+      edges.slice(offset, offset + WRITE_BATCH_SIZE),
+      'from_evidence_id,to_evidence_id,relation',
+      offset
+    );
   }
   console.log(`Evidence catalog applied: ${records.length} objects, ${edges.length} lineage edges.`);
 }
