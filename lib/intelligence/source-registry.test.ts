@@ -37,6 +37,11 @@ describe('intelligence source registry', () => {
       'r2.audit_artifacts',
       'public.intelligence_evidence_objects',
       'public.intelligence_evidence_edges',
+      'public.intelligence_quality_policies',
+      'public.intelligence_run_quality_classifications',
+      'public.intelligence_window_quality_assessments',
+      'public.intelligence_quarantine_events',
+      'public.intelligence_quality_alerts',
     ];
 
     for (const id of required) expect(ids.has(id), id).toBe(true);
