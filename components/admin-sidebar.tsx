@@ -44,6 +44,7 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
     section: 'Analytics',
     items: [
       { href: '/dashboard/benchmarks', label: 'Benchmarks', icon: 'analytics' },
+      { href: '/admin/intelligence', label: 'Intelligence', icon: 'neurology' },
       { href: '/admin/geo-performance', label: 'GEO Performance', icon: 'track_changes' },
       { href: '/dashboard/evals', label: 'Evals', icon: 'science' },
       { href: '/dashboard/attribution', label: 'Attribution', icon: 'link' },
