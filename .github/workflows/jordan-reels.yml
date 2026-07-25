@@ -21,6 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install Reel media tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          ffmpeg -version
+          ffprobe -version
       - name: Ensure HyperFrames browser
         run: npx --yes hyperframes@0.7.71 browser ensure
       - name: Render next approved Reel brief
