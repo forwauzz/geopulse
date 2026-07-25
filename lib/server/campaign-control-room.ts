@@ -176,6 +176,9 @@ export async function loadCampaignControlRoom(args: {
     gpmConfigs,
     gpmReports,
     logs,
+    seoRuns,
+    seoOpportunities,
+    seoUsage,
   ] = await Promise.all([
     safeRows(args.supabase.from('distribution_accounts').select('id,provider_name,account_label,status,last_verified_at').order('updated_at', { ascending: false }).limit(50)),
     safeRows(args.supabase.from('distribution_assets').select('id,title,provider_family,asset_type,status,created_at,metadata').order('created_at', { ascending: false }).limit(100)),
@@ -189,6 +192,9 @@ export async function loadCampaignControlRoom(args: {
     safeRows(args.supabase.from('client_benchmark_configs').select('id,topic,location,cadence,report_email,updated_at,metadata').order('updated_at', { ascending: false }).limit(200)),
     safeRows(args.supabase.from('gpm_reports').select('id,config_id,platform,generated_at').gte('generated_at', since).order('generated_at', { ascending: false }).limit(300)),
     safeRows(args.supabase.from('app_logs').select('event,level,created_at,data').gte('created_at', new Date(nowMs - 7 * 86_400_000).toISOString()).order('created_at', { ascending: false }).limit(800)),
+    safeRows(args.supabase.from('seo_agent_runs').select('id,status,reason,started_at,completed_at,month_spend_usd').order('started_at', { ascending: false }).limit(10)),
+    safeRows(args.supabase.from('seo_opportunities').select('id,kind,status,priority,title,evidence,recommendation,metadata,last_seen_at').in('status', ['queued', 'in_progress']).order('priority', { ascending: true }).order('last_seen_at', { ascending: false }).limit(25)),
+    safeRows(args.supabase.from('seo_api_usage').select('cost_usd,occurred_at').gte('occurred_at', new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString())),
   ]);
 
   const accountById = new Map(accounts.map((row) => [text(row, 'id') ?? '', row]));
@@ -328,6 +334,26 @@ export async function loadCampaignControlRoom(args: {
     });
   }
 
+  const latestSeo = seoRuns[0];
+  const seoSpend = seoUsage.reduce((sum, row) => sum + Number(row['cost_usd'] ?? 0), 0);
+  campaigns.push({
+    id: 'seo:autonomous-owner',
+    lane: 'competitors',
+    name: 'Autonomous SEO owner',
+    channel: 'Google Search Console + DataForSEO',
+    status: text(latestSeo ?? {}, 'status') ?? 'awaiting first run',
+    health: text(latestSeo ?? {}, 'status') === 'failed'
+      ? 'blocked'
+      : isOlderThan(text(latestSeo ?? {}, 'started_at'), nowMs, 26)
+        ? 'attention'
+        : 'healthy',
+    owner: 'Priya',
+    lastActivityAt: text(latestSeo ?? {}, 'completed_at') ?? text(latestSeo ?? {}, 'started_at'),
+    nextActivityAt: null,
+    detail: `${seoOpportunities.length} owned opportunities; $${seoSpend.toFixed(4)} of the $10 monthly hard cap used.${text(latestSeo ?? {}, 'reason') ? ` ${text(latestSeo ?? {}, 'reason')}` : ''}`,
+    href: '/admin/automation',
+  });
+
   for (const config of gpmConfigs) {
     const configReports = reportsByConfig.get(text(config, 'id') ?? '') ?? [];
     const latest = configReports[0];
@@ -378,6 +404,21 @@ export async function loadCampaignControlRoom(args: {
         ? 'Maya routes the missing dependency or configuration to the named capability owner and verifies the next successful run.'
         : 'Maya confirms whether this pause is intentional before changing the switch.',
       href: '/admin/agents',
+    });
+  }
+
+  for (const opportunity of seoOpportunities.slice(0, 5)) {
+    const metadata = object(opportunity, 'metadata');
+    const owner = text(metadata, 'owner') ?? (text(opportunity, 'kind') === 'technical' ? 'Marcus' : 'Jordan');
+    actions.push({
+      key: `seo-opportunity:${text(opportunity, 'id') ?? crypto.randomUUID()}`,
+      severity: Number(opportunity['priority'] ?? 2) === 1 ? 'today' : 'watch',
+      owner,
+      resolution: 'agent',
+      title: text(opportunity, 'title') ?? 'SEO opportunity',
+      detail: text(opportunity, 'evidence') ?? 'Search evidence is available in the SEO queue.',
+      playbook: `${text(opportunity, 'recommendation') ?? 'Review and execute the recommended SEO change.'} Maya verifies a new measurement before marking it complete.`,
+      href: '/admin/automation',
     });
   }
 

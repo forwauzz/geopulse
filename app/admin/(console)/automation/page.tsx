@@ -14,6 +14,8 @@ import {
   runSelfImprovementNow,
   runMarketingNow,
   runEditorialPipelineNow,
+  setSeoFlag,
+  runSeoNow,
 } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -67,7 +69,7 @@ export default async function AutomationConsolePage() {
   }
   const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-  const [self, marketing, designSetting, designAgentEnabled, runsRes, proposalsRes, channelsRes] = await Promise.all([
+  const [self, marketing, designSetting, designAgentEnabled, runsRes, proposalsRes, channelsRes, seoSetting, seoConnectionRes, seoRunsRes, seoUsageRes, seoOpportunitiesRes] = await Promise.all([
     loadSelfImprovementSettings(supabase),
     loadAutomationSetting(supabase, 'marketing_autopilot'),
     loadAutomationSetting(supabase, 'report_design_agent'),
@@ -75,12 +77,21 @@ export default async function AutomationConsolePage() {
     supabase.from('self_improvement_runs').select('id, created_at, trigger_source, status, score, letter_grade, emailed_to').order('created_at', { ascending: false }).limit(8),
     supabase.from('content_items').select('slug, title, status, created_at').eq('metadata->>proposed_by', 'marketing_autopilot').order('created_at', { ascending: false }).limit(8),
     supabase.from('distribution_accounts').select('id').eq('status', 'connected').limit(1),
+    loadAutomationSetting(supabase, 'seo_agent'),
+    supabase.from('seo_provider_connections').select('status,last_synced_at,last_error').eq('provider', 'google_search_console').maybeSingle(),
+    supabase.from('seo_agent_runs').select('id,status,reason,search_console_rows,rank_tasks_queued,rank_tasks_completed,opportunities_created,month_spend_usd,started_at').order('started_at', { ascending: false }).limit(5),
+    supabase.from('seo_api_usage').select('cost_usd').eq('provider', 'dataforseo').gte('occurred_at', new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()),
+    supabase.from('seo_opportunities').select('id').in('status', ['queued', 'in_progress']),
   ]);
 
   const runs = (runsRes.data ?? []) as Array<{ id: string; created_at: string; trigger_source: string; status: string; score: number | null; letter_grade: string | null; emailed_to: string | null }>;
   const designAgentKilled = designSetting.killSwitch;
   const proposals = (proposalsRes.data ?? []) as Array<{ slug: string; title: string; status: string; created_at: string }>;
   const channelConnected = Array.isArray(channelsRes.data) && channelsRes.data.length > 0;
+  const seoConnection = seoConnectionRes.data as { status?: string; last_synced_at?: string | null; last_error?: string | null } | null;
+  const seoRuns = (seoRunsRes.data ?? []) as Array<{ id: string; status: string; reason: string | null; search_console_rows: number; rank_tasks_queued: number; rank_tasks_completed: number; opportunities_created: number; month_spend_usd: number; started_at: string }>;
+  const seoSpend = (seoUsageRes.data ?? []).reduce((sum, row) => sum + Number(row.cost_usd ?? 0), 0);
+  const seoOpportunityCount = seoOpportunitiesRes.data?.length ?? 0;
 
   const discoveryMode = resolveDiscoveryMode(env);
   const geminiKey = Boolean(env.GEMINI_API_KEY?.trim());
@@ -137,6 +148,52 @@ export default async function AutomationConsolePage() {
             </table>
           </div>
         ) : <p className="mt-4 font-sans text-xs text-on-surface-variant">No runs yet.</p>}
+      </section>
+
+      {/* Autonomous SEO */}
+      <section className={card}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-sans text-lg font-bold text-on-background">Autonomous SEO owner</h2>
+            <p className="mt-0.5 font-sans text-xs text-on-surface-variant">Search Console finds real demand; capped rank checks validate competitors; qualified gaps become owned editorial work.</p>
+          </div>
+          <div className="flex gap-2">
+            <a href="/api/admin/seo/google/start" className="inline-flex min-h-[36px] items-center rounded-xl bg-surface-container px-4 text-sm font-semibold text-on-background transition hover:bg-surface-container-high">
+              {seoConnection?.status === 'connected' ? 'Reconnect Google' : 'Connect Google'}
+            </a>
+            <form action={runSeoNow}>
+              <button type="submit" className="inline-flex min-h-[36px] items-center rounded-xl bg-primary px-4 text-sm font-semibold text-on-primary transition hover:bg-primary-dim">Run now</button>
+            </form>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <StatusChip ok={seoConnection?.status === 'connected'} label={seoConnection?.status === 'connected' ? 'Search Console connected' : 'Search Console connection required'} />
+          <StatusChip ok={seoSpend < 10} label={`DataForSEO $${seoSpend.toFixed(4)} / $10 hard cap`} />
+          <StatusChip ok label={`${seoOpportunityCount} owned opportunities`} />
+        </div>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="flex items-center justify-between gap-3"><dt className="font-sans text-sm text-on-surface-variant">Enabled</dt><dd><Toggle action={setSeoFlag} field="enabled" current={seoSetting.enabled} /></dd></div>
+          <div className="flex items-center justify-between gap-3"><dt className="font-sans text-sm text-on-surface-variant">Kill switch</dt><dd><Toggle action={setSeoFlag} field="kill_switch" current={seoSetting.killSwitch} onLabel="Killed" offLabel="Live" /></dd></div>
+          <div className="flex items-center justify-between gap-3"><dt className="font-sans text-sm text-on-surface-variant">Last Google sync</dt><dd className="text-sm text-on-background">{fmt(seoConnection?.last_synced_at ?? null)}</dd></div>
+          <div className="flex items-center justify-between gap-3"><dt className="font-sans text-sm text-on-surface-variant">Schedule</dt><dd className="text-sm text-on-background">Hourly oversight · daily collection</dd></div>
+        </dl>
+        {seoConnection?.last_error ? <p className="mt-3 text-xs text-error">{seoConnection.last_error}</p> : null}
+        {seoRuns.length > 0 ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead><tr className="text-left"><th className={`${kicker} p-2`}>When</th><th className={`${kicker} p-2`}>Status</th><th className={`${kicker} p-2`}>Google rows</th><th className={`${kicker} p-2`}>Ranks</th><th className={`${kicker} p-2`}>New opportunities</th></tr></thead>
+              <tbody>{seoRuns.map((run) => (
+                <tr key={run.id} className="border-t border-outline-variant/20">
+                  <td className="p-2 text-on-surface-variant">{fmt(run.started_at)}</td>
+                  <td className="p-2 text-on-background">{run.status}{run.reason ? ` · ${run.reason}` : ''}</td>
+                  <td className="p-2 tabular-nums text-on-background">{run.search_console_rows}</td>
+                  <td className="p-2 tabular-nums text-on-background">{run.rank_tasks_completed}/{run.rank_tasks_queued}</td>
+                  <td className="p-2 tabular-nums text-on-background">{run.opportunities_created}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : <p className="mt-4 font-sans text-xs text-on-surface-variant">No SEO runs yet. Connect Google, then run once.</p>}
       </section>
 
       {/* Marketing autopilot */}

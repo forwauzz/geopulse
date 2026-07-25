@@ -19,7 +19,8 @@ export type AgentFlagFeature =
   | 'competitor_benchmark'
   | 'engagement_digest'
   | 'social_proof_agent'
-  | 'revenue_agency';
+  | 'revenue_agency'
+  | 'seo_agent';
 
 export async function isAgentEnabled(
   supabase: SupabaseClient,

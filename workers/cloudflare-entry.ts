@@ -48,6 +48,7 @@ import type { BrowserRunBinding } from '../lib/server/social-card-renderer';
 import { registerSelfFetch } from './lib/fetch-gate';
 import { registerLlmVerdictCache } from './scan-engine/run-scan';
 import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-staff';
+import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -199,6 +200,32 @@ export default {
         await runScheduledDistributionDispatch(supabase as any, env as any);
       } catch (err) {
         structuredError('distribution_schedule_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('seo_agent');
+        const result = await runAutonomousSeoAgent({
+          supabase,
+          env: env as unknown as Record<string, string | undefined>,
+        });
+        if (result.status === 'failed') {
+          structuredError('seo_agent_failed', { reason: result.reason ?? 'unknown' });
+        } else if (result.status === 'completed') {
+          structuredLog('seo_agent_completed', {
+            search_console_rows: result.searchConsoleRows,
+            rank_tasks_queued: result.rankTasksQueued,
+            rank_tasks_completed: result.rankTasksCompleted,
+            opportunities_created: result.opportunitiesCreated,
+            month_spend_usd: result.monthSpendUsd,
+          }, 'info');
+        }
+      } catch (err) {
+        structuredError('seo_agent_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

@@ -10,6 +10,7 @@ import { runMarketingAutopilot } from '@/lib/server/marketing-autopilot';
 import { runAutonomousEditorialEngine } from '@/lib/server/autonomous-editorial-engine';
 import { createAutonomousEditorialProvider } from '@/lib/server/autonomous-editorial-providers';
 import { structuredLogWithClientAndWait } from '@/lib/server/structured-log';
+import { runAutonomousSeoAgent } from '@/lib/server/autonomous-seo-agent';
 
 const AUTOMATION_PATH = '/admin/automation';
 
@@ -62,6 +63,33 @@ export async function setMarketingFlag(formData: FormData): Promise<void> {
     field === 'enabled' ? { enabled: value } : { killSwitch: value },
     ctx.userId
   );
+  revalidatePath(AUTOMATION_PATH);
+}
+
+export async function setSeoFlag(formData: FormData): Promise<void> {
+  const ctx = await requireConsole();
+  if ('error' in ctx) return;
+  const field = String(formData.get('field') ?? '');
+  const value = String(formData.get('value') ?? '') === 'true';
+  if (field !== 'enabled' && field !== 'kill_switch') return;
+  await updateAutomationSetting(
+    ctx.supabase,
+    'seo_agent',
+    field === 'enabled' ? { enabled: value } : { killSwitch: value },
+    ctx.userId
+  );
+  revalidatePath(AUTOMATION_PATH);
+}
+
+export async function runSeoNow(): Promise<void> {
+  const ctx = await requireConsole();
+  if ('error' in ctx) return;
+  await runAutonomousSeoAgent({
+    supabase: ctx.supabase,
+    env: ctx.env,
+    force: true,
+    runType: 'manual',
+  });
   revalidatePath(AUTOMATION_PATH);
 }
 

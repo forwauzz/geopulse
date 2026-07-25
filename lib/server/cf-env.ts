@@ -123,6 +123,12 @@ export type PaymentApiEnv = ScanApiEnv & {
   DEEP_AUDIT_INTERNAL_REWRITE_MODEL: string;
   /** 'workers_ai' (free/open-source) or 'gemini'. Optional — defaults to the Gemini path. */
   DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER?: string;
+  /** Autonomous SEO owner. Tokens are encrypted at rest with this separate key. */
+  DATAFORSEO_LOGIN?: string;
+  DATAFORSEO_PASSWORD?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_ID?: string;
+  GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET?: string;
+  SEO_TOKEN_ENCRYPTION_KEY?: string;
 };
 
 /**
@@ -337,6 +343,11 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_ENABLED'),
       DEEP_AUDIT_INTERNAL_REWRITE_MODEL: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_MODEL'),
       DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER: pickEnvString(e, 'DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER'),
+      DATAFORSEO_LOGIN: pickEnvString(e, 'DATAFORSEO_LOGIN'),
+      DATAFORSEO_PASSWORD: pickEnvString(e, 'DATAFORSEO_PASSWORD'),
+      GOOGLE_SEARCH_CONSOLE_CLIENT_ID: pickEnvString(e, 'GOOGLE_SEARCH_CONSOLE_CLIENT_ID'),
+      GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: pickEnvString(e, 'GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET'),
+      SEO_TOKEN_ENCRYPTION_KEY: pickEnvString(e, 'SEO_TOKEN_ENCRYPTION_KEY'),
     };
   } catch {
     return {
@@ -386,6 +397,12 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
         process.env['DEEP_AUDIT_INTERNAL_REWRITE_MODEL'] ?? '',
       DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER:
         process.env['DEEP_AUDIT_INTERNAL_REWRITE_PROVIDER'] ?? '',
+      DATAFORSEO_LOGIN: process.env['DATAFORSEO_LOGIN'] ?? '',
+      DATAFORSEO_PASSWORD: process.env['DATAFORSEO_PASSWORD'] ?? '',
+      GOOGLE_SEARCH_CONSOLE_CLIENT_ID: process.env['GOOGLE_SEARCH_CONSOLE_CLIENT_ID'] ?? '',
+      GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET:
+        process.env['GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET'] ?? '',
+      SEO_TOKEN_ENCRYPTION_KEY: process.env['SEO_TOKEN_ENCRYPTION_KEY'] ?? '',
     };
   }
 }

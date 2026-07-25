@@ -63,6 +63,20 @@ async function hasConnectedChannel(supabase: SupabaseClient): Promise<boolean> {
   }
 }
 
+async function hasConnectedSeoProvider(supabase: SupabaseClient): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('seo_provider_connections')
+      .select('id')
+      .eq('provider', 'google_search_console')
+      .eq('status', 'connected')
+      .limit(1);
+    return Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike): Promise<AgentStatus[]> {
   const [
     outreachEnabled,
@@ -78,11 +92,14 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     digestSetting,
     socialProofSetting,
     revenueAgencySetting,
+    seoSetting,
     selfImprove,
     templatesTable,
     researchTable,
     channelConnected,
     cohortDomainCount,
+    seoTables,
+    seoConnected,
   ] = await Promise.all([
     isAgentEnabled(supabase, 'outreach_sweep', { failOpen: true }),
     isAgentEnabled(supabase, 'research_agent', { failOpen: true }),
@@ -97,11 +114,14 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
     loadAutomationSetting(supabase, 'engagement_digest'),
     loadAutomationSetting(supabase, 'social_proof_agent'),
     loadAutomationSetting(supabase, 'revenue_agency'),
+    loadAutomationSetting(supabase, 'seo_agent'),
     loadSelfImprovementSettings(supabase),
     tableExists(supabase, 'outreach_templates'),
     tableExists(supabase, 'research_watchlist'),
     hasConnectedChannel(supabase),
     countCohortDomains(supabase),
+    tableExists(supabase, 'seo_agent_runs'),
+    hasConnectedSeoProvider(supabase),
   ]);
 
   const digestRecipientSet = Boolean(
@@ -130,6 +150,24 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
   );
 
   return [
+    {
+      key: 'seo_owner',
+      name: 'Autonomous SEO owner',
+      audience: 'internal',
+      description:
+        'Uses free Search Console evidence and tightly capped rank checks to find opportunities, assign content work, and verify progress continuously.',
+      control: 'flag',
+      flagFeature: 'seo_agent',
+      enabled: seoSetting.enabled && !seoSetting.killSwitch,
+      killSwitch: seoSetting.killSwitch,
+      blockers: [
+        ...(seoTables ? [] : ['Migration 067 is required before SEO runs can be recorded']),
+        ...(env['DATAFORSEO_LOGIN']?.trim() && env['DATAFORSEO_PASSWORD']?.trim() ? [] : ['DataForSEO credentials missing — paid rank validation is paused']),
+        ...(env['GOOGLE_SEARCH_CONSOLE_CLIENT_ID']?.trim() && env['GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET']?.trim() && env['SEO_TOKEN_ENCRYPTION_KEY']?.trim() ? [] : ['Google OAuth or token encryption credentials are incomplete']),
+        ...(seoConnected ? [] : ['Google Search Console is not connected — connect it in /admin/automation']),
+      ],
+      manageHint: 'Connection, hard spend cap, run history, and run-now live in /admin/automation.',
+    },
     {
       key: 'revenue_agency',
       name: 'Revenue Agency',
