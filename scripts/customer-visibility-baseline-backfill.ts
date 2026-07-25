@@ -4,6 +4,7 @@ import {
   provisionCustomerVisibilityBaseline,
 } from '../lib/server/customer-visibility-baseline';
 
+async function main(): Promise<void> {
 const url = process.env['NEXT_PUBLIC_SUPABASE_URL']?.trim() ?? '';
 const key = process.env['SUPABASE_SERVICE_ROLE_KEY']?.trim() ?? '';
 const apply = process.argv.includes('--apply');
@@ -112,3 +113,9 @@ for (const [userId, domain] of newestDomainByUser) {
 
 console.log(JSON.stringify({ provisioned, failed, completedAt: new Date().toISOString() }));
 if (failed > 0) process.exitCode = 1;
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
