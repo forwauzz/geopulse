@@ -18,6 +18,13 @@ type AdminNavSection = {
 
 const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
   {
+    section: 'Executive',
+    items: [
+      { href: '/admin/campaigns', label: 'Campaigns', icon: 'campaign' },
+      { href: '/admin/agents', label: 'Chief of Staff & Agents', icon: 'assistant' },
+    ],
+  },
+  {
     section: 'Platform',
     items: [
       { href: '/admin', label: 'Console Home', icon: 'home' },
@@ -26,7 +33,6 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
       { href: '/admin/startups', label: 'Startups', icon: 'rocket_launch' },
       { href: '/admin/services', label: 'Services & Bundles', icon: 'tune' },
       { href: '/admin/users', label: 'Users', icon: 'group' },
-      { href: '/admin/agents', label: 'Agents', icon: 'smart_toy' },
       { href: '/admin/outreach', label: 'Outreach', icon: 'outgoing_mail' },
       { href: '/admin/competitors', label: 'Competitors', icon: 'compare_arrows' },
       { href: '/admin/research', label: 'Research', icon: 'science' },

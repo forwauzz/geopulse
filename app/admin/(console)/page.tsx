@@ -31,52 +31,28 @@ function QuickLink({ href, icon, label, description }: QuickLinkProps) {
 
 const QUICK_LINKS: QuickLinkProps[] = [
   {
-    href: '/admin/agencies',
-    icon: 'corporate_fare',
-    label: 'Agencies',
-    description: 'Manage agency accounts, clients, entitlements, and scan access.',
+    href: '/admin/campaigns',
+    icon: 'campaign',
+    label: 'Campaigns',
+    description: 'Email, newsletters, social, outreach, competitors, benchmarks, and schedule health.',
   },
   {
-    href: '/admin/startups',
-    icon: 'rocket_launch',
-    label: 'Startups',
-    description: 'Manage startup workspaces, bundles, rollout flags, and service gates.',
+    href: '/admin/agents',
+    icon: 'assistant',
+    label: 'Chief of Staff & Agents',
+    description: 'Maya’s priorities, agent ownership, blockers, and reliability exceptions.',
   },
   {
-    href: '/admin/services',
-    icon: 'tune',
-    label: 'Services',
-    description: 'Configure service catalog, bundles, and entitlement overrides.',
+    href: '/admin/users',
+    icon: 'group',
+    label: 'Customers',
+    description: 'Customer accounts, agencies, startups, plans, and access.',
   },
   {
-    href: '/dashboard/content',
-    icon: 'article',
-    label: 'Content',
-    description: 'Editorial pipeline: drafts, publish, launch readiness, batch controls.',
-  },
-  {
-    href: '/dashboard/benchmarks',
-    icon: 'analytics',
-    label: 'Benchmarks',
-    description: 'Run and review AI benchmark comparisons across domains.',
-  },
-  {
-    href: '/admin/logs',
-    icon: 'receipt_long',
-    label: 'System Logs',
-    description: 'Filter and inspect system events, delivery failures, and errors.',
-  },
-  {
-    href: '/dashboard/distribution',
-    icon: 'share',
-    label: 'Distribution',
-    description: 'Manage distribution accounts, OAuth, assets, and dispatch jobs.',
-  },
-  {
-    href: '/dashboard/evals',
-    icon: 'science',
-    label: 'Evals',
-    description: 'Eval analytics and model quality measurement.',
+    href: '/admin/settings',
+    icon: 'settings',
+    label: 'Platform settings',
+    description: 'Platform defaults. Detailed operator tools remain in the sidebar.',
   },
 ];
 
@@ -93,7 +69,7 @@ export default function AdminConsolePage() {
           Console Home
         </h1>
         <p className="mt-1 text-sm text-on-surface-variant">
-          Platform operator tools — not visible to end users. All changes here affect production data.
+          Your executive starting point. Campaigns and Chief of Staff show what matters; detailed operator tools stay available in the sidebar.
         </p>
       </div>
 
@@ -117,9 +93,9 @@ export default function AdminConsolePage() {
       {/* ── Quick-access grid ────────────────────────────────── */}
       <div>
         <h2 className="mb-4 font-headline text-lg font-semibold text-on-background">
-          Platform sections
+          Run the company
         </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           {QUICK_LINKS.map((link) => (
             <QuickLink key={link.href} {...link} />
           ))}

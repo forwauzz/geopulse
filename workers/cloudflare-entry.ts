@@ -47,6 +47,7 @@ import {
 import type { BrowserRunBinding } from '../lib/server/social-card-renderer';
 import { registerSelfFetch } from './lib/fetch-gate';
 import { registerLlmVerdictCache } from './scan-engine/run-scan';
+import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-staff';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -198,6 +199,21 @@ export default {
         await runScheduledDistributionDispatch(supabase as any, env as any);
       } catch (err) {
         structuredError('distribution_schedule_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('chief_of_staff');
+        await runCampaignChiefOfStaffCheck({
+          supabase,
+          env: env as unknown as Record<string, string | undefined>,
+        });
+      } catch (err) {
+        structuredError('chief_of_staff_campaign_check_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }
