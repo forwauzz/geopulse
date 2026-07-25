@@ -16,10 +16,9 @@ import { structuredError, structuredLog } from './structured-log';
 export const GPM_RUN_MODE = 'blind_discovery' as const;
 
 export function gpmRunHasCompletedQuestions(result: {
-  readonly queryRunCount: number;
-  readonly skippedQueryCount: number;
+  readonly completedQueryCount: number;
 }): boolean {
-  return result.queryRunCount > result.skippedQueryCount;
+  return result.completedQueryCount > 0;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────

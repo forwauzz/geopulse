@@ -256,6 +256,8 @@ describe('runBenchmarkGroupSkeleton', () => {
     expect(result).toEqual({
       runGroupId: 'run-group-1',
       queryRunCount: 2,
+      completedQueryCount: 0,
+      failedQueryCount: 0,
       skippedQueryCount: 2,
     });
     expect(calls.some((call) => call.table === 'benchmark_run_groups' && call.op === 'insert')).toBe(true);
