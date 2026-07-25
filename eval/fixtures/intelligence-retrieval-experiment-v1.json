@@ -1,0 +1,208 @@
+{
+  "fixtureVersion": "intelligence-retrieval-eval-v1",
+  "createdBeforeIndexing": true,
+  "topK": 3,
+  "documents": [
+    {
+      "evidenceId": "ev_schema_missing",
+      "sourceId": "finding:scan-101:schema",
+      "objectType": "audit_finding",
+      "text": "The organization has no JSON-LD Organization structured data, so machines cannot reliably resolve the brand entity.",
+      "domain": "alpha.example",
+      "lane": "audit-v1",
+      "model": null,
+      "quality": "valid",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-01T10:00:00Z"
+    },
+    {
+      "evidenceId": "ev_schema_present",
+      "sourceId": "finding:scan-102:schema",
+      "objectType": "audit_finding",
+      "text": "Organization JSON-LD is present and links the canonical company name, logo, and sameAs profiles.",
+      "domain": "beta.example",
+      "lane": "audit-v1",
+      "model": null,
+      "quality": "valid",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-02T10:00:00Z"
+    },
+    {
+      "evidenceId": "ev_competitor_cited",
+      "sourceId": "query-run:201",
+      "objectType": "model_answer",
+      "text": "The answer recommends two competing law firms and cites their service pages, but does not mention the measured firm.",
+      "domain": "law.example",
+      "lane": "openai:gpt-4o-mini:blind",
+      "model": "gpt-4o-mini",
+      "quality": "valid",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-10T12:00:00Z"
+    },
+    {
+      "evidenceId": "ev_brand_cited",
+      "sourceId": "query-run:202",
+      "objectType": "model_answer",
+      "text": "The measured firm appears in the answer with an exact citation to its mergers and acquisitions practice page.",
+      "domain": "law.example",
+      "lane": "openai:gpt-4o-mini:grounded",
+      "model": "gpt-4o-mini",
+      "quality": "valid",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-10T12:00:00Z"
+    },
+    {
+      "evidenceId": "ev_cron_stale",
+      "sourceId": "run-group:301",
+      "objectType": "audit_finding",
+      "text": "The scheduled benchmark group has remained in running state for ninety-six hours because the cron tail did not reconcile completion.",
+      "domain": "ops.example",
+      "lane": "scheduler-v1",
+      "model": null,
+      "quality": "incomplete",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-12T00:00:00Z"
+    },
+    {
+      "evidenceId": "ev_provider_failure",
+      "sourceId": "query-run:302",
+      "objectType": "model_answer",
+      "text": "The model provider returned a rate-limit error and no response body; this is not a genuine zero-citation outcome.",
+      "domain": "ops.example",
+      "lane": "gemini:flash:blind",
+      "model": "gemini-2.5-flash-lite",
+      "quality": "provider_failure",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-12T01:00:00Z"
+    },
+    {
+      "evidenceId": "ev_about_thin",
+      "sourceId": "finding:scan-401:about",
+      "objectType": "audit_finding",
+      "text": "The company profile page provides almost no specific expertise, proof, people, or client outcomes.",
+      "domain": "startup.example",
+      "lane": "audit-v1",
+      "model": null,
+      "quality": "valid",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-15T10:00:00Z"
+    },
+    {
+      "evidenceId": "ev_about_recommendation",
+      "sourceId": "recommendation:401",
+      "objectType": "recommendation",
+      "text": "Expand the About page with verifiable expertise, named leadership, customer evidence, and clear entity facts.",
+      "domain": "startup.example",
+      "lane": "recommendation-v1",
+      "model": null,
+      "quality": "valid",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-15T11:00:00Z"
+    },
+    {
+      "evidenceId": "ev_service_recommendation",
+      "sourceId": "recommendation:402",
+      "objectType": "recommendation",
+      "text": "Create dedicated service pages with scope, process, evidence, and frequently asked questions.",
+      "domain": "startup.example",
+      "lane": "recommendation-v1",
+      "model": null,
+      "quality": "valid",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-15T11:05:00Z"
+    },
+    {
+      "evidenceId": "ev_private_tenant_a",
+      "sourceId": "recommendation:private-a",
+      "objectType": "implementation_summary",
+      "text": "Confidential tenant A implementation details for entity schema and leadership proof.",
+      "domain": "private-a.example",
+      "lane": "recommendation-v1",
+      "model": null,
+      "quality": "valid",
+      "visibility": "private_tenant",
+      "tenantId": "tenant-a",
+      "observedAt": "2026-07-18T10:00:00Z"
+    },
+    {
+      "evidenceId": "ev_private_tenant_b",
+      "sourceId": "recommendation:private-b",
+      "objectType": "implementation_summary",
+      "text": "Confidential tenant B implementation details for entity schema and leadership proof.",
+      "domain": "private-b.example",
+      "lane": "recommendation-v1",
+      "model": null,
+      "quality": "valid",
+      "visibility": "private_tenant",
+      "tenantId": "tenant-b",
+      "observedAt": "2026-07-18T10:00:00Z"
+    },
+    {
+      "evidenceId": "ev_quarantined_anomaly",
+      "sourceId": "query-run:999",
+      "objectType": "model_answer",
+      "text": "Every brand received exactly zero citations after an abrupt cohort-wide change.",
+      "domain": "anomaly.example",
+      "lane": "openai:gpt-4o-mini:blind",
+      "model": "gpt-4o-mini",
+      "quality": "quarantined",
+      "visibility": "internal",
+      "tenantId": null,
+      "observedAt": "2026-07-20T10:00:00Z"
+    }
+  ],
+  "tasks": [
+    {
+      "taskId": "entity_markup_discovery",
+      "taskType": "evidence_discovery",
+      "query": "Find evidence that machine-readable company identity is absent.",
+      "filters": { "visibility": ["internal"], "quality": ["valid"] },
+      "relevantEvidenceIds": ["ev_schema_missing"]
+    },
+    {
+      "taskId": "competitor_visibility",
+      "taskType": "evidence_discovery",
+      "query": "Find an AI answer where rivals are recommended while our brand is overlooked.",
+      "filters": { "domain": ["law.example"], "model": ["gpt-4o-mini"], "quality": ["valid"] },
+      "relevantEvidenceIds": ["ev_competitor_cited"]
+    },
+    {
+      "taskId": "stuck_scheduler",
+      "taskType": "analogous_case",
+      "query": "Find benchmark work that never finished and has been stuck for days.",
+      "filters": { "quality": ["incomplete"], "visibility": ["internal"] },
+      "relevantEvidenceIds": ["ev_cron_stale"]
+    },
+    {
+      "taskId": "thin_company_profile",
+      "taskType": "recommendation_similarity",
+      "query": "Which action addresses a weak company profile with little proof or leadership detail?",
+      "filters": { "objectType": ["recommendation"], "domain": ["startup.example"], "quality": ["valid"] },
+      "relevantEvidenceIds": ["ev_about_recommendation"]
+    },
+    {
+      "taskId": "provider_error_not_zero",
+      "taskType": "analogous_case",
+      "query": "Find a failed AI request that must not be counted as a real no-citation answer.",
+      "filters": { "quality": ["provider_failure"], "visibility": ["internal"] },
+      "relevantEvidenceIds": ["ev_provider_failure"]
+    },
+    {
+      "taskId": "tenant_isolation",
+      "taskType": "access_control",
+      "query": "Find the confidential entity schema implementation.",
+      "filters": { "tenantId": ["tenant-a"], "visibility": ["private_tenant"], "quality": ["valid"] },
+      "relevantEvidenceIds": ["ev_private_tenant_a"],
+      "forbiddenEvidenceIds": ["ev_private_tenant_b"]
+    }
+  ]
+}
