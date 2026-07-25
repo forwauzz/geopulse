@@ -6,6 +6,7 @@ import {
   buildIndustryHumorCandidate,
   instagramScheduleSlot,
   orderAutonomousCandidates,
+  reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
 } from './social-proof-agent';
 
@@ -202,5 +203,22 @@ describe('Social Proof Agent safeguards', () => {
         9
       )
     ).toBe('2026-07-24T13:00:00.000Z');
+    expect(
+      instagramScheduleSlot(
+        new Date('2026-07-23T14:12:34.567Z'),
+        'America/Toronto',
+        17
+      )
+    ).toBe('2026-07-23T21:00:00.000Z');
+  });
+
+  it('reserves the next open hourly slot when another post already owns the desired hour', () => {
+    const occupied = new Set(['2026-07-23T21:00:00.000Z']);
+    expect(
+      reserveInstagramScheduleSlot('2026-07-23T21:00:00.000Z', occupied)
+    ).toBe('2026-07-23T22:00:00.000Z');
+    expect(
+      reserveInstagramScheduleSlot('2026-07-23T21:00:00.000Z', occupied)
+    ).toBe('2026-07-23T23:00:00.000Z');
   });
 });
