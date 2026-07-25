@@ -13,6 +13,15 @@ import { storeGpmReport, type GpmReportStoreEnvLike, type GpmR2BucketLike } from
 import { sendGpmReportSlackSummary } from './geo-performance-slack';
 import { structuredError, structuredLog } from './structured-log';
 
+export const GPM_RUN_MODE = 'blind_discovery' as const;
+
+export function gpmRunHasCompletedQuestions(result: {
+  readonly queryRunCount: number;
+  readonly skippedQueryCount: number;
+}): boolean {
+  return result.queryRunCount > result.skippedQueryCount;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type GpmPlatformModelMap = {
@@ -226,6 +235,7 @@ export async function executeGpmClientRun(args: {
           domainId: args.config.benchmark_domain_id,
           querySetId: args.config.query_set_id,
           modelId,
+          runMode: GPM_RUN_MODE,
           runScope: 'gpm_client_run',
           runLabel: `gpm-${windowDate}-${domain.canonical_domain}-${platform}`.slice(0, 160),
           notes: `GEO Performance run (${windowDate}) — ${platform}`,
@@ -244,6 +254,9 @@ export async function executeGpmClientRun(args: {
         },
         args.adapter
       );
+      if (!gpmRunHasCompletedQuestions(result)) {
+        throw new Error(`No ${platform} buyer questions executed; the configured model lane is unavailable.`);
+      }
 
       await persistCompetitorCitations({
         supabase: args.supabase,

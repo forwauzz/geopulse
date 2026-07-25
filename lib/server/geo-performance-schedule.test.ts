@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGpmRunKey,
+  GPM_RUN_MODE,
+  gpmRunHasCompletedQuestions,
   resolveGpmPlatformModelMap,
   resolveGpmWindowDate,
 } from './geo-performance-schedule';
+
+describe('GPM measurement contract', () => {
+  it('uses blind buyer discovery and rejects all-skipped runs as measurements', () => {
+    expect(GPM_RUN_MODE).toBe('blind_discovery');
+    expect(gpmRunHasCompletedQuestions({ queryRunCount: 8, skippedQueryCount: 8 })).toBe(false);
+    expect(gpmRunHasCompletedQuestions({ queryRunCount: 8, skippedQueryCount: 0 })).toBe(true);
+  });
+});
 
 // ── resolveGpmWindowDate ──────────────────────────────────────────────────────
 
