@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReportCategoryScore } from '@/components/score-report';
 
 /** Matches the /api/competitors/* response contract. */
@@ -64,8 +64,9 @@ export function CompetitorDiscovery({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null); // domain currently scanning/adding
   const [added, setAdded] = useState<Set<string>>(new Set());
+  const detectionStarted = useRef(false);
 
-  async function detect() {
+  const detect = useCallback(async () => {
     setError(null);
     setStage('detecting');
     try {
@@ -94,7 +95,13 @@ export function CompetitorDiscovery({
       setError('We couldn’t reach that site. Enter your industry and city below.');
       setStage('confirm');
     }
-  }
+  }, [domain, youUrl]);
+
+  useEffect(() => {
+    if (atCap || detectionStarted.current) return;
+    detectionStarted.current = true;
+    void detect();
+  }, [atCap, detect]);
 
   async function discover(e: React.FormEvent) {
     e.preventDefault();

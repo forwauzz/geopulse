@@ -350,6 +350,16 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
           />
         ) : undefined
       }
+      primaryActionSlot={
+        showMonitorSubscription && turnstileSiteKey && checkoutState !== 'subscribed' ? (
+          <MonitorSubscribeCTA
+            siteKey={turnstileSiteKey}
+            scanId={data.scanId}
+            domain={host}
+            accountEmail={monitorAccountEmail}
+          />
+        ) : undefined
+      }
       deepAuditSlot={
         <div className="space-y-6">
           {/* Access & Eligibility Matrix — the per-destination headline diagnostic */}
@@ -489,17 +499,6 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
                 />
               </div>
             </section>
-          ) : null}
-
-          {/* Monetized recurring hook: subscribe to monitor this site monthly (flagged). Turnstile
-              needs a site key, so only render when one is present. */}
-          {showMonitorSubscription && turnstileSiteKey ? (
-            <MonitorSubscribeCTA
-              siteKey={turnstileSiteKey}
-              scanId={data.scanId}
-              domain={host}
-              accountEmail={monitorAccountEmail}
-            />
           ) : null}
 
           {/* Dated 90-day plan + re-scan hook (spec C11) */}
