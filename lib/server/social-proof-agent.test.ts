@@ -105,6 +105,9 @@ describe('Social Proof Agent safeguards', () => {
     expect(config.clientProofEnabled).toBe(false);
     expect(config.auditScreenshotsEnabled).toBe(false);
     expect(config.reelsEnabled).toBe(false);
+    expect(config.reelsPerWeek).toBe(4);
+    expect(config.reelDaysLocal).toEqual([0, 2, 4, 6]);
+    expect(config.reelPublishMode).toBe('autonomous');
     expect(config.industryHumorEnabled).toBe(true);
   });
 

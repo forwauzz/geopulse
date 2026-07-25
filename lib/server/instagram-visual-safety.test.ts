@@ -84,6 +84,40 @@ describe('Instagram visual safety', () => {
     ).toEqual({ safe: true });
   });
 
+  it('allows Jordan CI renders only after the deterministic crop suite passes', () => {
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({
+          ...completeMetadata,
+          meta_preview_approved: false,
+          meta_preview_approved_at: '',
+          renderer: 'github_actions_hyperframes',
+          reels_preview_safe: true,
+          crop_safe_zone_checked: true,
+          automated_crop_suite_approved: true,
+          automated_crop_suite_version: 'jordan-crop-suite-v1',
+        }),
+      ])
+    ).toEqual({ safe: true });
+  });
+
+  it('does not treat a generic automated renderer claim as Meta approval', () => {
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({
+          ...completeMetadata,
+          meta_preview_approved: false,
+          meta_preview_approved_at: '',
+          renderer: 'unknown',
+          reels_preview_safe: true,
+          crop_safe_zone_checked: true,
+          automated_crop_suite_approved: true,
+          automated_crop_suite_version: 'jordan-crop-suite-v1',
+        }),
+      ])
+    ).toEqual({ safe: false, reason: 'meta_preview_approval_required' });
+  });
+
   it('blocks silent reels even when every visual preview passed', () => {
     expect(
       validateInstagramVisualSafety(asset('short_video_post'), [

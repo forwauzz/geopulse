@@ -1,0 +1,9 @@
+{
+  "name": "jordan-kinetic-reel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npx --yes hyperframes@0.7.71 check",
+    "render": "npx --yes hyperframes@0.7.71 render --strict --strict-variables --quality high"
+  }
+}

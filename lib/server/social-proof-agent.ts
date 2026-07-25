@@ -34,6 +34,15 @@ import {
 } from './social-trend-agent';
 import { collectInstagramPerformance } from './instagram-performance-agent';
 import { structuredLogWithClientAndWait } from './structured-log';
+import {
+  buildJordanReelScript,
+  chooseJordanReelSource,
+  jordanReelSlotKey,
+  resolveJordanReelConfig,
+  shouldPlanJordanReel,
+  type JordanReelCategory,
+  type JordanReelPublishMode,
+} from './jordan-reel-production';
 
 export type SocialProofAgentMode = 'off' | 'draft' | 'approval' | 'autonomous';
 
@@ -48,6 +57,10 @@ export type SocialProofAgentConfig = {
   readonly clientProofEnabled: boolean;
   readonly carouselEnabled: boolean;
   readonly reelsEnabled: boolean;
+  readonly reelsPerWeek: number;
+  readonly reelDaysLocal: readonly number[];
+  readonly reelCategories: readonly JordanReelCategory[];
+  readonly reelPublishMode: JordanReelPublishMode;
   readonly trendResearchEnabled: boolean;
   readonly learningEnabled: boolean;
   readonly minAggregateSampleSize: number;
@@ -172,6 +185,7 @@ export function resolveSocialProofAgentConfig(
   enabled: boolean,
   killed: boolean
 ): SocialProofAgentConfig {
+  const reel = resolveJordanReelConfig(config);
   const rawMode = typeof config['mode'] === 'string' ? config['mode'] : '';
   const mode: SocialProofAgentMode =
     killed || !enabled
@@ -190,7 +204,11 @@ export function resolveSocialProofAgentConfig(
     industryHumorEnabled: readBoolean(config, 'industry_humor_enabled', true),
     clientProofEnabled: readBoolean(config, 'client_proof_enabled', false),
     carouselEnabled: readBoolean(config, 'carousel_enabled', true),
-    reelsEnabled: readBoolean(config, 'reels_enabled', false),
+    reelsEnabled: reel.enabled,
+    reelsPerWeek: reel.reelsPerWeek,
+    reelDaysLocal: reel.daysLocal,
+    reelCategories: reel.categories,
+    reelPublishMode: reel.publishMode,
     trendResearchEnabled: readBoolean(config, 'trend_research_enabled', true),
     learningEnabled: readBoolean(config, 'learning_enabled', true),
     minAggregateSampleSize: readPositiveInt(config, 'min_aggregate_sample_size', 20, 500),
@@ -588,6 +606,7 @@ async function materializeCandidateMedia(args: {
   readonly env: SocialProductionEnv;
   readonly dateKey: string;
 }): Promise<SocialProofCandidate> {
+  if (args.candidate.assetType === 'short_video_post') return args.candidate;
   if (args.candidate.media && args.candidate.media.length > 0) return args.candidate;
   if (
     args.candidate.mediaUrl &&
@@ -931,10 +950,51 @@ export async function runSocialProofAgent(args: {
 
     const account = preferredAccount(accounts);
     const family = providerFamily(account);
-    const orderedCandidates =
+    const baseOrderedCandidates =
       mode === 'autonomous'
         ? orderAutonomousCandidates(candidates, historicalPerformanceByKind(existingAssets))
         : candidates;
+    const reelConfig = {
+      enabled: config.reelsEnabled,
+      reelsPerWeek: config.reelsPerWeek,
+      daysLocal: config.reelDaysLocal,
+      categories: config.reelCategories,
+      publishMode: config.reelPublishMode,
+    };
+    const reelSource =
+      account?.provider_name === 'instagram' &&
+      shouldPlanJordanReel({
+        now,
+        timezone: config.timezone,
+        config: reelConfig,
+        existingAssets,
+      })
+        ? chooseJordanReelSource(baseOrderedCandidates, config.reelCategories)
+        : null;
+    const reelCandidate: SocialProofCandidate | null = reelSource
+      ? {
+          ...reelSource,
+          key: `jordan-reel-${jordanReelSlotKey(now, config.timezone)}`,
+          assetType: 'short_video_post',
+          mediaUrl: null,
+          mediaMimeType: null,
+          mediaAlt: null,
+          evidence: {
+            ...reelSource.evidence,
+            research_agent:
+              reelSource.evidence['research_agent'] === 'sofia' ? 'sofia' : null,
+            reel_slot_key: jordanReelSlotKey(now, config.timezone),
+            reel_script: buildJordanReelScript(reelSource),
+            reel_template: 'diagnostic-kinetic-v1',
+          },
+          // Rendering, mobile previews, audio, duplication, and Meta validation must
+          // complete before this can be promoted to an autonomous publish job.
+          safeForAutonomousPublish: false,
+        }
+      : null;
+    const orderedCandidates = reelCandidate
+      ? [reelCandidate, ...baseOrderedCandidates.filter((candidate) => candidate !== reelSource)]
+      : baseOrderedCandidates;
     let assetsCreated = 0;
     let jobsCreated = 0;
 
@@ -979,8 +1039,9 @@ export async function runSocialProofAgent(args: {
         title: candidate.title,
         bodyPlaintext: candidate.caption,
         captionText: candidate.caption,
-        status:
-          mode === 'autonomous' && !candidate.safeForAutonomousPublish
+        status: candidate.assetType === 'short_video_post'
+          ? 'draft'
+          : mode === 'autonomous' && !candidate.safeForAutonomousPublish
             ? 'review'
             : assetStatusForMode(mode),
         ctaUrl: trackedProviderCta(candidate.ctaUrl, account?.provider_name ?? 'social', candidate.key),
@@ -996,6 +1057,17 @@ export async function runSocialProofAgent(args: {
           audit_screenshots_enabled: config.auditScreenshotsEnabled,
           carousel_enabled: config.carouselEnabled,
           reels_enabled: config.reelsEnabled,
+          reels_per_week: config.reelsPerWeek,
+          reel_days_local: config.reelDaysLocal,
+          reel_categories: config.reelCategories,
+          reel_publish_mode: config.reelPublishMode,
+          reel_slot_key: candidate.evidence['reel_slot_key'] ?? null,
+          reel_script: candidate.evidence['reel_script'] ?? null,
+          reel_template: candidate.evidence['reel_template'] ?? null,
+          reel_render_status:
+            candidate.assetType === 'short_video_post' ? 'pending' : null,
+          reel_validation_version:
+            candidate.assetType === 'short_video_post' ? 'jordan-reel-v1' : null,
           industry_humor_enabled: config.industryHumorEnabled,
           trend_research_enabled: config.trendResearchEnabled,
           learning_enabled: config.learningEnabled,
@@ -1045,6 +1117,41 @@ export async function runSocialProofAgent(args: {
             },
           },
         ]);
+      }
+
+      if (
+        candidate.assetType === 'short_video_post' &&
+        account?.provider_name === 'instagram'
+      ) {
+        const jobId = `proof_job_${account.account_id}_${candidate.key}`
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]+/g, '-')
+          .slice(0, 150);
+        const existingJob = await repo.getJobByJobId(jobId);
+        if (!existingJob) {
+          const autonomousReel =
+            mode === 'autonomous' && config.reelPublishMode === 'autonomous';
+          await repo.createJob({
+            jobId,
+            distributionAssetId: asset.id,
+            distributionAccountId: account.id,
+            publishMode: autonomousReel ? 'scheduled' : 'draft',
+            scheduledFor: autonomousReel
+              ? instagramScheduleSlot(
+                  now,
+                  config.timezone,
+                  config.postingHoursLocal[
+                    Math.min(jobsCreated, config.postingHoursLocal.length - 1)
+                  ] ?? 19
+                )
+              : null,
+            // The renderer callback promotes this reservation only after every
+            // fail-closed Reel validation passes.
+            status: 'draft',
+          });
+          if (autonomousReel) jobsCreated += 1;
+        }
+        continue;
       }
 
       if (mode === 'autonomous' && candidateCanPublish(candidate, account) && account) {
