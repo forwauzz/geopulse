@@ -112,7 +112,6 @@ async function createOpportunity(
   const payload = {
     opportunity_key: draft.key,
     kind: draft.kind,
-    status: 'queued',
     priority: draft.priority,
     title: draft.title,
     evidence: draft.evidence,
@@ -125,7 +124,11 @@ async function createOpportunity(
     await db.from('seo_opportunities').update(payload).eq('id', existing.id);
     return false;
   }
-  const { error } = await db.from('seo_opportunities').insert({ ...payload, first_seen_at: now.toISOString() });
+  const { error } = await db.from('seo_opportunities').insert({
+    ...payload,
+    status: 'queued',
+    first_seen_at: now.toISOString(),
+  });
   return !error;
 }
 
