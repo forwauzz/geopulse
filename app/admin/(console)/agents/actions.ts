@@ -69,6 +69,15 @@ function postingHours(formData: FormData): number[] {
   return unique.length > 0 ? unique : [9, 12, 15, 19];
 }
 
+function reelDays(formData: FormData): number[] {
+  const values = String(formData.get('reelDaysLocal') ?? '0,2,4,6')
+    .split(',')
+    .map((value) => Number.parseInt(value.trim(), 10))
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 6);
+  const unique = [...new Set(values)].slice(0, 7);
+  return unique.length > 0 ? unique : [0, 2, 4, 6];
+}
+
 export async function saveSocialProofAgent(formData: FormData): Promise<void> {
   const ctx = await loadAdminActionContext();
   if (!ctx.ok) return;
@@ -96,6 +105,18 @@ export async function saveSocialProofAgent(formData: FormData): Promise<void> {
         client_proof_enabled: checked(formData, 'clientProofEnabled'),
         carousel_enabled: checked(formData, 'carouselEnabled'),
         reels_enabled: checked(formData, 'reelsEnabled'),
+        reels_per_week: intField(formData, 'reelsPerWeek', 4, 7),
+        reel_days_local: reelDays(formData),
+        reel_publish_mode:
+          String(formData.get('reelPublishMode') ?? 'autonomous') === 'draft'
+            ? 'draft'
+            : 'autonomous',
+        reel_categories: [
+          ...(checked(formData, 'reelTimelyEnabled') ? ['timely'] : []),
+          ...(checked(formData, 'reelEducationalEnabled') ? ['educational'] : []),
+          ...(checked(formData, 'reelHumorEnabled') ? ['humor'] : []),
+          ...(checked(formData, 'reelProofEnabled') ? ['proof'] : []),
+        ],
         trend_research_enabled: checked(formData, 'trendResearchEnabled'),
         learning_enabled: checked(formData, 'learningEnabled'),
         min_aggregate_sample_size: intField(formData, 'minAggregateSampleSize', 20, 500),

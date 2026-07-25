@@ -11,6 +11,7 @@ import {
 import { judgeGrowthLoop } from '@/lib/server/growth-judge';
 import { resolveSocialProofAgentConfig } from '@/lib/server/social-proof-agent';
 import { loadSofiaResearchHandoffs } from '@/lib/server/sofia-research';
+import { loadJordanReelLibrary } from '@/lib/server/jordan-reel-production';
 import {
   runRevenueAgencyNow,
   runSocialProofNow,
@@ -95,12 +96,13 @@ export default async function AdminAgentsPage() {
     env = process.env as unknown as Record<string, string | undefined>;
   }
 
-  const [agents, socialSetting, revenueSetting, revenueSnapshot, sofiaResearch] = await Promise.all([
+  const [agents, socialSetting, revenueSetting, revenueSnapshot, sofiaResearch, jordanReels] = await Promise.all([
     loadAgentStatuses(ctx.adminDb, env),
     loadAutomationSetting(ctx.adminDb, 'social_proof_agent'),
     loadAutomationSetting(ctx.adminDb, 'revenue_agency'),
     loadRevenueAgencySnapshot(ctx.adminDb),
     loadSofiaResearchHandoffs(ctx.adminDb),
+    loadJordanReelLibrary(ctx.adminDb),
   ]);
   const social = resolveSocialProofAgentConfig(
     socialSetting.config,
@@ -417,6 +419,21 @@ export default async function AdminAgentsPage() {
               Minimum aggregate sample
               <input name="minAggregateSampleSize" type="number" min="5" max="500" defaultValue={social.minAggregateSampleSize} className={`${inputClass} w-40`} />
             </label>
+            <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+              Reels per week
+              <input name="reelsPerWeek" type="number" min="1" max="7" defaultValue={social.reelsPerWeek} className={`${inputClass} w-28`} />
+            </label>
+            <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+              Reel days (Sun=0)
+              <input name="reelDaysLocal" defaultValue={social.reelDaysLocal.join(', ')} className={`${inputClass} w-36`} />
+            </label>
+            <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+              Reel publishing
+              <select name="reelPublishMode" defaultValue={social.reelPublishMode} className={inputClass}>
+                <option value="autonomous">Schedule automatically</option>
+                <option value="draft">Draft only</option>
+              </select>
+            </label>
           </div>
 
           <div className="mt-4 grid gap-2 md:grid-cols-2">
@@ -429,7 +446,11 @@ export default async function AdminAgentsPage() {
             <Checkbox name="auditScreenshotsEnabled" label="Audit report screenshots" description="Only redacted or consented media can pass review." defaultChecked={social.auditScreenshotsEnabled} />
             <Checkbox name="clientProofEnabled" label="Client proof" description="Still requires an explicit consent record and claim-safe evidence." defaultChecked={social.clientProofEnabled} />
             <Checkbox name="carouselEnabled" label="Carousels" defaultChecked={social.carouselEnabled} />
-            <Checkbox name="reelsEnabled" label="Reels" description="Reel concepts stay review-gated until 9:16 video, audio, grid/feed previews, and Meta preview approval all pass." defaultChecked={social.reelsEnabled} />
+            <Checkbox name="reelsEnabled" label="Reels" description="Jordan renders crop-safe 9:16 masters with audio and keeps them inside the daily post cap." defaultChecked={social.reelsEnabled} />
+            <Checkbox name="reelTimelyEnabled" label="Timely Reels" defaultChecked={social.reelCategories.includes('timely')} />
+            <Checkbox name="reelEducationalEnabled" label="Educational Reels" defaultChecked={social.reelCategories.includes('educational')} />
+            <Checkbox name="reelHumorEnabled" label="Humor Reels" defaultChecked={social.reelCategories.includes('humor')} />
+            <Checkbox name="reelProofEnabled" label="Proof Reels" defaultChecked={social.reelCategories.includes('proof')} />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -505,6 +526,42 @@ export default async function AdminAgentsPage() {
                         })}
                       </span>
                     </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
+
+        <details className="mt-4 rounded-xl border border-outline-variant/20 bg-surface-container-low">
+          <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3 font-sans text-sm font-bold text-on-background">
+            <span className="inline-flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>movie</span>
+              Jordan Reel library
+            </span>
+            <span className="font-label text-[0.62rem] uppercase tracking-wider text-on-surface-variant">
+              {jordanReels.length} item{jordanReels.length === 1 ? '' : 's'}
+            </span>
+          </summary>
+          <div className="border-t border-outline-variant/15 px-4 py-4">
+            {jordanReels.length === 0 ? (
+              <p className="font-sans text-sm text-on-surface-variant">No Reel drafts yet. The next eligible Sofia handoff will appear here.</p>
+            ) : (
+              <div className="grid gap-2">
+                {jordanReels.map((reel) => (
+                  <article key={reel.assetId} className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-container-lowest p-3">
+                    <span className="material-symbols-outlined text-primary" aria-hidden>smart_display</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-sans text-sm font-bold text-on-background">{reel.title}</p>
+                      <p className="font-sans text-xs text-on-surface-variant">
+                        {reel.renderStatus.replaceAll('_', ' ')}
+                        {reel.scheduledFor ? ` · ${new Date(reel.scheduledFor).toLocaleString('en-CA', { timeZone: social.timezone })}` : ''}
+                      </p>
+                    </div>
+                    {reel.destinationUrl ? (
+                      <a href={reel.destinationUrl} target="_blank" rel="noreferrer" className="font-sans text-xs font-bold text-primary">Open</a>
+                    ) : null}
+                    <span className="rounded-full bg-primary/10 px-2 py-1 font-sans text-xs font-semibold text-primary">{reel.status}</span>
                   </article>
                 ))}
               </div>

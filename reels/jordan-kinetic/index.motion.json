@@ -1,0 +1,9 @@
+{
+  "duration": 9,
+  "assertions": [
+    { "kind": "appearsBy", "selector": "#scene-hook .hero", "bySec": 0.6 },
+    { "kind": "before", "a": "#scene-hook .hero", "b": "#scene-cta .hero" },
+    { "kind": "staysInFrame", "selector": "#scene-compare .top" },
+    { "kind": "keepsMoving", "withinSelector": "#reel-content", "maxStaticSec": 1.5 }
+  ]
+}

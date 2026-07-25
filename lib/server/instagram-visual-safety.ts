@@ -21,7 +21,8 @@ function stringFrom(value: unknown): string {
 /**
  * Reels are fail-closed because Instagram shows the same 9:16 source through
  * multiple crops. Dimensions alone cannot prove that the feed/profile previews
- * are safe, so a real Meta Business Suite preview approval is also required.
+ * are safe. Manually supplied Reels require a real Meta Business Suite preview;
+ * Jordan-rendered Reels require the stricter deterministic crop-suite attestation.
  */
 export function validateInstagramVisualSafety(
   asset: DistributionAssetRow,
@@ -48,10 +49,16 @@ export function validateInstagramVisualSafety(
   if (stringFrom(video.metadata['safe_area_contract']) !== 'reel_9x16_center_safe') {
     return { safe: false, reason: 'reel_safe_area_unverified' };
   }
-  if (
-    video.metadata['meta_preview_approved'] !== true ||
-    stringFrom(video.metadata['meta_preview_approved_at']) === ''
-  ) {
+  const manualMetaPreviewApproved =
+    video.metadata['meta_preview_approved'] === true &&
+    stringFrom(video.metadata['meta_preview_approved_at']) !== '';
+  const automatedCropSuiteApproved =
+    video.metadata['automated_crop_suite_approved'] === true &&
+    video.metadata['crop_safe_zone_checked'] === true &&
+    video.metadata['reels_preview_safe'] === true &&
+    stringFrom(video.metadata['automated_crop_suite_version']) === 'jordan-crop-suite-v1' &&
+    stringFrom(video.metadata['renderer']) === 'github_actions_hyperframes';
+  if (!manualMetaPreviewApproved && !automatedCropSuiteApproved) {
     return { safe: false, reason: 'meta_preview_approval_required' };
   }
   if (video.metadata['has_audio'] !== true || numberFrom(video.metadata['audio_track_count'])! < 1) {
