@@ -51,6 +51,11 @@ describe('intelligence source registry', () => {
       'public.intelligence_retrieval_experiments',
       'public.intelligence_embedding_manifests',
       'public.intelligence_retrieval_task_results',
+      'public.intelligence_learning_patterns',
+      'public.intelligence_methodology_proposals',
+      'public.intelligence_methodology_eval_links',
+      'public.intelligence_policy_versions',
+      'public.intelligence_methodology_events',
     ];
 
     for (const id of required) expect(ids.has(id), id).toBe(true);
