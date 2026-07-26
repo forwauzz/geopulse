@@ -495,7 +495,7 @@ export async function attemptSafeCampaignRemediation(args: {
         .maybeSingle();
       const ageMs = item?.updated_at ? now.getTime() - Date.parse(item.updated_at) : 0;
       const incomplete = !item?.canonical_url || /\bsubject ideas\b|optional link-back/i.test(String(item?.draft_markdown ?? ''));
-      if (item && ageMs > 14 * 86_400_000 && incomplete) {
+      if (item && ageMs > 2 * 86_400_000 && incomplete) {
         const { error } = await args.db.from('content_items').update({ status: 'archived' }).eq('id', id);
         if (!error) {
           await args.db
