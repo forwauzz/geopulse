@@ -282,7 +282,7 @@ export async function reconcileContentLoops(db: Db, now = new Date()): Promise<n
   const keys = loops.map((row: any) => String(row.source_key));
   const { data: items } = await db
     .from('content_items')
-    .select('content_id,status,canonical_url,published_at,content_type')
+    .select('content_id,status,canonical_url,published_at,content_type,draft_markdown')
     .in('content_id', keys);
   const byKey = new Map<string, any>(
     (items ?? []).map((item: any) => [String(item.content_id), item] as [string, any]),
@@ -293,7 +293,7 @@ export async function reconcileContentLoops(db: Db, now = new Date()): Promise<n
     const satisfied = item?.content_type === 'article'
       ? item.status === 'published' && Boolean(item.canonical_url)
       : item?.content_type === 'newsletter'
-        ? item.status === 'published'
+        ? ['draft', 'approved', 'published'].includes(String(item.status ?? '')) && Boolean(item.draft_markdown)
         : ['approved', 'published'].includes(String(item?.status ?? ''));
     if (!satisfied) continue;
     await db.from('agent_work_loops').update({
@@ -310,6 +310,74 @@ export async function reconcileContentLoops(db: Db, now = new Date()): Promise<n
     completed += 1;
   }
   return completed;
+}
+
+export function buildSeoNewsletterDerivative(args: {
+  title: string;
+  markdown: string;
+  canonicalUrl: string;
+}): string {
+  const withoutTitle = args.markdown.replace(/^#\s+.+$/m, '').trim();
+  const bounded = withoutTitle.length <= 2_400
+    ? withoutTitle
+    : `${withoutTitle.slice(0, 2_350).replace(/\s+\S*$/, '').trim()}\n\n…`;
+  return [
+    `# ${args.title}`,
+    bounded,
+    `[Read the complete guide](${args.canonicalUrl})`,
+    `Run a free GEO-Pulse scan to measure your starting point.`,
+  ].join('\n\n');
+}
+
+export async function materializeSeoContentDerivatives(args: {
+  db: Db;
+  opportunityId: string;
+  title: string;
+  markdown: string;
+  canonicalUrl: string;
+  now?: Date;
+}): Promise<number> {
+  const now = args.now ?? new Date();
+  const { data: items } = await args.db
+    .from('content_items')
+    .select('id,content_id,content_type,status,metadata')
+    .eq('metadata->>seo_opportunity_id', args.opportunityId)
+    .in('content_type', ['newsletter', 'social_post']);
+  let updated = 0;
+  for (const item of items ?? []) {
+    if (item.status === 'published' || item.status === 'archived') continue;
+    const metadata = metadataObject(item.metadata);
+    if (item.content_type === 'newsletter') {
+      await args.db.from('content_items').update({
+        title: args.title,
+        status: 'draft',
+        canonical_url: args.canonicalUrl,
+        draft_markdown: buildSeoNewsletterDerivative(args),
+        metadata: {
+          ...metadata,
+          derived_from_canonical: true,
+          derived_at: now.toISOString(),
+        },
+      }).eq('id', item.id);
+      updated += 1;
+    } else {
+      await args.db.from('content_items').update({
+        brief_markdown: [
+          `## Instagram content concept`,
+          `Turn “${args.title}” into a crop-safe carousel or paced Reel.`,
+          `Lead with the buyer problem, use three evidence-backed teaching beats, and finish with the free scan.`,
+          `Canonical source: ${args.canonicalUrl}`,
+        ].join('\n\n'),
+        metadata: {
+          ...metadata,
+          derived_from_canonical: true,
+          derived_at: now.toISOString(),
+        },
+      }).eq('id', item.id);
+      updated += 1;
+    }
+  }
+  return updated;
 }
 
 export async function closeSatisfiedSeoParents(db: Db, now = new Date()): Promise<number> {
@@ -416,6 +484,51 @@ export async function attemptSafeCampaignRemediation(args: {
       // A retry is not a resolution. The loop closes only after the source job
       // reports success and disappears from the exception view.
       void error;
+    }
+
+    if (action.key.startsWith('newsletter:') && action.detail.includes('draft was created')) {
+      const id = action.key.slice('newsletter:'.length);
+      const { data: item } = await args.db
+        .from('content_items')
+        .select('id,status,updated_at,draft_markdown,canonical_url')
+        .eq('id', id)
+        .maybeSingle();
+      const ageMs = item?.updated_at ? now.getTime() - Date.parse(item.updated_at) : 0;
+      const incomplete = !item?.canonical_url || /\bsubject ideas\b|optional link-back/i.test(String(item?.draft_markdown ?? ''));
+      if (item && ageMs > 14 * 86_400_000 && incomplete) {
+        const { error } = await args.db.from('content_items').update({ status: 'archived' }).eq('id', id);
+        if (!error) {
+          await args.db
+            .from('content_distribution_deliveries')
+            .update({ status: 'archived' })
+            .eq('content_item_id', id)
+            .in('status', ['pending', 'drafted', 'queued', 'failed']);
+          resolved.set(action.key, {
+            remediation: 'stale_incomplete_newsletter_archived',
+            content_item_id: id,
+            verified_at: now.toISOString(),
+          });
+        }
+      }
+    }
+
+    if (action.key.startsWith('gpm:') && action.title.includes('awaiting first report')) {
+      const id = action.key.slice('gpm:'.length);
+      const { data: config } = await args.db
+        .from('client_benchmark_configs')
+        .select('metadata')
+        .eq('id', id)
+        .maybeSingle();
+      const metadata = metadataObject(config?.metadata);
+      await args.db.from('client_benchmark_configs').update({
+        metadata: {
+          ...metadata,
+          baseline_status: 'queued',
+          baseline_requested_at: now.toISOString(),
+          baseline_requested_by: 'maya',
+        },
+      }).eq('id', id);
+      // This remains open until gpm_reports proves that the baseline ran.
     }
   }
   return resolved;

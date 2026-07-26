@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   attemptSafeCampaignRemediation,
+  buildSeoNewsletterDerivative,
   buildSeoContentFamily,
 } from './agent-loop-control';
 
@@ -20,6 +21,18 @@ describe('closed-loop agent control', () => {
     expect(family[1]?.contentId).toContain(':newsletter');
     expect(family[2]?.contentId).toContain(':instagram');
     expect(new Set(family.map((item) => item.slug)).size).toBe(3);
+  });
+
+  it('creates a bounded newsletter derivative that links back to the canonical article', () => {
+    const markdown = buildSeoNewsletterDerivative({
+      title: 'How AI visibility audits work',
+      markdown: '# Old title\n\n## Direct answer\n\nUseful evidence.',
+      canonicalUrl: '/blog/ai-visibility-audit',
+    });
+    expect(markdown).toContain('# How AI visibility audits work');
+    expect(markdown).toContain('Useful evidence.');
+    expect(markdown).toContain('[Read the complete guide](/blog/ai-visibility-audit)');
+    expect(markdown).not.toContain('# Old title');
   });
 
   it('skips a 403 prospect instead of leaving Maya with a repeating open loop', async () => {

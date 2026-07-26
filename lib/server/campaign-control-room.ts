@@ -250,7 +250,11 @@ export async function loadCampaignControlRoom(args: {
     const published = itemDeliveries.some((row) => text(row, 'status') === 'published');
     const latestDelivery = itemDeliveries[0];
     const deliveryStatus = text(latestDelivery ?? {}, 'status');
-    const deliveryStale = Boolean(deliveryStatus && deliveryStatus !== 'published' && isOlderThan(text(latestDelivery ?? {}, 'updated_at'), nowMs, 48));
+    const deliveryStale = Boolean(
+      deliveryStatus &&
+      !['published', 'archived'].includes(deliveryStatus) &&
+      isOlderThan(text(latestDelivery ?? {}, 'updated_at'), nowMs, 48)
+    );
     const ready = ['approved', 'published'].includes(text(item, 'status') ?? '');
     campaigns.push({
       id: `newsletter:${text(item, 'id') ?? crypto.randomUUID()}`,

@@ -7,7 +7,11 @@
  */
 import { evaluateContentPublishChecks, prepareContentForPublish } from './content-publishing';
 import { configInt, loadAutomationSetting } from './automation-settings';
-import { closeSatisfiedSeoParents, reconcileContentLoops } from './agent-loop-control';
+import {
+  closeSatisfiedSeoParents,
+  materializeSeoContentDerivatives,
+  reconcileContentLoops,
+} from './agent-loop-control';
 
 type Db = { from(table: string): any };
 export type EditorialProvider = {
@@ -121,6 +125,17 @@ export async function runAutonomousEditorialEngine(args: {
   });
   const { error: updateError } = await args.supabase.from('content_items').update({ title: draft.title, draft_markdown: draft.markdown, source_links: draft.sources, status: 'published', canonical_url: publish.canonicalUrl, published_at: publish.publishedAt, metadata }).eq('content_id', candidate.content_id);
   if (updateError) return { status: 'failed', reason: updateError.message };
+  const opportunityId = String(candidate.metadata?.seo_opportunity_id ?? '');
+  if (opportunityId && publish.canonicalUrl) {
+    await materializeSeoContentDerivatives({
+      db: args.supabase,
+      opportunityId,
+      title: draft.title,
+      markdown: draft.markdown,
+      canonicalUrl: publish.canonicalUrl,
+      now,
+    });
+  }
   await reconcileContentLoops(args.supabase, now);
   await closeSatisfiedSeoParents(args.supabase, now);
   return { status: 'created', contentId: candidate.content_id };
