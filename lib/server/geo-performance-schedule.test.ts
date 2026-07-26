@@ -116,7 +116,7 @@ describe('resolveGpmPlatformModelMap', () => {
     const map = resolveGpmPlatformModelMap({});
     expect(map.chatgpt).toBe('gpt-4o-mini');
     expect(map.gemini).toBe('gemini-2.0-flash');
-    expect(map.perplexity).toBe('llama-3.1-sonar-small-128k-online');
+    expect(map.perplexity).toBe('sonar');
   });
 
   it('uses env var overrides when provided', () => {

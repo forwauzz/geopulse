@@ -107,7 +107,7 @@ describe('resolveBenchmarkExecutionConfig', () => {
     });
     expect(config.provider).toBe('perplexity');
     expect(config.apiKey).toBe('pplx-test');
-    expect(config.model).toBe('llama-3.1-sonar-small-128k-online');
+    expect(config.model).toBe('sonar');
     expect(config.endpoint).toBe('https://api.perplexity.ai/chat/completions');
   });
 

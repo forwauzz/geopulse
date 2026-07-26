@@ -191,7 +191,7 @@
     // Must be one of BENCHMARK_EXECUTION_ENABLED_MODELS or the Gemini adapter skips the
     // run as "model lane not enabled". Aligned with the benchmark lane model.
     "GPM_GEMINI_MODEL_ID": "gemini-2.5-flash-lite",
-    "GPM_PERPLEXITY_MODEL_ID": "llama-3.1-sonar-small-128k-online",
+    "GPM_PERPLEXITY_MODEL_ID": "sonar",
     "GPM_NARRATIVE_MODEL": "claude-haiku-4-5-20251001",
     // Gemini fallback for the report narrative when no ANTHROPIC_API_KEY is set.
     "GPM_NARRATIVE_GEMINI_MODEL": "gemini-2.5-flash-lite",

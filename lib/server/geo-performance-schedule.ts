@@ -385,7 +385,7 @@ export function resolveGpmPlatformModelMap(env: GpmScheduleEnvLike): GpmPlatform
   return {
     chatgpt: env.GPM_CHATGPT_MODEL_ID?.trim() || 'gpt-4o-mini',
     gemini: env.GPM_GEMINI_MODEL_ID?.trim() || 'gemini-2.0-flash',
-    perplexity: env.GPM_PERPLEXITY_MODEL_ID?.trim() || 'llama-3.1-sonar-small-128k-online',
+    perplexity: env.GPM_PERPLEXITY_MODEL_ID?.trim() || 'sonar',
   };
 }
 

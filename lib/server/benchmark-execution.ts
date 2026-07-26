@@ -77,7 +77,7 @@ const OPENAI_RETRY_DELAYS_MS = [400, 1200];
 
 const OPENAI_DEFAULT_MODEL = 'gpt-4o-mini';
 const OPENAI_DEFAULT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
-const PERPLEXITY_DEFAULT_MODEL = 'llama-3.1-sonar-small-128k-online';
+const PERPLEXITY_DEFAULT_MODEL = 'sonar';
 const PERPLEXITY_DEFAULT_ENDPOINT = 'https://api.perplexity.ai/chat/completions';
 
 export class StubBenchmarkExecutionAdapter implements BenchmarkExecutionAdapter {
