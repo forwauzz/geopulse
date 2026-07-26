@@ -22,8 +22,12 @@ function db() {
       if (columns === 'title') {
         return { eq: vi.fn(() => ({ limit: vi.fn(async () => ({ data: [{ title:'Existing' }], error:null })) })) };
       }
-      const ordered = { limit: vi.fn(async () => ({ data:[row], error:null })) };
-      return { eq: vi.fn(() => ({ in: vi.fn(() => ({ order: vi.fn(() => ordered) })) })) };
+      const chain: any = {};
+      chain.eq = vi.fn(() => chain);
+      chain.in = vi.fn(() => chain);
+      chain.order = vi.fn(() => chain);
+      chain.limit = vi.fn(async () => ({ data:[row], error:null }));
+      return chain;
     }),
     update,
   })) } as any;
