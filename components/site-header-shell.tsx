@@ -26,6 +26,7 @@ export function SiteHeaderShell({
 }: SiteHeaderShellProps) {
   const pathname = usePathname();
   const isDashboardRoute = pathname.startsWith('/dashboard');
+  const isHomeRoute = pathname === '/';
   // Dashboard chrome lives entirely in the left sidebar (branding, sign out, theme toggle),
   // so there's no top header on dashboard routes.
   if (isDashboardRoute) return null;
@@ -34,7 +35,7 @@ export function SiteHeaderShell({
     ? 'blog-chrome-light sticky top-0 z-50 border-b border-outline-variant/30 bg-surface backdrop-blur'
     : 'sticky top-0 z-50 bg-surface';
   const primaryNavLinkClassName =
-    'hidden font-sans text-lg font-semibold text-on-background md:inline';
+    'hidden font-body text-sm font-semibold text-on-background md:inline';
   const subtleNavLinkClassName =
     'text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background';
   const dashboardLinkClassName =
@@ -43,8 +44,8 @@ export function SiteHeaderShell({
   return (
     <header className={headerClassName}>
       <nav
-        className={`mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-4 sm:px-6 md:px-10 ${
-          isDashboardRoute ? 'py-4' : 'py-6'
+        className={`mx-auto flex ${isHomeRoute ? 'max-w-6xl' : 'max-w-screen-2xl'} flex-wrap items-center justify-between gap-3 px-4 sm:px-6 md:px-10 ${
+          isDashboardRoute || isHomeRoute ? 'py-4' : 'py-6'
         }`}
       >
         <Link href="/" className="flex items-center gap-2">

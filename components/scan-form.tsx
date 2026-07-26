@@ -178,12 +178,12 @@ export function ScanForm({
   return (
     <form
       onSubmit={onSubmit}
-      className={`mx-auto flex w-full flex-col ${isHero ? 'max-w-4xl gap-3' : 'max-w-3xl gap-4'}`}
+      className={`mx-auto flex w-full flex-col ${isHero ? 'max-w-3xl gap-2' : 'max-w-3xl gap-4'}`}
     >
       <div
         className={
           isHero
-            ? 'flex flex-col gap-3 overflow-hidden rounded-[1.75rem] border border-outline-variant/15 bg-surface-container-lowest p-3 shadow-float sm:flex-row sm:items-stretch'
+            ? 'flex flex-col gap-2 overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-2 shadow-float sm:flex-row sm:items-stretch'
             : 'flex flex-col gap-2 rounded-xl bg-surface-container-low p-2 shadow-float md:flex-row md:items-stretch'
         }
       >
@@ -198,7 +198,7 @@ export function ScanForm({
           aria-label="Website URL"
           className={
             isHero
-              ? 'min-h-[72px] flex-grow rounded-2xl border border-transparent bg-surface-container-low px-6 py-5 font-body text-lg text-on-surface outline-none ring-0 transition placeholder:text-on-surface-variant/70 focus:border-tertiary/30 focus:ring-2 focus:ring-tertiary/25 sm:min-h-0 sm:flex-1'
+              ? 'min-h-[58px] flex-grow rounded-xl border border-transparent bg-surface-container-low px-5 py-4 font-body text-base text-on-surface outline-none ring-0 transition placeholder:text-on-surface-variant/70 focus:border-primary/30 focus:ring-2 focus:ring-primary/20 sm:min-h-0 sm:flex-1'
               : 'min-h-[52px] flex-grow rounded-xl border border-outline-variant/15 bg-surface-container-lowest px-6 py-4 font-body text-base text-on-surface outline-none ring-0 transition focus:border-tertiary/40 focus:ring-2 focus:ring-tertiary/40'
           }
         />
@@ -207,7 +207,7 @@ export function ScanForm({
           disabled={loading || pending}
           className={
             isHero
-              ? 'flex shrink-0 items-center justify-center rounded-2xl bg-primary px-8 py-5 text-base font-semibold text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 sm:min-w-[196px] sm:self-stretch sm:py-0'
+              ? 'flex shrink-0 items-center justify-center rounded-xl bg-primary px-7 py-4 text-sm font-semibold text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 sm:min-w-[170px] sm:self-stretch sm:py-0'
               : 'shrink-0 rounded-xl bg-primary px-8 py-4 text-sm font-medium text-on-primary transition-all duration-200 hover:bg-primary-dim disabled:opacity-50 md:min-w-[160px]'
           }
         >
@@ -227,13 +227,10 @@ export function ScanForm({
       {isHero ? (
         <div className="flex flex-col gap-1.5 text-center">
           <p className="font-body text-xs text-on-surface-variant">
-            Use a full URL starting with <span className="font-medium text-on-background">https://</span> — example{' '}
+            Enter your website, starting with <span className="font-medium text-on-background">https://</span> — for example{' '}
             <code className="rounded bg-surface-container-low px-1.5 py-0.5 font-mono text-[0.9em] text-on-background">
               https://example.com
             </code>
-          </p>
-          <p className="font-body text-sm text-on-surface-variant">
-            Enter any public homepage, category page, or product page to see how clearly machines can crawl and reuse it.
           </p>
         </div>
       ) : null}
