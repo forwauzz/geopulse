@@ -384,7 +384,6 @@ export async function attemptSafeCampaignRemediation(args: {
         const { error } = await args.db.from('outreach_prospects').update({
           enabled: false,
           last_error: null,
-          next_run_at: null,
         }).eq('id', id);
         if (!error) {
           resolved.set(action.key, {

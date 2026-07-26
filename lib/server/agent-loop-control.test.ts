@@ -45,7 +45,6 @@ describe('closed-loop agent control', () => {
     expect(update).toHaveBeenCalledWith({
       enabled: false,
       last_error: null,
-      next_run_at: null,
     });
     expect(eq).toHaveBeenCalledWith('id', 'abc');
     expect(result.get('prospect:abc')).toMatchObject({
