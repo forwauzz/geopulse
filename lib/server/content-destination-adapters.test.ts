@@ -139,6 +139,11 @@ describe('resolveContentDestinationAdapter', () => {
       'Content-Type': 'application/json',
       Authorization: 'Token buttondown_test_key',
     });
+    const buttondownBody = JSON.parse(String(init?.body)) as { body: string; metadata: { preview_text: string } };
+    expect(buttondownBody.body).toContain('Jordan Reyes');
+    expect(buttondownBody.body).toContain('Social Producer &amp; Publisher');
+    expect(buttondownBody.body).toContain('https://getgeopulse.com/team/jordan-reyes.webp');
+    expect(buttondownBody.metadata.preview_text).not.toContain('Jordan Reyes');
   });
 
   it('publishes a Ghost draft post and returns normalized delivery data', async () => {
@@ -406,6 +411,11 @@ describe('resolveContentDestinationAdapter', () => {
       'Content-Type': 'application/json',
       'X-Kit-Api-Key': 'kit_test_key',
     });
+    const kitBody = JSON.parse(String(init?.body)) as { content: string; preview_text: string };
+    expect(kitBody.content).toContain('Jordan Reyes');
+    expect(kitBody.content).toContain('Social Producer &amp; Publisher');
+    expect(kitBody.content).toContain('https://getgeopulse.com/team/jordan-reyes.webp');
+    expect(kitBody.preview_text).not.toContain('Jordan Reyes');
   });
 
   it('publishes an X post and returns normalized delivery data', async () => {

@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { PaymentApiEnv } from '@/lib/server/cf-env';
 import type { ContentAdminDetailRow } from '@/lib/server/content-admin-data';
 import type { ContentDestinationRow } from '@/lib/server/content-destination-admin-data';
+import { agentEmailSignatureHtml } from '@/lib/server/email-theme';
 
 export type ContentPublishRequest = {
   readonly item: ContentAdminDetailRow;
@@ -262,7 +263,7 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
     }
 
     const markdown = getDraftBody(request.item);
-    const html = markdownToHtml(markdown);
+    const html = `${markdownToHtml(markdown)}${agentEmailSignatureHtml('jordan')}`;
     const previewText = buildPreviewText(markdown);
 
     const response = await fetch('https://api.kit.com/v4/broadcasts', {
@@ -330,8 +331,9 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
       });
     }
 
-    const markdown = getDraftBody(request.item);
-    const previewText = buildPreviewText(markdown);
+    const draftMarkdown = getDraftBody(request.item);
+    const markdown = `${draftMarkdown}\n\n${agentEmailSignatureHtml('jordan')}`;
+    const previewText = buildPreviewText(draftMarkdown);
     const body: Record<string, unknown> = {
       subject: request.item.title,
       body: markdown,
