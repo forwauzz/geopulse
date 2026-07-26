@@ -55,6 +55,26 @@ async function markContentLoopExecuting(args: {
     .eq('id', loop.id);
 }
 
+async function markContentLoopBlocked(args: {
+  db: Db;
+  contentId: string;
+  blocker: string;
+  now: Date;
+}): Promise<void> {
+  await args.db
+    .from('agent_work_loops')
+    .update({
+      state: 'blocked',
+      founder_required: true,
+      blocker: args.blocker,
+      evidence: { verification: 'publishing_connector_missing' },
+      last_attempted_at: args.now.toISOString(),
+    })
+    .eq('source_type', 'content_item')
+    .eq('source_key', args.contentId)
+    .in('state', ['assigned', 'executing', 'verifying', 'blocked']);
+}
+
 export async function dispatchPreparedSeoNewsletters(args: {
   supabase: Db;
   now?: Date;
@@ -78,6 +98,15 @@ export async function dispatchPreparedSeoNewsletters(args: {
 
   const rows = (data ?? []) as NewsletterRow[];
   if (!account) {
+    await Promise.all(rows.map((item) =>
+      markContentLoopBlocked({
+        db: args.supabase,
+        contentId: item.content_id,
+        now,
+        blocker:
+          'Connect one newsletter destination (Buttondown, Kit, or Ghost) so Jordan can send this issue.',
+      })
+    ));
     return { prepared: rows.length, jobsCreated: 0, skippedNoAccount: rows.length };
   }
 

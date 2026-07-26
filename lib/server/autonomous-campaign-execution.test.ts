@@ -94,4 +94,56 @@ describe('dispatchPreparedSeoNewsletters', () => {
       }),
     ]);
   });
+
+  it('routes a missing newsletter connector to one explicit founder decision', async () => {
+    repo.listAccounts.mockResolvedValue([]);
+    const loopUpdates: Record<string, unknown>[] = [];
+    const supabase = {
+      from(table: string) {
+        if (table === 'content_items') {
+          const query: any = {
+            select: () => query,
+            eq: () => query,
+            in: () => query,
+            order: () => query,
+            limit: () => Promise.resolve({
+              data: [{
+                id: 'newsletter-1',
+                content_id: 'seo-agent:topic:newsletter',
+                title: 'Topic',
+                draft_markdown: '# Topic',
+                canonical_url: '/blog/topic',
+                metadata: { derived_from_canonical: true },
+              }],
+              error: null,
+            }),
+          };
+          return query;
+        }
+        if (table === 'agent_work_loops') {
+          const query: any = {
+            update: (payload: Record<string, unknown>) => {
+              loopUpdates.push(payload);
+              return query;
+            },
+            eq: () => query,
+            in: () => Promise.resolve({ error: null }),
+          };
+          return query;
+        }
+        throw new Error(`Unexpected table ${table}`);
+      },
+    } as any;
+
+    const result = await dispatchPreparedSeoNewsletters({ supabase });
+
+    expect(result).toEqual({ prepared: 1, jobsCreated: 0, skippedNoAccount: 1 });
+    expect(loopUpdates).toEqual([
+      expect.objectContaining({
+        state: 'blocked',
+        founder_required: true,
+        blocker: expect.stringContaining('Buttondown'),
+      }),
+    ]);
+  });
 });
