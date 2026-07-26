@@ -67,6 +67,34 @@ function object(row: Row, key: string): Record<string, unknown> {
     : {};
 }
 
+function metric(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+export function socialExperimentDetail(
+  metadata: Record<string, unknown>,
+  fallback: string,
+): string {
+  const stream = typeof metadata['creative_stream'] === 'string'
+    ? metadata['creative_stream'].trim().replaceAll('-', ' ')
+    : '';
+  if (!stream) return fallback;
+
+  const performance = metadata['instagram_performance'];
+  if (!performance || typeof performance !== 'object' || Array.isArray(performance)) {
+    return `${stream} stream · Performance tracking starts after publication.`;
+  }
+  const snapshot = performance as Record<string, unknown>;
+  return [
+    `${stream} stream`,
+    `${metric(snapshot['views']).toLocaleString('en-US')} views`,
+    `${metric(snapshot['reach']).toLocaleString('en-US')} reach`,
+    `${metric(snapshot['saves']).toLocaleString('en-US')} saves`,
+    `${metric(snapshot['shares']).toLocaleString('en-US')} shares`,
+  ].join(' · ');
+}
+
 function isOlderThan(iso: string | null, nowMs: number, hours: number): boolean {
   if (!iso) return true;
   const value = Date.parse(iso);
@@ -234,6 +262,11 @@ export async function loadCampaignControlRoom(args: {
     const account = accountById.get(text(job, 'distribution_account_id') ?? '');
     const family = text(asset ?? {}, 'provider_family') ?? text(account ?? {}, 'provider_name') ?? 'distribution';
     const isEmail = family === 'newsletter' || family === 'email';
+    const defaultDetail = overdue
+      ? 'Scheduled delivery is overdue.'
+      : stalled
+        ? 'Publishing job is still processing.'
+        : `${family} delivery job`;
     campaigns.push({
       id: `distribution:${text(job, 'id') ?? crypto.randomUUID()}`,
       lane: isEmail ? 'email' : 'social',
@@ -244,7 +277,11 @@ export async function loadCampaignControlRoom(args: {
       owner: 'Jordan',
       lastActivityAt: text(job, 'completed_at') ?? updatedAt,
       nextActivityAt: scheduledFor,
-      detail: text(job, 'last_error') ?? (overdue ? 'Scheduled delivery is overdue.' : stalled ? 'Publishing job is still processing.' : `${family} delivery job`),
+      detail: text(job, 'last_error') ?? (
+        isEmail
+          ? defaultDetail
+          : socialExperimentDetail(object(asset ?? {}, 'metadata'), defaultDetail)
+      ),
       href: '/dashboard/distribution',
     });
   }
