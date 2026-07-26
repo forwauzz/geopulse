@@ -64,6 +64,18 @@ const previewEngineScores: Record<string, string> = {
 
 const previewEngines = AI_ENGINES.filter((engine) => engine.key in previewEngineScores);
 
+function heroEngineLogoClass(engineKey: string): string {
+  if (engineKey === 'claude') return 'h-7 w-48';
+  if (engineKey === 'perplexity') return 'h-12 w-44';
+  return 'h-10 w-auto max-w-[180px] md:h-12';
+}
+
+function previewEngineLogoClass(engineKey: string): string {
+  if (engineKey === 'claude') return 'h-5 w-32';
+  if (engineKey === 'perplexity') return 'h-7 w-28';
+  return 'h-7 w-auto max-w-[130px]';
+}
+
 async function loadBaseUrl(): Promise<string> {
   const env = await getPaymentApiEnv();
   return env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/';
@@ -173,7 +185,7 @@ export default async function HomePage({
                 <EngineLogo
                   key={engine.key}
                   engine={engine}
-                  className="h-9 w-auto max-w-[150px] md:h-12 md:max-w-[190px]"
+                  className={heroEngineLogoClass(engine.key)}
                 />
               ))}
             </div>
@@ -205,7 +217,7 @@ export default async function HomePage({
                   <div className="mt-5 space-y-4">
                     {previewEngines.map((engine) => (
                       <div key={engine.key} className="flex items-center justify-between gap-4">
-                        <EngineLogo engine={engine} className="h-7 w-auto max-w-[130px]" />
+                        <EngineLogo engine={engine} className={previewEngineLogoClass(engine.key)} />
                         <span className="font-mono text-xs text-on-surface-variant">{previewEngineScores[engine.key]}</span>
                       </div>
                     ))}
