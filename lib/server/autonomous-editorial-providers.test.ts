@@ -48,4 +48,22 @@ describe('autonomous editorial hero', () => {
     });
     expect(put).toHaveBeenCalledOnce();
   });
+
+  it('rejects geographic SEO when GEO should mean generative engine optimization', async () => {
+    const provider = createAutonomousEditorialProvider({});
+    const review = await provider.review({
+      title: 'A Guide to Geo Optimization',
+      markdown: 'Use location-specific keywords to reach a geographic audience in your target location.',
+      sources: ['https://developers.google.com/search'],
+      hero: {
+        url: 'https://media.example.com/hero.jpg',
+        alt: CLEAN_EDITORIAL_HERO_ALT,
+      },
+    });
+
+    expect(review).toEqual({
+      approved: false,
+      reasons: ['GEO was misinterpreted as geographic or local-search optimization'],
+    });
+  });
 });

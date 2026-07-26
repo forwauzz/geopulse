@@ -25,8 +25,8 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
   return {
     async draft({ topic, existingTitles }) {
       const result = await runWorkersAiPrompt({ ai: env.AI, model: env.EDITORIAL_WRITER_MODEL, maxTokens: 3500,
-        system: 'You write source-backed GEO-Pulse blog drafts. Never promise rankings. Output JSON only: {"title":"","markdown":"","sources":["https://..."]}. Include 2+ H2s, a direct answer, internal /blog links, and a bounded free-scan CTA.',
-        prompt: `Topic: ${topic}\nAvoid duplicate intent with: ${existingTitles.slice(0, 50).join(' | ')}` });
+        system: 'You write source-backed GEO-Pulse blog drafts about generative engine optimization (GEO), AI-search visibility, citations, and answer-engine marketing. GEO always means generative engine optimization here, never geographic or local-search optimization. Never promise rankings. Output JSON only: {"title":"","markdown":"","sources":["https://..."]}. Include 2+ H2s, a direct answer, internal /blog links, and a bounded free-scan CTA.',
+        prompt: `GEO-Pulse product context: help a small business or agency become visible and cited in ChatGPT, Gemini, Perplexity, Google AI Overviews, and other answer engines.\nTopic: ${topic}\nAvoid duplicate intent with: ${existingTitles.slice(0, 50).join(' | ')}` });
       if (!result.ok) return { title: '', markdown: '', sources: [] };
       const json = jsonFromModel(result.text);
       const title = typeof json?.title === 'string' ? json.title.trim() : '';
@@ -47,7 +47,10 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
     },
     async review({ title, markdown, sources, hero }) {
       if (!hero.url.startsWith('https://') || /\b(ai|robot|future|innovation)\b/i.test(hero.alt) || sources.length === 0) return { approved: false, reasons: ['hero or sources fail policy'] };
-      const result = await runWorkersAiPrompt({ ai: env.AI, model: env.EDITORIAL_REVIEWER_MODEL, maxTokens: 600, system: 'Review GEO-Pulse content. Reject unsupported claims, generic AI buzzwords, duplicated intent, missing internal links, or misleading source use. Output JSON only: {"approved":boolean,"reasons":[""]}.', prompt: `TITLE: ${title}\nSOURCES: ${sources.join('\n')}\nDRAFT:\n${markdown}` });
+      if (/\bgeographic (?:audience|region)|\blocal search terms?\b|\blocation-specific keywords?\b|\btarget location\b/i.test(`${title}\n${markdown}`)) {
+        return { approved: false, reasons: ['GEO was misinterpreted as geographic or local-search optimization'] };
+      }
+      const result = await runWorkersAiPrompt({ ai: env.AI, model: env.EDITORIAL_REVIEWER_MODEL, maxTokens: 600, system: 'Review GEO-Pulse content about generative engine optimization and AI-search visibility. GEO means generative engine optimization, never geographic optimization. Reject unsupported claims, generic AI buzzwords, duplicated intent, missing internal links, misleading source use, or content that drifts into local/geographic SEO. Output JSON only: {"approved":boolean,"reasons":[""]}.', prompt: `TITLE: ${title}\nSOURCES: ${sources.join('\n')}\nDRAFT:\n${markdown}` });
       if (!result.ok) return { approved: false, reasons: [result.reason] };
       const json = jsonFromModel(result.text); return { approved: json?.approved === true, reasons: Array.isArray(json?.reasons) ? json.reasons.filter((v): v is string => typeof v === 'string') : ['review_parse_failed'] };
     },
