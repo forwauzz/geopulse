@@ -13,6 +13,9 @@ export type InstagramPerformanceSnapshot = {
   readonly profileActivity: number;
 };
 
+export const INSTAGRAM_MEDIA_INSIGHT_METRICS =
+  'views,reach,saved,shares,total_interactions';
+
 function finite(value: unknown): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
@@ -91,7 +94,9 @@ export async function collectInstagramPerformance(args: {
       const insightsUrl = new URL(`${base}/${encodeURIComponent(job.provider_post_id)}/insights`);
       insightsUrl.searchParams.set(
         'metric',
-        'views,reach,saved,shares,total_interactions,profile_activity,follows'
+        // Account-level metrics such as profile_activity and follows cause Meta
+        // to reject the entire media-insights request for Reels.
+        INSTAGRAM_MEDIA_INSIGHT_METRICS
       );
       insightsUrl.searchParams.set('access_token', token);
       const insightsResponse = await fetch(insightsUrl.toString(), {

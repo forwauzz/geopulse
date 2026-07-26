@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { parseInstagramInsights } from './instagram-performance-agent';
+import {
+  INSTAGRAM_MEDIA_INSIGHT_METRICS,
+  parseInstagramInsights,
+} from './instagram-performance-agent';
 
 describe('Instagram performance learning', () => {
+  it('requests only metrics supported for Reel media', () => {
+    expect(INSTAGRAM_MEDIA_INSIGHT_METRICS).toBe(
+      'views,reach,saved,shares,total_interactions'
+    );
+    expect(INSTAGRAM_MEDIA_INSIGHT_METRICS).not.toContain('profile_activity');
+    expect(INSTAGRAM_MEDIA_INSIGHT_METRICS).not.toContain('follows');
+  });
+
   it('normalizes owned-media fields and insight values', () => {
     expect(parseInstagramInsights(
       { like_count: 7, comments_count: 3 },

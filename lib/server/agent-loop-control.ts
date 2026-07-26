@@ -26,7 +26,7 @@ type SeoOpportunity = {
 export type SeoContentFamilyMember = {
   contentId: string;
   slug: string;
-  contentType: 'article' | 'newsletter' | 'social_post';
+  contentType: 'article' | 'social_post';
   status: 'brief' | 'idea';
   title: string;
   owner: 'Jordan';
@@ -71,7 +71,6 @@ export function buildSeoContentFamily(args: {
   keyword: string;
   opportunityTitle: string;
   articleSlaHours?: number;
-  newsletterSlaHours?: number;
   socialIdeaSlaHours?: number;
 }): SeoContentFamilyMember[] {
   const familySlug = `seo-${slugify(args.keyword || args.opportunityTitle)}`;
@@ -85,16 +84,6 @@ export function buildSeoContentFamily(args: {
       owner: 'Jordan',
       goal: 'Publish the source-backed canonical website article.',
       slaHours: args.articleSlaHours ?? 24,
-    },
-    {
-      contentId: `seo-agent:${familySlug}:newsletter`,
-      slug: `${familySlug}-newsletter`,
-      contentType: 'newsletter',
-      status: 'brief',
-      title: `${args.opportunityTitle} — newsletter`,
-      owner: 'Jordan',
-      goal: 'Prepare the newsletter derivative linked to the canonical article.',
-      slaHours: args.newsletterSlaHours ?? 48,
     },
     {
       contentId: `seo-agent:${familySlug}:instagram`,
@@ -163,7 +152,6 @@ export async function syncSeoOpportunityLoops(args: {
   now?: Date;
   limit?: number;
   articleSlaHours?: number;
-  newsletterSlaHours?: number;
   socialIdeaSlaHours?: number;
 }): Promise<{ opportunities: number; contentItems: number; loops: number }> {
   const now = args.now ?? new Date();
@@ -211,7 +199,6 @@ export async function syncSeoOpportunityLoops(args: {
       keyword,
       opportunityTitle: opportunity.title,
       articleSlaHours: args.articleSlaHours,
-      newsletterSlaHours: args.newsletterSlaHours,
       socialIdeaSlaHours: args.socialIdeaSlaHours,
     });
 
@@ -251,7 +238,7 @@ export async function syncSeoOpportunityLoops(args: {
         source_type: 'content_item',
         source_key: member.contentId,
         parent_loop_id: parent.id,
-        lane: member.contentType === 'article' ? 'seo' : member.contentType === 'newsletter' ? 'email' : 'social',
+        lane: member.contentType === 'article' ? 'seo' : 'social',
         owner: member.owner,
         state: 'assigned',
         severity: opportunity.priority === 1 ? 'today' : 'normal',
@@ -335,23 +322,6 @@ export async function reconcileContentLoops(db: Db, now = new Date()): Promise<n
   return completed;
 }
 
-export function buildSeoNewsletterDerivative(args: {
-  title: string;
-  markdown: string;
-  canonicalUrl: string;
-}): string {
-  const withoutTitle = args.markdown.replace(/^#\s+.+$/m, '').trim();
-  const bounded = withoutTitle.length <= 2_400
-    ? withoutTitle
-    : `${withoutTitle.slice(0, 2_350).replace(/\s+\S*$/, '').trim()}\n\n…`;
-  return [
-    `# ${args.title}`,
-    bounded,
-    `[Read the complete guide](${args.canonicalUrl})`,
-    `Run a free GEO-Pulse scan to measure your starting point.`,
-  ].join('\n\n');
-}
-
 export async function materializeSeoContentDerivatives(args: {
   db: Db;
   opportunityId: string;
@@ -365,42 +335,79 @@ export async function materializeSeoContentDerivatives(args: {
     .from('content_items')
     .select('id,content_id,content_type,status,metadata')
     .eq('metadata->>seo_opportunity_id', args.opportunityId)
-    .in('content_type', ['newsletter', 'social_post']);
+    .eq('content_type', 'social_post');
   let updated = 0;
   for (const item of items ?? []) {
     if (item.status === 'published' || item.status === 'archived') continue;
     const metadata = metadataObject(item.metadata);
-    if (item.content_type === 'newsletter') {
-      await args.db.from('content_items').update({
-        title: args.title,
-        status: 'draft',
-        canonical_url: args.canonicalUrl,
-        draft_markdown: buildSeoNewsletterDerivative(args),
-        metadata: {
-          ...metadata,
-          derived_from_canonical: true,
-          derived_at: now.toISOString(),
-        },
-      }).eq('id', item.id);
-      updated += 1;
-    } else {
-      await args.db.from('content_items').update({
-        brief_markdown: [
-          `## Instagram content concept`,
-          `Turn “${args.title}” into a crop-safe carousel or paced Reel.`,
-          `Lead with the buyer problem, use three evidence-backed teaching beats, and finish with the free scan.`,
-          `Canonical source: ${args.canonicalUrl}`,
-        ].join('\n\n'),
-        metadata: {
-          ...metadata,
-          derived_from_canonical: true,
-          derived_at: now.toISOString(),
-        },
-      }).eq('id', item.id);
-      updated += 1;
-    }
+    await args.db.from('content_items').update({
+      brief_markdown: [
+        `## Instagram content concept`,
+        `Turn “${args.title}” into a crop-safe carousel or paced Reel.`,
+        `Lead with the buyer problem, use three evidence-backed teaching beats, and finish with the free scan.`,
+        `Canonical source: ${args.canonicalUrl}`,
+      ].join('\n\n'),
+      metadata: {
+        ...metadata,
+        derived_from_canonical: true,
+        derived_at: now.toISOString(),
+      },
+    }).eq('id', item.id);
+    updated += 1;
   }
   return updated;
+}
+
+/**
+ * Early versions treated "newsletter" as a separate email send. The intended
+ * SEO loop is simpler: publish the canonical GEO-Pulse blog, then derive social.
+ * Preserve the old records for audit history while removing them from the
+ * active work queue.
+ */
+export async function retireLegacySeoNewsletterLoops(db: Db, now = new Date()): Promise<number> {
+  const { data: items } = await db
+    .from('content_items')
+    .select('id,content_id,status,metadata')
+    .eq('content_type', 'newsletter')
+    .eq('metadata->>proposed_by', 'seo_agent')
+    .limit(250);
+  const legacy = items ?? [];
+  if (!legacy.length) return 0;
+
+  for (const item of legacy) {
+    if (item.status !== 'published' && item.status !== 'archived') {
+      await db.from('content_items').update({
+        status: 'archived',
+        metadata: {
+          ...metadataObject(item.metadata),
+          retired_reason: 'canonical_blog_is_the_primary_seo_publication',
+          retired_at: now.toISOString(),
+        },
+      }).eq('id', item.id);
+    }
+  }
+
+  const keys = legacy.map((item: any) => String(item.content_id));
+  const { data: loops } = await db
+    .from('agent_work_loops')
+    .select('id')
+    .eq('source_type', 'content_item')
+    .in('source_key', keys)
+    .in('state', ['assigned', 'executing', 'verifying', 'blocked']);
+  for (const loop of loops ?? []) {
+    await db.from('agent_work_loops').update({
+      state: 'dismissed',
+      evidence: {
+        verification: 'channel_merged_into_canonical_blog',
+        canonical_channel: 'article',
+      },
+      founder_required: false,
+      blocker: null,
+      verified_at: now.toISOString(),
+      resolved_at: now.toISOString(),
+    }).eq('id', loop.id);
+  }
+  return loops?.length ?? 0;
 }
 
 export async function closeSatisfiedSeoParents(db: Db, now = new Date()): Promise<number> {
@@ -450,8 +457,14 @@ export async function runAgentLoopControl(args: {
   db: Db;
   now?: Date;
   seoBatch?: number;
-}): Promise<{ synced: number; contentCompleted: number; seoCompleted: number }> {
+}): Promise<{
+  synced: number;
+  contentCompleted: number;
+  seoCompleted: number;
+  legacyNewslettersRetired: number;
+}> {
   const now = args.now ?? new Date();
+  const legacyNewslettersRetired = await retireLegacySeoNewsletterLoops(args.db, now);
   const synced = await syncSeoOpportunityLoops({
     db: args.db,
     now,
@@ -459,7 +472,7 @@ export async function runAgentLoopControl(args: {
   });
   const contentCompleted = await reconcileContentLoops(args.db, now);
   const seoCompleted = await closeSatisfiedSeoParents(args.db, now);
-  return { synced: synced.opportunities, contentCompleted, seoCompleted };
+  return { synced: synced.opportunities, contentCompleted, seoCompleted, legacyNewslettersRetired };
 }
 
 export type CampaignLoopAction = {
