@@ -11,6 +11,7 @@
  */
 
 import { inferProviderFromModelId } from './benchmark-metrics';
+import { agentEmailSignatureHtml } from './email-theme';
 import type {
   BenchmarkDomainRow,
   BenchmarkQueryRow,
@@ -403,6 +404,7 @@ export function renderBenchmarkDailyRecapHtml(recap: BenchmarkDailyRecap): strin
       : ''
   }
   ${newlyCitedBlock}
+  <tr><td style="padding:8px 32px 24px;">${agentEmailSignatureHtml('priya')}</td></tr>
   <tr><td style="padding:24px 32px;border-top:1px solid #F1F4F4;">
     <p style="color:#ABB4B5;font-size:11px;margin:0;">Generated ${escHtml(recap.generatedAt)} · GEO Pulse benchmarking</p>
   </td></tr>

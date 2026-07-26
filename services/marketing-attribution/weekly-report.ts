@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { agentEmailSignatureHtml } from '../../lib/server/email-theme';
 
 export type FunnelRow = {
   week_start: string;
@@ -137,6 +138,7 @@ export function buildWeeklyReportHtml(data: WeeklyReportData): string {
     <h3 style="margin:0 0 8px;color:#565E74;font-size:14px;text-transform:uppercase;letter-spacing:1px;">Channel Funnel</h3>
     ${funnelTableHtml(data.funnel)}
   </td></tr>
+  <tr><td style="padding:8px 32px 24px;">${agentEmailSignatureHtml('elena')}</td></tr>
   <tr><td style="padding:24px 32px;border-top:1px solid #F1F4F4;">
     <p style="color:#ABB4B5;font-size:11px;margin:0;">Generated ${esc(dateStr)} · Powered by GEO-Pulse</p>
   </td></tr>

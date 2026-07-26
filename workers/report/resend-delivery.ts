@@ -1,4 +1,5 @@
 export type ResendEmailResult = { ok: true } | { ok: false; message: string };
+import { agentEmailSignatureHtml } from '../../lib/server/email-theme';
 import {
   buildDeliveryCallToAction,
   escapeHtml,
@@ -115,6 +116,9 @@ function buildBrandedHtml(input: {
 
   <!-- CTA -->
   <tr><td style="padding:0 32px;">${downloadHtml}${attachNote}</td></tr>
+
+  <!-- Accountable customer outcomes owner -->
+  <tr><td style="padding:0 32px 24px;">${agentEmailSignatureHtml('priya')}</td></tr>
 
   <!-- Footer -->
   <tr><td style="padding:32px;border-top:1px solid #F1F4F4;margin-top:24px;">

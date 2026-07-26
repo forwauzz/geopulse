@@ -150,6 +150,7 @@ export function buildSelfImprovementReportHtml(input: {
   return emailShell({
     kicker: 'Daily self-audit · getgeopulse.com watches itself',
     mastheadNote: 'Self-improvement loop',
+    sender: 'marcus',
     bodyHtml: [
       `<p style="margin:0 0 6px;"><a href="${input.targetUrl}" style="color:${EMAIL_COLORS.primary};font-weight:700;text-decoration:none;">${esc(input.targetUrl)}</a></p>`,
       scoreBlock(input.score, input.letterGrade, 'AI visibility score'),

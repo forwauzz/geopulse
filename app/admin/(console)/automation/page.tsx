@@ -70,7 +70,7 @@ export default async function AutomationConsolePage() {
   }
   const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-  const [self, marketing, designSetting, designAgentEnabled, runsRes, proposalsRes, channelsRes, seoSetting, seoConnectionRes, seoRunsRes, seoUsageRes, seoOpportunitiesRes] = await Promise.all([
+  const [self, marketing, designSetting, designAgentEnabled, runsRes, proposalsRes, channelsRes, seoSetting, seoConnectionRes, seoRunsRes, seoUsageRes, seoOpportunitiesRes, seoMeasurementsRes, seoQueueRes, seoBriefsRes] = await Promise.all([
     loadSelfImprovementSettings(supabase),
     loadAutomationSetting(supabase, 'marketing_autopilot'),
     loadAutomationSetting(supabase, 'report_design_agent'),
@@ -83,6 +83,22 @@ export default async function AutomationConsolePage() {
     supabase.from('seo_agent_runs').select('id,status,reason,search_console_rows,rank_tasks_queued,rank_tasks_completed,opportunities_created,month_spend_usd,started_at').order('started_at', { ascending: false }).limit(5),
     supabase.from('seo_api_usage').select('cost_usd').eq('provider', 'dataforseo').gte('occurred_at', new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString()),
     supabase.from('seo_opportunities').select('id').in('status', ['queued', 'in_progress']),
+    supabase.from('seo_measurements')
+      .select('id,source,measured_on,position,clicks,impressions,ctr,page_url,seo_keywords(keyword,source)')
+      .eq('source', 'google_search_console')
+      .order('measured_on', { ascending: false })
+      .limit(100),
+    supabase.from('seo_opportunities')
+      .select('id,kind,status,priority,title,evidence,recommendation,last_seen_at,metadata,seo_keywords(keyword)')
+      .in('status', ['queued', 'in_progress'])
+      .order('priority', { ascending: true })
+      .order('last_seen_at', { ascending: false })
+      .limit(40),
+    supabase.from('content_items')
+      .select('content_id,title,status,keyword_cluster,created_at,metadata')
+      .eq('metadata->>proposed_by', 'seo_agent')
+      .order('created_at', { ascending: false })
+      .limit(20),
   ]);
 
   const runs = (runsRes.data ?? []) as Array<{ id: string; created_at: string; trigger_source: string; status: string; score: number | null; letter_grade: string | null; emailed_to: string | null }>;
@@ -93,6 +109,37 @@ export default async function AutomationConsolePage() {
   const seoRuns = (seoRunsRes.data ?? []) as Array<{ id: string; status: string; reason: string | null; search_console_rows: number; rank_tasks_queued: number; rank_tasks_completed: number; opportunities_created: number; month_spend_usd: number; started_at: string }>;
   const seoSpend = (seoUsageRes.data ?? []).reduce((sum, row) => sum + Number(row.cost_usd ?? 0), 0);
   const seoOpportunityCount = seoOpportunitiesRes.data?.length ?? 0;
+  const seoMeasurements = (seoMeasurementsRes.data ?? []) as Array<{
+    id: string;
+    source: string;
+    measured_on: string;
+    position: number | null;
+    clicks: number | null;
+    impressions: number | null;
+    ctr: number | null;
+    page_url: string | null;
+    seo_keywords: { keyword?: string; source?: string } | Array<{ keyword?: string; source?: string }> | null;
+  }>;
+  const seoQueue = (seoQueueRes.data ?? []) as Array<{
+    id: string;
+    kind: string;
+    status: string;
+    priority: number;
+    title: string;
+    evidence: string;
+    recommendation: string;
+    last_seen_at: string;
+    metadata: Record<string, unknown> | null;
+    seo_keywords: { keyword?: string } | Array<{ keyword?: string }> | null;
+  }>;
+  const seoBriefs = (seoBriefsRes.data ?? []) as Array<{
+    content_id: string;
+    title: string;
+    status: string;
+    keyword_cluster: string | null;
+    created_at: string;
+    metadata: Record<string, unknown> | null;
+  }>;
 
   const discoveryMode = resolveDiscoveryMode(env);
   const geminiKey = Boolean(env.GEMINI_API_KEY?.trim());
@@ -201,6 +248,81 @@ export default async function AutomationConsolePage() {
             </table>
           </div>
         ) : <p className="mt-4 font-sans text-xs text-on-surface-variant">No SEO runs yet. Connect Google, then run once.</p>}
+
+        <div className="mt-6 border-t border-outline-variant/20 pt-5">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h3 className="font-sans text-base font-bold text-on-background">Google Search Console evidence</h3>
+              <p className="mt-1 font-sans text-xs text-on-surface-variant">The real queries and pages Google reported—not generated keyword ideas.</p>
+            </div>
+            <StatusChip ok label={`${seoMeasurements.length} Google rows`} />
+          </div>
+          {seoMeasurements.length > 0 ? (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse text-sm">
+                <thead><tr className="text-left">
+                  <th className={`${kicker} p-2`}>Query</th>
+                  <th className={`${kicker} p-2`}>Google page</th>
+                  <th className={`${kicker} p-2 text-right`}>Position</th>
+                  <th className={`${kicker} p-2 text-right`}>Impressions</th>
+                  <th className={`${kicker} p-2 text-right`}>Clicks</th>
+                  <th className={`${kicker} p-2 text-right`}>CTR</th>
+                  <th className={`${kicker} p-2`}>Measured</th>
+                </tr></thead>
+                <tbody>{seoMeasurements.map((row) => {
+                  const relation = Array.isArray(row.seo_keywords) ? row.seo_keywords[0] : row.seo_keywords;
+                  return (
+                    <tr key={row.id} className="border-t border-outline-variant/20 align-top">
+                      <td className="p-2 font-semibold text-on-background">{relation?.keyword ?? 'Unknown query'}</td>
+                      <td className="max-w-[280px] truncate p-2 text-on-surface-variant" title={row.page_url ?? undefined}>{row.page_url ?? '—'}</td>
+                      <td className="p-2 text-right tabular-nums text-on-background">{row.position == null ? '—' : Number(row.position).toFixed(1)}</td>
+                      <td className="p-2 text-right tabular-nums text-on-background">{row.impressions ?? '—'}</td>
+                      <td className="p-2 text-right tabular-nums text-on-background">{row.clicks ?? '—'}</td>
+                      <td className="p-2 text-right tabular-nums text-on-background">{row.ctr == null ? '—' : `${(Number(row.ctr) * 100).toFixed(1)}%`}</td>
+                      <td className="p-2 text-on-surface-variant">{row.measured_on}</td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            </div>
+          ) : <p className="mt-3 font-sans text-xs text-on-surface-variant">No Search Console rows have been collected yet.</p>}
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+            <h3 className="font-sans text-base font-bold text-on-background">Priya’s owned SEO queue</h3>
+            <p className="mt-1 font-sans text-xs text-on-surface-variant">Measured gaps that still need execution and verification.</p>
+            <div className="mt-3 space-y-3">
+              {seoQueue.slice(0, 12).map((item) => (
+                <div key={item.id} className="rounded-lg bg-surface-container-lowest p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-sans text-sm font-semibold text-on-background">{item.title}</p>
+                    <span className="rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-primary">{item.status.replaceAll('_', ' ')}</span>
+                  </div>
+                  <p className="mt-1 font-body text-xs leading-relaxed text-on-surface-variant">{item.evidence}</p>
+                  <p className="mt-2 font-sans text-[11px] text-on-surface-variant">Owner: {String(item.metadata?.['owner'] ?? 'Priya')}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4">
+            <h3 className="font-sans text-base font-bold text-on-background">Editorial handoffs</h3>
+            <p className="mt-1 font-sans text-xs text-on-surface-variant">What Priya has actually handed to Jordan—not merely discovered.</p>
+            <div className="mt-3 space-y-3">
+              {seoBriefs.map((brief) => (
+                <div key={brief.content_id} className="rounded-lg bg-surface-container-lowest p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-sans text-sm font-semibold text-on-background">{brief.title}</p>
+                    <span className="rounded-md bg-tertiary/10 px-2 py-0.5 text-[10px] font-bold uppercase text-tertiary">{brief.status}</span>
+                  </div>
+                  <p className="mt-1 font-body text-xs text-on-surface-variant">{brief.keyword_cluster ?? 'No keyword cluster'} · {fmt(brief.created_at)}</p>
+                  <p className="mt-2 font-sans text-[11px] text-on-surface-variant">Owner: {String(brief.metadata?.['owner'] ?? 'Jordan')}</p>
+                </div>
+              ))}
+              {seoBriefs.length === 0 ? <p className="font-sans text-xs text-on-surface-variant">No SEO brief has been handed to editorial yet.</p> : null}
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Marketing autopilot */}

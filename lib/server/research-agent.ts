@@ -13,6 +13,8 @@
  *     ("unverified — needs corroboration"); promotion is a human act.
  *   - One source failing must not sink the run: per-source try/catch.
  */
+import { agentEmailSignatureHtml } from './email-theme';
+
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fetchGateText } from '../../workers/lib/fetch-gate';
 import { structuredLog } from './structured-log';
@@ -270,6 +272,7 @@ export function buildResearchDigestHtml(proposals: ResearchProposalDraft[]): str
     '<p>The weekly source sweep found documentation changes that may affect the spec. Nothing has been applied — review the queue:</p>',
     `<ul style="padding-left:18px;">${rows}</ul>`,
     '<p><a href="https://getgeopulse.com/admin/research">Open the review queue</a></p>',
+    agentEmailSignatureHtml('sofia'),
     '</div>',
   ].join('\n');
 }

@@ -24,6 +24,7 @@ export function buildSavedPreviewEmail(args: {
   const html = emailShell({
     kicker: 'Your saved GEO-Pulse preview',
     mastheadNote: 'AI search readiness',
+    sender: 'priya',
     bodyHtml: [
       `<p style="margin:0 0 10px;">Your preview for <strong>${escapeEmailHtml(args.url)}</strong> is saved.</p>`,
       scoreBlock(args.score, gradeForScore(args.score), 'Current GEO readiness'),
@@ -53,6 +54,7 @@ export function buildRevenueNurtureEmail(args: {
   const html = emailShell({
     kicker: 'One useful next step',
     mastheadNote: 'GEO-Pulse Monitoring',
+    sender: 'priya',
     bodyHtml: [
       `<p style="margin:0 0 10px;">You asked for GEO visibility tips after auditing <strong>${escapeEmailHtml(args.url)}</strong>.</p>`,
       scoreBlock(args.score, gradeForScore(args.score), 'Your audit baseline'),

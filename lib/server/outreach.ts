@@ -128,6 +128,7 @@ export function buildOutreachEmailHtml(args: {
   return emailShell({
     kicker: 'AI search readiness · complimentary audit',
     mastheadNote: 'Prepared for your team',
+    sender: 'elena',
     bodyHtml: [
       `<p style="margin:0 0 10px;">${greeting}</p>`,
       `<p style="margin:0 0 14px;">We ran an AI-readiness audit of <strong>${escapeEmailHtml(args.domain)}</strong> — how clearly AI engines like ChatGPT, Gemini and Perplexity can read, understand and cite your site.</p>`,

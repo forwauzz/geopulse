@@ -84,6 +84,7 @@ export function buildEngagementDigestHtml(stats: DigestStats): string {
     kicker: 'Engagement digest · last 24 hours',
     bodyHtml: body,
     mastheadNote: 'Internal',
+    sender: 'elena',
   });
 }
 

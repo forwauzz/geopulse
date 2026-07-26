@@ -330,6 +330,7 @@ async function sendMonitorAuditEmail(
   const html = emailShell({
     kicker: 'Monthly monitoring · AI search readiness',
     mastheadNote: 'GEO-Pulse Monitoring',
+    sender: 'priya',
     bodyHtml: [
       `<p style="margin:0 0 6px;">Here is this month's audit of <strong>${escapeEmailHtml(scanUrl)}</strong>.</p>`,
       scoreBlock(score, letterGrade, 'AI search readiness'),

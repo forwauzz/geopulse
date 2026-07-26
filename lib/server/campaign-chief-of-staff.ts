@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadAgentStatuses } from './agent-console';
 import { loadCampaignControlRoom } from './campaign-control-room';
+import { agentEmailSignatureHtml } from './email-theme';
 import { structuredLogWithClientAndWait } from './structured-log';
 
 function escapeHtml(value: string): string {
@@ -60,7 +61,7 @@ export async function runCampaignChiefOfStaffCheck(args: {
           from: resendFrom,
           to: [recipient],
           subject: `Maya: ${room.actions.length} campaign action${room.actions.length === 1 ? '' : 's'} need owners`,
-          html: `<h1>Chief of Staff campaign brief</h1><p>${escapeHtml(room.summary)}</p><ol>${rows}</ol><p><a href="https://getgeopulse.com/admin/campaigns">Open Campaigns</a></p>`,
+          html: `<h1>Chief of Staff campaign brief</h1><p>${escapeHtml(room.summary)}</p><ol>${rows}</ol><p><a href="https://getgeopulse.com/admin/campaigns">Open Campaigns</a></p>${agentEmailSignatureHtml('maya')}`,
         }),
       });
       if (response.ok) {

@@ -152,6 +152,7 @@ async function sendRecurringAuditEmail(
   const html = emailShell({
     kicker: 'Scheduled audit · AI search readiness',
     mastheadNote: 'Recurring audit',
+    sender: 'priya',
     bodyHtml: [
       `<p style="margin:0 0 6px;">Your scheduled audit of <strong>${escapeEmailHtml(scanUrl)}</strong> just finished.</p>`,
       scoreBlock(score, letterGrade, 'AI search readiness'),

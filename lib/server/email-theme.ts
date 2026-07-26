@@ -21,6 +21,18 @@ export const EMAIL_COLORS = {
   red: '#9E3F3D',
 } as const;
 
+export type EmailAgentKey = 'maya' | 'noah' | 'priya' | 'elena' | 'sofia' | 'jordan' | 'marcus';
+
+const EMAIL_AGENTS: Record<EmailAgentKey, { name: string; role: string; avatar: string }> = {
+  maya: { name: 'Maya Brooks', role: 'AI Chief of Staff', avatar: '/team/maya-brooks.webp' },
+  noah: { name: 'Noah Carter', role: 'Activation Manager', avatar: '/team/noah-carter.webp' },
+  priya: { name: 'Priya Shah', role: 'SEO & Customer Outcomes Strategist', avatar: '/team/priya-shah.webp' },
+  elena: { name: 'Elena Park', role: 'Customer Intelligence Lead', avatar: '/team/elena-park.webp' },
+  sofia: { name: 'Sofia Chen', role: 'Trend & Audience Researcher', avatar: '/team/sofia-chen.webp' },
+  jordan: { name: 'Jordan Reyes', role: 'Social Producer & Publisher', avatar: '/team/jordan-reyes.webp' },
+  marcus: { name: 'Marcus Reed', role: 'Reliability Engineer', avatar: '/team/marcus-reed.webp' },
+};
+
 export function escapeEmailHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
@@ -28,6 +40,22 @@ export function escapeEmailHtml(value: string): string {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+export function agentEmailSignatureHtml(agentKey: EmailAgentKey): string {
+  const agent = EMAIL_AGENTS[agentKey];
+  const avatarUrl = `https://getgeopulse.com${agent.avatar}`;
+  return [
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0 0;border-top:1px solid ${EMAIL_COLORS.track};padding-top:18px;">`,
+    '<tr>',
+    `<td width="56" style="vertical-align:middle;"><img src="${avatarUrl}" width="48" height="48" alt="${escapeEmailHtml(agent.name)}" style="display:block;width:48px;height:48px;border-radius:24px;object-fit:cover;" /></td>`,
+    '<td style="vertical-align:middle;padding-left:10px;font-family:Arial,sans-serif;">',
+    `<p style="margin:0;color:${EMAIL_COLORS.ink};font-size:14px;font-weight:700;">${escapeEmailHtml(agent.name)}</p>`,
+    `<p style="margin:3px 0 0;color:${EMAIL_COLORS.muted};font-size:12px;">${escapeEmailHtml(agent.role)} · GEO-Pulse</p>`,
+    '</td>',
+    '</tr>',
+    '</table>',
+  ].join('');
 }
 
 /** Big score + grade with a table-based gauge bar — the signature visual. */
@@ -76,6 +104,8 @@ export function issueListHtml(items: ReadonlyArray<{ check?: string; fix?: strin
 export function emailShell(input: {
   kicker: string;
   bodyHtml: string;
+  /** The Mole employee accountable for this email. */
+  sender: EmailAgentKey;
   /** e.g. 'Daily self-improvement report' — right side of the masthead. */
   mastheadNote?: string;
   footerNote?: string;
@@ -101,6 +131,7 @@ export function emailShell(input: {
     // Body card.
     `<tr><td style="padding:12px 32px 24px;font-family:Georgia,serif;color:${EMAIL_COLORS.body};font-size:15px;line-height:1.6;">`,
     input.bodyHtml,
+    agentEmailSignatureHtml(input.sender),
     `</td></tr>`,
     // Editorial footer.
     `<tr><td style="padding:20px 32px 24px;border-top:1px solid ${EMAIL_COLORS.bg};">`,

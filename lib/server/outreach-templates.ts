@@ -79,6 +79,7 @@ export function brandShell(innerHtml: string, pixelUrl: string, unsubscribeUrl?:
   return emailShell({
     kicker: 'AI search readiness',
     bodyHtml: innerHtml,
+    sender: 'elena',
     unsubscribeUrl,
     pixelUrl,
   });

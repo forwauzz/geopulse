@@ -22,6 +22,7 @@ export function buildSubscriptionWelcomeEmail(args: {
     html: emailShell({
       kicker: 'Your workspace is ready',
       mastheadNote: planName(args.bundleKey),
+      sender: 'noah',
       bodyHtml: [
         `<p style="margin:0 0 12px;">${name ? `<strong>${escapeEmailHtml(name)}</strong> is` : 'Your workspace is'} ready.</p>`,
         agency
@@ -44,6 +45,7 @@ export function buildTrialEndingEmail(args: {
     html: emailShell({
       kicker: 'Trial reminder',
       mastheadNote: planName(args.bundleKey),
+      sender: 'noah',
       bodyHtml: [
         '<p style="margin:0 0 14px;">Your trial ends in about three days. Your plan will continue automatically unless you cancel before renewal.</p>',
         ctaButton('Review your plan and billing', `${args.appUrl.replace(/\/$/, '')}/dashboard/billing`),
