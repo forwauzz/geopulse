@@ -68,7 +68,7 @@ function LoopStateBadge({ state }: { readonly state: string }) {
 export default async function AdminCampaignsPage({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ tab?: string }>;
+  readonly searchParams?: Promise<{ tab?: string; loop?: string }>;
 }) {
   const ctx = await loadAdminPageContext('/admin/campaigns');
   if (!ctx.ok) return <p className="text-error">{ctx.message}</p>;
@@ -86,11 +86,12 @@ export default async function AdminCampaignsPage({
     loadCampaignControlRoom({ supabase: ctx.adminDb, agents }),
     ctx.adminDb
       .from('agent_work_loops')
-      .select('id,source_type,source_key,parent_loop_id,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,founder_required,blocker,evidence,resolved_at,updated_at')
+      .select('id,source_type,source_key,parent_loop_id,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,founder_required,blocker,evidence,metadata,resolved_at,updated_at')
       .order('updated_at', { ascending: false })
       .limit(100),
   ]);
   const loops = loopResult.data ?? [];
+  const loopsById = new Map(loops.map((loop: any) => [String(loop.id), loop]));
   const loopCounts = {
     action: loops.filter((loop: any) => ['assigned', 'discovered'].includes(loop.state)).length,
     running: loops.filter((loop: any) => loop.state === 'executing').length,
@@ -98,7 +99,20 @@ export default async function AdminCampaignsPage({
     blocked: loops.filter((loop: any) => loop.state === 'blocked' || loop.founder_required).length,
     completed: loops.filter((loop: any) => loop.state === 'completed').length,
   };
-  const requested = (await searchParams)?.tab ?? 'overview';
+  const params = await searchParams;
+  const requested = params?.tab ?? 'overview';
+  const requestedLoop = params?.loop ?? 'all';
+  const loopView = ['all', 'action', 'running', 'verifying', 'blocked', 'completed'].includes(requestedLoop)
+    ? requestedLoop
+    : 'all';
+  const visibleLoops = loops.filter((loop: any) => {
+    if (loopView === 'all') return true;
+    if (loopView === 'action') return ['assigned', 'discovered'].includes(loop.state);
+    if (loopView === 'running') return loop.state === 'executing';
+    if (loopView === 'verifying') return loop.state === 'verifying';
+    if (loopView === 'blocked') return loop.state === 'blocked' || loop.founder_required;
+    return loop.state === 'completed';
+  });
   const activeTab = TABS.some((tab) => tab.key === requested) ? requested as 'overview' | CampaignLane : 'overview';
   const visible = activeTab === 'overview'
     ? room.campaigns
@@ -164,7 +178,10 @@ export default async function AdminCampaignsPage({
                 <h2 className="mt-2 font-headline text-xl font-bold text-on-background">Loop Control</h2>
                 <p className="mt-1 text-sm text-on-surface-variant">Every Priya finding and Maya exception stays owned until evidence verifies the outcome.</p>
               </div>
-              <Link href="/admin/automation#seo-agent" className="rounded-xl border border-outline-variant/25 px-4 py-2 text-sm font-semibold text-on-background">Open SEO evidence</Link>
+              <div className="flex gap-2">
+                {loopView !== 'all' ? <Link href="/admin/campaigns#loop-control" className="rounded-xl border border-outline-variant/25 px-4 py-2 text-sm font-semibold text-on-background">Show all</Link> : null}
+                <Link href="/admin/automation#seo-agent" className="rounded-xl border border-outline-variant/25 px-4 py-2 text-sm font-semibold text-on-background">Open SEO evidence</Link>
+              </div>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {[
@@ -173,30 +190,38 @@ export default async function AdminCampaignsPage({
                 ['Verifying', loopCounts.verifying],
                 ['Blocked', loopCounts.blocked],
                 ['Completed', loopCounts.completed],
-              ].map(([label, value]) => (
-                <div key={String(label)} className="rounded-xl bg-surface-container-low p-4">
+              ].map(([label, value], index) => {
+                const key = ['action', 'running', 'verifying', 'blocked', 'completed'][index]!;
+                return (
+                <Link key={String(label)} href={`/admin/campaigns?loop=${key}#loop-control`} className={`rounded-xl p-4 transition hover:bg-surface-container ${loopView === key ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-surface-container-low'}`}>
                   <p className="text-xs text-on-surface-variant">{label}</p>
                   <p className="mt-1 text-2xl font-black text-on-background">{value}</p>
-                </div>
-              ))}
+                </Link>
+              )})}
             </div>
             {loops.length > 0 ? (
               <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[920px] border-collapse text-sm">
+                <table className="w-full min-w-[1180px] border-collapse text-sm">
                   <thead>
                     <tr className="text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
                       <th className="py-3 pr-4">Work</th>
                       <th className="px-4 py-3">Owner</th>
                       <th className="px-4 py-3">State</th>
+                      <th className="px-4 py-3">Parent</th>
                       <th className="px-4 py-3">Deadline</th>
+                      <th className="px-4 py-3">Attempts</th>
+                      <th className="px-4 py-3">Cost</th>
                       <th className="px-4 py-3">Proof / next action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {loops.slice(0, 30).map((loop: any) => {
+                    {visibleLoops.slice(0, 30).map((loop: any) => {
                       const evidence = loop.evidence && Object.keys(loop.evidence).length > 0
                         ? Object.entries(loop.evidence).map(([key, value]) => `${key}: ${String(value)}`).join(' · ')
                         : null;
+                      const parent: any = loop.parent_loop_id ? loopsById.get(String(loop.parent_loop_id)) : null;
+                      const rawCost = loop.metadata?.cost_usd ?? loop.evidence?.cost_usd;
+                      const cost = Number.isFinite(Number(rawCost)) ? `$${Number(rawCost).toFixed(2)}` : '—';
                       return (
                         <tr key={loop.id} className="border-t border-outline-variant/15 align-top">
                           <td className="py-4 pr-4">
@@ -210,7 +235,12 @@ export default async function AdminCampaignsPage({
                             </span>
                           </td>
                           <td className="px-4 py-4"><LoopStateBadge state={loop.founder_required ? 'blocked' : loop.state} /></td>
+                          <td className="max-w-52 px-4 py-4 text-xs text-on-surface-variant">
+                            {parent?.title ?? (loop.parent_loop_id ? 'Parent outside current view' : '—')}
+                          </td>
                           <td className="px-4 py-4 text-on-surface-variant">{fmt(loop.due_at)}</td>
+                          <td className="px-4 py-4 text-on-surface-variant">{loop.attempt_count ?? 0}</td>
+                          <td className="px-4 py-4 text-on-surface-variant">{cost}</td>
                           <td className="max-w-md px-4 py-4 text-xs leading-5 text-on-surface-variant">
                             {evidence ?? loop.blocker ?? loop.next_action ?? 'Waiting for production evidence.'}
                           </td>
