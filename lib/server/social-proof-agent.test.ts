@@ -6,6 +6,7 @@ import {
   buildIndustryHumorCandidate,
   instagramScheduleSlot,
   orderAutonomousCandidates,
+  preferredAccount,
   reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
 } from './social-proof-agent';
@@ -24,6 +25,27 @@ function scan(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Social Proof Agent safeguards', () => {
+  it('prefers a social account over connected newsletter accounts', () => {
+    const account = (provider_name: 'buttondown' | 'instagram', id: string) => ({
+      id,
+      account_id: id,
+      provider_name,
+      account_label: id,
+      external_account_id: null,
+      status: 'connected' as const,
+      default_audience_id: null,
+      metadata: {},
+      connected_by_user_id: null,
+      last_verified_at: null,
+      created_at: '2026-07-26T00:00:00.000Z',
+      updated_at: '2026-07-26T00:00:00.000Z',
+    });
+    expect(preferredAccount([
+      account('buttondown', 'newsletter'),
+      account('instagram', 'social'),
+    ])?.provider_name).toBe('instagram');
+  });
+
   it('is fail-closed when disabled or killed', () => {
     expect(resolveSocialProofAgentConfig({}, false, false).mode).toBe('off');
     expect(resolveSocialProofAgentConfig({ mode: 'autonomous' }, true, true).mode).toBe('off');

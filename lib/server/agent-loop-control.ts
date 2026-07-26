@@ -510,7 +510,8 @@ export async function attemptSafeCampaignRemediation(args: {
     if (action.key.startsWith('distribution:') && action.resolution === 'agent') {
       const id = action.key.slice('distribution:'.length);
       const retryable = /timeout|network|429|5\d\d|overdue|processing/i.test(action.detail);
-      if (!retryable) continue;
+      const exhausted = /retries exhausted|after \d+ attempts/i.test(action.detail);
+      if (!retryable || exhausted) continue;
       const { error } = await args.db.from('distribution_jobs').update({
         status: 'queued',
         scheduled_for: now.toISOString(),

@@ -49,6 +49,7 @@ import { registerSelfFetch } from './lib/fetch-gate';
 import { registerLlmVerdictCache } from './scan-engine/run-scan';
 import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-staff';
 import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
+import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -248,6 +249,38 @@ export default {
         }
       } catch (err) {
         structuredError('seo_editorial_cron_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('campaign_execution');
+        const result = await runAutonomousCampaignExecution({
+          supabase,
+          appUrl: env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
+          env: {
+            ...env,
+            BROWSER: env.BROWSER as unknown as BrowserRunBinding,
+          },
+        });
+        structuredLog('autonomous_campaign_execution', result, 'info');
+      } catch (err) {
+        structuredError('autonomous_campaign_execution_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('distribution_verification');
+        await runScheduledDistributionDispatch(supabase as any, env as any);
+      } catch (err) {
+        structuredError('distribution_verification_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

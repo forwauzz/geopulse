@@ -9,6 +9,46 @@ afterEach(() => {
 });
 
 describe('resolveContentDestinationAdapter', () => {
+  it('queues an explicitly autonomous Buttondown job for immediate sending', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: 'btn-email-auto',
+        absolute_url: 'https://buttondown.com/geopulse/archive/auto/',
+        creation_date: '2026-07-26T12:00:00.000Z',
+        status: 'about_to_send',
+      }),
+    } as Response) as typeof fetch;
+    const destination = {
+      id: 'dest-buttondown',
+      destination_key: 'buttondown_newsletter',
+      destination_type: 'newsletter',
+      provider_name: 'buttondown',
+      display_name: 'Buttondown',
+      enabled: true,
+      metadata: { autonomous_send: true },
+    } as any;
+
+    const result = await resolveContentDestinationAdapter(destination).publishDraft({
+      destination,
+      env: { BUTTONDOWN_API_KEY: 'buttondown_test_key' } as any,
+      item: {
+        id: 'newsletter-auto',
+        content_id: 'seo-agent:auto:newsletter',
+        slug: 'auto-newsletter',
+        title: 'Autonomous newsletter',
+        content_type: 'newsletter',
+        draft_markdown: '# Useful update',
+        canonical_url: 'https://getgeopulse.com/blog/useful-update',
+        metadata: {},
+      } as any,
+    });
+
+    expect(result.status).toBe('published');
+    const body = JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body));
+    expect(body.status).toBe('about_to_send');
+  });
+
   it('publishes a Buttondown draft email and returns normalized delivery data', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,

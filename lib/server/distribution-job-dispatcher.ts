@@ -6,6 +6,7 @@ import {
 import { refreshSocialOAuthToken } from '@/lib/server/distribution-social-oauth';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
 import { publishInstagramAsset } from '@/lib/server/instagram-publisher';
+import { recordDistributionPublicationProof } from '@/lib/server/distribution-publication-proof';
 import {
   createDistributionEngineRepository,
   type DistributionAccountRow,
@@ -48,6 +49,7 @@ type DispatchDependencies = {
   readonly publishLinkedInShortVideoPost?: typeof publishLinkedInShortVideoPost;
   readonly publishLinkedInLongVideoPost?: typeof publishLinkedInLongVideoPost;
   readonly publishInstagramAsset?: typeof publishInstagramAsset;
+  readonly recordPublicationProof?: typeof recordDistributionPublicationProof;
 };
 
 type DispatchableContentRow = {
@@ -81,7 +83,12 @@ type PublishResult = {
   readonly metadata: Record<string, unknown>;
 };
 
-function buildSyntheticDestination(account: DistributionAccountRow) {
+const MAX_AUTONOMOUS_DISTRIBUTION_ATTEMPTS = 4;
+
+function buildSyntheticDestination(
+  account: DistributionAccountRow,
+  publishMode: DistributionJobRow['publish_mode'],
+) {
   const destinationType =
     account.provider_name === 'buttondown' || account.provider_name === 'kit' || account.provider_name === 'ghost'
       ? 'newsletter'
@@ -102,7 +109,10 @@ function buildSyntheticDestination(account: DistributionAccountRow) {
     plan_tier: null,
     availability_status: 'available',
     availability_reason: null,
-    metadata: account.metadata ?? {},
+    metadata: {
+      ...(account.metadata ?? {}),
+      autonomous_send: publishMode === 'publish_now',
+    },
     created_at: account.created_at,
     updated_at: account.updated_at,
   } as const;
@@ -1449,6 +1459,7 @@ export async function dispatchDistributionJobById(
   const publishLinkedInLongVideo =
     deps.publishLinkedInLongVideoPost ?? publishLinkedInLongVideoPost;
   const publishInstagram = deps.publishInstagramAsset ?? publishInstagramAsset;
+  const recordPublicationProof = deps.recordPublicationProof ?? recordDistributionPublicationProof;
   const log = deps.structuredLog ?? structuredLog;
   const logError = deps.structuredError ?? structuredError;
   let activeAccount: DistributionAccountRow | null = null;
@@ -1546,7 +1557,7 @@ export async function dispatchDistributionJobById(
     const runtimeEnv = resolveProviderRuntimeEnv(env, account, activeToken);
 
     const attemptNumber = (await repo.listJobAttempts(currentJob.id)).length + 1;
-    const destination = buildSyntheticDestination(account);
+    const destination = buildSyntheticDestination(account, currentJob.publish_mode);
 
     let result: PublishResult;
     if (asset.asset_type === 'single_image_post' && account.provider_name === 'x') {
@@ -1650,12 +1661,38 @@ export async function dispatchDistributionJobById(
           ? 'published'
           : result.status === 'queued'
             ? 'queued'
-            : 'published',
+            : 'draft',
       destinationUrl: result.destinationUrl,
       providerPostId: result.providerPublicationId,
       lastError: null,
-      completedAt: new Date().toISOString(),
+      completedAt: result.status === 'queued' ? null : new Date().toISOString(),
     });
+    if (result.status === 'published') {
+      try {
+        const proofTable = supabase.from('distribution_assets') as any;
+        if (typeof proofTable?.update !== 'function') {
+          throw new Error('Publication proof storage is unavailable.');
+        }
+        await recordPublicationProof({
+          db: supabase,
+          account,
+          asset,
+          job: currentJob,
+          contentItem: item,
+          destinationPostId: result.providerPublicationId,
+          destinationUrl: result.destinationUrl,
+        });
+      } catch (proofError) {
+        // The provider has already accepted the publication. Never retry the external
+        // publish because an internal evidence write failed; that would create duplicates.
+        // The hourly proof reconciler repairs this internal write without republishing.
+        logError('distribution_publication_proof_failed', {
+          job_id: currentJob.job_id,
+          provider_name: account.provider_name,
+          message: proofError instanceof Error ? proofError.message : 'unknown',
+        });
+      }
+    }
 
     log(
       'distribution_job_dispatch_succeeded',
@@ -1678,8 +1715,10 @@ export async function dispatchDistributionJobById(
     const providerName = activeAccount?.provider_name;
     const backoffProfile = readBackoffProfile(activeAccount);
     const backoffMultiplier = readBackoffMultiplier(activeAccount);
+    const retryAllowed =
+      failure.retryable && nextAttemptNumber < MAX_AUTONOMOUS_DISTRIBUTION_ATTEMPTS;
     const retryAfterMs =
-      failure.retryable
+      retryAllowed
         ? pickBackoffWindowMs(providerName, failure.providerStatusCode, nextAttemptNumber, {
             profile: backoffProfile,
             multiplier: backoffMultiplier,
@@ -1706,10 +1745,12 @@ export async function dispatchDistributionJobById(
     });
 
     await repo.updateJob(currentJob.id, {
-      status: failure.retryable ? 'scheduled' : 'failed',
-      scheduledFor: failure.retryable ? retryScheduledFor : currentJob.scheduled_for,
-      lastError: failure.message,
-      completedAt: failure.retryable ? null : new Date().toISOString(),
+      status: retryAllowed ? 'scheduled' : 'failed',
+      scheduledFor: retryAllowed ? retryScheduledFor : currentJob.scheduled_for,
+      lastError: failure.retryable && !retryAllowed
+        ? `${failure.message} Automatic retries exhausted after ${MAX_AUTONOMOUS_DISTRIBUTION_ATTEMPTS} attempts.`
+        : failure.message,
+      completedAt: retryAllowed ? null : new Date().toISOString(),
     });
 
     if (
@@ -1721,7 +1762,7 @@ export async function dispatchDistributionJobById(
     }
 
     logError(
-      failure.retryable
+      retryAllowed
         ? 'distribution_job_dispatch_retryable_failed'
         : 'distribution_job_dispatch_failed',
       {
@@ -1730,8 +1771,9 @@ export async function dispatchDistributionJobById(
         provider_status_code: failure.providerStatusCode,
         retry_after_ms: retryAfterMs,
         retry_scheduled_for: retryScheduledFor,
-        retry_backoff_profile: failure.retryable ? backoffProfile : null,
-        retry_backoff_multiplier: failure.retryable ? backoffMultiplier : null,
+        retry_backoff_profile: retryAllowed ? backoffProfile : null,
+        retry_backoff_multiplier: retryAllowed ? backoffMultiplier : null,
+        attempts_exhausted: failure.retryable && !retryAllowed,
       }
     );
 

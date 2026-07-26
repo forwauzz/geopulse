@@ -92,16 +92,22 @@ function laneCounts(items: CampaignItem[]): CampaignControlRoom['laneCounts'] {
 }
 
 function remediationFor(campaign: CampaignItem): Pick<ChiefOfStaffAction, 'resolution' | 'playbook'> {
+  const needsFounderAuthority =
+    /connect|credential|api key|oauth|permission|billing|budget|legal|consent/i.test(campaign.detail);
   if (campaign.lane === 'email') {
     return {
-      resolution: 'approval',
-      playbook: 'Jordan verifies freshness, audience, and links. Maya asks the founder for send approval when a provider draft is stale; Jordan then publishes it.',
+      resolution: needsFounderAuthority ? 'approval' : 'agent',
+      playbook: needsFounderAuthority
+        ? 'Maya asks only for the missing provider authority. Jordan resumes and verifies delivery immediately after it is supplied.'
+        : 'Jordan refreshes or retries the delivery automatically. Maya closes it only after the provider records publication.',
     };
   }
   if (campaign.lane === 'social') {
     return {
-      resolution: 'agent',
-      playbook: 'Jordan regenerates unsafe creative or retries a retryable delivery. Maya verifies the replacement before the schedule is restored.',
+      resolution: needsFounderAuthority ? 'approval' : 'agent',
+      playbook: needsFounderAuthority
+        ? 'Maya asks only for the missing provider authority. Jordan resumes the schedule as soon as it is supplied.'
+        : 'Jordan regenerates unsafe creative or retries a retryable delivery. Maya verifies the provider publication before the schedule is restored.',
     };
   }
   if (campaign.lane === 'prospecting') {

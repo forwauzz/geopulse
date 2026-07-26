@@ -746,11 +746,15 @@ function providerFamily(account: DistributionAccountRow | null): DistributionPro
     : 'generic';
 }
 
-function preferredAccount(accounts: ReadonlyArray<DistributionAccountRow>): DistributionAccountRow | null {
+export function preferredAccount(accounts: ReadonlyArray<DistributionAccountRow>): DistributionAccountRow | null {
   const priority = ['instagram', 'linkedin', 'x', 'facebook', 'threads'];
+  const rank = (provider: string): number => {
+    const index = priority.indexOf(provider);
+    return index === -1 ? priority.length : index;
+  };
   return (
     [...accounts].sort(
-      (a, b) => priority.indexOf(a.provider_name) - priority.indexOf(b.provider_name)
+      (a, b) => rank(a.provider_name) - rank(b.provider_name)
     )[0] ?? null
   );
 }

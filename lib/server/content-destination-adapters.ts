@@ -196,6 +196,10 @@ function getDraftBody(item: ContentAdminDetailRow): string {
   });
 }
 
+function shouldSendNow(destination: ContentDestinationRow): boolean {
+  return destination.metadata?.['autonomous_send'] === true;
+}
+
 function base64UrlEncode(value: string | Buffer): string {
   return Buffer.from(value)
     .toString('base64')
@@ -266,6 +270,7 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
     const html = `${markdownToHtml(markdown)}${agentEmailSignatureHtml('jordan')}`;
     const previewText = buildPreviewText(markdown);
 
+    const sendNow = shouldSendNow(request.destination);
     const response = await fetch('https://api.kit.com/v4/broadcasts', {
       method: 'POST',
       headers: {
@@ -277,7 +282,8 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
         content: html,
         description: `Draft pushed from GEO-Pulse content item ${request.item.content_id}`,
         preview_text: previewText,
-        public: false,
+        public: sendNow,
+        send_at: sendNow ? new Date().toISOString() : null,
         subscriber_filter: {
           all: [{ type: 'all_subscribers' }],
         },
@@ -312,7 +318,7 @@ class KitContentDestinationAdapter implements ContentDestinationAdapter {
     return {
       providerPublicationId,
       destinationUrl: json.public_url ?? null,
-      status: 'drafted',
+      status: sendNow ? 'published' : 'drafted',
       metadata: {
         provider: 'kit',
         created_at: json.created_at ?? null,
@@ -334,10 +340,11 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
     const draftMarkdown = getDraftBody(request.item);
     const markdown = `${draftMarkdown}\n\n${agentEmailSignatureHtml('jordan')}`;
     const previewText = buildPreviewText(draftMarkdown);
+    const sendNow = shouldSendNow(request.destination);
     const body: Record<string, unknown> = {
       subject: request.item.title,
       body: markdown,
-      status: 'draft',
+      status: sendNow ? 'about_to_send' : 'draft',
       description: `Draft pushed from GEO-Pulse content item ${request.item.content_id}`,
       metadata: {
         geopulse_content_id: request.item.content_id,
@@ -388,7 +395,7 @@ class ButtondownContentDestinationAdapter implements ContentDestinationAdapter {
     return {
       providerPublicationId,
       destinationUrl: json.absolute_url ?? null,
-      status: 'drafted',
+      status: sendNow ? 'published' : 'drafted',
       metadata: {
         provider: 'buttondown',
         creation_date: json.creation_date ?? null,
@@ -422,7 +429,24 @@ class GhostContentDestinationAdapter implements ContentDestinationAdapter {
     const version = (request.env.GHOST_ADMIN_API_VERSION || 'v6.0').trim() || 'v6.0';
     const token = createGhostAdminToken(request.env.GHOST_ADMIN_API_KEY);
 
-    const response = await fetch(`${adminBaseUrl}/ghost/api/admin/posts/?source=html`, {
+    const sendNow = shouldSendNow(request.destination);
+    const newsletterSlug =
+      typeof request.destination.metadata?.['newsletter_slug'] === 'string'
+        ? request.destination.metadata['newsletter_slug'].trim()
+        : '';
+    if (sendNow && !newsletterSlug) {
+      throw new ContentDestinationPublishError({
+        message: 'Ghost newsletter_slug is missing from the connected account.',
+        providerName: 'ghost',
+        retryable: false,
+      });
+    }
+    const query = new URLSearchParams({ source: 'html' });
+    if (sendNow) {
+      query.set('newsletter', newsletterSlug);
+      query.set('email_segment', 'all');
+    }
+    const response = await fetch(`${adminBaseUrl}/ghost/api/admin/posts/?${query.toString()}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -436,7 +460,7 @@ class GhostContentDestinationAdapter implements ContentDestinationAdapter {
             title: request.item.title,
             slug: request.item.slug,
             html,
-            status: 'draft',
+            status: sendNow ? 'published' : 'draft',
             custom_excerpt: previewText,
           },
         ],
@@ -474,7 +498,7 @@ class GhostContentDestinationAdapter implements ContentDestinationAdapter {
     return {
       providerPublicationId,
       destinationUrl: post?.url ?? null,
-      status: 'drafted',
+      status: sendNow ? 'published' : 'drafted',
       metadata: {
         provider: 'ghost',
         updated_at: post?.updated_at ?? null,
