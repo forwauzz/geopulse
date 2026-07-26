@@ -3,6 +3,7 @@ import {
   buildGpmRunKey,
   GPM_RUN_MODE,
   gpmRunHasCompletedQuestions,
+  resolveGpmEnabledPlatforms,
   resolveGpmPlatformModelMap,
   resolveGpmWindowDate,
 } from './geo-performance-schedule';
@@ -132,5 +133,28 @@ describe('resolveGpmPlatformModelMap', () => {
   it('trims whitespace from env var values', () => {
     const map = resolveGpmPlatformModelMap({ GPM_CHATGPT_MODEL_ID: '  gpt-4o  ' });
     expect(map.chatgpt).toBe('gpt-4o');
+  });
+});
+
+describe('resolveGpmEnabledPlatforms', () => {
+  it('preserves all platforms when no global guard is configured', () => {
+    expect(resolveGpmEnabledPlatforms(undefined)).toEqual([
+      'chatgpt',
+      'gemini',
+      'perplexity',
+    ]);
+  });
+
+  it('allows production to keep a newly funded provider out of scheduled sweeps', () => {
+    expect(resolveGpmEnabledPlatforms('gemini,chatgpt')).toEqual([
+      'gemini',
+      'chatgpt',
+    ]);
+  });
+
+  it('normalizes, deduplicates, and ignores unknown providers', () => {
+    expect(
+      resolveGpmEnabledPlatforms(' Perplexity,perplexity,unknown ')
+    ).toEqual(['perplexity']);
   });
 });

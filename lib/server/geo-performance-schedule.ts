@@ -29,6 +29,30 @@ export type GpmPlatformModelMap = {
   readonly perplexity: string;
 };
 
+export const GPM_PLATFORMS = ['chatgpt', 'gemini', 'perplexity'] as const;
+export type GpmPlatform = (typeof GPM_PLATFORMS)[number];
+
+/**
+ * Global provider kill switch for scheduled GPM work.
+ *
+ * An empty value preserves the historical "all configured platforms" behavior
+ * for local/test environments. Production sets this explicitly so adding a
+ * provider secret cannot silently turn on billable runs for every client.
+ */
+export function resolveGpmEnabledPlatforms(raw: string | undefined): readonly GpmPlatform[] {
+  if (!raw?.trim()) return GPM_PLATFORMS;
+
+  const valid = new Set<string>(GPM_PLATFORMS);
+  return Array.from(
+    new Set(
+      raw
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .filter((value): value is GpmPlatform => valid.has(value))
+    )
+  );
+}
+
 export type GpmRunSummary = {
   readonly configId: string;
   readonly windowDate: string;
@@ -344,6 +368,7 @@ export async function executeGpmClientRun(args: {
 
 export type GpmScheduleEnvLike = {
   readonly GPM_SCHEDULE_ENABLED?: string;
+  readonly GPM_ENABLED_PLATFORMS?: string;
   readonly GPM_CHATGPT_MODEL_ID?: string;
   readonly GPM_GEMINI_MODEL_ID?: string;
   readonly GPM_PERPLEXITY_MODEL_ID?: string;
@@ -402,6 +427,9 @@ export async function runGpmScheduledSweep(args: {
 
   const allConfigs = (configs ?? []) as ClientBenchmarkConfigRow[];
   const platformModelMap = resolveGpmPlatformModelMap(args.env);
+  const globallyEnabledPlatforms = new Set(
+    resolveGpmEnabledPlatforms(args.env.GPM_ENABLED_PLATFORMS)
+  );
   const adapter = args.adapter ?? createBenchmarkExecutionAdapter(args.env as any);
 
   let launchedRuns = 0;
@@ -412,9 +440,26 @@ export async function runGpmScheduledSweep(args: {
   structuredLog('gpm_sweep_started', {
     config_count: allConfigs.length,
     window_date: windowDate,
+    enabled_platforms: Array.from(globallyEnabledPlatforms).join(','),
   });
 
   for (const config of allConfigs) {
+    const enabledConfig = {
+      ...config,
+      platforms_enabled: config.platforms_enabled.filter((platform) =>
+        globallyEnabledPlatforms.has(platform as GpmPlatform)
+      ),
+    };
+    if (enabledConfig.platforms_enabled.length === 0) {
+      skippedRuns += config.platforms_enabled.length;
+      structuredLog('gpm_config_skipped_no_globally_enabled_platforms', {
+        config_id: config.id,
+        configured_platforms: config.platforms_enabled.join(','),
+        enabled_platforms: Array.from(globallyEnabledPlatforms).join(','),
+      });
+      continue;
+    }
+
     const configuredEntitlement = args.entitlementsByConfigId.get(config.id) ?? {
       enabled: false,
       tier: null,
@@ -446,7 +491,7 @@ export async function runGpmScheduledSweep(args: {
     try {
       const summary = await executeGpmClientRun({
         supabase: args.supabase,
-        config,
+        config: enabledConfig,
         entitlement,
         platformModelMap,
         adapter,
