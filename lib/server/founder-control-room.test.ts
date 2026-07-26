@@ -34,7 +34,7 @@ const agent = (key: string, enabled = true): AgentStatus => ({
 });
 
 describe('founder control room', () => {
-  it('keeps stable agent keys under six named owners and reports the real bottleneck', () => {
+  it('keeps stable agent keys under seven named owners and reports the real bottleneck', () => {
     const room = buildFounderControlRoom({
       agents: [
         agent('revenue_agency'),
@@ -64,6 +64,36 @@ describe('founder control room', () => {
     expect(room.learningBrief.recommendation).toContain('report-to-paid-monitoring');
     expect(room.incidents[0]?.area).toBe('Stripe');
     expect(room.workforce.find((member) => member.id === 'maya')?.lastAction?.event).toBe('revenue_agency_run');
+  });
+
+  it('uses founder-edited employee identity without changing capability ownership', () => {
+    const customMaya = {
+      id: 'maya' as const,
+      name: 'Maya Stone',
+      role: 'Operating Partner',
+      icon: 'assistant',
+      initials: 'MS',
+      color: 'bg-violet-600',
+      avatar: 'https://media.example.com/maya.webp',
+      job: 'Owns the daily operating loop and escalates founder decisions.',
+      capabilityKeys: ['revenue_agency', 'engagement_digest'],
+    };
+    const room = buildFounderControlRoom({
+      agents: [agent('revenue_agency'), agent('engagement_digest')],
+      snapshot,
+      logs: [],
+      workforce: [customMaya],
+    });
+
+    expect(room.workforce[0]).toMatchObject({
+      name: 'Maya Stone',
+      role: 'Operating Partner',
+      avatar: 'https://media.example.com/maya.webp',
+    });
+    expect(room.workforce[0]?.capabilities.map((capability) => capability.key)).toEqual([
+      'revenue_agency',
+      'engagement_digest',
+    ]);
   });
 
   it('classifies every reliability area Marcus owns', () => {

@@ -111,6 +111,14 @@ export type WorkforceView = WorkforceMember & {
   readonly capabilities: readonly AgentStatus[];
 };
 
+type WorkforceProfileRow = {
+  id: WorkforceMember['id'];
+  name: string;
+  role: string;
+  job: string;
+  avatar_url: string;
+};
+
 export type ReliabilityIncident = {
   readonly area: 'Queue' | 'Report' | 'Social' | 'Stripe' | 'Schedule';
   readonly event: string;
@@ -171,8 +179,9 @@ export function buildFounderControlRoom(args: {
   agents: readonly AgentStatus[];
   snapshot: RevenueAgencySnapshot;
   logs: readonly { event: string; level: 'info' | 'warning' | 'error'; created_at: string }[];
+  workforce?: readonly WorkforceMember[];
 }): FounderControlRoom {
-  const { agents, snapshot, logs } = args;
+  const { agents, snapshot, logs, workforce: workforceDirectory = NAMED_WORKFORCE } = args;
   const incidents = logs
     .filter((row) => row.level === 'error' || row.level === 'warning')
     .map((row) => {
@@ -182,7 +191,7 @@ export function buildFounderControlRoom(args: {
     .filter((row): row is ReliabilityIncident => row !== null)
     .slice(0, 8);
 
-  const workforce = NAMED_WORKFORCE.map((member): WorkforceView => {
+  const workforce = workforceDirectory.map((member): WorkforceView => {
     const capabilities = member.capabilityKeys
       .map((key) => agents.find((agent) => agent.key === key))
       .filter((agent): agent is AgentStatus => Boolean(agent));
@@ -251,6 +260,7 @@ export async function loadFounderControlRoom(
   snapshot: RevenueAgencySnapshot
 ): Promise<FounderControlRoom> {
   let logs: { event: string; level: 'info' | 'warning' | 'error'; created_at: string }[] = [];
+  let workforce: readonly WorkforceMember[] = NAMED_WORKFORCE;
   try {
     const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
     const result = await supabase
@@ -263,5 +273,34 @@ export async function loadFounderControlRoom(
   } catch {
     // The control room must remain available when observability storage is unavailable.
   }
-  return buildFounderControlRoom({ agents, snapshot, logs });
+  try {
+    const result = await supabase
+      .from('workforce_profiles')
+      .select('id,name,role,job,avatar_url');
+    if (!result.error && result.data) {
+      const profiles = new Map(
+        (result.data as WorkforceProfileRow[]).map((profile) => [profile.id, profile])
+      );
+      workforce = NAMED_WORKFORCE.map((member) => {
+        const profile = profiles.get(member.id);
+        return profile
+          ? {
+              ...member,
+              name: profile.name,
+              role: profile.role,
+              job: profile.job,
+              avatar: profile.avatar_url,
+              initials: profile.name
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((part) => part[0]?.toUpperCase() ?? '')
+                .join(''),
+            }
+          : member;
+      });
+    }
+  } catch {
+    // Migration 068 may not be installed yet; bundled defaults keep the page usable.
+  }
+  return buildFounderControlRoom({ agents, snapshot, logs, workforce });
 }

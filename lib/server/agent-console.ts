@@ -29,6 +29,8 @@ export interface AgentStatus {
   blockers: string[];
   /** Where to manage it when not toggleable here. */
   manageHint?: string;
+  /** Safe in-product destination for resolving settings or blockers. */
+  manageHref?: string;
 }
 
 type EnvLike = Record<string, string | undefined>;
@@ -167,6 +169,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
         ...(seoConnected ? [] : ['Google Search Console is not connected — connect it in /admin/automation']),
       ],
       manageHint: 'Connection, hard spend cap, run history, and run-now live in /admin/automation.',
+      manageHref: '/admin/automation#seo-agent',
     },
     {
       key: 'revenue_agency',
@@ -182,6 +185,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
         ...(resendReady ? [] : ['Resend email credentials missing — outreach and operator digests cannot send']),
       ],
       manageHint: 'Mode, pipeline health, and run-now live at the top of this page.',
+      manageHref: '/admin/agents#revenue-agency',
     },
     {
       key: 'social_proof',
@@ -197,6 +201,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
         ? []
         : ['No connected distribution account — the agent can draft, but it cannot schedule or publish'],
       manageHint: 'Mode and proof-type controls live at the top of this page.',
+      manageHref: '/admin/agents#social-production',
     },
     {
       key: 'outreach',
@@ -212,6 +217,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
         ...(templatesTable ? [] : ['Custom templates dormant until migration 054 is applied (built-in email still sends)']),
       ],
       manageHint: 'Prospects, templates and tracking live in /admin/outreach.',
+      manageHref: '/admin/outreach',
     },
     {
       key: 'research',
@@ -224,6 +230,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       killSwitch: researchSetting.killSwitch,
       blockers: researchTable ? [] : ['Dormant until migration 055 is applied'],
       manageHint: 'Review queue and watchlist live in /admin/research.',
+      manageHref: '/admin/research',
     },
     {
       key: 'design',
@@ -235,6 +242,8 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       enabled: designEnabled,
       killSwitch: designSetting.killSwitch,
       blockers: browserRenderReady ? [] : ['Browser Rendering credentials/mode not set — covers render without the screenshot'],
+      manageHint: 'Enablement and kill switch live in /admin/automation.',
+      manageHref: '/admin/automation#report-design',
     },
     {
       key: 'engagement_digest',
@@ -250,6 +259,8 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
         ...(resendReady ? [] : ['Resend email credentials missing — digest cannot send']),
         ...(digestRecipientSet ? [] : ['No recipient — set one in automation_settings config or the self-improvement recipient']),
       ],
+      manageHint: 'Recipient and delivery controls live in /admin/automation.',
+      manageHref: '/admin/automation#self-improvement',
     },
     {
       key: 'competitor_benchmark',
@@ -264,6 +275,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       blockers:
         cohortDomainCount > 0 ? [] : ['No cohort domains yet — add the customer and competitors in /admin/competitors'],
       manageHint: 'Cohorts, manual scans and the comparison table live in /admin/competitors.',
+      manageHref: '/admin/competitors',
     },
     {
       key: 'marketing_autopilot',
@@ -276,6 +288,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       killSwitch: marketingSetting.killSwitch,
       blockers: channelConnected ? [] : ['No distribution channel connected (X/LinkedIn/Ghost) — briefs only, no posting'],
       manageHint: 'Daily cap and run-now live in /admin/automation.',
+      manageHref: '/admin/automation#marketing-autopilot',
     },
     {
       key: 'self_improvement',
@@ -287,6 +300,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       killSwitch: selfImprove.killSwitch,
       blockers: [],
       manageHint: 'Toggles, recipient and run-now live in /admin/automation.',
+      manageHref: '/admin/automation#self-improvement',
     },
     {
       key: 'recurring_audits',
@@ -298,6 +312,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       killSwitch: false,
       blockers: [],
       manageHint: 'Grant per user in /admin/settings; each client turns their schedule on/off in /dashboard/automation.',
+      manageHref: '/admin/settings',
     },
     {
       key: 'gpm',
@@ -308,6 +323,8 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       enabled: gpmEnabled,
       killSwitch: false,
       blockers: gpmEnabled ? [] : ['GPM_SCHEDULE_ENABLED is not "true" in wrangler.jsonc (redeploy to change)'],
+      manageHint: 'Monitoring results and schedules live in geo performance.',
+      manageHref: '/admin/geo-performance',
     },
     {
       key: 'competitor_discovery',
@@ -318,6 +335,8 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       enabled: true,
       killSwitch: false,
       blockers: discoveryLive ? [] : ['Running in MOCK mode — live Google-grounded discovery needs COMPETITOR_DISCOVERY_MODE=live + Gemini billing'],
+      manageHint: 'Review discovered competitors and cohorts in the competitor console.',
+      manageHref: '/admin/competitors',
     },
     {
       key: 'benchmark',
@@ -329,6 +348,7 @@ export async function loadAgentStatuses(supabase: SupabaseClient, env: EnvLike):
       killSwitch: false,
       blockers: [],
       manageHint: 'Schedules and recaps are env-driven; results feed /admin/geo-performance.',
+      manageHref: '/admin/geo-performance',
     },
   ];
 }

@@ -1,5 +1,6 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import Image from 'next/image';
+import Link from 'next/link';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { loadAgentStatuses } from '@/lib/server/agent-console';
 import { loadFounderControlRoom } from '@/lib/server/founder-control-room';
@@ -18,6 +19,7 @@ import {
   runSocialProofNow,
   saveRevenueAgency,
   saveSocialProofAgent,
+  saveWorkforceProfile,
   setAgentFlag,
 } from './actions';
 
@@ -175,6 +177,12 @@ export default async function AdminAgentsPage() {
           </span>
         )}
         {agent.manageHint && <span className="font-sans text-xs text-on-surface-variant/80">{agent.manageHint}</span>}
+        {agent.manageHref && (
+          <Link href={agent.manageHref} className="ml-auto inline-flex items-center gap-1 rounded-lg border border-primary/25 px-3 py-1 text-xs font-bold text-primary">
+            Fix settings
+            <span className="material-symbols-outlined text-[14px]" aria-hidden>arrow_forward</span>
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -251,7 +259,7 @@ export default async function AdminAgentsPage() {
 
       <section>
         <h2 className="font-sans text-lg font-bold text-on-background">Your AI team</h2>
-        <p className="font-sans text-sm text-on-surface-variant">Six owners, using the agents and schedules already running underneath.</p>
+        <p className="font-sans text-sm text-on-surface-variant">Seven owners, using the agents and schedules already running underneath. Edit how each employee appears without rewiring their production responsibilities.</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {controlRoom.workforce.map((member) => (
             <article key={member.id} className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-4">
@@ -280,17 +288,58 @@ export default async function AdminAgentsPage() {
               {member.blockers.length > 0 && <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-2 font-sans text-xs text-amber-800 dark:text-amber-200">{member.blockers[0]}</p>}
               <div className="mt-3 flex flex-wrap gap-1">
                 {member.capabilities.map((capability) => (
-                  <span key={capability.key} className="rounded-full bg-surface-container px-2 py-1 font-label text-[0.58rem] font-semibold text-on-surface-variant">
-                    {capability.name} · {capability.blockers.length > 0 ? 'Repair' : 'Keep'}
-                  </span>
+                  capability.manageHref ? (
+                    <Link
+                      key={capability.key}
+                      href={capability.manageHref}
+                      className="rounded-full bg-surface-container px-2 py-1 font-label text-[0.58rem] font-semibold text-primary hover:bg-surface-container-high"
+                      title={capability.manageHint}
+                    >
+                      {capability.name} · {capability.blockers.length > 0 ? 'Fix' : 'Manage'}
+                    </Link>
+                  ) : (
+                    <span key={capability.key} className="rounded-full bg-surface-container px-2 py-1 font-label text-[0.58rem] font-semibold text-on-surface-variant">
+                      {capability.name} · {capability.blockers.length > 0 ? 'Repair' : 'Keep'}
+                    </span>
+                  )
                 ))}
               </div>
+              <details className="mt-4 border-t border-outline-variant/15 pt-3">
+                <summary className="cursor-pointer font-sans text-xs font-bold text-primary">Edit employee</summary>
+                <form action={saveWorkforceProfile} className="mt-3 grid gap-3">
+                  <input type="hidden" name="id" value={member.id} />
+                  <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+                    Name
+                    <input name="name" required minLength={2} maxLength={80} defaultValue={member.name} className={inputClass} />
+                  </label>
+                  <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+                    Role
+                    <input name="role" required minLength={2} maxLength={100} defaultValue={member.role} className={inputClass} />
+                  </label>
+                  <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+                    Responsibilities
+                    <textarea name="job" required minLength={10} maxLength={500} rows={4} defaultValue={member.job} className={inputClass} />
+                  </label>
+                  <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+                    Portrait URL
+                    <input name="avatarUrl" required defaultValue={member.avatar} className={inputClass} />
+                  </label>
+                  <label className="grid gap-1 font-sans text-xs font-semibold text-on-surface-variant">
+                    Or upload a portrait
+                    <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp" className="block w-full text-xs text-on-surface-variant file:mr-3 file:rounded-lg file:border-0 file:bg-surface-container file:px-3 file:py-2 file:font-semibold file:text-on-background" />
+                    <span className="font-normal">JPG, PNG, or WebP up to 3 MB. Upload replaces the URL above.</span>
+                  </label>
+                  <button type="submit" className="justify-self-start rounded-xl bg-primary px-4 py-2 font-sans text-xs font-bold text-on-primary">
+                    Save employee
+                  </button>
+                </form>
+              </details>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+      <section id="revenue-agency" className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
@@ -379,7 +428,7 @@ export default async function AdminAgentsPage() {
         </form>
       </section>
 
-      <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
+      <section id="social-production" className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">

@@ -111,7 +111,7 @@ export default async function AutomationConsolePage() {
       </header>
 
       {/* Self-improvement */}
-      <section className={card}>
+      <section id="self-improvement" className={card}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-sans text-lg font-bold text-on-background">Self-improvement loop</h2>
@@ -152,7 +152,7 @@ export default async function AutomationConsolePage() {
       </section>
 
       {/* Autonomous SEO */}
-      <section className={card}>
+      <section id="seo-agent" className={card}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-3">
@@ -204,7 +204,7 @@ export default async function AutomationConsolePage() {
       </section>
 
       {/* Marketing autopilot */}
-      <section className={card}>
+      <section id="marketing-autopilot" className={card}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-sans text-lg font-bold text-on-background">Marketing autopilot</h2>
@@ -241,7 +241,7 @@ export default async function AutomationConsolePage() {
       </section>
 
       {/* Report design agent (issue #90) — personalized PDF covers, ON by default */}
-      <section className={card}>
+      <section id="report-design" className={card}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-sans text-lg font-bold text-on-background">Report design agent</h2>

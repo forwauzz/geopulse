@@ -14,7 +14,75 @@ import {
 } from '@/lib/server/social-proof-agent';
 import { getPaymentApiEnv, getSocialProductionEnv } from '@/lib/server/cf-env';
 
+const WORKFORCE_IDS = new Set(['maya', 'noah', 'priya', 'elena', 'sofia', 'jordan', 'marcus']);
+const AVATAR_TYPES = new Map([
+  ['image/jpeg', 'jpg'],
+  ['image/png', 'png'],
+  ['image/webp', 'webp'],
+]);
+
+function textField(formData: FormData, name: string, max: number): string {
+  return String(formData.get(name) ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function validAvatarUrl(value: string): boolean {
+  if (value.startsWith('/team/')) return true;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+export async function saveWorkforceProfile(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const id = textField(formData, 'id', 20);
+  const name = textField(formData, 'name', 80);
+  const role = textField(formData, 'role', 100);
+  const job = textField(formData, 'job', 500);
+  let avatarUrl = String(formData.get('avatarUrl') ?? '').trim().slice(0, 1000);
+  if (!WORKFORCE_IDS.has(id) || name.length < 2 || role.length < 2 || job.length < 10) return;
+
+  const avatar = formData.get('avatar');
+  if (avatar instanceof File && avatar.size > 0) {
+    const extension = AVATAR_TYPES.get(avatar.type);
+    if (!extension || avatar.size > 3_000_000) return;
+    const production = await getSocialProductionEnv();
+    const base = production.SOCIAL_MEDIA_PUBLIC_BASE?.replace(/\/$/, '');
+    if (!production.REPORT_FILES || !base) return;
+    const key = `team/avatars/${id}-${Date.now()}.${extension}`;
+    await production.REPORT_FILES.put(key, await avatar.arrayBuffer(), {
+      httpMetadata: {
+        contentType: avatar.type,
+        cacheControl: 'public, max-age=31536000, immutable',
+      },
+    });
+    avatarUrl = `${base}/${key}`;
+  }
+  if (!validAvatarUrl(avatarUrl)) return;
+
+  const { error } = await ctx.adminDb.from('workforce_profiles').upsert(
+    {
+      id,
+      name,
+      role,
+      job,
+      avatar_url: avatarUrl,
+      updated_by_user_id: ctx.user.id,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' }
+  );
+  if (error) throw new Error('Could not save the employee profile.');
+  revalidatePath('/admin/agents');
+  revalidatePath('/admin/campaigns');
+  revalidatePath('/admin/automation');
+}
+
 const TOGGLEABLE: ReadonlySet<AutomationFeature> = new Set<AutomationFeature>([
+  'seo_agent',
   'outreach_sweep',
   'research_agent',
   'report_design_agent',
