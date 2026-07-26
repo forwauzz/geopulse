@@ -85,10 +85,7 @@ type PublishResult = {
 
 const MAX_AUTONOMOUS_DISTRIBUTION_ATTEMPTS = 4;
 
-function buildSyntheticDestination(
-  account: DistributionAccountRow,
-  publishMode: DistributionJobRow['publish_mode'],
-) {
+function buildSyntheticDestination(account: DistributionAccountRow) {
   const destinationType =
     account.provider_name === 'buttondown' || account.provider_name === 'kit' || account.provider_name === 'ghost'
       ? 'newsletter'
@@ -109,10 +106,7 @@ function buildSyntheticDestination(
     plan_tier: null,
     availability_status: 'available',
     availability_reason: null,
-    metadata: {
-      ...(account.metadata ?? {}),
-      autonomous_send: publishMode === 'publish_now',
-    },
+    metadata: account.metadata ?? {},
     created_at: account.created_at,
     updated_at: account.updated_at,
   } as const;
@@ -1557,7 +1551,7 @@ export async function dispatchDistributionJobById(
     const runtimeEnv = resolveProviderRuntimeEnv(env, account, activeToken);
 
     const attemptNumber = (await repo.listJobAttempts(currentJob.id)).length + 1;
-    const destination = buildSyntheticDestination(account, currentJob.publish_mode);
+    const destination = buildSyntheticDestination(account);
 
     let result: PublishResult;
     if (asset.asset_type === 'single_image_post' && account.provider_name === 'x') {

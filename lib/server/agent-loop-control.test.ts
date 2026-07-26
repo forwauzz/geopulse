@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   attemptSafeCampaignRemediation,
-  buildSeoNewsletterDerivative,
   buildSeoContentFamily,
   isContentLoopSatisfied,
 } from './agent-loop-control';
@@ -13,32 +12,15 @@ describe('closed-loop agent control', () => {
       opportunityTitle: 'Close the competitor gap',
     });
 
-    expect(family.map((item) => item.contentType)).toEqual([
-      'article',
-      'newsletter',
-      'social_post',
-    ]);
+    expect(family.map((item) => item.contentType)).toEqual(['article', 'social_post']);
     expect(family[0]?.contentId).toBe('seo-agent:seo-ai-visibility-platform');
-    expect(family[1]?.contentId).toContain(':newsletter');
-    expect(family[2]?.contentId).toContain(':instagram');
-    expect(new Set(family.map((item) => item.slug)).size).toBe(3);
+    expect(family[1]?.contentId).toContain(':instagram');
+    expect(new Set(family.map((item) => item.slug)).size).toBe(2);
   });
 
-  it('creates a bounded newsletter derivative that links back to the canonical article', () => {
-    const markdown = buildSeoNewsletterDerivative({
-      title: 'How AI visibility audits work',
-      markdown: '# Old title\n\n## Direct answer\n\nUseful evidence.',
-      canonicalUrl: '/blog/ai-visibility-audit',
-    });
-    expect(markdown).toContain('# How AI visibility audits work');
-    expect(markdown).toContain('Useful evidence.');
-    expect(markdown).toContain('[Read the complete guide](/blog/ai-visibility-audit)');
-    expect(markdown).not.toContain('# Old title');
-  });
-
-  it('requires publication evidence before closing newsletter and social loops', () => {
+  it('requires publication evidence before closing canonical and social loops', () => {
     expect(isContentLoopSatisfied({
-      content_type: 'newsletter',
+      content_type: 'article',
       status: 'draft',
       canonical_url: '/blog/example',
     })).toBe(false);
@@ -47,8 +29,9 @@ describe('closed-loop agent control', () => {
       status: 'approved',
     })).toBe(false);
     expect(isContentLoopSatisfied({
-      content_type: 'newsletter',
+      content_type: 'article',
       status: 'published',
+      canonical_url: '/blog/example',
     })).toBe(true);
     expect(isContentLoopSatisfied({
       content_type: 'social_post',
