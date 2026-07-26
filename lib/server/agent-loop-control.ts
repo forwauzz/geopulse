@@ -520,6 +520,7 @@ export async function attemptSafeCampaignRemediation(args: {
         .eq('id', id)
         .maybeSingle();
       const metadata = metadataObject(config?.metadata);
+      if (metadata['baseline_status'] === 'queued') continue;
       await args.db.from('client_benchmark_configs').update({
         metadata: {
           ...metadata,

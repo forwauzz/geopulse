@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildGpmRunKey,
+  buildActivationRunVersion,
   GPM_RUN_MODE,
   gpmRunHasCompletedQuestions,
   resolveGpmEnabledPlatforms,
   resolveGpmPlatformModelMap,
   resolveGpmWindowDate,
+  resolveActivationBaselineStatus,
 } from './geo-performance-schedule';
 
 describe('GPM measurement contract', () => {
@@ -156,5 +158,26 @@ describe('resolveGpmEnabledPlatforms', () => {
     expect(
       resolveGpmEnabledPlatforms(' Perplexity,perplexity,unknown ')
     ).toEqual(['perplexity']);
+  });
+
+  it('requires report evidence before an activation baseline is measured', () => {
+    expect(resolveActivationBaselineStatus({
+      hasReport: false,
+      launched: 0,
+      failed: 0,
+      existing: 2,
+    })).toBe('queued');
+    expect(resolveActivationBaselineStatus({
+      hasReport: true,
+      launched: 0,
+      failed: 0,
+      existing: 2,
+    })).toBe('measured');
+  });
+
+  it('gives each requested activation baseline a collision-proof run version', () => {
+    expect(buildActivationRunVersion({
+      baseline_requested_at: '2026-07-26T17:05:00.000Z',
+    }, 'config-1')).toBe('activation-2026-07-26T17-05-00-000Z');
   });
 });

@@ -71,6 +71,9 @@ export async function runAutonomousEditorialEngine(args: {
     : fallbackResult.data;
 
   const orderedCandidates = [...(candidates ?? [])].sort((left: any, right: any) => {
+    const leftRetry = left?.metadata?.editorial_retry_required === true ? 0 : 1;
+    const rightRetry = right?.metadata?.editorial_retry_required === true ? 0 : 1;
+    if (leftRetry !== rightRetry) return leftRetry - rightRetry;
     const leftSeo = left?.metadata?.proposed_by === 'seo_agent' ? 0 : 1;
     const rightSeo = right?.metadata?.proposed_by === 'seo_agent' ? 0 : 1;
     return leftSeo - rightSeo;
@@ -95,7 +98,7 @@ export async function runAutonomousEditorialEngine(args: {
   const review = await args.provider.review({ title: draft.title, markdown: draft.markdown, sources: draft.sources, hero });
   if (!review.approved) return { status: 'rejected', reason: review.reasons.join('; ') || 'review_failed' };
 
-  const metadata = { ...(candidate.metadata ?? {}), autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: 'generated' }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
+  const metadata = { ...(candidate.metadata ?? {}), editorial_retry_required: false, autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: 'generated' }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
   const checks = evaluateContentPublishChecks({
     ...candidate,
     content_type: 'article',

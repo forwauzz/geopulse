@@ -118,6 +118,26 @@ export function buildGpmRunKey(
   return `gpm:${configId}:${platform}:${windowDate}`;
 }
 
+export function buildActivationRunVersion(
+  metadata: Record<string, unknown>,
+  configId: string,
+): string {
+  return `activation-${String(metadata['baseline_requested_at'] ?? configId)
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .slice(0, 80)}`;
+}
+
+export function resolveActivationBaselineStatus(input: {
+  hasReport: boolean;
+  launched: number;
+  failed: number;
+  existing: number;
+}): 'measured' | 'failed' | 'queued' {
+  if (input.hasReport) return 'measured';
+  if (input.failed > 0 && input.launched === 0 && input.existing === 0) return 'failed';
+  return 'queued';
+}
+
 // ── Competitor co-citation post-processing ────────────────────────────────────
 
 async function persistCompetitorCitations(args: {
@@ -499,17 +519,25 @@ export async function runGpmScheduledSweep(args: {
         triggerSource: args.triggerSource,
         reportEnv: args.env,
         reportBucket: args.reportBucket,
+        runVersion: activationBaselineQueued
+          ? buildActivationRunVersion(configMetadata, config.id)
+          : undefined,
       });
       if (activationBaselineQueued && !summary.entitlementBlocked && !summary.skippedMissingConfig) {
         const launched = summary.platformResults.filter((result) => result.status === 'launched');
         const failed = summary.platformResults.filter((result) => result.status === 'failed');
         const existing = summary.platformResults.filter((result) => result.status === 'skipped_existing');
-        const baselineStatus =
-          failed.length > 0 && launched.length === 0 && existing.length === 0
-            ? 'failed'
-            : launched.length > 0 || existing.length > 0
-              ? 'measured'
-              : 'queued';
+        const { data: reportProof } = await args.supabase
+          .from('gpm_reports')
+          .select('id')
+          .eq('config_id', config.id)
+          .limit(1);
+        const baselineStatus = resolveActivationBaselineStatus({
+          hasReport: (reportProof ?? []).length > 0,
+          launched: launched.length,
+          failed: failed.length,
+          existing: existing.length,
+        });
         await args.supabase
           .from('client_benchmark_configs')
           .update({
