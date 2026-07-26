@@ -6,7 +6,8 @@
  * always leaves the item as a draft; it never publishes by accident.
  */
 import { evaluateContentPublishChecks, prepareContentForPublish } from './content-publishing';
-import { loadAutomationSetting } from './automation-settings';
+import { configInt, loadAutomationSetting } from './automation-settings';
+import { closeSatisfiedSeoParents, reconcileContentLoops } from './agent-loop-control';
 
 type Db = { from(table: string): any };
 export type EditorialProvider = {
@@ -24,6 +25,20 @@ export async function runAutonomousEditorialEngine(args: {
 }): Promise<EditorialRunResult> {
   const setting = await loadAutomationSetting(args.supabase as any, 'marketing_autopilot');
   if (!setting.enabled || setting.killSwitch) return { status: 'skipped', reason: 'disabled_or_killed' };
+  const now = args.now ?? new Date();
+  const dayStart = new Date(now);
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const dailyPublishCap = Math.min(Math.max(configInt(setting.config, 'daily_publish_cap', 2), 1), 5);
+  const { data: publishedToday } = await args.supabase
+    .from('content_items')
+    .select('id')
+    .eq('content_type', 'article')
+    .eq('status', 'published')
+    .gte('published_at', dayStart.toISOString())
+    .limit(dailyPublishCap);
+  if ((publishedToday ?? []).length >= dailyPublishCap) {
+    return { status: 'skipped', reason: 'daily_publish_cap' };
+  }
 
   const { data: candidates, error } = await args.supabase
     .from('content_items')
@@ -36,7 +51,12 @@ export async function runAutonomousEditorialEngine(args: {
     .limit(25);
   if (error) return { status: 'failed', reason: error.message };
 
-  const candidate = (candidates ?? []).find((row: any) =>
+  const orderedCandidates = [...(candidates ?? [])].sort((left: any, right: any) => {
+    const leftSeo = left?.metadata?.proposed_by === 'seo_agent' ? 0 : 1;
+    const rightSeo = right?.metadata?.proposed_by === 'seo_agent' ? 0 : 1;
+    return leftSeo - rightSeo;
+  });
+  const candidate = orderedCandidates.find((row: any) =>
     row?.status === 'brief' ||
     row?.metadata?.proposed_by === 'marketing_autopilot' ||
     // The registry cleanup predates the metadata marker on some rows. An archived article with
@@ -56,7 +76,7 @@ export async function runAutonomousEditorialEngine(args: {
   const review = await args.provider.review({ title: draft.title, markdown: draft.markdown, sources: draft.sources, hero });
   if (!review.approved) return { status: 'rejected', reason: review.reasons.join('; ') || 'review_failed' };
 
-  const metadata = { ...(candidate.metadata ?? {}), autonomous_editorial: { generated_at: (args.now ?? new Date()).toISOString(), reviewer: 'passed', hero_provider: 'generated' }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
+  const metadata = { ...(candidate.metadata ?? {}), autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: 'generated' }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
   const checks = evaluateContentPublishChecks({
     ...candidate,
     content_type: 'article',
@@ -85,5 +105,8 @@ export async function runAutonomousEditorialEngine(args: {
     published_at: null,
   });
   const { error: updateError } = await args.supabase.from('content_items').update({ title: draft.title, draft_markdown: draft.markdown, source_links: draft.sources, status: 'published', canonical_url: publish.canonicalUrl, published_at: publish.publishedAt, metadata }).eq('content_id', candidate.content_id);
-  return updateError ? { status: 'failed', reason: updateError.message } : { status: 'created', contentId: candidate.content_id };
+  if (updateError) return { status: 'failed', reason: updateError.message };
+  await reconcileContentLoops(args.supabase, now);
+  await closeSatisfiedSeoParents(args.supabase, now);
+  return { status: 'created', contentId: candidate.content_id };
 }

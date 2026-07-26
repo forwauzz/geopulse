@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadAgentStatuses } from './agent-console';
+import {
+  attemptSafeCampaignRemediation,
+  syncCampaignActionLoops,
+} from './agent-loop-control';
 import { loadCampaignControlRoom } from './campaign-control-room';
 import { agentEmailSignatureHtml } from './email-theme';
 import { structuredLogWithClientAndWait } from './structured-log';
@@ -19,6 +23,18 @@ export async function runCampaignChiefOfStaffCheck(args: {
     agents,
     now: args.now,
   });
+  const now = args.now ?? new Date();
+  const remediated = await attemptSafeCampaignRemediation({
+    db: args.supabase,
+    actions: room.actions,
+    now,
+  });
+  const loopSync = await syncCampaignActionLoops({
+    db: args.supabase,
+    actions: room.actions,
+    resolved: remediated,
+    now,
+  });
   const urgent = room.actions.filter((action) => action.severity === 'now').length;
   await structuredLogWithClientAndWait(
     args.supabase,
@@ -29,46 +45,85 @@ export async function runCampaignChiefOfStaffCheck(args: {
       open_actions: room.actions.length,
       urgent_actions: urgent,
       cron_healthy: room.cron.healthy,
+      safely_remediated: remediated.size,
+      loops_open: loopSync.open,
+      loops_resolved: loopSync.resolved,
     },
     urgent > 0 ? 'warning' : 'info',
   );
 
   let digestSent = false;
-  const now = args.now ?? new Date();
   const recipient = args.env['MARKETING_REPORT_TO']?.trim()
     || args.env['BENCHMARK_DAILY_RECAP_TO']?.trim()
     || args.env['SELF_IMPROVEMENT_REPORT_TO']?.trim()
     || '';
   const resendKey = args.env['RESEND_API_KEY']?.trim() ?? '';
   const resendFrom = args.env['RESEND_FROM_EMAIL']?.trim() ?? '';
-  if (room.actions.length > 0 && now.getUTCHours() === 12 && recipient && resendKey && resendFrom) {
+  if (now.getUTCHours() === 12 && recipient && resendKey && resendFrom) {
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
+    const [{ data: founderRows }, { data: resolvedRows }] = await Promise.all([
+      args.supabase
+        .from('agent_work_loops')
+        .select('id,title,detail,next_action,owner,blocker')
+        .eq('founder_required', true)
+        .in('state', ['assigned', 'executing', 'verifying', 'blocked'])
+        .order('due_at', { ascending: true })
+        .limit(12),
+      args.supabase
+        .from('agent_work_loops')
+        .select('id,title,owner,evidence,resolved_at')
+        .eq('state', 'completed')
+        .gte('resolved_at', dayStart.toISOString())
+        .order('resolved_at', { ascending: false })
+        .limit(20),
+    ]);
+    const founderActions = founderRows ?? [];
+    const resolvedActions = resolvedRows ?? [];
+    const mode = founderActions.length > 0 ? 'attention' : resolvedActions.length > 0 ? 'resolved' : null;
+    if (!mode) return { health: room.health, actions: loopSync.open, urgent, digestSent };
+    const event = mode === 'attention'
+      ? 'chief_of_staff_founder_attention_sent'
+      : 'chief_of_staff_resolved_digest_sent';
     const { count } = await args.supabase
       .from('app_logs')
       .select('id', { count: 'exact', head: true })
-      .eq('event', 'chief_of_staff_campaign_digest_sent')
+      .eq('event', event)
       .gte('created_at', dayStart.toISOString());
     if ((count ?? 0) === 0) {
-      const rows = room.actions
-        .slice(0, 12)
-        .map((action) => `<li style="margin:0 0 16px"><strong>${escapeHtml(action.owner)}: ${escapeHtml(action.title)}</strong><br/>${escapeHtml(action.detail)}<br/><em>Next: ${escapeHtml(action.playbook)}</em></li>`)
-        .join('');
+      const rows = mode === 'attention'
+        ? founderActions.map((action: any) =>
+            `<li style="margin:0 0 16px"><strong>${escapeHtml(String(action.owner))}: ${escapeHtml(String(action.title))}</strong><br/>${escapeHtml(String(action.detail ?? ''))}<br/><em>Your decision: ${escapeHtml(String(action.next_action ?? action.blocker ?? 'Review this exception.'))}</em></li>`
+          ).join('')
+        : resolvedActions.map((action: any) =>
+            `<li style="margin:0 0 16px"><strong>${escapeHtml(String(action.owner))}: ${escapeHtml(String(action.title))}</strong><br/>Resolved and verified at ${escapeHtml(String(action.resolved_at ?? now.toISOString()))}.</li>`
+          ).join('');
+      const subject = mode === 'attention'
+        ? `Maya: ${founderActions.length} decision${founderActions.length === 1 ? '' : 's'} need your attention`
+        : `Maya: we had ${resolvedActions.length} issue${resolvedActions.length === 1 ? '' : 's'} and they were resolved`;
+      const heading = mode === 'attention'
+        ? 'Only these decisions need you'
+        : 'Issues found and resolved';
+      const intro = mode === 'attention'
+        ? 'Routine problems are being handled by the team. These items require founder authority.'
+        : 'The team found the following issues, fixed them, and verified the result.';
       const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           from: resendFrom,
           to: [recipient],
-          subject: `Maya: ${room.actions.length} campaign action${room.actions.length === 1 ? '' : 's'} need owners`,
-          html: `<h1>Chief of Staff campaign brief</h1><p>${escapeHtml(room.summary)}</p><ol>${rows}</ol><p><a href="https://getgeopulse.com/admin/campaigns">Open Campaigns</a></p>${agentEmailSignatureHtml('maya')}`,
+          subject,
+          html: `<h1>${heading}</h1><p>${intro}</p><ol>${rows}</ol><p><a href="https://getgeopulse.com/admin/campaigns">Open Loop Control</a></p>${agentEmailSignatureHtml('maya')}`,
         }),
       });
       if (response.ok) {
         digestSent = true;
-        await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_campaign_digest_sent', {
+        await structuredLogWithClientAndWait(args.supabase, event, {
           recipient,
-          urgent_actions: urgent,
+          mode,
+          founder_actions: founderActions.length,
+          resolved_actions: resolvedActions.length,
         }, 'info');
       } else {
         await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_campaign_digest_failed', {
@@ -80,5 +135,5 @@ export async function runCampaignChiefOfStaffCheck(args: {
     }
   }
 
-  return { health: room.health, actions: room.actions.length, urgent, digestSent };
+  return { health: room.health, actions: loopSync.open, urgent, digestSent };
 }

@@ -234,6 +234,28 @@ export default {
         const supabase = createClient(supaUrl, supaKey, {
           auth: { persistSession: false, autoRefreshToken: false },
         });
+        stage('seo_editorial');
+        const editorial = await runAutonomousEditorialEngine({
+          supabase,
+          provider: createAutonomousEditorialProvider(env as unknown as Record<string, unknown> as any),
+        });
+        if (editorial.status !== 'skipped') {
+          structuredLog(
+            'seo_editorial_cron_run',
+            editorial,
+            editorial.status === 'failed' ? 'error' : editorial.status === 'rejected' ? 'warning' : 'info',
+          );
+        }
+      } catch (err) {
+        structuredError('seo_editorial_cron_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
         stage('chief_of_staff');
         await runCampaignChiefOfStaffCheck({
           supabase,

@@ -90,6 +90,43 @@ export async function runSeoNow(): Promise<void> {
     force: true,
     runType: 'manual',
   });
+  const editorialEnv = await getAutonomousEditorialEnv();
+  const editorial = await runAutonomousEditorialEngine({
+    supabase: ctx.supabase,
+    provider: createAutonomousEditorialProvider(editorialEnv),
+  });
+  await structuredLogWithClientAndWait(ctx.supabase, 'seo_manual_closed_loop_run', {
+    editorial_status: editorial.status,
+    editorial_reason: editorial.reason ?? null,
+    content_id: editorial.contentId ?? null,
+  }, editorial.status === 'failed' ? 'error' : editorial.status === 'rejected' ? 'warning' : 'info');
+  revalidatePath(AUTOMATION_PATH);
+  revalidatePath('/admin/campaigns');
+}
+
+export async function setSeoThroughput(formData: FormData): Promise<void> {
+  const ctx = await requireConsole();
+  if ('error' in ctx) return;
+  const familyBatchRaw = Number.parseInt(String(formData.get('familyBatch') ?? ''), 10);
+  const publishCapRaw = Number.parseInt(String(formData.get('publishCap') ?? ''), 10);
+  const [seo, marketing] = await Promise.all([
+    loadAutomationSetting(ctx.supabase, 'seo_agent'),
+    loadAutomationSetting(ctx.supabase, 'marketing_autopilot'),
+  ]);
+  const familyBatch = Number.isFinite(familyBatchRaw)
+    ? Math.min(Math.max(familyBatchRaw, 1), 25)
+    : configInt(seo.config, 'content_family_batch', 10);
+  const publishCap = Number.isFinite(publishCapRaw)
+    ? Math.min(Math.max(publishCapRaw, 1), 5)
+    : configInt(marketing.config, 'daily_publish_cap', 2);
+  await Promise.all([
+    updateAutomationSetting(ctx.supabase, 'seo_agent', {
+      config: { ...seo.config, content_family_batch: familyBatch },
+    }, ctx.userId),
+    updateAutomationSetting(ctx.supabase, 'marketing_autopilot', {
+      config: { ...marketing.config, daily_publish_cap: publishCap },
+    }, ctx.userId),
+  ]);
   revalidatePath(AUTOMATION_PATH);
 }
 

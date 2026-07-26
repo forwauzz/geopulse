@@ -16,6 +16,7 @@ import {
   runMarketingNow,
   runEditorialPipelineNow,
   setSeoFlag,
+  setSeoThroughput,
   runSeoNow,
 } from './actions';
 
@@ -144,6 +145,8 @@ export default async function AutomationConsolePage() {
   const discoveryMode = resolveDiscoveryMode(env);
   const geminiKey = Boolean(env.GEMINI_API_KEY?.trim());
   const marketingCap = configInt(marketing.config, 'daily_cap', 2);
+  const seoFamilyBatch = configInt(seoSetting.config, 'content_family_batch', 10);
+  const seoPublishCap = configInt(marketing.config, 'daily_publish_cap', 2);
   const card = 'rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6';
   const kicker = 'font-label text-[0.6rem] uppercase tracking-[0.13em] text-on-surface-variant';
 
@@ -231,6 +234,20 @@ export default async function AutomationConsolePage() {
           <div className="flex items-center justify-between gap-3"><dt className="font-sans text-sm text-on-surface-variant">Last Google sync</dt><dd className="text-sm text-on-background">{fmt(seoConnection?.last_synced_at ?? null)}</dd></div>
           <div className="flex items-center justify-between gap-3"><dt className="font-sans text-sm text-on-surface-variant">Schedule</dt><dd className="text-sm text-on-background">Hourly oversight · daily collection</dd></div>
         </dl>
+        <form action={setSeoThroughput} className="mt-4 flex flex-wrap items-end gap-3 rounded-xl bg-surface-container-low p-4">
+          <label className="grid gap-1">
+            <span className={kicker}>Findings wired per run</span>
+            <input name="familyBatch" type="number" min={1} max={25} defaultValue={seoFamilyBatch}
+              className="min-h-[38px] w-24 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30" />
+          </label>
+          <label className="grid gap-1">
+            <span className={kicker}>Articles published daily</span>
+            <input name="publishCap" type="number" min={1} max={5} defaultValue={seoPublishCap}
+              className="min-h-[38px] w-24 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-3 font-body text-sm text-on-surface outline-none focus:ring-2 focus:ring-tertiary/30" />
+          </label>
+          <button type="submit" className="inline-flex min-h-[38px] items-center rounded-xl bg-surface-container px-4 text-sm font-semibold text-on-background transition hover:bg-surface-container-high">Save throughput</button>
+          <p className="w-full font-sans text-[11px] text-on-surface-variant">Cost guardrail: no more than five autonomous articles per day; default is two.</p>
+        </form>
         {seoConnection?.last_error ? <p className="mt-3 text-xs text-error">{seoConnection.last_error}</p> : null}
         {seoRuns.length > 0 ? (
           <div className="mt-4 overflow-x-auto">

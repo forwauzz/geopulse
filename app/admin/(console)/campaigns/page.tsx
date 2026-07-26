@@ -54,6 +54,17 @@ function HealthBadge({ health }: { readonly health: CampaignHealth }) {
   );
 }
 
+function LoopStateBadge({ state }: { readonly state: string }) {
+  const style = state === 'completed'
+    ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+    : state === 'blocked'
+      ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+      : state === 'verifying'
+        ? 'bg-violet-500/15 text-violet-700 dark:text-violet-300'
+        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300';
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-bold capitalize ${style}`}>{state.replaceAll('_', ' ')}</span>;
+}
+
 export default async function AdminCampaignsPage({
   searchParams,
 }: {
@@ -71,7 +82,22 @@ export default async function AdminCampaignsPage({
   }
 
   const agents = await loadAgentStatuses(ctx.adminDb, env);
-  const room = await loadCampaignControlRoom({ supabase: ctx.adminDb, agents });
+  const [room, loopResult] = await Promise.all([
+    loadCampaignControlRoom({ supabase: ctx.adminDb, agents }),
+    ctx.adminDb
+      .from('agent_work_loops')
+      .select('id,source_type,source_key,parent_loop_id,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,founder_required,blocker,evidence,resolved_at,updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(100),
+  ]);
+  const loops = loopResult.data ?? [];
+  const loopCounts = {
+    action: loops.filter((loop: any) => ['assigned', 'discovered'].includes(loop.state)).length,
+    running: loops.filter((loop: any) => loop.state === 'executing').length,
+    verifying: loops.filter((loop: any) => loop.state === 'verifying').length,
+    blocked: loops.filter((loop: any) => loop.state === 'blocked' || loop.founder_required).length,
+    completed: loops.filter((loop: any) => loop.state === 'completed').length,
+  };
   const requested = (await searchParams)?.tab ?? 'overview';
   const activeTab = TABS.some((tab) => tab.key === requested) ? requested as 'overview' | CampaignLane : 'overview';
   const visible = activeTab === 'overview'
@@ -129,6 +155,74 @@ export default async function AdminCampaignsPage({
                 </Link>
               );
             })}
+          </section>
+
+          <section id="loop-control" className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Closed-loop operations</p>
+                <h2 className="mt-2 font-headline text-xl font-bold text-on-background">Loop Control</h2>
+                <p className="mt-1 text-sm text-on-surface-variant">Every Priya finding and Maya exception stays owned until evidence verifies the outcome.</p>
+              </div>
+              <Link href="/admin/automation#seo-agent" className="rounded-xl border border-outline-variant/25 px-4 py-2 text-sm font-semibold text-on-background">Open SEO evidence</Link>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {[
+                ['Needs action', loopCounts.action],
+                ['Running', loopCounts.running],
+                ['Verifying', loopCounts.verifying],
+                ['Blocked', loopCounts.blocked],
+                ['Completed', loopCounts.completed],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-xl bg-surface-container-low p-4">
+                  <p className="text-xs text-on-surface-variant">{label}</p>
+                  <p className="mt-1 text-2xl font-black text-on-background">{value}</p>
+                </div>
+              ))}
+            </div>
+            {loops.length > 0 ? (
+              <div className="mt-5 overflow-x-auto">
+                <table className="w-full min-w-[920px] border-collapse text-sm">
+                  <thead>
+                    <tr className="text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                      <th className="py-3 pr-4">Work</th>
+                      <th className="px-4 py-3">Owner</th>
+                      <th className="px-4 py-3">State</th>
+                      <th className="px-4 py-3">Deadline</th>
+                      <th className="px-4 py-3">Proof / next action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loops.slice(0, 30).map((loop: any) => {
+                      const evidence = loop.evidence && Object.keys(loop.evidence).length > 0
+                        ? Object.entries(loop.evidence).map(([key, value]) => `${key}: ${String(value)}`).join(' · ')
+                        : null;
+                      return (
+                        <tr key={loop.id} className="border-t border-outline-variant/15 align-top">
+                          <td className="py-4 pr-4">
+                            <p className="font-semibold text-on-background">{loop.title}</p>
+                            <p className="mt-1 text-xs text-on-surface-variant">{loop.lane} · {loop.detail ?? loop.source_type}</p>
+                          </td>
+                          <td className="px-4 py-4">
+                            <span className="inline-flex items-center gap-2">
+                              {teamAvatar(loop.owner) ? <Image src={teamAvatar(loop.owner)!} alt="" width={48} height={48} className="h-7 w-7 rounded-full object-cover" /> : null}
+                              {loop.owner}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4"><LoopStateBadge state={loop.founder_required ? 'blocked' : loop.state} /></td>
+                          <td className="px-4 py-4 text-on-surface-variant">{fmt(loop.due_at)}</td>
+                          <td className="max-w-md px-4 py-4 text-xs leading-5 text-on-surface-variant">
+                            {evidence ?? loop.blocker ?? loop.next_action ?? 'Waiting for production evidence.'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="mt-5 rounded-xl bg-surface-container-low px-4 py-4 text-sm text-on-surface-variant">The first hourly run will backfill the active SEO and campaign work.</p>
+            )}
           </section>
 
           <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">

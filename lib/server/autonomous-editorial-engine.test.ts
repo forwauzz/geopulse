@@ -5,9 +5,26 @@ const row = { content_id: 'content-1', slug: 'useful-page', title: 'Brief', topi
 function db() {
   const update = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }));
   return { from: vi.fn((table: string) => ({
-    select: vi.fn(() => table === 'automation_settings'
-      ? { eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { feature:'marketing_autopilot', enabled:true, kill_switch:false, config:{} }, error:null })) })) }
-      : { eq: vi.fn(() => ({ in: vi.fn(() => ({ order: vi.fn(() => ({ limit: vi.fn(async () => ({ data:[row], error:null })) })) })), limit: vi.fn(async () => ({ data: [{ title:'Existing' }], error:null })) })), limit: vi.fn(async () => ({ data: [{ title:'Existing' }], error:null })) }),
+    select: vi.fn((columns: string) => {
+      if (table === 'automation_settings') {
+        return { eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { feature:'marketing_autopilot', enabled:true, kill_switch:false, config:{} }, error:null })) })) };
+      }
+      if (table === 'agent_work_loops') {
+        return { eq: vi.fn(() => ({ in: vi.fn(() => ({ limit: vi.fn(async () => ({ data: [] })) })) })) };
+      }
+      if (columns === 'id') {
+        const chain: any = {};
+        chain.eq = vi.fn(() => chain);
+        chain.gte = vi.fn(() => chain);
+        chain.limit = vi.fn(async () => ({ data: [] }));
+        return chain;
+      }
+      if (columns === 'title') {
+        return { eq: vi.fn(() => ({ limit: vi.fn(async () => ({ data: [{ title:'Existing' }], error:null })) })) };
+      }
+      const ordered = { limit: vi.fn(async () => ({ data:[row], error:null })) };
+      return { eq: vi.fn(() => ({ in: vi.fn(() => ({ order: vi.fn(() => ordered) })) })) };
+    }),
     update,
   })) } as any;
 }

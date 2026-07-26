@@ -1,4 +1,5 @@
 import { configInt, loadAutomationSetting } from './automation-settings';
+import { runAgentLoopControl } from './agent-loop-control';
 import { decryptSeoToken, encryptSeoToken } from './seo-token-crypto';
 import {
   fetchDataForSeoRankResult,
@@ -144,10 +145,6 @@ export function aggregateSearchConsoleRows(rows: readonly SearchConsoleRow[]): S
   }));
 }
 
-function slugify(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 72);
-}
-
 async function createOpportunity(
   db: Db,
   draft: SeoOpportunityDraft,
@@ -177,57 +174,6 @@ async function createOpportunity(
     first_seen_at: now.toISOString(),
   });
   return !error;
-}
-
-async function proposeOneContentBrief(db: Db, now: Date): Promise<void> {
-  const today = isoDate(now);
-  const { data: already } = await db
-    .from('content_items')
-    .select('id')
-    .eq('metadata->>proposed_by', 'seo_agent')
-    .gte('created_at', `${today}T00:00:00.000Z`)
-    .limit(1);
-  if (already?.length) return;
-
-  const { data: opportunities } = await db
-    .from('seo_opportunities')
-    .select('id,title,evidence,recommendation,metadata,seo_keywords(keyword)')
-    .eq('status', 'queued')
-    // New articles are appropriate for a proven content gap. Striking-distance
-    // and CTR opportunities belong on the existing ranking page, not in a
-    // duplicate SEO blog post.
-    .eq('kind', 'content_gap')
-    .order('priority', { ascending: true })
-    .order('last_seen_at', { ascending: false })
-    .limit(1);
-  const opportunity = opportunities?.[0];
-  if (!opportunity?.id) return;
-  const keyword = String(opportunity.seo_keywords?.keyword ?? opportunity.title);
-  const slug = `seo-${slugify(keyword)}`;
-  const contentId = `seo-agent:${slug}`;
-  const { error } = await db.from('content_items').upsert({
-    content_id: contentId,
-    slug,
-    title: opportunity.title,
-    status: 'brief',
-    content_type: 'article',
-    target_persona: 'small_business_and_agency',
-    primary_problem: opportunity.evidence,
-    topic_cluster: keyword,
-    keyword_cluster: keyword,
-    cta_goal: 'free_scan',
-    source_type: 'internal_plus_research',
-    brief_markdown: `## Opportunity\n\n${opportunity.evidence}\n\n## Recommended angle\n\n${opportunity.recommendation}`,
-    metadata: {
-      proposed_by: 'seo_agent',
-      seo_opportunity_id: opportunity.id,
-      owner: opportunity.metadata?.owner ?? 'Jordan',
-      requires_source_backed_editorial_review: true,
-    },
-  }, { onConflict: 'content_id' });
-  if (!error) {
-    await db.from('seo_opportunities').update({ status: 'in_progress' }).eq('id', opportunity.id);
-  }
 }
 
 async function syncSearchConsole(input: {
@@ -495,7 +441,14 @@ export async function runAutonomousSeoAgent(args: {
       }
     }
 
-    await proposeOneContentBrief(args.supabase, now);
+    // Every approved Priya finding becomes owned work immediately. The loop
+    // controller reuses the canonical content and campaign tables and is
+    // idempotent, so an hourly run never creates duplicate content families.
+    await runAgentLoopControl({
+      db: args.supabase,
+      now,
+      seoBatch: Math.min(configInt(config, 'content_family_batch', 10), 25),
+    });
     const result: SeoAgentResult = {
       status: 'completed',
       searchConsoleRows,
