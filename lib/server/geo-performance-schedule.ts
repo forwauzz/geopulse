@@ -553,6 +553,25 @@ export async function runGpmScheduledSweep(args: {
             updated_at: now.toISOString(),
           })
           .eq('id', config.id);
+        if (baselineStatus === 'measured') {
+          const reportIds = (reportProof ?? []).map((row: any) => String(row.id));
+          await args.supabase
+            .from('agent_work_loops')
+            .update({
+              state: 'completed',
+              founder_required: false,
+              blocker: null,
+              evidence: {
+                verification: 'gpm_report_created',
+                report_ids: reportIds,
+                baseline_completed_at: now.toISOString(),
+              },
+              verified_at: now.toISOString(),
+              resolved_at: now.toISOString(),
+            })
+            .eq('source_type', 'campaign_action')
+            .eq('source_key', `gpm:${config.id}`);
+        }
       }
 
       if (summary.entitlementBlocked) {

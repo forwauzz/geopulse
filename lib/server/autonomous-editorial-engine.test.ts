@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runAutonomousEditorialEngine } from './autonomous-editorial-engine';
+import { mergeEditorialCandidates, runAutonomousEditorialEngine } from './autonomous-editorial-engine';
 
 const row = { content_id: 'content-1', slug: 'useful-page', title: 'Brief', topic_cluster: 'ai_search_readiness', status: 'brief', metadata: {} };
 function db() {
@@ -34,6 +34,13 @@ function db() {
 }
 
 describe('autonomous editorial engine', () => {
+  it('puts review retries ahead of the normal limited backlog without duplicates', () => {
+    expect(mergeEditorialCandidates(
+      [{ content_id: 'retry' }],
+      [{ content_id: 'normal' }, { content_id: 'retry' }],
+    ).map((row) => row.content_id)).toEqual(['retry', 'normal']);
+  });
+
   it('never writes a draft without a clean hero', async () => {
     const supabase = db();
     const result = await runAutonomousEditorialEngine({ supabase, provider: {

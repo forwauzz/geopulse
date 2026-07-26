@@ -22,6 +22,17 @@ export type EditorialProvider = {
 
 export type EditorialRunResult = { status: 'created' | 'skipped' | 'rejected' | 'failed'; reason?: string; contentId?: string };
 
+export function mergeEditorialCandidates(
+  retryRows: readonly any[],
+  seoRows: readonly any[],
+): any[] {
+  const retryIds = new Set(retryRows.map((row: any) => String(row.content_id)));
+  return [
+    ...retryRows,
+    ...seoRows.filter((row: any) => !retryIds.has(String(row.content_id))),
+  ];
+}
+
 export async function runAutonomousEditorialEngine(args: {
   supabase: Db;
   provider: EditorialProvider;
@@ -43,6 +54,15 @@ export async function runAutonomousEditorialEngine(args: {
   if ((publishedToday ?? []).length >= dailyPublishCap) {
     return { status: 'skipped', reason: 'daily_publish_cap' };
   }
+
+  const retryCandidatesResult = await args.supabase
+    .from('content_items')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
+    .eq('content_type', 'article')
+    .eq('metadata->>editorial_retry_required', 'true')
+    .in('status', ['brief', 'draft'])
+    .limit(10);
+  if (retryCandidatesResult.error) return { status: 'failed', reason: retryCandidatesResult.error.message };
 
   const seoCandidatesResult = await args.supabase
     .from('content_items')
@@ -66,8 +86,12 @@ export async function runAutonomousEditorialEngine(args: {
     .order('updated_at', { ascending: true })
     .limit(25);
   if (fallbackResult.error) return { status: 'failed', reason: fallbackResult.error.message };
-  const candidates = seoCandidatesResult.data?.length
-    ? seoCandidatesResult.data
+  const prioritizedSeoCandidates = mergeEditorialCandidates(
+    retryCandidatesResult.data ?? [],
+    seoCandidatesResult.data ?? [],
+  );
+  const candidates = prioritizedSeoCandidates.length
+    ? prioritizedSeoCandidates
     : fallbackResult.data;
 
   const orderedCandidates = [...(candidates ?? [])].sort((left: any, right: any) => {
