@@ -34,6 +34,20 @@ export type SeoContentFamilyMember = {
   slaHours: number;
 };
 
+export function isContentLoopSatisfied(item: {
+  content_type?: string | null;
+  status?: string | null;
+  canonical_url?: string | null;
+} | null | undefined): boolean {
+  if (item?.content_type === 'article') {
+    return item.status === 'published' && Boolean(item.canonical_url);
+  }
+  if (item?.content_type === 'newsletter' || item?.content_type === 'social_post') {
+    return item.status === 'published';
+  }
+  return false;
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -239,18 +253,16 @@ export async function syncSeoOpportunityLoops(args: {
         parent_loop_id: parent.id,
         lane: member.contentType === 'article' ? 'seo' : member.contentType === 'newsletter' ? 'email' : 'social',
         owner: member.owner,
-        state: member.contentType === 'social_post' ? 'completed' : 'assigned',
+        state: 'assigned',
         severity: opportunity.priority === 1 ? 'today' : 'normal',
         title: member.title,
         detail: member.goal,
         next_action: member.goal,
         due_at: addHours(opportunity.first_seen_at, member.slaHours),
         founder_required: false,
-        resolved_at: member.contentType === 'social_post' ? now.toISOString() : null,
-        verified_at: member.contentType === 'social_post' ? now.toISOString() : null,
-        evidence: member.contentType === 'social_post'
-          ? { content_item_id: item.id, status: 'idea_created' }
-          : {},
+        resolved_at: null,
+        verified_at: null,
+        evidence: {},
         metadata: { content_item_id: item.id, content_type: member.contentType },
       });
       if (child) loops += 1;
@@ -275,8 +287,8 @@ export async function reconcileContentLoops(db: Db, now = new Date()): Promise<n
     .from('agent_work_loops')
     .select('id,source_key,state')
     .eq('source_type', 'content_item')
-    .in('state', ['assigned', 'executing', 'verifying', 'blocked'])
-    .limit(100);
+    .in('state', ['assigned', 'executing', 'verifying', 'blocked', 'completed'])
+    .limit(250);
   const loops = loopRows ?? [];
   if (!loops.length) return 0;
   const keys = loops.map((row: any) => String(row.source_key));
@@ -290,12 +302,23 @@ export async function reconcileContentLoops(db: Db, now = new Date()): Promise<n
   let completed = 0;
   for (const loop of loops) {
     const item = byKey.get(String(loop.source_key));
-    const satisfied = item?.content_type === 'article'
-      ? item.status === 'published' && Boolean(item.canonical_url)
-      : item?.content_type === 'newsletter'
-        ? ['draft', 'approved', 'published'].includes(String(item.status ?? '')) && Boolean(item.draft_markdown)
-        : ['approved', 'published'].includes(String(item?.status ?? ''));
-    if (!satisfied) continue;
+    const satisfied = isContentLoopSatisfied(item);
+    if (!satisfied) {
+      if (
+        loop.state === 'completed'
+        && (item?.content_type === 'newsletter' || item?.content_type === 'social_post')
+      ) {
+        await db.from('agent_work_loops').update({
+          state: 'assigned',
+          evidence: { verification: 'publication_not_yet_proven' },
+          verified_at: null,
+          resolved_at: null,
+          blocker: null,
+        }).eq('id', loop.id);
+      }
+      continue;
+    }
+    if (loop.state === 'completed') continue;
     await db.from('agent_work_loops').update({
       state: 'completed',
       evidence: {
@@ -385,15 +408,27 @@ export async function closeSatisfiedSeoParents(db: Db, now = new Date()): Promis
     .from('agent_work_loops')
     .select('id,source_key')
     .eq('source_type', 'seo_opportunity')
-    .in('state', ['assigned', 'executing', 'verifying'])
-    .limit(100);
+    .in('state', ['assigned', 'executing', 'verifying', 'completed'])
+    .limit(250);
   let completed = 0;
   for (const parent of parents ?? []) {
     const { data: children } = await db
       .from('agent_work_loops')
       .select('state,evidence')
       .eq('parent_loop_id', parent.id);
-    if (!children?.length || children.some((child: any) => child.state !== 'completed' && child.state !== 'dismissed')) {
+    const hasOpenChild = !children?.length
+      || children.some((child: any) => child.state !== 'completed' && child.state !== 'dismissed');
+    if (hasOpenChild) {
+      await db.from('agent_work_loops').update({
+        state: 'executing',
+        evidence: { verification: 'waiting_for_all_channels_to_publish' },
+        verified_at: null,
+        resolved_at: null,
+      }).eq('id', parent.id);
+      await db.from('seo_opportunities').update({
+        status: 'in_progress',
+        completed_at: null,
+      }).eq('id', parent.source_key);
       continue;
     }
     await db.from('agent_work_loops').update({

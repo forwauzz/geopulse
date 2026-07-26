@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
+import { AI_ENGINES, EngineLogo } from '@/components/ai-engines';
 import { ScanForm } from '@/components/scan-form';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
@@ -53,6 +55,14 @@ const faqItems = [
     answer: 'Yes. Agencies can manage client portfolios, run recurring measurements, and share client-ready scorecards and reports.',
   },
 ] as const;
+
+const previewEngineScores: Record<string, string> = {
+  chatgpt: '78%',
+  google: '69%',
+  perplexity: '61%',
+};
+
+const previewEngines = AI_ENGINES.filter((engine) => engine.key in previewEngineScores);
 
 async function loadBaseUrl(): Promise<string> {
   const env = await getPaymentApiEnv();
@@ -154,6 +164,21 @@ export default async function HomePage({
           </div>
           <p className="mt-3 font-body text-xs text-on-surface-variant">Free first audit · No credit card · Results in about 90 seconds</p>
 
+          <div className="mx-auto mt-8 max-w-5xl">
+            <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
+              Measure visibility across the engines buyers use
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-10 gap-y-6 rounded-2xl border border-outline-variant/25 bg-white px-6 py-6 shadow-sm md:gap-x-14 md:px-10">
+              {AI_ENGINES.map((engine) => (
+                <EngineLogo
+                  key={engine.key}
+                  engine={engine}
+                  className="h-9 w-auto max-w-[150px] md:h-12 md:max-w-[190px]"
+                />
+              ))}
+            </div>
+          </div>
+
           <div className="mx-auto mt-10 overflow-hidden rounded-[2rem] border border-outline-variant/30 bg-surface-container-lowest p-3 text-left shadow-[0_24px_80px_rgba(15,23,42,0.12)] md:p-5">
             <div className="rounded-[1.35rem] border border-outline-variant/20 bg-surface-container-low p-5 md:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/20 pb-5">
@@ -178,10 +203,10 @@ export default async function HomePage({
                 <div className="rounded-2xl bg-surface-container-lowest p-5">
                   <p className="font-body text-xs text-on-surface-variant">Visibility by engine</p>
                   <div className="mt-5 space-y-4">
-                    {[['ChatGPT', '78%'], ['Gemini', '69%'], ['Perplexity', '61%']].map(([engine, value]) => (
-                      <div key={engine} className="flex items-center justify-between gap-4">
-                        <span className="font-body text-sm font-medium text-on-background">{engine}</span>
-                        <span className="font-mono text-xs text-on-surface-variant">{value}</span>
+                    {previewEngines.map((engine) => (
+                      <div key={engine.key} className="flex items-center justify-between gap-4">
+                        <EngineLogo engine={engine} className="h-7 w-auto max-w-[130px]" />
+                        <span className="font-mono text-xs text-on-surface-variant">{previewEngineScores[engine.key]}</span>
                       </div>
                     ))}
                   </div>
@@ -240,17 +265,41 @@ export default async function HomePage({
 
       <section className="px-5 py-16 sm:px-6 md:py-20">
         <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-2">
-          <div className="rounded-3xl bg-[#151a2d] p-8 text-white md:p-10">
-            <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-[#aab4ff]">For businesses</p>
-            <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight">Turn uncertainty into your next move.</h2>
-            <p className="mt-4 max-w-lg font-body leading-7 text-white/70">Get a baseline automatically, see how buyers find you in AI, and know which website and content fixes deserve attention.</p>
-            <Link href="/#audit" className="mt-7 inline-flex rounded-xl bg-white px-5 py-3 font-body text-sm font-semibold text-[#151a2d]">Run my free audit</Link>
+          <div className="overflow-hidden rounded-3xl bg-[#151a2d] text-white">
+            <div className="relative h-64">
+              <Image
+                src="/media/small-business-building.webp"
+                alt="A thriving independent business in a modern neighborhood"
+                fill
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#151a2d] via-transparent to-transparent" aria-hidden />
+            </div>
+            <div className="p-8 pt-6 md:p-10 md:pt-7">
+              <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-[#aab4ff]">For businesses</p>
+              <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight">Turn uncertainty into your next move.</h2>
+              <p className="mt-4 max-w-lg font-body leading-7 text-white/70">Get a baseline automatically, see how buyers find you in AI, and know which website and content fixes deserve attention.</p>
+              <Link href="/#audit" className="mt-7 inline-flex rounded-xl bg-white px-5 py-3 font-body text-sm font-semibold text-[#151a2d]">Run my free audit</Link>
+            </div>
           </div>
-          <div className="rounded-3xl bg-primary p-8 text-on-primary md:p-10">
-            <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] opacity-75">For agencies</p>
-            <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight">Prove value across every client.</h2>
-            <p className="mt-4 max-w-lg font-body leading-7 opacity-80">Benchmark client visibility, monitor progress, and send polished scorecards and recurring reports from one portfolio.</p>
-            <Link href="/solutions/agencies" className="mt-7 inline-flex rounded-xl bg-on-primary px-5 py-3 font-body text-sm font-semibold text-primary">Explore agency tools</Link>
+          <div className="overflow-hidden rounded-3xl bg-primary text-on-primary">
+            <div className="relative h-64">
+              <Image
+                src="/media/agency-brainstorm.webp"
+                alt="A marketing agency team brainstorming a client growth campaign"
+                fill
+                sizes="(min-width: 1024px) 50vw, 100vw"
+                className="object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-primary via-transparent to-transparent" aria-hidden />
+            </div>
+            <div className="p-8 pt-6 md:p-10 md:pt-7">
+              <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] opacity-75">For agencies</p>
+              <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight">Prove value across every client.</h2>
+              <p className="mt-4 max-w-lg font-body leading-7 opacity-80">Benchmark client visibility, monitor progress, and send polished scorecards and recurring reports from one portfolio.</p>
+              <Link href="/solutions/agencies" className="mt-7 inline-flex rounded-xl bg-on-primary px-5 py-3 font-body text-sm font-semibold text-primary">Explore agency tools</Link>
+            </div>
           </div>
         </div>
       </section>

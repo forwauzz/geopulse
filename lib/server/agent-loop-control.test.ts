@@ -3,6 +3,7 @@ import {
   attemptSafeCampaignRemediation,
   buildSeoNewsletterDerivative,
   buildSeoContentFamily,
+  isContentLoopSatisfied,
 } from './agent-loop-control';
 
 describe('closed-loop agent control', () => {
@@ -33,6 +34,26 @@ describe('closed-loop agent control', () => {
     expect(markdown).toContain('Useful evidence.');
     expect(markdown).toContain('[Read the complete guide](/blog/ai-visibility-audit)');
     expect(markdown).not.toContain('# Old title');
+  });
+
+  it('requires publication evidence before closing newsletter and social loops', () => {
+    expect(isContentLoopSatisfied({
+      content_type: 'newsletter',
+      status: 'draft',
+      canonical_url: '/blog/example',
+    })).toBe(false);
+    expect(isContentLoopSatisfied({
+      content_type: 'social_post',
+      status: 'approved',
+    })).toBe(false);
+    expect(isContentLoopSatisfied({
+      content_type: 'newsletter',
+      status: 'published',
+    })).toBe(true);
+    expect(isContentLoopSatisfied({
+      content_type: 'social_post',
+      status: 'published',
+    })).toBe(true);
   });
 
   it('skips a 403 prospect instead of leaving Maya with a repeating open loop', async () => {

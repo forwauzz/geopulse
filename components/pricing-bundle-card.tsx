@@ -229,14 +229,20 @@ export function PricingBundleCard({
     });
   }
 
-  const ctaLabel = isCurrentPlan
-    ? 'Current plan'
-    : trialDays > 0
-      ? `Start free ${trialDays}-day trial`
-      : 'Subscribe';
+  const trialCta = bundleKey === 'startup_dev'
+    ? 'Start Business trial'
+    : bundleKey === 'agency_core'
+      ? 'Start Agency trial'
+      : 'Start Agency Scale trial';
+  const ctaLabel = isCurrentPlan ? 'Current plan' : trialDays > 0 ? trialCta : 'Subscribe';
 
   return (
-    <article className={`flex flex-col rounded-2xl bg-surface-container-low p-8 shadow-float${!isFree ? ' border-t-2 border-gold/40' : ''}`}>
+    <article className={`relative flex flex-col rounded-2xl bg-surface-container-low p-7 shadow-float${bundleKey === 'agency_core' ? ' border-2 border-primary/45' : ' border border-outline-variant/20'}`}>
+      {bundleKey === 'agency_core' ? (
+        <span className="absolute right-5 top-5 rounded-full bg-primary px-3 py-1 font-body text-[10px] font-semibold uppercase tracking-wider text-on-primary">
+          Most popular
+        </span>
+      ) : null}
       {/* Header */}
       <div>
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">

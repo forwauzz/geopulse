@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
@@ -24,17 +23,17 @@ const pricingFaqItems = [
   {
     question: 'What is included in the free audit?',
     answer:
-      'The free audit gives you a first-pass score, the highest-priority blockers, and a practical first move for crawl access, trust, metadata, and extractability.',
+      'The free audit gives you a readiness score, your highest-priority visibility blockers, and a practical first move. No account or credit card is required.',
   },
   {
-    question: 'When should I upgrade to a paid bundle?',
+    question: 'When should a business upgrade?',
     answer:
-      'Upgrade when you need ongoing audit history, dashboard access, workspace workflows, or a shareable deep audit artifact for a team or client.',
+      'Upgrade when you want GEO-Pulse to keep tracking your AI visibility, competitors, website improvements, and progress instead of relying on a one-time snapshot.',
   },
   {
-    question: 'Which pages should I audit first?',
+    question: 'Which agency plan should I choose?',
     answer:
-      'Start with the homepage, pricing page, product pages, docs, and any public page that explains your offer or captures high-intent demand.',
+      'Choose Agency when you need recurring client measurement and reporting. Choose Agency Scale when weekly monitoring, unlimited prompts, and a client-facing portal are central to your service.',
   },
 ] as const;
 
@@ -43,38 +42,39 @@ const BUNDLE_META: Record<
   { name: string; tagline: string; features: string[] }
 > = {
   startup_dev: {
-    name: 'Startup Dev',
-    tagline: 'Full audit platform for early-stage teams tracking AI search visibility.',
+    name: 'Business',
+    tagline: 'For one business ready to improve and monitor its visibility.',
     features: [
-      'Same scan signals as the homepage audit, plus the full platform',
-      'Unlimited deep audit reports',
-      'Startup workspace dashboard',
-      'Audit history & comparison',
-      'GitHub integration',
-      'Slack delivery',
+      'Automatic AI visibility baseline',
+      'Monthly tracking for up to 10 buyer prompts',
+      'Website readiness audits and priority fixes',
+      'Competitor and citation monitoring',
+      'Full history and progress dashboard',
+      'Reports delivered by email',
     ],
   },
   agency_core: {
-    name: 'Agency Core',
-    tagline: 'Multi-client audit management for agencies managing AI search at scale.',
+    name: 'Agency',
+    tagline: 'For agencies proving search visibility progress across clients.',
     features: [
-      'Everything in Startup Dev',
-      'Agency account dashboard',
-      'Multi-client management',
-      'Client audit history',
-      'Bundle entitlement controls',
-      'Team member access',
+      'Everything in Business',
+      'Multi-client agency portfolio',
+      'Monthly or biweekly monitoring',
+      'Up to 15 buyer prompts per client run',
+      'Shareable scorecards and recurring reports',
+      'Email and Slack delivery',
     ],
   },
   agency_pro: {
-    name: 'Agency Pro',
-    tagline: 'Full agency platform with advanced benchmarking and white-label reporting.',
+    name: 'Agency Scale',
+    tagline: 'For agencies making GEO a recurring, client-facing service.',
     features: [
-      'Everything in Agency Core',
-      'Advanced benchmark tracking',
-      'Competitor cohort analysis',
-      'Priority support',
-      'Custom model policy controls',
+      'Everything in Agency',
+      'Weekly client monitoring',
+      'Unlimited prompts per client run',
+      'Advanced competitor benchmarking',
+      'White-label reporting',
+      'Email, Slack, and portal delivery',
     ],
   },
 };
@@ -204,41 +204,34 @@ export default async function PricingPage() {
   });
 
   return (
-    <main className="mx-auto max-w-screen-2xl px-6 py-16 md:px-10 md:py-24">
+    <main className="mx-auto max-w-6xl px-6 py-14 md:px-10 md:py-20">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
 
-      <section className="mx-auto max-w-3xl text-center">
+      <section className="mx-auto max-w-4xl text-center">
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
           Pricing
         </p>
-        <h1 className="mt-4 font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl">
-          Start free. Subscribe when you need the full platform.
+        <h1 className="mt-4 text-balance font-headline text-4xl font-semibold leading-[1.05] tracking-[-0.04em] text-on-background md:text-6xl">
+          Start free. Pay when you want GEO-Pulse working continuously.
         </h1>
-        <p className="mt-6 font-body text-lg leading-relaxed text-on-surface-variant">
-          Run your first AI search readiness scan for free. Upgrade to a bundle when your team
-          needs ongoing audits, dashboards, or client management.
+        <p className="mx-auto mt-6 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant">
+          The free audit shows your starting point. Paid plans keep measuring AI visibility,
+          competitors, citations, and progress—whether you manage one business or many clients.
         </p>
-        <p className="mt-3 font-body text-sm text-on-surface-variant">
-          Reviewed by{' '}
-          <Link href="/about" className="font-semibold text-primary hover:underline">
-            {SITE_AUTHOR_NAME}
-          </Link>
-          .
-        </p>
-        <p className="mt-4 font-body text-sm text-on-surface-variant">
-          Need a trust anchor first? Visit the{' '}
-          <Link href="/about" className="font-semibold text-primary hover:underline">
-            About page
-          </Link>
-          . Read the{' '}
-          <Link href="/privacy" className="font-semibold text-primary hover:underline">
-            Privacy Policy
-          </Link>{' '}
-          before checkout if you want the data handling details.
-        </p>
+      </section>
+
+      <section className="mx-auto mt-9 grid max-w-3xl gap-3 text-left sm:grid-cols-2">
+        <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-5">
+          <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-primary">One business</p>
+          <p className="mt-2 font-body text-sm leading-6 text-on-surface-variant">Choose Business for your own website, competitors, and monthly progress.</p>
+        </div>
+        <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-5">
+          <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-primary">Client portfolio</p>
+          <p className="mt-2 font-body text-sm leading-6 text-on-surface-variant">Choose an Agency plan to manage, measure, and report across clients.</p>
+        </div>
       </section>
 
       <div className="mx-auto mt-10 max-w-3xl">
@@ -247,7 +240,7 @@ export default async function PricingPage() {
         </Suspense>
       </div>
 
-      <section id="agency-plans" className="mt-12 grid scroll-mt-24 gap-8 sm:grid-cols-2 xl:grid-cols-3">
+      <section id="plans" className="mt-10 grid scroll-mt-24 gap-6 md:grid-cols-3">
         {cards.map((card) => (
           <Suspense key={card.bundleKey} fallback={null}>
             <PricingBundleCard {...card} />
@@ -255,8 +248,8 @@ export default async function PricingPage() {
         ))}
       </section>
 
-      <p className="mt-12 text-center font-body text-sm text-on-surface-variant">
-        All paid plans include a free trial. Credit card required. Cancel anytime.
+      <p className="mt-8 text-center font-body text-sm text-on-surface-variant">
+        Every paid plan includes a 7-day trial. Credit card required. Cancel before the trial ends and you will not be charged.
       </p>
 
       <section className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-10 lg:grid-cols-12">
@@ -265,10 +258,7 @@ export default async function PricingPage() {
           <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background md:text-3xl">
             Direct answers before checkout
           </h2>
-          <p className="mt-4 font-body text-sm leading-7 text-on-surface-variant">
-            This page should answer what the free audit includes, when the paid bundle matters, and
-            which pages are worth auditing first.
-          </p>
+          <p className="mt-4 font-body text-sm leading-7 text-on-surface-variant">Choose based on who you manage and how often you need proof of progress.</p>
         </div>
         <div className="grid grid-cols-1 gap-4 lg:col-span-8">
           {pricingFaqItems.map((item) => (
@@ -283,42 +273,6 @@ export default async function PricingPage() {
             </div>
           ))}
         </div>
-      </section>
-
-      <section className="mx-auto mt-12 max-w-3xl rounded-2xl bg-surface-container-low p-6 shadow-float">
-        <p className="font-label text-xs uppercase tracking-widest text-primary">References</p>
-        <ul className="mt-4 grid gap-3 md:grid-cols-3">
-          <li>
-            <a
-              href="https://stripe.com/docs/payments/checkout"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
-            >
-              Stripe Checkout docs
-            </a>
-          </li>
-          <li>
-            <a
-              href="https://developers.cloudflare.com/turnstile/"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
-            >
-              Cloudflare Turnstile docs
-            </a>
-          </li>
-          <li>
-            <a
-              href="https://developers.google.com/search/docs/crawling-indexing/robots/intro"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-xl border border-outline-variant bg-surface-container-lowest px-4 py-3 text-sm font-medium text-on-surface transition hover:bg-surface-container-high"
-            >
-              Crawlability guidance
-            </a>
-          </li>
-        </ul>
       </section>
     </main>
   );
