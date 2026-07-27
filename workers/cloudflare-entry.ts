@@ -16,6 +16,7 @@ import { runScheduledStartupExecutionDispatch } from '../lib/server/startup-exec
 import { runScheduledStartupSlackAutoPost } from '../lib/server/startup-slack-schedule';
 import { runGpmScheduledSweep } from '../lib/server/geo-performance-schedule';
 import { buildGpmEntitlementsMap } from '../lib/server/geo-performance-entitlements';
+import { runAgencyBaselineCompletionSweep } from '../lib/server/agency-client-baseline';
 import {
   fetchAndBuildBenchmarkDailyRecap,
   sendBenchmarkDailyRecap,
@@ -352,7 +353,18 @@ export default {
           GPM_REPORT_R2_PUBLIC_BASE: envRecord['GPM_REPORT_R2_PUBLIC_BASE'],
           RESEND_API_KEY:          resendKey || undefined,
           RESEND_FROM_EMAIL:       resendFrom || undefined,
+          GPM_MONTHLY_SPEND_CAP_USD: envRecord['GPM_MONTHLY_SPEND_CAP_USD'],
+          GPM_CLIENT_ACTIVATION_CAP_USD: envRecord['GPM_CLIENT_ACTIVATION_CAP_USD'],
         };
+        const baselineSweep = await runAgencyBaselineCompletionSweep({
+          supabase,
+          env: env as unknown as Parameters<typeof runAgencyBaselineCompletionSweep>[0]['env'],
+          reportBucket: (env as any).REPORT_FILES,
+          limit: 1,
+        });
+        if (baselineSweep.eligible > 0) {
+          structuredLog('agency_baseline_completion_tick', baselineSweep, 'info');
+        }
         const { data: configStubs } = await supabase
           .from('client_benchmark_configs')
           .select('id, startup_workspace_id, agency_account_id');

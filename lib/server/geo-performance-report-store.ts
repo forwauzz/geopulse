@@ -141,6 +141,18 @@ export async function storeGpmReport(args: {
   // 5. Persist a versioned record. Including the immutable run id in the stored window key
   // preserves every recheck while the payload keeps the clean customer-facing cadence window.
   const storedWindowKey = `${windowDate}@${runGroupId}`;
+  const recipients = recipientsFromMetadata(config.report_email, config.metadata);
+  const reportMetadata: Record<string, unknown> = {
+    model_id: payload.modelId,
+    citation_rate: payload.citationRate,
+    visibility_pct: payload.visibilityPct,
+    industry_rank: payload.industryRank,
+    prompt_count: payload.prompts.length,
+    cadence_window: windowDate,
+    report_run_group_id: runGroupId,
+    email_status: recipients.length > 0 ? 'pending' : 'not_configured',
+    recipient_count: recipients.length,
+  };
   const { data: inserted, error: insertErr } = await args.supabase
     .from('gpm_reports')
     .insert(
@@ -156,15 +168,7 @@ export async function storeGpmReport(args: {
         report_payload_version: '1',
         narrative_generated: narrativeGenerated,
         generated_at: new Date().toISOString(),
-        metadata: {
-          model_id: payload.modelId,
-          citation_rate: payload.citationRate,
-          visibility_pct: payload.visibilityPct,
-          industry_rank: payload.industryRank,
-          prompt_count: payload.prompts.length,
-          cadence_window: windowDate,
-          report_run_group_id: runGroupId,
-        },
+        metadata: reportMetadata,
       }
     )
     .select('id')
@@ -177,7 +181,7 @@ export async function storeGpmReport(args: {
   // 6. Send email report if configured (non-fatal)
   const resendKey  = args.env.RESEND_API_KEY?.trim();
   const resendFrom = args.env.RESEND_FROM_EMAIL?.trim();
-  const recipients = recipientsFromMetadata(config.report_email, config.metadata);
+  let emailStatus = recipients.length > 0 ? 'not_sent_provider_unconfigured' : 'not_configured';
   if (recipients.length > 0 && resendKey && resendFrom) {
     try {
       const idempotencyKey = `gpm-report/${config.id}/${platform}/${windowDate}/${runGroupId}`;
@@ -195,21 +199,40 @@ export async function storeGpmReport(args: {
         idempotencyKey,
       });
       if (!emailResult.ok) {
+        emailStatus = 'failed';
         structuredError('gpm_report_email_failed', {
           config_id: config.id,
           report_id: reportId,
           message: emailResult.message,
         });
       } else {
+        emailStatus = 'sent';
         structuredLog('gpm_report_email_sent', { config_id: config.id, report_id: reportId, recipient_count: recipients.length });
       }
     } catch (err) {
+      emailStatus = 'failed';
       structuredError('gpm_report_email_exception', {
         config_id: config.id,
         report_id: reportId,
         error: err instanceof Error ? err.message : 'unknown',
       });
     }
+  }
+  const reportTable = args.supabase.from('gpm_reports') as unknown as {
+    update?: (payload: Record<string, unknown>) => {
+      eq(column: string, value: string): Promise<unknown>;
+    };
+  };
+  if (typeof reportTable.update === 'function') {
+    await reportTable
+      .update({
+        metadata: {
+          ...reportMetadata,
+          email_status: emailStatus,
+          email_status_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', reportId);
   }
 
   structuredLog('gpm_report_store_done', {

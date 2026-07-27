@@ -11,6 +11,7 @@ import { buildGpmEntitlementsMap } from '@/lib/server/geo-performance-entitlemen
 import { executeGpmClientRun, resolveGpmPlatformModelMap } from '@/lib/server/geo-performance-schedule';
 import { parsePromptCsv } from '@/lib/server/prompt-csv';
 import { parseReportRecipients } from '@/lib/shared/report-recipients';
+import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -352,6 +353,49 @@ export async function runClientVisibilityCheck(formData: FormData): Promise<void
   const launched = summary.platformResults.filter((result) => result.status === 'launched').length;
   revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
   redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&visibility=${launched > 0 ? 'checked' : 'failed'}`);
+}
+
+export async function completeClientBaseline(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    clientId: z.string().uuid(),
+    agencyAccountId: z.string().uuid(),
+    reportEmail: z.string().trim().email().optional(),
+  }).safeParse({
+    clientId: formData.get('clientId'),
+    agencyAccountId: formData.get('agencyAccountId'),
+    reportEmail: formData.get('reportEmail') || undefined,
+  });
+  if (!parsed.success) return;
+  const auth = await authorizedAdmin(parsed.data);
+  if (!auth) return;
+  const [env, editorialEnv] = await Promise.all([
+    getPaymentApiEnv(),
+    getAutonomousEditorialEnv(),
+  ]);
+  const result = await completeAgencyClientBaseline({
+    supabase: auth.admin,
+    env,
+    agencyAccountId: parsed.data.agencyAccountId,
+    clientId: parsed.data.clientId,
+    userId: auth.user.id,
+    reportEmail: parsed.data.reportEmail ?? auth.user.email ?? null,
+    reportBucket: editorialEnv.REPORT_FILES
+      ? {
+          put: (key, value, options) =>
+            editorialEnv.REPORT_FILES!.put(
+              key,
+              value instanceof Uint8Array ? new Uint8Array(value).slice().buffer : value,
+              options ? { httpMetadata: { contentType: options.httpMetadata?.contentType } } : undefined,
+            ),
+        }
+      : undefined,
+  });
+  revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
+  revalidatePath('/dashboard/visibility');
+  redirect(
+    `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}` +
+    `&baseline=${result.ok ? 'complete' : encodeURIComponent(result.reason ?? 'failed')}`,
+  );
 }
 
 export async function createClientShareLink(formData: FormData): Promise<void> {

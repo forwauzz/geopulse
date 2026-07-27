@@ -12,6 +12,13 @@ import { runBenchmarkGroupSkeleton } from './benchmark-runner';
 import { storeGpmReport, type GpmReportStoreEnvLike, type GpmR2BucketLike } from './geo-performance-report-store';
 import { sendGpmReportSlackSummary } from './geo-performance-slack';
 import { structuredError, structuredLog } from './structured-log';
+import {
+  estimateGpmActivationCostUsd,
+  estimateGpmPlatformCostUsd,
+  isGpmSpendAllowed,
+  loadGpmMonthSpendUsd,
+  resolveGpmSpendPolicy,
+} from './gpm-spend-guard';
 
 export const GPM_RUN_MODE = 'blind_discovery' as const;
 
@@ -62,6 +69,7 @@ export type GpmRunSummary = {
     readonly platform: string;
     readonly status: 'launched' | 'skipped_existing' | 'failed';
     readonly runGroupId: string | null;
+    readonly estimatedCostUsd: number;
   }[];
 };
 
@@ -250,8 +258,12 @@ export async function executeGpmClientRun(args: {
   }
 
   const platformResults: GpmRunSummary['platformResults'][number][] = [];
+  const configuredPromptCount = Math.max(
+    1,
+    Number(args.config.metadata?.['prompt_count'] ?? 10) || 10,
+  );
 
-  for (const platform of args.config.platforms_enabled) {
+  for (const [platformIndex, platform] of args.config.platforms_enabled.entries()) {
     const modelId = args.platformModelMap[platform as keyof GpmPlatformModelMap];
     if (!modelId) {
       structuredLog('gpm_platform_skipped_no_model', {
@@ -267,11 +279,20 @@ export async function executeGpmClientRun(args: {
       : buildGpmRunKey(args.config.id, platform, windowDate);
     const existing = await repo.getRunGroupByScheduleKey(runKey);
     if (existing) {
-      platformResults.push({ platform, status: 'skipped_existing', runGroupId: existing.id });
+      platformResults.push({
+        platform,
+        status: 'skipped_existing',
+        runGroupId: existing.id,
+        estimatedCostUsd: 0,
+      });
       continue;
     }
 
     try {
+      const estimatedCostUsd = estimateGpmPlatformCostUsd(
+        platform as GpmPlatform,
+        configuredPromptCount,
+      );
       const result = await runBenchmarkGroupSkeleton(
         args.supabase,
         {
@@ -293,6 +314,9 @@ export async function executeGpmClientRun(args: {
             gpm_location: args.config.location,
             trigger_source: args.triggerSource ?? 'worker_cron',
             schedule_run_key: runKey, // reuses getRunGroupByScheduleKey lookup
+            estimated_cost_usd: estimatedCostUsd,
+            spend_estimate_version: 'gpm-conservative-v1',
+            prompt_count_budgeted: configuredPromptCount,
           },
         },
         args.adapter
@@ -313,7 +337,16 @@ export async function executeGpmClientRun(args: {
         try {
           const storeResult = await storeGpmReport({
             supabase: args.supabase,
-            config: args.config,
+            // Generate every provider artifact, but send one client email per measurement cycle.
+            // The final provider is the delivery carrier; the signed-out scorecard combines all
+            // provider results.
+            config: platformIndex === args.config.platforms_enabled.length - 1
+              ? args.config
+              : {
+                  ...args.config,
+                  report_email: null,
+                  metadata: { ...args.config.metadata, report_recipients: [] },
+                },
             runGroupId: result.runGroupId,
             platform,
             windowDate,
@@ -362,7 +395,12 @@ export async function executeGpmClientRun(args: {
         window_date: windowDate,
       });
 
-      platformResults.push({ platform, status: 'launched', runGroupId: result.runGroupId });
+      platformResults.push({
+        platform,
+        status: 'launched',
+        runGroupId: result.runGroupId,
+        estimatedCostUsd,
+      });
     } catch (error) {
       structuredError('gpm_client_run_failed', {
         config_id: args.config.id,
@@ -371,7 +409,12 @@ export async function executeGpmClientRun(args: {
         window_date: windowDate,
         error: error instanceof Error ? error.message : 'unknown',
       });
-      platformResults.push({ platform, status: 'failed', runGroupId: null });
+      platformResults.push({
+        platform,
+        status: 'failed',
+        runGroupId: null,
+        estimatedCostUsd: 0,
+      });
     }
   }
 
@@ -399,6 +442,8 @@ export type GpmScheduleEnvLike = {
   // Email delivery
   readonly RESEND_API_KEY?: string;
   readonly RESEND_FROM_EMAIL?: string;
+  readonly GPM_MONTHLY_SPEND_CAP_USD?: string;
+  readonly GPM_CLIENT_ACTIVATION_CAP_USD?: string;
 };
 
 export function resolveGpmPlatformModelMap(env: GpmScheduleEnvLike): GpmPlatformModelMap {
@@ -451,6 +496,8 @@ export async function runGpmScheduledSweep(args: {
     resolveGpmEnabledPlatforms(args.env.GPM_ENABLED_PLATFORMS)
   );
   const adapter = args.adapter ?? createBenchmarkExecutionAdapter(args.env as any);
+  const spendPolicy = resolveGpmSpendPolicy(args.env);
+  let monthSpendUsd = await loadGpmMonthSpendUsd(args.supabase, now).catch(() => 0);
 
   let launchedRuns = 0;
   let skippedRuns = 0;
@@ -464,6 +511,13 @@ export async function runGpmScheduledSweep(args: {
   });
 
   for (const config of allConfigs) {
+    const nextScheduledAt = typeof config.metadata?.['next_scheduled_at'] === 'string'
+      ? Date.parse(String(config.metadata['next_scheduled_at']))
+      : Number.NaN;
+    if (Number.isFinite(nextScheduledAt) && nextScheduledAt > now.getTime()) {
+      skippedRuns += config.platforms_enabled.length;
+      continue;
+    }
     const enabledConfig = {
       ...config,
       platforms_enabled: config.platforms_enabled.filter((platform) =>
@@ -477,6 +531,43 @@ export async function runGpmScheduledSweep(args: {
         configured_platforms: config.platforms_enabled.join(','),
         enabled_platforms: Array.from(globallyEnabledPlatforms).join(','),
       });
+      continue;
+    }
+    const promptCount = Math.max(1, Number(config.metadata?.['prompt_count'] ?? 10) || 10);
+    const estimatedConfigCostUsd = estimateGpmActivationCostUsd(
+      enabledConfig.platforms_enabled as GpmPlatform[],
+      promptCount,
+      false,
+    );
+    const spendCheck = isGpmSpendAllowed({
+      estimatedUsd: estimatedConfigCostUsd,
+      monthSpendUsd,
+      policy: spendPolicy,
+    });
+    if (!spendCheck.allowed) {
+      skippedRuns += enabledConfig.platforms_enabled.length;
+      await args.supabase
+        .from('client_benchmark_configs')
+        .update({
+          metadata: {
+            ...(config.metadata ?? {}),
+            spend_guard_status: 'blocked',
+            spend_guard_reason: spendCheck.reason,
+            spend_estimated_usd: estimatedConfigCostUsd,
+            spend_month_to_date_usd: monthSpendUsd,
+            spend_monthly_cap_usd: spendPolicy.monthlyCapUsd,
+            spend_checked_at: now.toISOString(),
+          },
+          updated_at: now.toISOString(),
+        })
+        .eq('id', config.id);
+      structuredLog('gpm_config_spend_blocked', {
+        config_id: config.id,
+        reason: spendCheck.reason,
+        estimated_cost_usd: estimatedConfigCostUsd,
+        month_spend_usd: monthSpendUsd,
+        monthly_cap_usd: spendPolicy.monthlyCapUsd,
+      }, 'warning');
       continue;
     }
 
@@ -523,6 +614,10 @@ export async function runGpmScheduledSweep(args: {
           ? buildActivationRunVersion(configMetadata, config.id)
           : undefined,
       });
+      monthSpendUsd = Math.round((
+        monthSpendUsd +
+        summary.platformResults.reduce((sum, result) => sum + result.estimatedCostUsd, 0)
+      ) * 10000) / 10000;
       if (activationBaselineQueued && !summary.entitlementBlocked && !summary.skippedMissingConfig) {
         const launched = summary.platformResults.filter((result) => result.status === 'launched');
         const failed = summary.platformResults.filter((result) => result.status === 'failed');

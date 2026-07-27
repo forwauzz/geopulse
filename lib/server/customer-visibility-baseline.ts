@@ -62,6 +62,8 @@ export function buildBaselineBuyerPrompts(input: {
     `Which ${category} providers have the strongest expertise and proof?`,
     `What are the best alternatives when comparing ${category} providers?`,
     `Which ${category} provider is best for a growing business?`,
+    `How much should I expect to pay for ${category} in ${location}?`,
+    `Which ${category} provider is best for my specific needs in ${location}?`,
   ]);
 }
 
@@ -246,7 +248,7 @@ export async function provisionCustomerVisibilityBaseline(
       query_set_id: querySet.id,
       competitor_list: competitors,
       cadence: 'monthly',
-      platforms_enabled: ['chatgpt', 'gemini'],
+      platforms_enabled: ['chatgpt', 'gemini', 'perplexity'],
       report_email: input.reportEmail?.trim() || null,
       metadata: {
         ...existingMetadata,

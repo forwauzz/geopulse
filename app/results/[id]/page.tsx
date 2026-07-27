@@ -5,6 +5,7 @@ import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { scanCanShowStandaloneMonitoringOffer } from '@/lib/server/scan-monitoring-offer';
 
 type PageProps = { params: Promise<{ id: string }>; searchParams?: Promise<{ checkout?: string }> };
 
@@ -61,6 +62,9 @@ export default async function ResultsPage({ params, searchParams }: PageProps) {
   const query = searchParams ? await searchParams : undefined;
   const siteKey = getTurnstileSiteKey();
   const uiFlags = await loadUiFlags();
+  const standaloneMonitoringEligible = uiFlags.show_monitor_subscription
+    ? await scanCanShowStandaloneMonitoringOffer(id)
+    : false;
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -73,7 +77,7 @@ export default async function ResultsPage({ params, searchParams }: PageProps) {
         turnstileSiteKey={siteKey}
         checkoutState={query?.checkout ?? null}
         showCompetitorSearch={uiFlags.show_competitor_search}
-        showMonitorSubscription={uiFlags.show_monitor_subscription}
+        showMonitorSubscription={uiFlags.show_monitor_subscription && standaloneMonitoringEligible}
         monitorAccountEmail={user?.email ?? null}
       />
     </main>
