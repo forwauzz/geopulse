@@ -20,6 +20,7 @@ const signupSchema = z
     confirmPassword: z.string().min(8, 'Confirm your password.'),
     next: z.string().optional(),
     bundle: z.string().optional(),
+    qaToken: z.string().trim().max(160).optional(),
   })
   .refine((value) => value.password === value.confirmPassword, {
     message: 'Passwords do not match.',
@@ -69,6 +70,7 @@ export async function sendMagicLink(
   const fullName = readTrimmedField(formData, 'full_name');
   const organizationName = readTrimmedField(formData, 'organization_name');
   const websiteUrl = readTrimmedField(formData, 'website_url');
+  const qaToken = readTrimmedField(formData, 'qa_token');
   let supabase;
   try {
     supabase = await createSupabaseServerClient();
@@ -95,6 +97,9 @@ export async function sendMagicLink(
   }
   if (websiteUrl) {
     redirectParams.set('website_url', websiteUrl);
+  }
+  if (qaToken) {
+    redirectParams.set('qa_token', qaToken);
   }
   const redirectTo = `${appUrl}/auth/callback?${redirectParams.toString()}`;
 
@@ -126,6 +131,7 @@ export async function signUpWithPassword(
     confirmPassword: formData.get('confirm_password'),
     next: formData.get('next') ?? undefined,
     bundle: formData.get('bundle') ?? undefined,
+    qaToken: formData.get('qa_token') ?? undefined,
     organizationName: formData.get('organization_name') ?? undefined,
     websiteUrl: formData.get('website_url') ?? undefined,
   });
@@ -196,6 +202,7 @@ export async function signUpWithPassword(
     isNewUser: true,
     organizationName: normalizedOrganizationName || null,
     websiteUrl: normalizedWebsiteUrl || null,
+    qaToken: parsed.data.qaToken ?? null,
   });
   redirect(redirectTarget ?? nextPath ?? '/dashboard');
 }
@@ -240,6 +247,7 @@ export async function signInWithPassword(
     bundleParam: bundle.success ? bundle.data : null,
     isNewUser: false,
     organizationName: readTrimmedField(formData, 'organization_name') || null,
+    qaToken: readTrimmedField(formData, 'qa_token') || null,
   });
   redirect(redirectTarget ?? nextPath ?? '/dashboard');
 }

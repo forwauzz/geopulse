@@ -24,6 +24,7 @@ function buildLoginRedirect(
     mode?: string | null;
     bundle?: string | null;
     organizationName?: string | null;
+    qaToken?: string | null;
   },
 ): URL {
   const url = new URL('/login', appUrl);
@@ -36,6 +37,9 @@ function buildLoginRedirect(
   }
   if (args.organizationName) {
     url.searchParams.set('organization_name', args.organizationName);
+  }
+  if (args.qaToken) {
+    url.searchParams.set('qa_token', args.qaToken);
   }
   if (args.error) {
     url.searchParams.set('error', args.error);
@@ -78,11 +82,12 @@ export async function GET(request: NextRequest) {
   const mode = searchParams.get('mode') ?? (bundle ? 'signup' : null);
   const organizationName = searchParams.get('organization_name')?.trim() ?? null;
   const websiteUrl = searchParams.get('website_url')?.trim() ?? null;
+  const qaToken = searchParams.get('qa_token')?.trim() ?? null;
   const err = searchParams.get('error_description') ?? searchParams.get('error');
 
   if (err) {
     return NextResponse.redirect(
-      buildLoginRedirect(appUrl, { next, error: err, mode, bundle, organizationName }),
+      buildLoginRedirect(appUrl, { next, error: err, mode, bundle, organizationName, qaToken }),
     );
   }
 
@@ -98,6 +103,7 @@ export async function GET(request: NextRequest) {
           mode,
           bundle,
           organizationName,
+          qaToken,
         }),
       );
     }
@@ -114,12 +120,13 @@ export async function GET(request: NextRequest) {
           mode,
           bundle,
           organizationName,
+          qaToken,
         }),
       );
     }
   } else {
     return NextResponse.redirect(
-      buildLoginRedirect(appUrl, { next, mode, bundle, organizationName }),
+      buildLoginRedirect(appUrl, { next, mode, bundle, organizationName, qaToken }),
     );
   }
 
@@ -152,6 +159,7 @@ export async function GET(request: NextRequest) {
       isNewUser,
       organizationName,
       websiteUrl,
+      qaToken,
     });
     if (redirectPath) {
       return NextResponse.redirect(new URL(redirectPath, appUrl));

@@ -17,6 +17,7 @@ type Props = {
     bundle?: string;
     organization_name?: string;
     website_url?: string;
+    qa_token?: string;
   }>;
 };
 
@@ -66,6 +67,7 @@ export default async function LoginPage({ searchParams }: Props) {
   const bundleKey = sp.bundle?.trim() || undefined;
   const organizationName = sp.organization_name?.trim() || undefined;
   const websiteUrl = sp.website_url?.trim() || undefined;
+  const qaToken = sp.qa_token?.trim() || undefined;
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col px-6 py-16">
@@ -120,6 +122,7 @@ export default async function LoginPage({ searchParams }: Props) {
         bundleKey={bundleKey}
         organizationName={organizationName}
         websiteUrl={websiteUrl}
+        qaToken={qaToken}
       />
     </main>
   );

@@ -39,6 +39,21 @@ describe('resolvePostSignupRedirect', () => {
     ).toBe('/pricing?bundle=agency_core&autosubscribe=1&organization_name=North+Star+Agency');
   });
 
+  it('preserves a protected QA journey through onboarding', () => {
+    expect(
+      resolvePostSignupRedirect({
+        nextParam: '/pricing',
+        bundleParam: 'startup_dev',
+        isNewUser: true,
+        organizationName: 'Harbour QA',
+        websiteUrl: 'https://example.com',
+        qaToken: 'qa-token-123',
+      }),
+    ).toBe(
+      '/dashboard/welcome?bundle=startup_dev&autosubscribe=1&organization_name=Harbour+QA&website_url=https%3A%2F%2Fexample.com&qa_token=qa-token-123',
+    );
+  });
+
   it('builds the dashboard success URL and keeps provisioning state explicit', () => {
     expect(
       buildBillingSubscribeSuccessUrl({

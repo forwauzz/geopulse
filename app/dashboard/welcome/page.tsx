@@ -13,6 +13,7 @@ export default async function WelcomePage({
     autosubscribe?: string;
     organization_name?: string;
     website_url?: string;
+    qa_token?: string;
   }>;
 }) {
   const sp = (await searchParams) ?? {};
@@ -33,6 +34,7 @@ export default async function WelcomePage({
         {sp.organization_name ? (
           <input type="hidden" name="organization_name" value={sp.organization_name} />
         ) : null}
+        {sp.qa_token ? <input type="hidden" name="qa_token" value={sp.qa_token} /> : null}
         <fieldset>
           <legend className="font-semibold text-on-background">1. Which best describes you?</legend>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">

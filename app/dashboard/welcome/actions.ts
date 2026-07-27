@@ -13,6 +13,7 @@ const schema = z.object({
   bundle: z.enum(['startup_dev', 'agency_core', 'agency_pro']).optional(),
   autosubscribe: z.literal('1').optional(),
   organizationName: z.string().trim().max(120).optional(),
+  qaToken: z.string().trim().max(160).optional(),
 });
 
 export async function completeWelcome(formData: FormData): Promise<void> {
@@ -23,6 +24,7 @@ export async function completeWelcome(formData: FormData): Promise<void> {
     bundle: formData.get('bundle') || undefined,
     autosubscribe: formData.get('autosubscribe') || undefined,
     organizationName: formData.get('organization_name') || undefined,
+    qaToken: formData.get('qa_token') || undefined,
   });
   if (!parsed.success) redirect('/dashboard/welcome?error=check_details');
 
@@ -43,7 +45,7 @@ export async function completeWelcome(formData: FormData): Promise<void> {
   });
   if (error) redirect('/dashboard/welcome?error=save_failed');
 
-  if (parsed.data.role === 'business' && parsed.data.website) {
+  if (parsed.data.role === 'business' && parsed.data.website && !parsed.data.bundle) {
     const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
     const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
     if (url && key) {
@@ -66,6 +68,9 @@ export async function completeWelcome(formData: FormData): Promise<void> {
     }
     if (parsed.data.website) {
       params.set('website_url', parsed.data.website);
+    }
+    if (parsed.data.qaToken) {
+      params.set('qa_token', parsed.data.qaToken);
     }
     redirect(`/pricing?${params.toString()}`);
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type Stripe from 'stripe';
 import { getClientIp, getPaymentApiEnv } from '@/lib/server/cf-env';
 import { checkCheckoutRateLimit } from '@/lib/server/rate-limit-kv';
 import { buildBillingSubscribeSuccessUrl } from '@/lib/server/billing-onboarding-flow';
@@ -7,6 +8,11 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
+import {
+  completeQaBuyerJourney,
+  validateQaBuyerJourney,
+} from '@/lib/server/qa-buyer-journey';
+import { handleSubscriptionUpserted } from '@/lib/server/stripe/subscription-handlers';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +38,7 @@ const bodySchema = z.object({
   turnstileToken: z.string().min(1),
   organizationName: z.string().trim().min(1).max(120).optional(),
   websiteUrl: z.string().trim().max(512).optional(),
+  qaToken: z.string().trim().min(32).max(160).optional(),
 });
 
 export async function POST(request: Request): Promise<Response> {
@@ -54,7 +61,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const { bundleKey, turnstileToken, organizationName, websiteUrl } = parsed.data;
+    const { bundleKey, turnstileToken, organizationName, websiteUrl, qaToken } = parsed.data;
 
     if (!isPaidBundleKey(bundleKey)) {
       return Response.json(
@@ -165,6 +172,99 @@ export async function POST(request: Request): Promise<Response> {
         },
         { status: 409 }
       );
+    }
+
+    if (qaToken) {
+      if (!env.SCAN_CACHE || !user.email) {
+        return Response.json(
+          { error: { code: 'qa_unavailable', message: 'QA simulation is not available.' } },
+          { status: 503 },
+        );
+      }
+      const qaValidation = await validateQaBuyerJourney({
+        kv: env.SCAN_CACHE,
+        token: qaToken,
+        email: user.email,
+        bundleKey,
+      });
+      if (!qaValidation.ok) {
+        structuredLog(
+          'qa_buyer_journey_rejected',
+          { userId: user.id, bundleKey, reason: qaValidation.reason },
+          'warning',
+        );
+        return Response.json(
+          { error: { code: 'qa_token_invalid', message: 'This QA journey is invalid or expired.' } },
+          { status: 403 },
+        );
+      }
+
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const subscriptionId = `sub_qa_${qaToken.slice(0, 32)}`;
+      const customerId = `cus_qa_${qaToken.slice(0, 24)}`;
+      const simulatedSubscription = {
+        id: subscriptionId,
+        customer: customerId,
+        status: 'trialing',
+        current_period_start: nowSeconds,
+        current_period_end: nowSeconds + 7 * 24 * 60 * 60,
+        metadata: {
+          user_id: user.id,
+          bundle_key: bundleKey,
+          organization_name: organizationName ?? qaValidation.claim.organizationName,
+          ...(websiteUrl ?? qaValidation.claim.websiteUrl
+            ? { website_url: websiteUrl ?? qaValidation.claim.websiteUrl ?? '' }
+            : {}),
+          qa_simulation: 'true',
+          qa_token: qaToken,
+        },
+        items: {
+          data: [{ price: { id: bundle.stripe_price_id } }],
+        },
+      } as unknown as Stripe.Subscription;
+
+      await handleSubscriptionUpserted(adminDb, simulatedSubscription);
+      const { data: simulatedRow } = await adminDb
+        .from('user_subscriptions')
+        .select('startup_workspace_id, agency_account_id, metadata')
+        .eq('user_id', user.id)
+        .eq('stripe_subscription_id', subscriptionId)
+        .maybeSingle();
+      const provisioned =
+        bundleKey === 'startup_dev'
+          ? Boolean(simulatedRow?.startup_workspace_id)
+          : Boolean(simulatedRow?.agency_account_id);
+      if (!simulatedRow || !provisioned) {
+        return checkoutFailure(
+          'qa_provisioning_failed',
+          'QA subscription was created but workspace provisioning did not complete.',
+          500,
+          { userId: user.id, bundleKey, subscriptionId },
+        );
+      }
+
+      await completeQaBuyerJourney({
+        kv: env.SCAN_CACHE,
+        result: {
+          token: qaToken,
+          userId: user.id,
+          email: user.email,
+          bundleKey,
+          subscriptionId,
+          completedAt: new Date().toISOString(),
+        },
+      });
+      structuredLog(
+        'qa_buyer_journey_completed',
+        { userId: user.id, bundleKey, subscriptionId },
+        'info',
+      );
+      const qaSuccessUrl = new URL(
+        buildBillingSubscribeSuccessUrl({ baseUrl, bundleKey }),
+      );
+      qaSuccessUrl.searchParams.set('qa_simulation', 'complete');
+      qaSuccessUrl.searchParams.set('qa_token', qaToken);
+      return Response.json({ url: qaSuccessUrl.toString(), qaSimulation: true });
     }
 
     if (!env.STRIPE_SECRET_KEY?.trim()) {

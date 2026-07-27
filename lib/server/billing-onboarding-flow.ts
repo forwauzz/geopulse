@@ -4,6 +4,7 @@ export function resolvePostSignupRedirect(args: {
   readonly isNewUser: boolean;
   readonly organizationName?: string | null;
   readonly websiteUrl?: string | null;
+  readonly qaToken?: string | null;
 }): string | null {
   if (args.bundleParam && args.nextParam === '/pricing') {
     const params = new URLSearchParams();
@@ -14,6 +15,9 @@ export function resolvePostSignupRedirect(args: {
     }
     if (args.websiteUrl?.trim()) {
       params.set('website_url', args.websiteUrl.trim());
+    }
+    if (args.qaToken?.trim()) {
+      params.set('qa_token', args.qaToken.trim());
     }
     // A paid buyer still needs a persona + goal before workspace provisioning can
     // succeed. Keep the selected plan through that short step, then continue to

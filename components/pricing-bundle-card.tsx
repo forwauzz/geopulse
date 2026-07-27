@@ -96,6 +96,7 @@ export function PricingBundleCard({
   const turnstileConfigured = bypassTurnstile || Boolean(turnstileSiteKey.trim());
   const organizationName = sp.get('organization_name')?.trim() || null;
   const websiteUrl = sp.get('website_url')?.trim() || null;
+  const qaToken = sp.get('qa_token')?.trim() || null;
 
   useEffect(() => {
     setTurnstileToken((current) => {
@@ -138,6 +139,7 @@ export function PricingBundleCard({
         turnstileToken: tokenStr,
         organizationName: organizationName ?? undefined,
         websiteUrl: websiteUrl ?? undefined,
+        qaToken: qaToken ?? undefined,
       }),
     });
 
@@ -177,10 +179,19 @@ export function PricingBundleCard({
 
   useEffect(() => {
     if (!autoSubscribe || !isAuthenticated || autoSubscribeFiredRef.current) return;
+    if (isAwaitingTurnstile) return;
     if (!isTurnstileWidgetReady) return;
     if (effectiveToken()) return;
     requestTurnstileToken();
-  }, [autoSubscribe, isAuthenticated, isTurnstileWidgetReady, turnstileToken, bypassTurnstile, bundleKey]);
+  }, [
+    autoSubscribe,
+    isAuthenticated,
+    isTurnstileWidgetReady,
+    isAwaitingTurnstile,
+    turnstileToken,
+    bypassTurnstile,
+    bundleKey,
+  ]);
 
   useLongWaitEffect(isCheckoutWaiting, {
     ...pricingCheckoutWaitJourney,
@@ -198,6 +209,9 @@ export function PricingBundleCard({
       });
       if (organizationName) {
         params.set('organization_name', organizationName);
+      }
+      if (qaToken) {
+        params.set('qa_token', qaToken);
       }
       window.location.href = `/login?${params.toString()}`;
       return;

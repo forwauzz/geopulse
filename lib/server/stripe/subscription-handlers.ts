@@ -86,6 +86,12 @@ export async function handleSubscriptionUpserted(
         current_period_end: periodEnd,
         metadata: {
           ...(organizationName ? { organization_name: organizationName } : {}),
+          ...(subscription.metadata?.['qa_simulation'] === 'true'
+            ? {
+                qa_simulation: true,
+                qa_token: subscription.metadata?.['qa_token'] ?? null,
+              }
+            : {}),
         },
       },
       { onConflict: 'stripe_subscription_id' }

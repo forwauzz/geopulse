@@ -12,9 +12,10 @@ type Props = {
   readonly bundleKey?: string;
   readonly organizationName?: string;
   readonly websiteUrl?: string;
+  readonly qaToken?: string;
 };
 
-export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationName, websiteUrl }: Props) {
+export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationName, websiteUrl, qaToken }: Props) {
   const [passwordState, passwordAction, passwordPending] = useActionState(
     signInWithPassword,
     null
@@ -33,6 +34,9 @@ export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationN
     if (bundleKey) {
       params.set('bundle', bundleKey);
     }
+    if (qaToken) {
+      params.set('qa_token', qaToken);
+    }
     return `/login?${params.toString()}`;
   })();
 
@@ -42,6 +46,7 @@ export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationN
         <form action={signupAction} className="flex flex-col gap-4 rounded-2xl bg-surface-container-low p-5">
           <input type="hidden" name="next" value={nextPath} />
           {bundleKey ? <input type="hidden" name="bundle" value={bundleKey} /> : null}
+          {qaToken ? <input type="hidden" name="qa_token" value={qaToken} /> : null}
           <div>
             <h2 className="font-sans text-lg font-semibold text-on-background">Create your account</h2>
             <p className="mt-1 font-body text-sm text-on-surface-variant">
@@ -152,6 +157,7 @@ export function LoginForm({ nextPath, isSignUp = false, bundleKey, organizationN
       <form action={passwordAction} className="flex flex-col gap-4 rounded-2xl bg-surface-container-low p-5">
         <input type="hidden" name="next" value={nextPath} />
         {bundleKey ? <input type="hidden" name="bundle" value={bundleKey} /> : null}
+        {qaToken ? <input type="hidden" name="qa_token" value={qaToken} /> : null}
         {/*
           No heading here: the page already renders <h1>Sign in</h1> and the same "Enter your email
           and password." line directly above this form, so repeating both showed the reader the
