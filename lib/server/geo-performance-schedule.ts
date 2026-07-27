@@ -28,6 +28,13 @@ export function gpmRunHasCompletedQuestions(result: {
   return result.completedQueryCount > 0;
 }
 
+export function gpmRunCompletedAllQuestions(
+  result: { readonly completedQueryCount: number },
+  expectedQueryCount: number,
+): boolean {
+  return result.completedQueryCount >= expectedQueryCount;
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type GpmPlatformModelMap = {
@@ -130,9 +137,11 @@ export function buildActivationRunVersion(
   metadata: Record<string, unknown>,
   configId: string,
 ): string {
-  return `activation-${String(metadata['baseline_requested_at'] ?? configId)
+  const loopVersion = String(metadata['onboarding_loop_version'] ?? 'v1');
+  const requestVersion = String(metadata['baseline_requested_at'] ?? configId);
+  return `activation-${loopVersion}-${requestVersion}`
     .replace(/[^a-zA-Z0-9_-]+/g, '-')
-    .slice(0, 80)}`;
+    .slice(0, 100);
 }
 
 export function resolveActivationBaselineStatus(input: {
@@ -317,12 +326,15 @@ export async function executeGpmClientRun(args: {
             estimated_cost_usd: estimatedCostUsd,
             spend_estimate_version: 'gpm-conservative-v1',
             prompt_count_budgeted: configuredPromptCount,
+            query_execution_delay_ms: platform === 'gemini' ? 1_500 : 0,
           },
         },
         args.adapter
       );
-      if (!gpmRunHasCompletedQuestions(result)) {
-        throw new Error(`No ${platform} buyer questions executed; the configured model lane is unavailable.`);
+      if (!gpmRunCompletedAllQuestions(result, configuredPromptCount)) {
+        throw new Error(
+          `${platform} completed ${result.completedQueryCount}/${configuredPromptCount} buyer questions.`,
+        );
       }
 
       await persistCompetitorCitations({
@@ -340,7 +352,9 @@ export async function executeGpmClientRun(args: {
             // Generate every provider artifact, but send one client email per measurement cycle.
             // The final provider is the delivery carrier; the signed-out scorecard combines all
             // provider results.
-            config: platformIndex === args.config.platforms_enabled.length - 1
+            config:
+              platformIndex === args.config.platforms_enabled.length - 1 &&
+              platformResults.every((item) => item.status !== 'failed')
               ? args.config
               : {
                   ...args.config,

@@ -44,6 +44,15 @@ export type CompetitorCandidate = {
   sample?: CompetitorSampleSummary;
 };
 
+export type DiscoveredBusinessContext = {
+  companyName: string | null;
+  category: string | null;
+  services: string[];
+  audience: string | null;
+  city: string | null;
+  region: string | null;
+};
+
 // ── Detection: schema.org @type → readable industry label ──────────────────────
 // Keys are lowercased schema.org type names (see workers/scan-engine/parse-signals.ts
 // `jsonLdTypes`). A LocalBusiness subtype is the strongest possible signal.
@@ -288,12 +297,13 @@ export function buildDiscoveryPrompt(profile: BusinessProfile, selfDomain: strin
     ? `in or near ${profile.city}${profile.region ? `, ${profile.region}` : ''}`
     : 'in the same local market';
   return [
-    `Use Google Search to find real, currently-operating local competitors of the business at ${selfDomain}.`,
-    `The business is a ${profile.businessType || 'local business'} ${where}.`,
-    'Return 3 to 5 direct competitors: other businesses of the same type serving the same local area.',
-    `Exclude ${selfDomain} itself, directories, aggregators (Yelp, Google, Facebook, etc.), and national chains.`,
+    `First use Google Search to inspect the official website at ${selfDomain} and identify what the company actually sells, who buys it, and where it operates.`,
+    `The saved account category is "${profile.businessType || 'local business'}" ${where}; correct that category from current public evidence when it is too broad.`,
+    'Then find 3 to 5 real, currently-operating direct competitors that sell the same core services to the same buyer in the same city or region.',
+    'If fewer than 3 exact local matches exist, broaden to nearby regional providers competing for the same customer need. Always return 3 to 5.',
+    `Exclude ${selfDomain} itself, the website agency or developer, directories, aggregators (Yelp, Google, Facebook, etc.), publishers, and unrelated businesses.`,
     'Respond with ONLY a JSON object of this exact shape, no prose, no markdown fences:',
-    '{ "competitors": [ { "name": "Business Name", "url": "https://their-site.com/", "reason": "one short phrase" } ] }',
+    '{ "context": { "companyName": "Company", "category": "specific business category", "services": ["service one", "service two"], "audience": "primary buyer", "city": "City or null", "region": "Region or null" }, "competitors": [ { "name": "Business Name", "url": "https://their-site.com/", "reason": "same service and market" } ] }',
   ].join('\n');
 }
 
@@ -303,11 +313,21 @@ const candidateSchema = z.object({
   reason: z.string().max(200).optional(),
 });
 const discoveryResponseSchema = z.object({
+  context: z.object({
+    companyName: z.string().min(1).max(120).nullable().optional(),
+    category: z.string().min(1).max(160).nullable().optional(),
+    services: z.array(z.string().min(1).max(120)).max(8).optional(),
+    audience: z.string().min(1).max(200).nullable().optional(),
+    city: z.string().min(1).max(100).nullable().optional(),
+    region: z.string().min(1).max(100).nullable().optional(),
+  }).optional(),
   competitors: z.array(candidateSchema).min(1).max(8),
 });
 
-/** Parse + validate the live Gemini discovery JSON into candidates (self-domain excluded). */
-export function parseDiscoveryResponse(raw: string, selfDomain: string): CompetitorCandidate[] {
+export function parseDiscoveryPayload(
+  raw: string,
+  selfDomain: string,
+): { competitors: CompetitorCandidate[]; context: DiscoveredBusinessContext | null } {
   const cleaned = raw
     .trim()
     .replace(/^```(?:json)?\s*/i, '')
@@ -315,17 +335,17 @@ export function parseDiscoveryResponse(raw: string, selfDomain: string): Competi
     .trim();
   const start = cleaned.indexOf('{');
   const end = cleaned.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) return [];
+  if (start === -1 || end === -1 || end <= start) return { competitors: [], context: null };
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(cleaned.slice(start, end + 1));
   } catch {
-    return [];
+    return { competitors: [], context: null };
   }
 
   const result = discoveryResponseSchema.safeParse(parsed);
-  if (!result.success) return [];
+  if (!result.success) return { competitors: [], context: null };
 
   const self = selfDomain.replace(/^www\./i, '').toLowerCase();
   const seen = new Set<string>();
@@ -342,5 +362,20 @@ export function parseDiscoveryResponse(raw: string, selfDomain: string): Competi
     out.push({ name: c.name, url: c.url, domain, reason: c.reason });
     if (out.length >= 5) break;
   }
-  return out;
+  const context = result.data.context
+    ? {
+        companyName: result.data.context.companyName ?? null,
+        category: result.data.context.category ?? null,
+        services: result.data.context.services ?? [],
+        audience: result.data.context.audience ?? null,
+        city: result.data.context.city ?? null,
+        region: result.data.context.region ?? null,
+      }
+    : null;
+  return { competitors: out, context };
+}
+
+/** Parse + validate the live Gemini discovery JSON into candidates (self-domain excluded). */
+export function parseDiscoveryResponse(raw: string, selfDomain: string): CompetitorCandidate[] {
+  return parseDiscoveryPayload(raw, selfDomain).competitors;
 }

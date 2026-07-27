@@ -346,7 +346,7 @@ export default async function ClientScorecardPage({
                     <div>
                       <p className="font-semibold text-on-background">Latest report ready</p>
                       <p className="mt-0.5 text-xs text-on-surface-variant">
-                        {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(latestGpmReport.generated_at))} · {String(latestGpmReport.platform) === 'chatgpt' ? 'ChatGPT' : 'Gemini'}
+                        {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(latestGpmReport.generated_at))} · {ENGINE_LABEL[String(latestGpmReport.platform) as EngineKey] ?? String(latestGpmReport.platform)}
                       </p>
                     </div>
                     {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">Delivered by email</span>}
@@ -404,7 +404,7 @@ export default async function ClientScorecardPage({
               <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">
                 <span className="material-symbols-outlined text-[18px]" aria-hidden>monitoring</span> Start tracking
               </button>
-              <p className="text-xs leading-relaxed text-on-surface-variant">Uses ChatGPT and Gemini. The first real measurement becomes the baseline; later checks show improvement or regression.</p>
+              <p className="text-xs leading-relaxed text-on-surface-variant">Uses ChatGPT, Gemini, and Perplexity. The first complete measurement becomes the baseline; later checks show improvement or regression.</p>
             </form>
           )}
         </div>

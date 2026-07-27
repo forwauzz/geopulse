@@ -112,12 +112,32 @@ export async function runBenchmarkGroupSkeleton(
     groundingContext,
   };
 
-  const executionResults = await Promise.all(
-    queries.map(async (query) => ({
-      query,
-      execution: await adapter.executeQuery(query, executionContext),
-    }))
-  );
+  const requestedDelay = Number(input.runMetadata?.['query_execution_delay_ms'] ?? 0);
+  const queryExecutionDelayMs = Number.isFinite(requestedDelay)
+    ? Math.max(0, Math.min(requestedDelay, 5_000))
+    : 0;
+  const executionResults: Array<{
+    query: (typeof queries)[number];
+    execution: Awaited<ReturnType<BenchmarkExecutionAdapter['executeQuery']>>;
+  }> = [];
+  if (queryExecutionDelayMs > 0) {
+    for (const [index, query] of queries.entries()) {
+      if (index > 0) {
+        await new Promise((resolve) => setTimeout(resolve, queryExecutionDelayMs));
+      }
+      executionResults.push({
+        query,
+        execution: await adapter.executeQuery(query, executionContext),
+      });
+    }
+  } else {
+    executionResults.push(...await Promise.all(
+      queries.map(async (query) => ({
+        query,
+        execution: await adapter.executeQuery(query, executionContext),
+      }))
+    ));
+  }
 
   const queryRuns = await repo.insertQueryRuns(
     executionResults.map(({ query, execution }) => ({

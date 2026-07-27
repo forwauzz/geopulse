@@ -139,7 +139,8 @@ export async function getTrackedPromptPanel(args: {
       .in('id', [...queryIds]);
 
     const customIds = new Set(customQueries.map((q) => q.id));
-    const engineOrder: EngineKey[] = ['chatgpt', 'gemini'];
+    const engineOrder: EngineKey[] = (['chatgpt', 'gemini', 'perplexity'] as const)
+      .filter((engine) => latestGroupByEngine.has(engine));
     const prompts: TrackedPromptRow[] = ((queryRows ?? []) as Array<{
       id: string;
       query_text: string;

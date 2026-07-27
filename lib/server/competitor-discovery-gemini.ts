@@ -10,9 +10,10 @@
  */
 import {
   buildDiscoveryPrompt,
-  parseDiscoveryResponse,
+  parseDiscoveryPayload,
   type BusinessProfile,
   type CompetitorCandidate,
+  type DiscoveredBusinessContext,
 } from './competitor-discovery';
 
 export type CompetitorDiscoveryGeminiEnv = {
@@ -22,7 +23,7 @@ export type CompetitorDiscoveryGeminiEnv = {
 };
 
 export type LiveDiscoveryResult =
-  | { ok: true; competitors: CompetitorCandidate[] }
+  | { ok: true; competitors: CompetitorCandidate[]; context: DiscoveredBusinessContext | null }
   | { ok: false; reason: string };
 
 type FetchLike = typeof fetch;
@@ -32,6 +33,10 @@ const defaultFetch: FetchLike = (input, init) => fetch(input, init);
 const TRANSIENT_STATUSES = new Set([429, 503]);
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [400, 1200];
+const EXCLUDED_GROUNDED_DOMAINS = new Set([
+  'google.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'youtube.com',
+  'yelp.com', 'yellowpages.ca', 'wikipedia.org',
+]);
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,12 +81,42 @@ export async function discoverCompetitorsLive(
       }
 
       const data = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
+        candidates?: {
+          content?: { parts?: { text?: string }[] };
+          groundingMetadata?: {
+            groundingChunks?: { web?: { uri?: string; title?: string } }[];
+          };
+        }[];
       };
       const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
-      const competitors = parseDiscoveryResponse(text, selfDomain);
-      if (competitors.length === 0) return { ok: false, reason: 'gemini_no_competitors_parsed' };
-      return { ok: true, competitors };
+      const parsed = parseDiscoveryPayload(text, selfDomain);
+      const competitors = [...parsed.competitors];
+      const seen = new Set(competitors.map((item) => item.domain));
+      const self = selfDomain.replace(/^www\./i, '').toLowerCase();
+      for (const chunk of data.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []) {
+        const uri = chunk.web?.uri;
+        if (!uri) continue;
+        try {
+          const url = new URL(uri);
+          const domain = url.hostname.replace(/^www\./i, '').toLowerCase();
+          if (
+            !domain || domain === self || seen.has(domain) ||
+            EXCLUDED_GROUNDED_DOMAINS.has(domain)
+          ) continue;
+          seen.add(domain);
+          competitors.push({
+            name: chunk.web?.title?.trim() || domain,
+            domain,
+            url: `${url.protocol}//${url.hostname}/`,
+            reason: 'Found in the grounded competitor search.',
+          });
+          if (competitors.length >= 5) break;
+        } catch {
+          // Ignore malformed grounding URLs.
+        }
+      }
+      if (competitors.length < 3) return { ok: false, reason: 'gemini_insufficient_competitors' };
+      return { ok: true, competitors: competitors.slice(0, 5), context: parsed.context };
     } catch (error) {
       if (attempt < MAX_ATTEMPTS) {
         await sleep(RETRY_DELAYS_MS[attempt - 1] ?? 1200);
