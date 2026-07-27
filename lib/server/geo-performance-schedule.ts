@@ -139,7 +139,8 @@ export function buildActivationRunVersion(
 ): string {
   const loopVersion = String(metadata['onboarding_loop_version'] ?? 'v1');
   const requestVersion = String(metadata['baseline_requested_at'] ?? configId);
-  return `activation-${loopVersion}-${requestVersion}`
+  const promptContextVersion = String(metadata['prompt_context_version'] ?? 'initial-context');
+  return `activation-${loopVersion}-${requestVersion}-${promptContextVersion}`
     .replace(/[^a-zA-Z0-9_-]+/g, '-')
     .slice(0, 100);
 }

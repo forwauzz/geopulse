@@ -46,6 +46,16 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function promptContextVersion(category: string | null, location: string): string {
+  const value = `${category ?? DEFAULT_VERTICAL}|${location}`.trim().toLowerCase();
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `v3-${(hash >>> 0).toString(36)}`;
+}
+
 export function buildBaselineBuyerPrompts(input: {
   readonly vertical?: string | null;
   readonly subvertical?: string | null;
@@ -141,13 +151,14 @@ export async function provisionCustomerVisibilityBaseline(
       existingDomain?.display_name ||
       canonicalDomain.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
     const prompts = buildBaselineBuyerPrompts({ vertical, subvertical, location });
+    const contextVersion = promptContextVersion(subvertical || vertical, location);
 
     const { data: querySet, error: querySetError } = await supabase
       .from('benchmark_query_sets')
       .upsert(
         {
           name: `client-prompts-${canonicalDomain}`,
-          version: 'v2',
+          version: contextVersion,
           vertical,
           description: `Automatically provisioned buyer questions for ${canonicalDomain}.`,
           status: 'active',
@@ -259,6 +270,7 @@ export async function provisionCustomerVisibilityBaseline(
         baseline_status: existingMetadata['baseline_status'] === 'measured' ? 'measured' : 'queued',
         baseline_requested_at: existingMetadata['baseline_requested_at'] ?? now,
         provisioning_version: PROVISIONING_VERSION,
+        prompt_context_version: querySet.id,
         updated_at: now,
       },
       updated_at: now,
