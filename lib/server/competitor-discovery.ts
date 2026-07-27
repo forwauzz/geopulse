@@ -297,9 +297,9 @@ export function buildDiscoveryPrompt(profile: BusinessProfile, selfDomain: strin
     ? `in or near ${profile.city}${profile.region ? `, ${profile.region}` : ''}`
     : 'in the same local market';
   return [
-    `First use Google Search to inspect the official website at ${selfDomain} and identify what the company actually sells, who buys it, and where it operates.`,
+    `First inspect the exact official URL https://${selfDomain}/ and identify what that company actually sells, who buys it, and where it operates.`,
     `The saved account category is "${profile.businessType || 'local business'}" ${where}; correct that category from current public evidence when it is too broad.`,
-    'Then find 3 to 5 real, currently-operating direct competitors that sell the same core services to the same buyer in the same city or region.',
+    'Then use Google Search to find 3 to 5 real, currently-operating direct competitors that sell the same core services to the same buyer in the same city or region.',
     'If fewer than 3 exact local matches exist, broaden to nearby regional providers competing for the same customer need. Always return 3 to 5.',
     `Exclude ${selfDomain} itself, the website agency or developer, directories, aggregators (Yelp, Google, Facebook, etc.), publishers, and unrelated businesses.`,
     'Respond with ONLY a JSON object of this exact shape, no prose, no markdown fences:',
