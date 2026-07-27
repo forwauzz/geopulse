@@ -83,19 +83,27 @@ export default async function AdminCampaignsPage({
   }
 
   const agents = await loadAgentStatuses(ctx.adminDb, env);
-  const [room, loopResult, providerSpend] = await Promise.all([
+  const [room, openLoopResult, completedLoopResult, providerSpend] = await Promise.all([
     loadCampaignControlRoom({ supabase: ctx.adminDb, agents }),
     ctx.adminDb
       .from('agent_work_loops')
       .select('id,source_type,source_key,parent_loop_id,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,founder_required,blocker,evidence,metadata,resolved_at,updated_at')
-      .order('updated_at', { ascending: false })
-      .limit(100),
+      .in('state', ['discovered', 'assigned', 'executing', 'verifying', 'blocked'])
+      .order('due_at', { ascending: true })
+      .limit(500),
+    ctx.adminDb
+      .from('agent_work_loops')
+      .select('id,source_type,source_key,parent_loop_id,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,founder_required,blocker,evidence,metadata,resolved_at,updated_at')
+      .eq('state', 'completed')
+      .order('resolved_at', { ascending: false })
+      .limit(50),
     loadProviderSpendSummary(ctx.adminDb),
   ]);
-  const loops = loopResult.data ?? [];
+  const loops = [...(openLoopResult.data ?? []), ...(completedLoopResult.data ?? [])];
   const loopsById = new Map(loops.map((loop: any) => [String(loop.id), loop]));
   const loopCounts = {
-    action: loops.filter((loop: any) => ['assigned', 'discovered'].includes(loop.state)).length,
+    backlog: loops.filter((loop: any) => loop.state === 'discovered').length,
+    action: loops.filter((loop: any) => loop.state === 'assigned').length,
     running: loops.filter((loop: any) => loop.state === 'executing').length,
     verifying: loops.filter((loop: any) => loop.state === 'verifying').length,
     blocked: loops.filter((loop: any) => loop.state === 'blocked' || loop.founder_required).length,
@@ -104,12 +112,13 @@ export default async function AdminCampaignsPage({
   const params = await searchParams;
   const requested = params?.tab ?? 'overview';
   const requestedLoop = params?.loop ?? 'all';
-  const loopView = ['all', 'action', 'running', 'verifying', 'blocked', 'completed'].includes(requestedLoop)
+  const loopView = ['all', 'backlog', 'action', 'running', 'verifying', 'blocked', 'completed'].includes(requestedLoop)
     ? requestedLoop
     : 'all';
   const visibleLoops = loops.filter((loop: any) => {
     if (loopView === 'all') return true;
-    if (loopView === 'action') return ['assigned', 'discovered'].includes(loop.state);
+    if (loopView === 'backlog') return loop.state === 'discovered';
+    if (loopView === 'action') return loop.state === 'assigned';
     if (loopView === 'running') return loop.state === 'executing';
     if (loopView === 'verifying') return loop.state === 'verifying';
     if (loopView === 'blocked') return loop.state === 'blocked' || loop.founder_required;
@@ -217,15 +226,16 @@ export default async function AdminCampaignsPage({
                 <Link href="/admin/automation#seo-agent" className="rounded-xl border border-outline-variant/25 px-4 py-2 text-sm font-semibold text-on-background">Open SEO evidence</Link>
               </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
               {[
+                ['Idea bank', loopCounts.backlog],
                 ['Needs action', loopCounts.action],
                 ['Running', loopCounts.running],
                 ['Verifying', loopCounts.verifying],
                 ['Blocked', loopCounts.blocked],
                 ['Completed', loopCounts.completed],
               ].map(([label, value], index) => {
-                const key = ['action', 'running', 'verifying', 'blocked', 'completed'][index]!;
+                const key = ['backlog', 'action', 'running', 'verifying', 'blocked', 'completed'][index]!;
                 return (
                 <Link key={String(label)} href={`/admin/campaigns?loop=${key}#loop-control`} className={`rounded-xl p-4 transition hover:bg-surface-container ${loopView === key ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-surface-container-low'}`}>
                   <p className="text-xs text-on-surface-variant">{label}</p>

@@ -7,6 +7,7 @@ import {
 import { loadCampaignControlRoom } from './campaign-control-room';
 import { agentEmailSignatureHtml } from './email-theme';
 import { structuredLogWithClientAndWait } from './structured-log';
+import { syncRuntimeIncidentLoops } from './runtime-incident-control';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 
 function escapeHtml(value: string): string {
@@ -19,6 +20,10 @@ export async function runCampaignChiefOfStaffCheck(args: {
   readonly now?: Date;
 }): Promise<{ health: string; actions: number; urgent: number; digestSent: boolean }> {
   const agents = await loadAgentStatuses(args.supabase, args.env);
+  const runtimeIncidents = await syncRuntimeIncidentLoops({
+    db: args.supabase,
+    now: args.now,
+  });
   const room = await loadCampaignControlRoom({
     supabase: args.supabase,
     agents,
@@ -68,6 +73,10 @@ export async function runCampaignChiefOfStaffCheck(args: {
       intelligence_status: intelligence.status,
       intelligence_evidence_count: intelligence.evidence.length,
       intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId).join(','),
+      runtime_incidents_active: runtimeIncidents.active,
+      runtime_incidents_opened: runtimeIncidents.opened,
+      runtime_incidents_escalated: runtimeIncidents.escalated,
+      runtime_incidents_resolved: runtimeIncidents.resolved,
     },
     urgent > 0 ? 'warning' : 'info',
   );

@@ -5,6 +5,7 @@ import {
   isContentLoopSatisfied,
   prioritizeWithAcceptedLearning,
   retryIsDue,
+  selectSeoFamilyIdsToDefer,
   seoParentCanClose,
 } from './agent-loop-control';
 
@@ -84,6 +85,19 @@ describe('closed-loop agent control', () => {
       }],
     );
     expect(withoutPositiveEvidence.map((row) => row.id)).toEqual(['technical', 'content']);
+  });
+
+  it('keeps active child families first and defers excess discoveries', () => {
+    const deferred = selectSeoFamilyIdsToDefer(
+      [
+        { id: 'normal-1', severity: 'normal', due_at: '2026-07-28T00:00:00.000Z' },
+        { id: 'active', severity: 'normal', due_at: '2026-07-29T00:00:00.000Z' },
+        { id: 'urgent', severity: 'urgent', due_at: '2026-07-30T00:00:00.000Z' },
+      ],
+      [{ parent_loop_id: 'active', state: 'executing' }],
+      2,
+    );
+    expect(deferred).toEqual(['normal-1']);
   });
 
   it('skips a 403 prospect instead of leaving Maya with a repeating open loop', async () => {

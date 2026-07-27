@@ -23,6 +23,39 @@ export function observationalConfidence(sampleSize: number): number {
   return Math.min(0.9, Math.max(0.1, Math.sqrt(Math.max(sampleSize, 1)) / 10));
 }
 
+export function isRepairableStaleBenchmarkAlert(input: {
+  readonly reasonCode: string;
+  readonly sourceKind: string;
+  readonly sourceId?: string | null;
+}): boolean {
+  return input.reasonCode === 'stale_running'
+    && input.sourceKind === 'benchmark_run_group'
+    && Boolean(input.sourceId);
+}
+
+async function resolveAlertAndLoop(args: {
+  db: Db;
+  alertId: string;
+  now: Date;
+  resolutionNote: string;
+  evidence: Record<string, unknown>;
+}): Promise<boolean> {
+  const { error: loopError } = await args.db.from('agent_work_loops').update({
+    state: 'completed',
+    evidence: args.evidence,
+    verified_at: args.now.toISOString(),
+    resolved_at: args.now.toISOString(),
+    founder_required: false,
+    blocker: null,
+  }).eq('source_type', 'intelligence_quality_alert').eq('source_key', args.alertId);
+  if (loopError) return false;
+  const { error: alertError } = await args.db.from('intelligence_quality_alerts').update({
+    resolved_at: args.now.toISOString(),
+    resolution_note: args.resolutionNote,
+  }).eq('id', args.alertId);
+  return !alertError;
+}
+
 async function materializePatterns(db: Db): Promise<number> {
   const { data, error } = await db
     .from('intelligence_mart_intervention_outcomes')
@@ -89,15 +122,64 @@ async function reconcileQualityDebt(db: Db, now: Date): Promise<{
   let criticalQuarantined = 0;
   let alertsResolved = 0;
   let incidentsOpened = 0;
+  const repairedStaleAlertIds = new Set<string>();
+  const repairableStaleAlerts = (data ?? []).filter((alert: any) =>
+    isRepairableStaleBenchmarkAlert({
+      reasonCode: String(alert.reason_code ?? ''),
+      sourceKind: String(alert.source_kind ?? ''),
+      sourceId: alert.source_id ? String(alert.source_id) : null,
+    }),
+  );
+  if (repairableStaleAlerts.length > 0) {
+    const alertIds = repairableStaleAlerts.map((alert: any) => String(alert.id));
+    const sourceIds = repairableStaleAlerts.map((alert: any) => String(alert.source_id));
+    const [{ error: childError }, { error: groupError }] = await Promise.all([
+      db.from('query_runs').update({
+        status: 'failed',
+        error_message: 'Reconciled after the run exceeded the active stale-running threshold.',
+        executed_at: now.toISOString(),
+      }).in('run_group_id', sourceIds).in('status', ['queued', 'running']),
+      db.from('benchmark_run_groups').update({
+        status: 'failed',
+        completed_at: now.toISOString(),
+      }).in('id', sourceIds).in('status', ['queued', 'running']),
+    ]);
+    if (!childError && !groupError) {
+      const { error: loopError } = await db.from('agent_work_loops').update({
+          state: 'completed',
+          evidence: {
+            verification: 'stale_benchmark_lifecycle_reconciled',
+            reconciled_alert_count: alertIds.length,
+          },
+          verified_at: now.toISOString(),
+          resolved_at: now.toISOString(),
+          founder_required: false,
+          blocker: null,
+        }).eq('source_type', 'intelligence_quality_alert').in('source_key', alertIds);
+      const { error: alertError } = loopError
+        ? { error: loopError }
+        : await db.from('intelligence_quality_alerts').update({
+            resolved_at: now.toISOString(),
+            resolution_note: 'The abandoned benchmark lifecycle was reconciled to failed and excluded from eligible measurements.',
+          }).in('id', alertIds);
+      if (!alertError) {
+        for (const alertId of alertIds) repairedStaleAlertIds.add(alertId);
+        alertsResolved += alertIds.length;
+      }
+    }
+  }
   for (const alert of data ?? []) {
+    if (repairedStaleAlertIds.has(String(alert.id))) continue;
     const reason = String(alert.reason_code ?? '');
     const expectedInsufficient = /insufficient|no_compatible|coverage_pending|not_available/i.test(reason);
     if (expectedInsufficient) {
-      const { error: resolveError } = await db.from('intelligence_quality_alerts').update({
-        resolved_at: now.toISOString(),
-        resolution_note: 'Classified as an expected insufficient-data state; no corrupted fact was admitted.',
-      }).eq('id', alert.id);
-      if (!resolveError) alertsResolved += 1;
+      if (await resolveAlertAndLoop({
+        db,
+        alertId: String(alert.id),
+        now,
+        resolutionNote: 'Classified as an expected insufficient-data state; no corrupted fact was admitted.',
+        evidence: { verification: 'expected_insufficient_data_classified' },
+      })) alertsResolved += 1;
       continue;
     }
 
@@ -111,11 +193,16 @@ async function reconcileQualityDebt(db: Db, now: Date): Promise<{
           .maybeSingle()
       : { data: null };
     if (run?.quality_state === 'valid' || run?.quality_state === 'valid_partial') {
-      const { error: resolveError } = await db.from('intelligence_quality_alerts').update({
-        resolved_at: now.toISOString(),
-        resolution_note: 'A replacement source run passed the active quality gate.',
-      }).eq('id', alert.id);
-      if (!resolveError) alertsResolved += 1;
+      if (await resolveAlertAndLoop({
+        db,
+        alertId: String(alert.id),
+        now,
+        resolutionNote: 'A replacement source run passed the active quality gate.',
+        evidence: {
+          verification: 'replacement_source_run_passed',
+          intelligence_run_id: run.id,
+        },
+      })) alertsResolved += 1;
       continue;
     }
 

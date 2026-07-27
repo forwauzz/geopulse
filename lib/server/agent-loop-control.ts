@@ -163,6 +163,15 @@ async function upsertLoop(
 
   if (existing?.id) {
     const next = {
+      ...(['discovered', 'dismissed'].includes(String(existing.state))
+        ? {
+            state: input['state'],
+            verified_at: null,
+            resolved_at: null,
+            blocker: null,
+            founder_required: false,
+          }
+        : {}),
       title: input['title'],
       detail: input['detail'],
       next_action: input['next_action'],
@@ -194,6 +203,110 @@ async function upsertLoop(
     attemptCount: Number(data.attempt_count ?? 0),
     maxAttempts: Number(data.max_attempts ?? 3),
     lastAttemptedAt: data.last_attempted_at ? String(data.last_attempted_at) : null,
+  };
+}
+
+export const SEO_FAMILY_WIP_CAP = 15;
+
+export function selectSeoFamilyIdsToDefer(
+  parents: readonly {
+    id: string;
+    due_at?: string | null;
+    severity?: string | null;
+  }[],
+  children: readonly {
+    parent_loop_id?: string | null;
+    state?: string | null;
+  }[],
+  cap = SEO_FAMILY_WIP_CAP,
+): string[] {
+  const activeChildParents = new Set(
+    children
+      .filter((child) => ['executing', 'verifying'].includes(String(child.state)))
+      .map((child) => String(child.parent_loop_id ?? ''))
+      .filter(Boolean),
+  );
+  const severityRank: Record<string, number> = { urgent: 0, today: 1, normal: 2, watch: 3 };
+  const ordered = [...parents].sort((left, right) => {
+    const childDelta =
+      Number(activeChildParents.has(right.id)) - Number(activeChildParents.has(left.id));
+    if (childDelta !== 0) return childDelta;
+    const severityDelta =
+      (severityRank[String(left.severity)] ?? 9) - (severityRank[String(right.severity)] ?? 9);
+    if (severityDelta !== 0) return severityDelta;
+    return Date.parse(String(left.due_at ?? '9999-12-31'))
+      - Date.parse(String(right.due_at ?? '9999-12-31'));
+  });
+  return ordered.slice(Math.max(0, cap)).map((parent) => parent.id);
+}
+
+async function enforceSeoFamilyWorkInProgress(db: Db): Promise<{
+  activeFamilies: number;
+  deferredFamilies: number;
+}> {
+  const { data: parents } = await db
+    .from('agent_work_loops')
+    .select('id,source_key,state,severity,due_at')
+    .eq('source_type', 'seo_opportunity')
+    .in('state', ['assigned', 'executing', 'verifying', 'blocked'])
+    .order('due_at', { ascending: true })
+    .limit(250);
+  const parentRows = parents ?? [];
+  if (parentRows.length <= SEO_FAMILY_WIP_CAP) {
+    return { activeFamilies: parentRows.length, deferredFamilies: 0 };
+  }
+  const parentIds = parentRows.map((row: any) => String(row.id));
+  const { data: children } = await db
+    .from('agent_work_loops')
+    .select('id,parent_loop_id,state')
+    .in('parent_loop_id', parentIds)
+    .limit(750);
+  const deferredIds = selectSeoFamilyIdsToDefer(parentRows, children ?? []);
+  if (deferredIds.length === 0) {
+    return { activeFamilies: parentRows.length, deferredFamilies: 0 };
+  }
+  const deferredParents = parentRows.filter((row: any) => deferredIds.includes(String(row.id)));
+  const deferredOpportunityIds = deferredParents.map((row: any) => String(row.source_key));
+  await db.from('agent_work_loops').update({
+    state: 'discovered',
+    blocker: null,
+    founder_required: false,
+    evidence: {
+      verification: 'deferred_to_bounded_wip_queue',
+      wip_cap: SEO_FAMILY_WIP_CAP,
+    },
+    verified_at: null,
+    resolved_at: null,
+  }).in('id', deferredIds);
+  await db.from('agent_work_loops').update({
+    state: 'discovered',
+    blocker: null,
+    founder_required: false,
+    evidence: {
+      verification: 'parent_family_waiting_for_capacity',
+      wip_cap: SEO_FAMILY_WIP_CAP,
+    },
+    verified_at: null,
+    resolved_at: null,
+  }).in('parent_loop_id', deferredIds).in('state', ['assigned', 'discovered']);
+  for (const opportunityId of deferredOpportunityIds) {
+    const { data: opportunity } = await db
+      .from('seo_opportunities')
+      .select('metadata')
+      .eq('id', opportunityId)
+      .maybeSingle();
+    await db.from('seo_opportunities').update({
+      status: 'queued',
+      metadata: {
+        ...metadataObject(opportunity?.metadata),
+        loop_controlled: false,
+        deferred_by_wip_cap: true,
+      },
+    }).eq('id', opportunityId);
+  }
+  return {
+    activeFamilies: parentRows.length - deferredIds.length,
+    deferredFamilies: deferredIds.length,
   };
 }
 
@@ -682,13 +795,19 @@ export async function runAgentLoopControl(args: {
   seoCompleted: number;
   legacyNewslettersRetired: number;
   measurementsCreated: number;
+  activeSeoFamilies: number;
+  deferredSeoFamilies: number;
 }> {
   const now = args.now ?? new Date();
   const legacyNewslettersRetired = await retireLegacySeoNewsletterLoops(args.db, now);
+  const familyCapacity = await enforceSeoFamilyWorkInProgress(args.db);
   const synced = await syncSeoOpportunityLoops({
     db: args.db,
     now,
-    limit: args.seoBatch ?? 10,
+    limit: Math.min(
+      args.seoBatch ?? 10,
+      Math.max(0, SEO_FAMILY_WIP_CAP - familyCapacity.activeFamilies),
+    ),
   });
   const contentCompleted = await reconcileContentLoops(args.db, now);
   const measurementsCreated = await reconcileSeoFollowupMeasurements(args.db);
@@ -699,6 +818,8 @@ export async function runAgentLoopControl(args: {
     seoCompleted,
     legacyNewslettersRetired,
     measurementsCreated,
+    activeSeoFamilies: familyCapacity.activeFamilies + synced.opportunities,
+    deferredSeoFamilies: familyCapacity.deferredFamilies,
   };
 }
 
@@ -818,7 +939,11 @@ export async function syncCampaignActionLoops(args: {
   now?: Date;
 }): Promise<{ open: number; resolved: number }> {
   const now = args.now ?? new Date();
-  const actions = args.actions.filter((action) => !action.key.startsWith('seo-opportunity:'));
+  const actions = args.actions.filter(
+    (action) =>
+      !action.key.startsWith('seo-opportunity:')
+      && !action.key.startsWith('runtime-incident:'),
+  );
   const activeKeys = new Set(actions.map((action) => action.key));
   let resolvedCount = 0;
 

@@ -257,7 +257,7 @@ export async function loadCampaignControlRoom(args: {
     safeRows(args.supabase.from('seo_agent_runs').select('id,status,reason,started_at,completed_at,month_spend_usd').order('started_at', { ascending: false }).limit(10)),
     safeRows(args.supabase.from('seo_opportunities').select('id,kind,status,priority,title,evidence,recommendation,metadata,last_seen_at').in('status', ['queued', 'in_progress']).order('priority', { ascending: true }).order('last_seen_at', { ascending: false }).limit(25)),
     safeRows(args.supabase.from('seo_api_usage').select('cost_usd,occurred_at').gte('occurred_at', new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString())),
-    safeRows(args.supabase.from('agent_work_loops').select('id,lane,owner,state,due_at').in('state', ['discovered', 'assigned', 'executing', 'verifying', 'blocked']).limit(500)),
+    safeRows(args.supabase.from('agent_work_loops').select('id,source_type,source_key,lane,owner,state,severity,title,detail,due_at,founder_required,blocker,metadata,updated_at').in('state', ['discovered', 'assigned', 'executing', 'verifying', 'blocked']).limit(500)),
   ]);
 
   const accountById = new Map(accounts.map((row) => [text(row, 'id') ?? '', row]));
@@ -279,6 +279,32 @@ export async function loadCampaignControlRoom(args: {
   }
 
   const campaigns: CampaignItem[] = [];
+
+  for (const loop of openWorkLoops.filter((row) => text(row, 'source_type') === 'runtime_incident')) {
+    const metadata = object(loop, 'metadata');
+    const configuredLane = text(metadata, 'campaign_lane');
+    const lane: CampaignLane = (
+      configuredLane === 'social'
+      || configuredLane === 'email'
+      || configuredLane === 'prospecting'
+      || configuredLane === 'competitors'
+      || configuredLane === 'benchmarks'
+    ) ? configuredLane : 'benchmarks';
+    const blocked = text(loop, 'state') === 'blocked' || loop['founder_required'] === true;
+    campaigns.push({
+      id: `runtime-incident:${text(loop, 'source_key') ?? text(loop, 'id') ?? crypto.randomUUID()}`,
+      lane,
+      name: text(loop, 'title') ?? 'Production runtime incident',
+      channel: 'Engineering reliability',
+      status: blocked ? 'engineering repair required' : 'automatic retry running',
+      health: blocked ? 'blocked' : 'attention',
+      owner: text(loop, 'owner') ?? 'Marcus',
+      lastActivityAt: text(loop, 'updated_at'),
+      nextActivityAt: text(loop, 'due_at'),
+      detail: text(loop, 'blocker') ?? text(loop, 'detail') ?? 'Replacement success is pending.',
+      href: '/admin/campaigns#loop-control',
+    });
+  }
 
   const socialAgent = args.agents.find((agent) => agent.key === 'social_proof');
   if (socialAgent?.enabled) {
@@ -470,7 +496,11 @@ export async function loadCampaignControlRoom(args: {
     campaign: 25,
   };
   for (const [lane, cap] of Object.entries(workInProgressCaps)) {
-    const laneWork = openWorkLoops.filter((row) => text(row, 'lane') === lane);
+    const laneWork = openWorkLoops.filter((row) =>
+      text(row, 'lane') === lane
+      && text(row, 'source_type') !== 'seo_opportunity'
+      && text(row, 'state') !== 'discovered'
+    );
     if (laneWork.length <= cap) continue;
     const owners = new Map<string, number>();
     for (const row of laneWork) {
