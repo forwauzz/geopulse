@@ -51,12 +51,21 @@ export type RevenueStage = {
 export type RevenueAgencySnapshot = {
   readonly windowDays: number;
   readonly leads: number;
+  readonly activatedLeads: number;
+  readonly markedConvertedLeads: number;
   readonly convertedLeads: number;
   readonly activeProspects: number;
   readonly outreachSends: number;
   readonly outreachOpens: number;
   readonly completedScans: number;
   readonly deliveredReports: number;
+  readonly checkoutStarts: number;
+  readonly repliesReceived: number;
+  readonly meetingsBooked: number;
+  readonly activatedWorkspaces: number;
+  readonly paymentsCompleted: number;
+  readonly paidSubscriptionsStarted: number;
+  readonly cancellations: number;
   readonly proofAssets: number;
   readonly publishedProof: number;
   readonly activeMonitoring: number;
@@ -132,6 +141,45 @@ async function safeCount(
   }
 }
 
+async function safeAnalyticsCount(
+  supabase: SupabaseClient,
+  eventName: string,
+  since: string
+): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .schema('analytics')
+      .from('marketing_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_name', eventName)
+      .gte('event_ts', since);
+    return error ? 0 : count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function safeQualifiedReportCount(
+  supabase: SupabaseClient,
+  since: string
+): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('scans')
+      .select('id')
+      .eq('status', 'complete')
+      .in('run_source', ['public_self_serve', 'agency_dashboard', 'startup_dashboard', 'monitor'])
+      .gte('created_at', since)
+      .limit(5_000);
+    if (error || !data?.length) return 0;
+    return safeCount(supabase, 'reports', (query) =>
+      query.in('scan_id', data.map((row) => row.id)).not('email_delivered_at', 'is', null)
+    );
+  } catch {
+    return 0;
+  }
+}
+
 export function chooseRevenueAgencyFocus(values: {
   leads: number;
   activeProspects: number;
@@ -166,12 +214,22 @@ export async function loadRevenueAgencySnapshot(
   const since = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000).toISOString();
   const [
     leads,
-    convertedLeads,
+    activatedLeads,
+    markedConvertedLeads,
     activeProspects,
     outreachSends,
     outreachOpens,
     completedScans,
     deliveredReports,
+    checkoutStarts,
+    repliesReceived,
+    meetingsBooked,
+    activatedStartupWorkspaces,
+    activatedAgencyAccounts,
+    paymentsCompleted,
+    paidWorkspaceSubscriptions,
+    paidMonitoringSubscriptions,
+    cancellations,
     proofAssets,
     publishedProof,
     activeMonitoring,
@@ -179,12 +237,36 @@ export async function loadRevenueAgencySnapshot(
     activeAgencyAccounts,
   ] = await Promise.all([
     safeCount(supabase, 'leads', (q) => q.gte('created_at', since)),
+    safeCount(supabase, 'leads', (q) => q.not('scan_id', 'is', null).gte('created_at', since)),
     safeCount(supabase, 'leads', (q) => q.eq('converted', true).gte('converted_at', since)),
     safeCount(supabase, 'outreach_prospects', (q) => q.eq('enabled', true)),
     safeCount(supabase, 'outreach_sends', (q) => q.gte('sent_at', since)),
     safeCount(supabase, 'outreach_sends', (q) => q.not('opened_at', 'is', null).gte('sent_at', since)),
-    safeCount(supabase, 'scans', (q) => q.eq('status', 'complete').gte('created_at', since)),
-    safeCount(supabase, 'reports', (q) => q.not('email_delivered_at', 'is', null).gte('created_at', since)),
+    safeCount(supabase, 'scans', (q) =>
+      q.eq('status', 'complete')
+        .in('run_source', ['public_self_serve', 'agency_dashboard', 'startup_dashboard', 'monitor'])
+        .gte('created_at', since)
+    ),
+    safeQualifiedReportCount(supabase, since),
+    safeAnalyticsCount(supabase, 'checkout_started', since),
+    safeCount(supabase, 'commercial_handoff_events', (q) =>
+      q.eq('event_type', 'reply_received').gte('occurred_at', since)
+    ),
+    safeCount(supabase, 'commercial_handoff_events', (q) =>
+      q.eq('event_type', 'meeting_booked').gte('occurred_at', since)
+    ),
+    safeCount(supabase, 'startup_workspaces', (q) => q.gte('created_at', since)),
+    safeCount(supabase, 'agency_accounts', (q) => q.gte('created_at', since)),
+    safeCount(supabase, 'payments', (q) => q.eq('status', 'complete').gte('created_at', since)),
+    safeCount(supabase, 'user_subscriptions', (q) =>
+      q.in('status', ['active', 'trialing']).gte('created_at', since)
+    ),
+    safeCount(supabase, 'monitoring_subscriptions', (q) =>
+      q.in('status', ['active', 'trialing']).gte('created_at', since)
+    ),
+    safeCount(supabase, 'user_subscriptions', (q) =>
+      q.eq('status', 'cancelled').gte('cancelled_at', since)
+    ),
     safeCount(supabase, 'distribution_assets', (q) =>
       q.eq('metadata->>created_by_agent', 'social_proof_agent').gte('created_at', since)
     ),
@@ -193,6 +275,11 @@ export async function loadRevenueAgencySnapshot(
     safeCount(supabase, 'monitoring_subscriptions', (q) => q.eq('status', 'past_due')),
     safeCount(supabase, 'agency_accounts', (q) => q.eq('status', 'active')),
   ]);
+  // Stripe-backed payment/subscription records, not a mutable CRM flag, are
+  // the authority for paid conversion.
+  const paidSubscriptionsStarted = paidWorkspaceSubscriptions + paidMonitoringSubscriptions;
+  const convertedLeads = paymentsCompleted + paidSubscriptionsStarted;
+  const activatedWorkspaces = activatedStartupWorkspaces + activatedAgencyAccounts;
 
   const focus = chooseRevenueAgencyFocus({
     leads,
@@ -230,7 +317,7 @@ export async function loadRevenueAgencySnapshot(
       label: 'Convert',
       value: convertedLeads,
       status: convertedLeads > 0 ? 'healthy' : leads + activeProspects > 0 ? 'attention' : 'waiting',
-      detail: `${convertedLeads} converted leads · ${outreachOpens}/${outreachSends} tracked email opens`,
+      detail: `${convertedLeads} Stripe-backed paid relationships · ${checkoutStarts} checkout starts · ${outreachOpens}/${outreachSends} tracked email opens`,
     },
     {
       key: 'retain',
@@ -244,12 +331,21 @@ export async function loadRevenueAgencySnapshot(
   return {
     windowDays,
     leads,
+    activatedLeads,
+    markedConvertedLeads,
     convertedLeads,
     activeProspects,
     outreachSends,
     outreachOpens,
     completedScans,
     deliveredReports,
+    checkoutStarts,
+    repliesReceived,
+    meetingsBooked,
+    activatedWorkspaces,
+    paymentsCompleted,
+    paidSubscriptionsStarted,
+    cancellations,
     proofAssets,
     publishedProof,
     activeMonitoring,

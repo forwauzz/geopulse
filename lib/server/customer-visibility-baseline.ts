@@ -1,5 +1,6 @@
 import { canonicalizeDomain } from './dashboard-citation-metrics';
 import { structuredError, structuredLog } from './structured-log';
+import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -137,6 +138,23 @@ export async function provisionCustomerVisibilityBaseline(
   const now = new Date().toISOString();
 
   try {
+    const intelligence = await retrieveIntelligenceEvidence(supabase, input.startupWorkspaceId
+      ? {
+          tenantType: 'startup_workspace',
+          tenantId: input.startupWorkspaceId,
+          domainHost: canonicalDomain,
+          limit: 20,
+        }
+      : {
+          tenantType: 'agency_account',
+          tenantId: input.agencyAccountId!,
+          domainHost: canonicalDomain,
+          limit: 20,
+        }).catch(() => ({
+          status: 'insufficient_evidence' as const,
+          evidence: [] as const,
+          limitations: ['The intelligence index is not available yet.'],
+        }));
     const { data: existingDomain } = await supabase
       .from('benchmark_domains')
       .select('id,display_name,vertical,subvertical,geo_region,metadata')
@@ -166,7 +184,10 @@ export async function provisionCustomerVisibilityBaseline(
             source: input.source,
             canonical_domain: canonicalDomain,
             provisioning_version: PROVISIONING_VERSION,
-            prompt_source: 'deterministic_company_context',
+            prompt_source: intelligence.status === 'ready'
+              ? 'deterministic_company_context_plus_intelligence'
+              : 'deterministic_company_context',
+            intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
             updated_at: now,
           },
         },
@@ -267,6 +288,9 @@ export async function provisionCustomerVisibilityBaseline(
         prompt_source: 'automatic_baseline',
         prompt_count: prompts.length,
         competitor_source: competitors.length > 0 ? 'intelligence_cohort' : 'awaiting_customer_input',
+        intelligence_status: intelligence.status,
+        intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
+        intelligence_limitations: intelligence.limitations,
         baseline_status: existingMetadata['baseline_status'] === 'measured' ? 'measured' : 'queued',
         baseline_requested_at: existingMetadata['baseline_requested_at'] ?? now,
         provisioning_version: PROVISIONING_VERSION,

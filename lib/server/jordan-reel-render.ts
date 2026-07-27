@@ -175,7 +175,7 @@ function assertJpeg(bytes: Uint8Array): void {
 
 function validateRenderReport(report: JordanReelRenderValidation): void {
   if (report.width !== 1080 || report.height !== 1920) throw new Error('invalid_dimensions');
-  if (!Number.isFinite(report.durationSeconds) || report.durationSeconds < 14 || report.durationSeconds > 20) {
+  if (!Number.isFinite(report.durationSeconds) || report.durationSeconds < 26 || report.durationSeconds > 30) {
     throw new Error('invalid_duration');
   }
   if (!Number.isFinite(report.audioTrackCount) || report.audioTrackCount < 1) {

@@ -50,4 +50,18 @@ describe('autonomous editorial engine', () => {
     }});
     expect(result).toEqual({ status:'rejected', reason:'missing_clean_hero' });
   });
+
+  it('stops before a paid hero request when the monthly cap denies it', async () => {
+    const supabase = db();
+    supabase.rpc = vi.fn(async () => ({ data: false, error: null }));
+    const hero = vi.fn(async () => ({ url: 'https://media.example.com/hero.jpg', alt: 'Editorial evidence collage' }));
+    const result = await runAutonomousEditorialEngine({ supabase, provider: {
+      heroSpend: { provider: 'openai', estimatedCostUsd: 0.25 },
+      draft: async () => ({ title:'Useful answer', markdown:'# Useful answer', sources:['https://example.com'] }),
+      hero,
+      review: async () => ({ approved:true, reasons:[] }),
+    }});
+    expect(result).toEqual({ status:'skipped', reason:'openai_spend_cap' });
+    expect(hero).not.toHaveBeenCalled();
+  });
 });

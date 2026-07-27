@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   socialExperimentDetail,
   summarizeCampaignHealth,
+  summarizeRuntimeHealth,
   type CampaignItem,
 } from './campaign-control-room';
 
@@ -40,6 +41,59 @@ describe('summarizeCampaignHealth', () => {
     expect(summarizeCampaignHealth([campaign('healthy')], false)).toEqual({
       health: 'blocked',
       summary: '0 blocked and 0 overdue or stale campaign workflows; the hourly scheduler heartbeat also needs immediate attention.',
+    });
+  });
+});
+
+describe('summarizeRuntimeHealth', () => {
+  it('keeps consecutive runtime failures visible even when inventory still exists', () => {
+    const logs = [
+      {
+        event: 'social_proof_agent_run',
+        level: 'error',
+        created_at: '2026-07-27T08:00:00.000Z',
+        data: { status: 'failed' },
+      },
+      {
+        event: 'social_proof_agent_run',
+        level: 'error',
+        created_at: '2026-07-27T07:00:00.000Z',
+        data: { status: 'failed' },
+      },
+      {
+        event: 'social_proof_agent_run',
+        level: 'info',
+        created_at: '2026-07-27T06:00:00.000Z',
+        data: { status: 'success' },
+      },
+    ];
+
+    expect(summarizeRuntimeHealth(logs, 'social_proof_agent_run')).toEqual({
+      consecutiveFailures: 2,
+      lastRunAt: '2026-07-27T08:00:00.000Z',
+      lastStatus: 'failed',
+    });
+  });
+
+  it('closes the incident only after a successful runtime signal', () => {
+    const logs = [
+      {
+        event: 'social_proof_agent_run',
+        level: 'info',
+        created_at: '2026-07-27T09:00:00.000Z',
+        data: { status: 'success' },
+      },
+      {
+        event: 'social_proof_agent_run',
+        level: 'error',
+        created_at: '2026-07-27T08:00:00.000Z',
+        data: { status: 'failed' },
+      },
+    ];
+
+    expect(summarizeRuntimeHealth(logs, 'social_proof_agent_run')).toMatchObject({
+      consecutiveFailures: 0,
+      lastStatus: 'success',
     });
   });
 });

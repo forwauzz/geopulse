@@ -188,6 +188,33 @@ export function summarizeCampaignHealth(
   };
 }
 
+export type RuntimeHealthSignal = {
+  readonly consecutiveFailures: number;
+  readonly lastRunAt: string | null;
+  readonly lastStatus: 'success' | 'failed' | 'missing';
+};
+
+export function summarizeRuntimeHealth(
+  logs: readonly Row[],
+  event: string,
+): RuntimeHealthSignal {
+  const matches = logs.filter((row) => text(row, 'event') === event);
+  if (matches.length === 0) {
+    return { consecutiveFailures: 0, lastRunAt: null, lastStatus: 'missing' };
+  }
+  let consecutiveFailures = 0;
+  for (const row of matches) {
+    const failed = text(row, 'level') === 'error' || text(object(row, 'data'), 'status') === 'failed';
+    if (!failed) break;
+    consecutiveFailures += 1;
+  }
+  return {
+    consecutiveFailures,
+    lastRunAt: text(matches[0]!, 'created_at'),
+    lastStatus: consecutiveFailures > 0 ? 'failed' : 'success',
+  };
+}
+
 export async function loadCampaignControlRoom(args: {
   readonly supabase: SupabaseLike;
   readonly agents: readonly AgentStatus[];
@@ -213,6 +240,7 @@ export async function loadCampaignControlRoom(args: {
     seoRuns,
     seoOpportunities,
     seoUsage,
+    openWorkLoops,
   ] = await Promise.all([
     safeRows(args.supabase.from('distribution_accounts').select('id,provider_name,account_label,status,last_verified_at').order('updated_at', { ascending: false }).limit(50)),
     safeRows(args.supabase.from('distribution_assets').select('id,title,provider_family,asset_type,status,created_at,metadata').order('created_at', { ascending: false }).limit(100)),
@@ -229,6 +257,7 @@ export async function loadCampaignControlRoom(args: {
     safeRows(args.supabase.from('seo_agent_runs').select('id,status,reason,started_at,completed_at,month_spend_usd').order('started_at', { ascending: false }).limit(10)),
     safeRows(args.supabase.from('seo_opportunities').select('id,kind,status,priority,title,evidence,recommendation,metadata,last_seen_at').in('status', ['queued', 'in_progress']).order('priority', { ascending: true }).order('last_seen_at', { ascending: false }).limit(25)),
     safeRows(args.supabase.from('seo_api_usage').select('cost_usd,occurred_at').gte('occurred_at', new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString())),
+    safeRows(args.supabase.from('agent_work_loops').select('id,lane,owner,state,due_at').in('state', ['discovered', 'assigned', 'executing', 'verifying', 'blocked']).limit(500)),
   ]);
 
   const accountById = new Map(accounts.map((row) => [text(row, 'id') ?? '', row]));
@@ -250,6 +279,38 @@ export async function loadCampaignControlRoom(args: {
   }
 
   const campaigns: CampaignItem[] = [];
+
+  const socialAgent = args.agents.find((agent) => agent.key === 'social_proof');
+  if (socialAgent?.enabled) {
+    const runtime = summarizeRuntimeHealth(logs, 'social_proof_agent_run');
+    const stale = isOlderThan(runtime.lastRunAt, nowMs, 3);
+    const blocked = runtime.consecutiveFailures >= 2;
+    campaigns.push({
+      id: 'runtime:social-proof',
+      lane: 'social',
+      name: 'Sofia and Jordan production pipeline',
+      channel: 'Research → creative → Instagram',
+      status: blocked
+        ? `${runtime.consecutiveFailures} consecutive failures`
+        : runtime.lastStatus === 'failed'
+          ? 'latest run failed'
+          : stale
+            ? 'runtime heartbeat stale'
+            : 'running',
+      health: blocked ? 'blocked' : runtime.lastStatus === 'failed' || stale ? 'attention' : 'healthy',
+      owner: 'Jordan',
+      lastActivityAt: runtime.lastRunAt,
+      nextActivityAt: null,
+      detail: blocked
+        ? `The production agent failed ${runtime.consecutiveFailures} consecutive runs. Scheduled inventory may still publish, but new research and creative production are not healthy.`
+        : runtime.lastStatus === 'failed'
+          ? 'The latest production run failed. The next bounded retry must succeed before Maya closes this incident.'
+          : stale
+            ? 'No social production heartbeat was recorded in the expected window.'
+            : 'The latest research and production run completed successfully.',
+      href: '/admin/agents',
+    });
+  }
 
   for (const job of jobs) {
     const status = text(job, 'status') ?? 'unknown';
@@ -400,6 +461,38 @@ export async function loadCampaignControlRoom(args: {
     detail: `${seoOpportunities.length} owned opportunities; $${seoSpend.toFixed(4)} of the $10 monthly hard cap used.${text(latestSeo ?? {}, 'reason') ? ` ${text(latestSeo ?? {}, 'reason')}` : ''}`,
     href: '/admin/automation',
   });
+
+  const workInProgressCaps: Record<string, number> = {
+    seo: 25,
+    social: 15,
+    intelligence: 20,
+    revenue: 20,
+    campaign: 25,
+  };
+  for (const [lane, cap] of Object.entries(workInProgressCaps)) {
+    const laneWork = openWorkLoops.filter((row) => text(row, 'lane') === lane);
+    if (laneWork.length <= cap) continue;
+    const owners = new Map<string, number>();
+    for (const row of laneWork) {
+      const owner = text(row, 'owner') ?? 'Maya';
+      owners.set(owner, (owners.get(owner) ?? 0) + 1);
+    }
+    const owner = [...owners.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Maya';
+    const overBy = laneWork.length - cap;
+    campaigns.push({
+      id: `backlog:${lane}`,
+      lane: lane === 'social' ? 'social' : lane === 'revenue' ? 'prospecting' : 'competitors',
+      name: `${lane} work-in-progress limit`,
+      channel: 'Closed-loop operations',
+      status: `${laneWork.length} open; cap ${cap}`,
+      health: laneWork.length >= cap * 2 ? 'blocked' : 'attention',
+      owner,
+      lastActivityAt: null,
+      nextActivityAt: null,
+      detail: `${overBy} items exceed the lane cap. Finish, merge, or explicitly dismiss existing work before admitting more.`,
+      href: '/admin/campaigns#loop-control',
+    });
+  }
 
   for (const config of gpmConfigs) {
     const configReports = reportsByConfig.get(text(config, 'id') ?? '') ?? [];

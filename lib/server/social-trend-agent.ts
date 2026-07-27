@@ -249,16 +249,22 @@ async function discoverWithGemini(
   const base = (
     env.GEMINI_ENDPOINT?.trim() || 'https://generativelanguage.googleapis.com/v1beta/models'
   ).replace(/\/$/, '');
-  const response = await fetch(`${base}/${model}:generateContent?key=${encodeURIComponent(key)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 5_000 },
-    }),
-    signal: AbortSignal.timeout(45_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${base}/${model}:generateContent?key=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 5_000 },
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && /abort|timeout/i.test(`${error.name} ${error.message}`);
+    return { ok: false, reason: timedOut ? 'gemini_timeout' : 'gemini_network_error', ideas: [] };
+  }
   if (!response.ok) return { ok: false, reason: `gemini_http_${response.status}`, ideas: [] };
   const json = (await response.json()) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -279,18 +285,24 @@ async function discoverWithOpenAI(
 ): Promise<SocialTrendDiscoveryResult> {
   const key = env.OPENAI_API_KEY?.trim();
   if (!key) return { ok: false, reason: 'openai_key_missing', ideas: [] };
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: env.SOCIAL_TREND_OPENAI_MODEL?.trim() || 'gpt-5.6-luna',
-      input: prompt,
-      tools: [{ type: 'web_search' }],
-      reasoning: { effort: 'low' },
-      max_output_tokens: 5_000,
-    }),
-    signal: AbortSignal.timeout(60_000),
-  });
+  let response: Response;
+  try {
+    response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: env.SOCIAL_TREND_OPENAI_MODEL?.trim() || 'gpt-5.6-luna',
+        input: prompt,
+        tools: [{ type: 'web_search' }],
+        reasoning: { effort: 'low' },
+        max_output_tokens: 5_000,
+      }),
+      signal: AbortSignal.timeout(18_000),
+    });
+  } catch (error) {
+    const timedOut = error instanceof Error && /abort|timeout/i.test(`${error.name} ${error.message}`);
+    return { ok: false, reason: timedOut ? 'openai_timeout' : 'openai_network_error', ideas: [] };
+  }
   if (!response.ok) return { ok: false, reason: `openai_http_${response.status}`, ideas: [] };
   const ideas = parseSocialTrendDiscovery(openAiResponseText(await response.json()), discoveredAt);
   return ideas.length > 0
@@ -300,12 +312,19 @@ async function discoverWithOpenAI(
 
 export async function discoverSocialTrends(
   env: SocialTrendEnv,
-  now = new Date()
+  now = new Date(),
+  reserve?: (provider: 'gemini' | 'openai', estimatedCostUsd: number) => Promise<boolean>,
 ): Promise<SocialTrendDiscoveryResult> {
   const prompt = discoveryPrompt(now);
   const discoveredAt = now.toISOString();
+  if (reserve && env.GEMINI_API_KEY?.trim() && !(await reserve('gemini', 0.02))) {
+    return { ok: false, reason: 'gemini_spend_cap', ideas: [] };
+  }
   const gemini = await discoverWithGemini(env, prompt, discoveredAt);
   if (gemini.ok) return gemini;
+  if (reserve && env.OPENAI_API_KEY?.trim() && !(await reserve('openai', 0.05))) {
+    return { ok: false, reason: `${gemini.reason};openai_spend_cap`, ideas: [] };
+  }
   const openai = await discoverWithOpenAI(env, prompt, discoveredAt);
   if (openai.ok) return openai;
   return { ok: false, reason: `${gemini.reason};${openai.reason}`, ideas: [] };
