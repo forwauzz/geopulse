@@ -99,6 +99,10 @@ describe('resolveDiscoveryMode', () => {
     expect(resolveDiscoveryMode({ COMPETITOR_DISCOVERY_MODE: 'live' })).toBe('mock'); // no key
     expect(resolveDiscoveryMode({ COMPETITOR_DISCOVERY_MODE: 'live', GEMINI_API_KEY: 'k' })).toBe('gemini');
     expect(resolveDiscoveryMode({ COMPETITOR_DISCOVERY_MODE: 'gemini', GEMINI_API_KEY: 'k' })).toBe('gemini');
+    expect(resolveDiscoveryMode({
+      COMPETITOR_DISCOVERY_MODE: 'live',
+      BENCHMARK_EXECUTION_API_KEY: 'benchmark-key',
+    })).toBe('gemini');
   });
 });
 

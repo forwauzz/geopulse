@@ -204,6 +204,7 @@ export function detectBusinessProfile(input: {
 export type DiscoveryEnvLike = {
   COMPETITOR_DISCOVERY_MODE?: string;
   GEMINI_API_KEY?: string;
+  BENCHMARK_EXECUTION_API_KEY?: string;
 };
 
 /**
@@ -214,7 +215,9 @@ export type DiscoveryEnvLike = {
 export function resolveDiscoveryMode(env: DiscoveryEnvLike | undefined): DiscoveryMode {
   const flag = env?.COMPETITOR_DISCOVERY_MODE?.trim().toLowerCase();
   if (flag === 'live' || flag === 'gemini') {
-    return env?.GEMINI_API_KEY?.trim() ? 'gemini' : 'mock';
+    return env?.BENCHMARK_EXECUTION_API_KEY?.trim() || env?.GEMINI_API_KEY?.trim()
+      ? 'gemini'
+      : 'mock';
   }
   return 'mock';
 }

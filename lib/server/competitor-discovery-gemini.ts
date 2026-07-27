@@ -18,6 +18,7 @@ import {
 
 export type CompetitorDiscoveryGeminiEnv = {
   GEMINI_API_KEY?: string;
+  BENCHMARK_EXECUTION_API_KEY?: string;
   GEMINI_MODEL?: string;
   COMPETITOR_DISCOVERY_GEMINI_MODEL?: string;
   GEMINI_ENDPOINT?: string;
@@ -49,7 +50,7 @@ export async function discoverCompetitorsLive(
   selfDomain: string,
   fetchImpl: FetchLike = defaultFetch
 ): Promise<LiveDiscoveryResult> {
-  const key = env.GEMINI_API_KEY?.trim();
+  const key = env.BENCHMARK_EXECUTION_API_KEY?.trim() || env.GEMINI_API_KEY?.trim();
   if (!key) return { ok: false, reason: 'gemini_api_key_missing' };
 
   const model =
