@@ -32,6 +32,10 @@ import {
   type SocialTrendEnv,
   type SocialTrendIdea,
 } from './social-trend-agent';
+import {
+  socialTrendToPriyaIdea,
+  upsertPriyaResearchIdeas,
+} from './priya-research-ideas';
 import { collectInstagramPerformance } from './instagram-performance-agent';
 import { structuredLogWithClientAndWait } from './structured-log';
 import {
@@ -962,6 +966,11 @@ export async function runSocialProofAgent(args: {
       const discovery = await discoverSocialTrends(args.env, now);
       if (discovery.ok) {
         trendProvider = discovery.provider;
+        await upsertPriyaResearchIdeas(
+          args.supabase,
+          discovery.ideas.map(socialTrendToPriyaIdea),
+          now,
+        );
         const recentlyUsed = new Set(
           existingAssets
             .map((asset) => asset.source_key ?? '')

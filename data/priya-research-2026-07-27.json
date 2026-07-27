@@ -1,0 +1,145 @@
+[
+  {
+    "channel": "reddit",
+    "title": "AI visibility tools need actionable metrics, not another dashboard",
+    "evidence": "Teams comparing Semrush alternatives say traditional tools are adding AI tabs without clearly showing which metrics matter or what action to take next.",
+    "recommendation": "Publish a buyer guide that separates prompt visibility, share of voice, citation evidence, and the next fix. Demonstrate the complete Geo-Pulse workflow with real evidence.",
+    "sourceUrl": "https://www.reddit.com/r/GrowthHacking/comments/1v6y0fz/best_semrush_alternatives_for_ai_search_and_geo/",
+    "sourceLabel": "r/GrowthHacking",
+    "replyDraft": "the useful split is usually: repeated prompt tracking for share of voice, citation audits for why a brand was chosen, and a prioritized fix tied to the source. full disclosure, i’m building geo-pulse around this problem, so i’m biased, but i would not buy a tool that only adds an ai score to a traditional seo dashboard.",
+    "audience": "agency",
+    "score": 92
+  },
+  {
+    "channel": "reddit",
+    "title": "No single GEO tool is believed to have complete coverage",
+    "evidence": "Buyers openly question whether any one platform covers ChatGPT, Gemini, Perplexity, prompts, citations, and recommendations reliably.",
+    "recommendation": "Create a transparent coverage page that shows which engines are measured, how often prompts repeat, what citations were observed, and the limits of every measurement.",
+    "sourceUrl": "https://www.reddit.com/r/GrowthHacking/comments/1v6y0fz/best_semrush_alternatives_for_ai_search_and_geo/",
+    "sourceLabel": "r/GrowthHacking",
+    "replyDraft": "i would ask every vendor to show the raw prompt, engine, timestamp, answer, and cited source behind the score. coverage claims are much easier to trust when the evidence is inspectable. full disclosure, i’m building geo-pulse and this is the standard we are trying to hold ourselves to.",
+    "audience": "both",
+    "score": 89
+  },
+  {
+    "channel": "reddit",
+    "title": "Share of voice and citation audits solve different jobs",
+    "evidence": "Practitioners distinguish recurring share-of-voice measurement from one-off citation investigation, but tool messaging often mixes them together.",
+    "recommendation": "Publish an explainer and product walkthrough showing when to use recurring benchmarks versus a deep citation audit, with an agency reporting example.",
+    "sourceUrl": "https://www.reddit.com/r/GrowthHacking/comments/1v6y0fz/best_semrush_alternatives_for_ai_search_and_geo/",
+    "sourceLabel": "r/GrowthHacking",
+    "replyDraft": "share of voice tells you whether the pattern is changing. a citation audit helps explain why a specific answer happened. you usually need both, but they should not be presented as the same metric. full disclosure, i’m building geo-pulse around this workflow.",
+    "audience": "agency",
+    "score": 86
+  },
+  {
+    "channel": "reddit",
+    "title": "Traditional SEO results can hide an AI recommendation gap",
+    "evidence": "The recurring question is why a site can rank in Google while remaining absent from AI answers and recommendations.",
+    "recommendation": "Build a comparison page around rank versus recommendation, then show the entity, evidence, citation, and freshness checks that explain the difference.",
+    "sourceUrl": "https://www.reddit.com/search/?q=%22generative%20engine%20optimization%22%20SEO&sort=new",
+    "sourceLabel": "Reddit GEO search",
+    "replyDraft": "ranking and recommendation are related, but they are not identical. ai systems may need clearer entity signals, corroborating sources, and answer-ready evidence before they confidently mention a brand. full disclosure, i’m building geo-pulse to measure that gap.",
+    "audience": "both",
+    "score": 88
+  },
+  {
+    "channel": "reddit",
+    "title": "Information freshness is becoming a separate AI visibility problem",
+    "evidence": "Practitioners are discussing temporal signals and whether stale facts prevent engines from trusting or citing a brand.",
+    "recommendation": "Publish a practical freshness audit covering updated facts, dates, schema, supporting pages, and recurring remeasurement.",
+    "sourceUrl": "https://www.reddit.com/search/?q=%22generative%20engine%20optimization%22%20SEO&sort=new",
+    "sourceLabel": "Reddit GEO search",
+    "replyDraft": "freshness is more than changing the publish date. the facts, supporting sources, structured data, and evidence all need to agree. then you have to rerun the same prompts to see whether the answer actually changed. full disclosure, i’m building geo-pulse and we track that last step.",
+    "audience": "business",
+    "score": 78
+  },
+  {
+    "channel": "twitter",
+    "title": "One-off AI visibility checks create false confidence",
+    "evidence": "Citation patterns vary across repeated prompts and engines, so a single answer is not a reliable benchmark.",
+    "recommendation": "Publish the case for repeated measurement and show confidence, sample size, engine mix, and change over time in the product.",
+    "sourceUrl": "https://x.com/AddllyAi/status/2081549471226446277",
+    "sourceLabel": "X: Addlly AI",
+    "replyDraft": "this is the part most screenshots miss. one answer is an anecdote. repeated prompts across engines give you a trend you can act on. full disclosure, i’m building geo-pulse to make that evidence visible instead of hiding it behind one score.",
+    "audience": "both",
+    "score": 91
+  },
+  {
+    "channel": "twitter",
+    "title": "Entity mapping connects Google performance to AI mentions",
+    "evidence": "SEO practitioners increasingly frame entity consistency as the bridge between search rankings and AI recommendation visibility.",
+    "recommendation": "Create a visual entity audit that connects brand facts, services, people, locations, third-party corroboration, and observed AI mentions.",
+    "sourceUrl": "https://x.com/seochrismcelroy/status/2081530753473548509",
+    "sourceLabel": "X: Chris McElroy",
+    "replyDraft": "entity consistency is a strong bridge between seo and ai visibility. if the brand, category, people, and proof do not line up across sources, recommendation systems have less confidence. full disclosure, i’m building geo-pulse and this is one of the gaps we measure.",
+    "audience": "agency",
+    "score": 84
+  },
+  {
+    "channel": "twitter",
+    "title": "Executives want AI visibility connected to revenue",
+    "evidence": "Marketing leaders say that having a visibility tool is not the outcome their boss wants. The real question is whether the work changes qualified demand, pipeline, or revenue.",
+    "recommendation": "Publish a measurement framework from prompt visibility to cited visit, conversion, and reported revenue. Make business outcomes prominent in agency reporting.",
+    "sourceUrl": "https://x.com/partner_centric/status/2081501254711226544",
+    "sourceLabel": "X: PartnerCentric",
+    "replyDraft": "exactly. visibility is an operating metric, not the final business outcome. the useful report connects the prompt and citation to the next action, then tracks qualified demand and revenue where attribution is available. full disclosure, i’m building geo-pulse around that chain.",
+    "audience": "agency",
+    "score": 95
+  },
+  {
+    "channel": "twitter",
+    "title": "High authority does not protect a brand from category confusion",
+    "evidence": "Established brands can rank well and still fail AI recommendations when engines cannot confidently place them in the category a buyer is asking about.",
+    "recommendation": "Build a category clarity audit and a before-and-after example using pages, entities, comparison language, and corroborating sources.",
+    "sourceUrl": "https://x.com/victoria_olsina/status/2081454712163815590",
+    "sourceLabel": "X: Victoria Olsina",
+    "replyDraft": "domain authority cannot fix unclear category positioning by itself. the engine still needs consistent evidence about what the company does, who it is for, and why it belongs in the answer. full disclosure, i’m building geo-pulse to surface that mismatch.",
+    "audience": "business",
+    "score": 90
+  },
+  {
+    "channel": "twitter",
+    "title": "AI search cannot recommend a business it cannot verify",
+    "evidence": "A growing practitioner theme is that missing or inconsistent facts across the web create a verification gap, even when the website itself is polished.",
+    "recommendation": "Publish a verification checklist covering business facts, structured data, profiles, third-party mentions, reviews, and citation-ready proof.",
+    "sourceUrl": "https://x.com/seorce_/status/2081359699488932173",
+    "sourceLabel": "X: SEORCE",
+    "replyDraft": "a polished site is not enough if the important facts cannot be corroborated elsewhere. consistent profiles, structured data, reviews, and third-party evidence all help reduce that verification gap. full disclosure, i’m building geo-pulse to audit this.",
+    "audience": "business",
+    "score": 87
+  },
+  {
+    "channel": "twitter",
+    "title": "Buyers do not know which AI visibility platform to trust",
+    "evidence": "People comparing platforms are looking at visibility, sources, recommendations, and coverage, but lack a clear trust standard.",
+    "recommendation": "Create a no-spin buyer checklist for evaluating AI visibility software, including raw evidence, repeatability, citations, cost controls, and useful next actions.",
+    "sourceUrl": "https://x.com/oguzhanglotier/status/2081359506701692983",
+    "sourceLabel": "X: Oguzhan",
+    "replyDraft": "i would compare raw evidence, repeated prompt coverage, source transparency, useful recommendations, and cost controls before comparing headline scores. full disclosure, i’m building geo-pulse, so i’m biased, but buyers should be able to inspect what produced every number.",
+    "audience": "both",
+    "score": 93
+  },
+  {
+    "channel": "twitter",
+    "title": "AI visibility has an ownership problem inside companies",
+    "evidence": "Teams are unsure whether AI visibility belongs to SEO, PR, content, product, or leadership, which makes findings easy to admire and hard to execute.",
+    "recommendation": "Publish a lightweight operating model that assigns every finding to an owner, deadline, artifact, and verification run.",
+    "sourceUrl": "https://x.com/presenc_ai/status/2081333714374525023",
+    "sourceLabel": "X: Presenc AI",
+    "replyDraft": "the owner can change by issue, but the loop should not. every finding needs one accountable person, one deliverable, a deadline, and a rerun that verifies the result. full disclosure, i’m building geo-pulse around that closed-loop model.",
+    "audience": "agency",
+    "score": 85
+  },
+  {
+    "channel": "twitter",
+    "title": "The strongest GEO promise is recommendation, not visibility",
+    "evidence": "Practitioners are moving from being seen in an answer to being selected and recommended for a specific buyer need.",
+    "recommendation": "Make recommendation share the central narrative, supported by prompt evidence, cited sources, competitive context, and a remediation plan.",
+    "sourceUrl": "https://x.com/AI_InterConnect/status/2081334808282841347",
+    "sourceLabel": "X: AI InterConnect",
+    "replyDraft": "being mentioned is useful, but being recommended for the right buyer question is the stronger outcome. that is why the prompt, competitors, cited evidence, and reason for the recommendation all matter. full disclosure, i’m building geo-pulse around this distinction.",
+    "audience": "both",
+    "score": 86
+  }
+]
