@@ -23,6 +23,7 @@ import { structuredError, structuredLog } from './structured-log';
 type BaselineEnv = {
   readonly GEMINI_API_KEY?: string;
   readonly GEMINI_MODEL?: string;
+  readonly COMPETITOR_DISCOVERY_GEMINI_MODEL?: string;
   readonly GEMINI_ENDPOINT?: string;
   readonly OPENAI_API_KEY?: string;
   readonly PERPLEXITY_API_KEY?: string;
@@ -208,7 +209,9 @@ export async function completeAgencyClientBaseline(args: {
     };
   }
 
-  const platforms: GpmPlatform[] = ['chatgpt', 'gemini', 'perplexity'];
+  // Keep the paced Gemini lane last so the single customer delivery is sent only after every
+  // provider has passed. A later repair can then reuse completed OpenAI-compatible lanes.
+  const platforms: GpmPlatform[] = ['chatgpt', 'perplexity', 'gemini'];
   const promptCount = 10;
   const estimatedSpendUsd = estimateGpmActivationCostUsd(platforms, promptCount);
   const policy = resolveGpmSpendPolicy(args.env);

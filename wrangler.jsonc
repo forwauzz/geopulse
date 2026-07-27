@@ -73,6 +73,7 @@
     // Live local-competitor discovery uses Gemini with Google Search grounding.
     // The API falls back visibly (never silently) when billing/quota is unavailable.
     "COMPETITOR_DISCOVERY_MODE": "live",
+    "COMPETITOR_DISCOVERY_GEMINI_MODEL": "gemini-2.5-flash-lite",
 
     // Benchmark execution defaults. API keys remain secrets.
     // "multi" routes by model id: gemini-* lanes to the Gemini adapter, gpt-* to OpenAI.

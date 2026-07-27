@@ -29,6 +29,7 @@ export type ScanApiEnv = {
   LEGACY_PAID_ENABLED: string;
   /** Local competitor discovery: 'live'/'gemini' = Google-Search grounding (needs billed key); else mock. */
   COMPETITOR_DISCOVERY_MODE: string;
+  COMPETITOR_DISCOVERY_GEMINI_MODEL?: string;
   /** Loop 5a self-improvement — daily self-audit + email. Off unless truthy AND DB settings on. */
   SELF_IMPROVEMENT_ENABLED?: string;
   SELF_IMPROVEMENT_TARGET_URL?: string;
@@ -197,6 +198,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
     LEGACY_PAID_ENABLED: String(e['LEGACY_PAID_ENABLED'] ?? ''),
     COMPETITOR_DISCOVERY_MODE: String(e['COMPETITOR_DISCOVERY_MODE'] ?? ''),
+    COMPETITOR_DISCOVERY_GEMINI_MODEL: String(e['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? ''),
     SELF_IMPROVEMENT_ENABLED: String(e['SELF_IMPROVEMENT_ENABLED'] ?? ''),
     SELF_IMPROVEMENT_TARGET_URL: String(e['SELF_IMPROVEMENT_TARGET_URL'] ?? ''),
     SELF_IMPROVEMENT_HOUR_UTC: String(e['SELF_IMPROVEMENT_HOUR_UTC'] ?? ''),
@@ -263,6 +265,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
       LEGACY_PAID_ENABLED: process.env['LEGACY_PAID_ENABLED'] ?? '',
       COMPETITOR_DISCOVERY_MODE: process.env['COMPETITOR_DISCOVERY_MODE'] ?? '',
+      COMPETITOR_DISCOVERY_GEMINI_MODEL: process.env['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? '',
       SELF_IMPROVEMENT_ENABLED: process.env['SELF_IMPROVEMENT_ENABLED'] ?? '',
       SELF_IMPROVEMENT_TARGET_URL: process.env['SELF_IMPROVEMENT_TARGET_URL'] ?? '',
       SELF_IMPROVEMENT_HOUR_UTC: process.env['SELF_IMPROVEMENT_HOUR_UTC'] ?? '',

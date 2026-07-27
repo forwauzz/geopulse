@@ -283,15 +283,40 @@ export async function executeGpmClientRun(args: {
       continue;
     }
 
-    const runKey = args.runVersion
+    const baseRunKey = args.runVersion
       ? `${buildGpmRunKey(args.config.id, platform, windowDate)}:recheck:${args.runVersion}`
       : buildGpmRunKey(args.config.id, platform, windowDate);
-    const existing = await repo.getRunGroupByScheduleKey(runKey);
-    if (existing) {
+    let runKey = baseRunKey;
+    let completedExisting: Awaited<ReturnType<typeof repo.getRunGroupByScheduleKey>> = null;
+    let retryExhausted = false;
+    for (let retryDepth = 0; retryDepth <= 3; retryDepth += 1) {
+      const existing = await repo.getRunGroupByScheduleKey(runKey);
+      if (!existing) break;
+      const existingCompleted = Number(existing.metadata?.['completed_query_count'] ?? 0);
+      if (existing.status === 'completed' && existingCompleted >= configuredPromptCount) {
+        completedExisting = existing;
+        break;
+      }
+      if (retryDepth === 3) {
+        retryExhausted = true;
+        break;
+      }
+      runKey = `${baseRunKey}:retry:${retryDepth + 1}`;
+    }
+    if (completedExisting) {
       platformResults.push({
         platform,
         status: 'skipped_existing',
-        runGroupId: existing.id,
+        runGroupId: completedExisting.id,
+        estimatedCostUsd: 0,
+      });
+      continue;
+    }
+    if (retryExhausted) {
+      platformResults.push({
+        platform,
+        status: 'failed',
+        runGroupId: null,
         estimatedCostUsd: 0,
       });
       continue;

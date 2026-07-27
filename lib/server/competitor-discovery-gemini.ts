@@ -19,6 +19,7 @@ import {
 export type CompetitorDiscoveryGeminiEnv = {
   GEMINI_API_KEY?: string;
   GEMINI_MODEL?: string;
+  COMPETITOR_DISCOVERY_GEMINI_MODEL?: string;
   GEMINI_ENDPOINT?: string;
 };
 
@@ -51,7 +52,10 @@ export async function discoverCompetitorsLive(
   const key = env.GEMINI_API_KEY?.trim();
   if (!key) return { ok: false, reason: 'gemini_api_key_missing' };
 
-  const model = env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash';
+  const model =
+    env.COMPETITOR_DISCOVERY_GEMINI_MODEL?.trim() ||
+    env.GEMINI_MODEL?.trim() ||
+    'gemini-2.5-flash-lite';
   const base = (env.GEMINI_ENDPOINT?.trim() || 'https://generativelanguage.googleapis.com/v1beta/models').replace(/\/$/, '');
   const url = `${base}/${model}:generateContent?key=${encodeURIComponent(key)}`;
 
