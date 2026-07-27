@@ -3,6 +3,7 @@ import {
   buildGpmRunKey,
   buildActivationRunVersion,
   GPM_RUN_MODE,
+  gpmRunCompletedAllQuestions,
   gpmRunHasCompletedQuestions,
   resolveGpmEnabledPlatforms,
   resolveGpmPlatformModelMap,
@@ -15,6 +16,8 @@ describe('GPM measurement contract', () => {
     expect(GPM_RUN_MODE).toBe('blind_discovery');
     expect(gpmRunHasCompletedQuestions({ completedQueryCount: 0 })).toBe(false);
     expect(gpmRunHasCompletedQuestions({ completedQueryCount: 8 })).toBe(true);
+    expect(gpmRunCompletedAllQuestions({ completedQueryCount: 3 }, 10)).toBe(false);
+    expect(gpmRunCompletedAllQuestions({ completedQueryCount: 10 }, 10)).toBe(true);
   });
 });
 
@@ -178,6 +181,7 @@ describe('resolveGpmEnabledPlatforms', () => {
   it('gives each requested activation baseline a collision-proof run version', () => {
     expect(buildActivationRunVersion({
       baseline_requested_at: '2026-07-26T17:05:00.000Z',
-    }, 'config-1')).toBe('activation-2026-07-26T17-05-00-000Z');
+      onboarding_loop_version: 'jack-ready-v2',
+    }, 'config-1')).toBe('activation-jack-ready-v2-2026-07-26T17-05-00-000Z');
   });
 });

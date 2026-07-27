@@ -238,13 +238,19 @@ export async function completeAgencyClientBaseline(args: {
     ? await discoverCompetitorsLive(args.env, profile, domain)
     : { ok: false as const, reason: 'live_discovery_disabled' };
   const discoveredDomains = discovery.ok ? discovery.competitors.map((item) => item.domain) : [];
+  const discoveredContext = discovery.ok ? discovery.context : null;
+  const resolvedCategory = discoveredContext?.category || client.subvertical || client.vertical;
+  const resolvedLocation = [
+    discoveredContext?.city || profile.city,
+    discoveredContext?.region || profile.region,
+  ].filter(Boolean).join(', ') || null;
   const baseline = await provisionCustomerVisibilityBaseline(args.supabase, {
     agencyAccountId: args.agencyAccountId,
     domain,
     companyName: client.display_name || client.name,
     vertical: client.vertical,
-    subvertical: client.subvertical,
-    location: [profile.city, profile.region].filter(Boolean).join(', ') || null,
+    subvertical: resolvedCategory,
+    location: resolvedLocation,
     explicitCompetitors: discoveredDomains,
     reportEmail: args.reportEmail ?? null,
     source: 'agency_client_creation',
@@ -278,10 +284,12 @@ export async function completeAgencyClientBaseline(args: {
   const metadata = {
     ...(config.metadata ?? {}),
     client_context: {
-      company: client.display_name || client.name,
-      category: profile.businessType,
-      city: profile.city,
-      region: profile.region,
+      company: discoveredContext?.companyName || client.display_name || client.name,
+      category: resolvedCategory || profile.businessType,
+      services: discoveredContext?.services ?? [],
+      audience: discoveredContext?.audience ?? null,
+      city: discoveredContext?.city || profile.city,
+      region: discoveredContext?.region || profile.region,
     },
     competitor_research_status: discovery.ok ? 'grounded' : 'fallback',
     competitor_research_reason: discovery.ok ? null : discovery.reason,
@@ -300,7 +308,7 @@ export async function completeAgencyClientBaseline(args: {
     spend_month_to_date_usd: monthSpendBeforeUsd,
     spend_monthly_cap_usd: policy.monthlyCapUsd,
     readiness_scan_id: scan?.id ?? null,
-    onboarding_loop_version: 'jack-ready-v1',
+    onboarding_loop_version: 'jack-ready-v2',
   };
   await args.supabase
     .from('client_benchmark_configs')
@@ -341,6 +349,10 @@ export async function completeAgencyClientBaseline(args: {
   const failedPlatforms = summary.platformResults
     .filter((item) => item.status === 'failed')
     .map((item) => item.platform);
+  const baselineReady =
+    baseline.competitors.length >= 3 &&
+    launchedPlatforms.length === platforms.length &&
+    failedPlatforms.length === 0;
   const shareToken = typeof client.metadata?.['client_summary_share_token'] === 'string'
     ? String(client.metadata['client_summary_share_token'])
     : crypto.randomUUID().replaceAll('-', '');
@@ -357,11 +369,11 @@ export async function completeAgencyClientBaseline(args: {
     args.supabase.from('client_benchmark_configs').update({
       metadata: {
         ...metadata,
-        baseline_status: launchedPlatforms.length > 0 ? 'measured' : 'failed',
-        baseline_completed_at: launchedPlatforms.length > 0 ? now.toISOString() : null,
+        baseline_status: baselineReady ? 'measured' : 'failed',
+        baseline_completed_at: baselineReady ? now.toISOString() : null,
         baseline_run_group_ids: summary.platformResults.map((item) => item.runGroupId).filter(Boolean),
         baseline_error: failedPlatforms.length === platforms.length ? 'all_platforms_failed' : null,
-        onboarding_loop_status: launchedPlatforms.length > 0 ? 'closed' : 'needs_retry',
+        onboarding_loop_status: baselineReady ? 'closed' : 'needs_retry',
         next_scheduled_at: new Date(
           now.getTime() +
           (config.cadence === 'weekly' ? 7 : config.cadence === 'biweekly' ? 14 : 30) *
@@ -384,7 +396,7 @@ export async function completeAgencyClientBaseline(args: {
   }, 'info');
 
   return {
-    ok: launchedPlatforms.length > 0,
+    ok: baselineReady,
     configId: config.id,
     scanId: scan?.id ?? null,
     score: scan?.score ?? null,
@@ -396,7 +408,11 @@ export async function completeAgencyClientBaseline(args: {
     monthSpendBeforeUsd,
     monthlyCapUsd: policy.monthlyCapUsd,
     shareToken,
-    reason: launchedPlatforms.length > 0 ? null : 'no_provider_completed',
+    reason: baselineReady
+      ? null
+      : baseline.competitors.length < 3
+        ? 'insufficient_competitors'
+        : 'incomplete_provider_measurement',
   };
 }
 

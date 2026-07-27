@@ -33,7 +33,7 @@ export type FreeVisibilityWorkspaceResult =
   | { readonly ok: true; readonly workspaceId: string; readonly baseline: VisibilityBaselineResult }
   | { readonly ok: false; readonly reason: string };
 
-const PROVISIONING_VERSION = 'customer-baseline-v1';
+const PROVISIONING_VERSION = 'customer-baseline-v2';
 const DEFAULT_VERTICAL = 'business services';
 const DEFAULT_LOCATION = 'your market';
 
@@ -147,7 +147,7 @@ export async function provisionCustomerVisibilityBaseline(
       .upsert(
         {
           name: `client-prompts-${canonicalDomain}`,
-          version: 'v1',
+          version: 'v2',
           vertical,
           description: `Automatically provisioned buyer questions for ${canonicalDomain}.`,
           status: 'active',
