@@ -182,6 +182,7 @@ describe('resolveGpmEnabledPlatforms', () => {
     expect(buildActivationRunVersion({
       baseline_requested_at: '2026-07-26T17:05:00.000Z',
       onboarding_loop_version: 'jack-ready-v2',
-    }, 'config-1')).toBe('activation-jack-ready-v2-2026-07-26T17-05-00-000Z');
+      prompt_context_version: 'set-vancouver-clinic',
+    }, 'config-1')).toBe('activation-jack-ready-v2-2026-07-26T17-05-00-000Z-set-vancouver-clinic');
   });
 });
