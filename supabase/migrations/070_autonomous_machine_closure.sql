@@ -268,6 +268,7 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+#variable_conflict use_column
 <<capture>>
 DECLARE
   row_data JSONB := to_jsonb(NEW);
