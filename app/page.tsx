@@ -20,23 +20,23 @@ import { loadUiFlags } from '@/lib/server/app-ui-flags';
 const productLanes = [
   {
     icon: 'visibility',
-    eyebrow: 'AI visibility',
-    title: 'Know where you appear',
-    bullets: ['Track the prompts buyers actually ask', 'Compare your visibility with competitors', 'See which sources AI engines cite'],
+    eyebrow: 'Measure',
+    title: 'See who AI recommends',
+    bullets: ['Track the buyer questions that matter', 'Compare your share of answers with competitors', 'See which sources support each answer'],
     href: '/ai-visibility-audit',
   },
   {
     icon: 'travel_explore',
-    eyebrow: 'Website readiness',
-    title: 'Find what blocks you',
-    bullets: ['Check crawl, structure, and trust signals', 'Prioritize the fixes that matter first', 'Turn every audit into an action plan'],
+    eyebrow: 'Explain',
+    title: 'Know why competitors win',
+    bullets: ['Audit crawl, structure, content, and trust', 'Connect findings to the pages that need work', 'Prioritize evidence-backed improvements'],
     href: '/ai-search-optimization',
   },
   {
     icon: 'monitoring',
-    eyebrow: 'Continuous growth',
-    title: 'Prove the work is paying off',
-    bullets: ['Measure improvements over time', 'Monitor client and competitor movement', 'Share clear, recurring reports'],
+    eyebrow: 'Verify',
+    title: 'Prove what changed',
+    bullets: ['Measure again after the work is done', 'Monitor client and competitor movement', 'Share recurring, client-ready reports'],
     href: '/generative-engine-optimization',
   },
 ] as const;
@@ -85,8 +85,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = await loadBaseUrl();
   return buildPublicPageMetadata({
     baseUrl,
-    title: 'AI Search Optimization Software & Website Readiness Audits | GEO-Pulse',
-    description: 'See how your business appears in AI search. Audit your website, compare competitors, and get a prioritized plan to improve your visibility.',
+    title: 'AI Visibility You Can Prove, Fix, and Report | GEO-Pulse',
+    description: 'See where competitors win in AI answers, what to fix on your website, and whether the work improved your visibility.',
     canonicalPath: '/',
     openGraphType: 'website',
   });
@@ -105,13 +105,13 @@ export default async function HomePage({
   const uiFlags = await loadUiFlags();
   const primaryHref = uiFlags.show_pricing ? '/pricing' : '/login';
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
-  const description = 'See how your business appears in AI search. Audit your website, compare competitors, and get a prioritized plan to improve your visibility.';
+  const description = 'See where competitors win in AI answers, what to fix on your website, and whether the work improved your visibility.';
   const schemas = [
     buildOrganizationStructuredData({ url: siteUrl, description: SITE_DESCRIPTION }),
     buildWebSiteStructuredData({ url: siteUrl, description: SITE_DESCRIPTION }),
     buildWebPageStructuredData({
       url: siteUrl,
-      title: 'AI Search Optimization Software & Website Readiness Audits | GEO-Pulse',
+      title: 'AI Visibility You Can Prove, Fix, and Report | GEO-Pulse',
       description,
       siteUrl,
       dateModified: new Date().toISOString(),
@@ -149,13 +149,13 @@ export default async function HomePage({
         <div className="mx-auto max-w-6xl text-center">
           <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 font-body text-xs font-semibold text-primary">
             <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
-            AI visibility, website readiness, and competitor intelligence
+            Built for agencies, consultants, and ambitious businesses
           </p>
           <h1 className="mx-auto mt-6 max-w-4xl text-balance font-headline text-4xl font-semibold leading-[1.04] tracking-[-0.04em] text-on-background sm:text-5xl md:text-6xl lg:text-7xl">
-            Win visibility in Google and AI search.
+            AI visibility you can prove, fix, and report.
           </h1>
           <p className="mx-auto mt-5 max-w-2xl text-balance font-body text-base leading-7 text-on-surface-variant md:text-lg">
-            See where your business appears, what competitors are winning, and exactly what to fix next—all in one clear workspace.
+            See where competitors win in AI answers, what is holding your website back, and whether your work actually improved the result.
           </p>
 
           <div id="audit" className="mx-auto mt-8 max-w-3xl scroll-mt-24">
@@ -174,7 +174,7 @@ export default async function HomePage({
               </div>
             )}
           </div>
-          <p className="mt-3 font-body text-xs text-on-surface-variant">Free first audit · No credit card · Results in about 90 seconds</p>
+          <p className="mt-3 font-body text-xs text-on-surface-variant">Free first audit · No credit card · Your first priorities in about 90 seconds</p>
 
           <div className="mx-auto mt-8 max-w-5xl">
             <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
@@ -195,10 +195,10 @@ export default async function HomePage({
             <div className="rounded-[1.35rem] border border-outline-variant/20 bg-surface-container-low p-5 md:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/20 pb-5">
                 <div>
-                  <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-primary">Product preview</p>
-                  <p className="mt-1 font-headline text-xl font-semibold text-on-background">Your AI visibility overview</p>
+                  <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-primary">Example product view</p>
+                  <p className="mt-1 font-headline text-xl font-semibold text-on-background">One answer, connected to the next action</p>
                 </div>
-                <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 font-body text-xs font-semibold text-emerald-700 dark:text-emerald-300">Monitoring active</span>
+                <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 font-body text-xs font-semibold text-emerald-700 dark:text-emerald-300">Example data · Monitoring active</span>
               </div>
               <div className="mt-5 grid gap-4 md:grid-cols-[0.8fr_1.2fr_1fr]">
                 <div className="rounded-2xl bg-surface-container-lowest p-5">
@@ -210,7 +210,7 @@ export default async function HomePage({
                   <div className="mt-5 h-2 overflow-hidden rounded-full bg-surface-container">
                     <div className="h-full w-[72%] rounded-full bg-primary" />
                   </div>
-                  <p className="mt-3 font-body text-[11px] text-on-surface-variant">Illustrative workspace</p>
+                  <p className="mt-3 font-body text-[11px] text-on-surface-variant">Measured across buyer questions</p>
                 </div>
                 <div className="rounded-2xl bg-surface-container-lowest p-5">
                   <p className="font-body text-xs text-on-surface-variant">Visibility by engine</p>
@@ -224,12 +224,25 @@ export default async function HomePage({
                   </div>
                 </div>
                 <div className="rounded-2xl bg-surface-container-lowest p-5">
-                  <p className="font-body text-xs text-on-surface-variant">Next best action</p>
-                  <p className="mt-3 font-headline text-lg font-semibold leading-snug text-on-background">Strengthen the pages buyers ask AI about most.</p>
-                  <p className="mt-3 font-body text-xs leading-5 text-on-surface-variant">3 priority pages · 7 recommended fixes</p>
+                  <p className="font-body text-xs text-on-surface-variant">Why competitors win</p>
+                  <p className="mt-3 font-headline text-lg font-semibold leading-snug text-on-background">Their service pages answer the buyer question more directly.</p>
+                  <p className="mt-3 font-body text-xs leading-5 text-on-surface-variant">Next: improve 3 priority pages · verify on the next run</p>
                 </div>
               </div>
             </div>
+          </div>
+          <div className="mx-auto mt-6 grid max-w-4xl gap-3 text-left sm:grid-cols-3">
+            {[
+              ['01', 'Find the gap', 'See the questions where competitors appear and you do not.'],
+              ['02', 'Fix the cause', 'Get practical website and content changes tied to evidence.'],
+              ['03', 'Prove the result', 'Measure again and share progress without rebuilding the report.'],
+            ].map(([number, title, copy]) => (
+              <div key={number} className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest px-5 py-4">
+                <p className="font-mono text-xs font-semibold text-primary">{number}</p>
+                <p className="mt-2 font-headline text-base font-semibold text-on-background">{title}</p>
+                <p className="mt-1 font-body text-xs leading-5 text-on-surface-variant">{copy}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -237,9 +250,9 @@ export default async function HomePage({
       <section className="px-5 py-16 sm:px-6 md:py-20">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-2xl text-center">
-            <p className="font-body text-xs font-semibold uppercase tracking-[0.18em] text-primary">One platform</p>
-            <h2 className="mt-3 text-balance font-headline text-3xl font-semibold tracking-tight text-on-background md:text-4xl">Everything you need to improve your search visibility</h2>
-            <p className="mt-4 font-body leading-7 text-on-surface-variant">Start with a free diagnosis. Keep monitoring when you are ready to grow.</p>
+            <p className="font-body text-xs font-semibold uppercase tracking-[0.18em] text-primary">The closed loop</p>
+            <h2 className="mt-3 text-balance font-headline text-3xl font-semibold tracking-tight text-on-background md:text-4xl">More useful than another visibility score</h2>
+            <p className="mt-4 font-body leading-7 text-on-surface-variant">GEO-Pulse connects measurement to the reason, the fix, and the next verified result.</p>
           </div>
           <div className="mt-10 grid gap-5 lg:grid-cols-3">
             {productLanes.map((lane) => (
@@ -266,7 +279,7 @@ export default async function HomePage({
 
       <section className="border-y border-outline-variant/20 bg-surface-container-low px-5 py-12 sm:px-6">
         <div className="mx-auto grid max-w-6xl gap-8 text-center sm:grid-cols-3">
-          {[['16', 'readiness checks per audit'], ['5', 'major AI engines covered'], ['~90 sec', 'to your first result']].map(([number, label]) => (
+          {[['Measure', 'buyer questions and visibility'], ['Explain', 'why competitors are winning'], ['Verify', 'whether the fix worked']].map(([number, label]) => (
             <div key={label}>
               <p className="font-headline text-4xl font-semibold tracking-tight text-on-background">{number}</p>
               <p className="mt-2 font-body text-sm text-on-surface-variant">{label}</p>
@@ -280,8 +293,8 @@ export default async function HomePage({
           <div className="overflow-hidden rounded-3xl bg-[#151a2d] text-white">
             <div className="relative h-64">
               <Image
-                src="/media/small-business-building.webp"
-                alt="A thriving independent business in a modern neighborhood"
+                src="/media/small-business-owner-v2.webp"
+                alt="An independent business owner reviewing their website on a laptop"
                 fill
                 sizes="(min-width: 1024px) 50vw, 100vw"
                 className="object-cover"
@@ -291,15 +304,15 @@ export default async function HomePage({
             <div className="p-8 pt-6 md:p-10 md:pt-7">
               <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-[#aab4ff]">For businesses</p>
               <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight">Turn uncertainty into your next move.</h2>
-              <p className="mt-4 max-w-lg font-body leading-7 text-white/70">Get a baseline automatically, see how buyers find you in AI, and know which website and content fixes deserve attention.</p>
+              <p className="mt-4 max-w-lg font-body leading-7 text-white/70">Start with an automatic baseline, see where competitors are recommended, and know which website and content fixes deserve attention.</p>
               <Link href="/#audit" className="mt-7 inline-flex rounded-xl bg-white px-5 py-3 font-body text-sm font-semibold text-[#151a2d]">Run my free audit</Link>
             </div>
           </div>
           <div className="overflow-hidden rounded-3xl bg-primary text-on-primary">
             <div className="relative h-64">
               <Image
-                src="/media/agency-brainstorm.webp"
-                alt="A marketing agency team brainstorming a client growth campaign"
+                src="/media/agency-team-v2.webp"
+                alt="A marketing agency team reviewing a client strategy together"
                 fill
                 sizes="(min-width: 1024px) 50vw, 100vw"
                 className="object-cover"
@@ -309,7 +322,7 @@ export default async function HomePage({
             <div className="p-8 pt-6 md:p-10 md:pt-7">
               <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] opacity-75">For agencies</p>
               <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight">Prove value across every client.</h2>
-              <p className="mt-4 max-w-lg font-body leading-7 opacity-80">Benchmark client visibility, monitor progress, and send polished scorecards and recurring reports from one portfolio.</p>
+              <p className="mt-4 max-w-lg font-body leading-7 opacity-80">Benchmark every client, explain the competitive gap, and send branded scorecards and recurring proof from one portfolio.</p>
               <Link href="/solutions/agencies" className="mt-7 inline-flex rounded-xl bg-on-primary px-5 py-3 font-body text-sm font-semibold text-primary">Explore agency tools</Link>
             </div>
           </div>
@@ -338,7 +351,7 @@ export default async function HomePage({
 
       <section className="px-5 pb-16 sm:px-6 md:pb-24">
         <div className="mx-auto flex max-w-6xl flex-col items-center rounded-3xl bg-surface-container-low px-6 py-12 text-center md:px-10">
-          <h2 className="max-w-3xl text-balance font-headline text-3xl font-semibold tracking-tight text-on-background md:text-4xl">Find out where your next customer can—and cannot—find you.</h2>
+          <h2 className="max-w-3xl text-balance font-headline text-3xl font-semibold tracking-tight text-on-background md:text-4xl">Find out where your next customer can and cannot find you.</h2>
           <p className="mt-4 font-body text-on-surface-variant">Start free. Get a clear score and your first priorities in about 90 seconds.</p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Link href="/#audit" className="rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary">Run a free audit</Link>

@@ -23,7 +23,7 @@ export function SiteFooter() {
             <span className="sr-only">GEO-Pulse</span>
           </div>
           <p className="max-w-sm font-label text-xs uppercase tracking-widest text-on-surface-variant">
-            Editorial intelligence for AI search readiness. High-fidelity audits for your public pages.
+            AI visibility you can prove, fix, and report.
           </p>
         </div>
         <div className="flex flex-col gap-4 font-body text-sm uppercase tracking-wide text-on-surface-variant md:flex-row md:justify-end md:gap-8">
