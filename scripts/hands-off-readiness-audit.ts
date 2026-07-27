@@ -178,7 +178,11 @@ async function main(): Promise<void> {
     ),
   );
 
-  const latestMaya = ((latestMayaResult.data ?? []) as Row[])[0] ?? null;
+  const mayaEvents = (latestMayaResult.data ?? []) as Row[];
+  const latestMaya = mayaEvents.find((row) => [
+    'chief_of_staff_campaign_check',
+    'chief_of_staff_campaign_escalation',
+  ].includes(String(row['event'] ?? ''))) ?? null;
   const mayaAgeHours = hoursAgo(latestMaya?.created_at, now);
   const activeDistribution = (distributionResult.data ?? []) as Row[];
   const stuckDistribution = activeDistribution.filter((job) => {
@@ -232,7 +236,7 @@ async function main(): Promise<void> {
       latestEvent: latestMaya?.event ?? null,
       latestAt: latestMaya?.created_at ?? null,
       latestData: latestMaya?.data ?? null,
-      recentEvents: groupCount((latestMayaResult.data ?? []) as Row[], 'event'),
+      recentEvents: groupCount(mayaEvents, 'event'),
     },
     loops: {
       totalLoaded: loops.length,
