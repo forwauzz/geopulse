@@ -12,6 +12,8 @@
  *   autonomous -> approve safe assets and create idempotent distribution jobs
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
+import { reserveProviderSpend } from './provider-spend-control';
 import { loadAutomationSetting } from './automation-settings';
 import {
   createDistributionEngineRepository,
@@ -110,6 +112,7 @@ export type SocialProofAgentResult = {
   readonly candidates: number;
   readonly assetsCreated: number;
   readonly jobsCreated: number;
+  readonly queuedContentItemIds: readonly string[];
   readonly reason?: string;
 };
 
@@ -138,6 +141,75 @@ type ContentRow = {
   readonly metadata: unknown;
   readonly published_at: string | null;
 };
+
+type AssignedSocialRow = {
+  readonly id: string;
+  readonly content_id: string;
+  readonly title: string;
+  readonly brief_markdown: string | null;
+  readonly metadata: Record<string, unknown> | null;
+  readonly created_at: string;
+};
+
+export function remainingDailyAssetCapacity(
+  assets: readonly Pick<DistributionAssetRow, 'created_at' | 'metadata'>[],
+  now: Date,
+  dailyCap: number,
+): number {
+  const day = now.toISOString().slice(0, 10);
+  const createdToday = assets.filter((asset) =>
+    asset.created_at.slice(0, 10) === day
+    && asset.metadata['created_by_agent'] === 'jordan'
+  ).length;
+  return Math.max(0, dailyCap - createdToday);
+}
+
+function assignedSocialCandidate(
+  item: AssignedSocialRow,
+  appUrl: string,
+): SocialProofCandidate | null {
+  const metadata = item.metadata ?? {};
+  const sourceUrl = typeof metadata['source_url'] === 'string' ? metadata['source_url'] : '';
+  const recommendation = typeof metadata['recommendation'] === 'string'
+    ? metadata['recommendation'].trim()
+    : '';
+  const evidence = typeof metadata['evidence'] === 'string'
+    ? metadata['evidence'].trim()
+    : '';
+  if (!sourceUrl.startsWith('https://') || !recommendation || !evidence) return null;
+  const caption = [
+    item.title,
+    '',
+    recommendation,
+    '',
+    'The useful question is not whether AI search exists. It is whether your business is understood, cited, and recommended when buyers ask.',
+    '',
+    'Measure it at getgeopulse.com.',
+  ].join('\n').slice(0, 1_900);
+  return {
+    key: `assigned-${item.content_id}`,
+    kind: 'carousel',
+    title: item.title,
+    caption,
+    ctaUrl: `${appUrl.replace(/\/$/, '')}/ai-visibility-audit`,
+    contentItemId: item.id,
+    mediaUrl: null,
+    mediaMimeType: null,
+    mediaAlt: null,
+    assetType: 'carousel_post',
+    evidence: {
+      source_url: sourceUrl,
+      source_label: metadata['source_label'] ?? null,
+      research_channel: metadata['research_channel'] ?? null,
+      seo_family_key: metadata['seo_family_key'] ?? null,
+      source_excerpt: evidence.slice(0, 800),
+      intelligence_evidence_ids: Array.isArray(metadata['intelligence_evidence_ids'])
+        ? metadata['intelligence_evidence_ids']
+        : [],
+    },
+    safeForAutonomousPublish: true,
+  };
+}
 
 function readBoolean(config: Record<string, unknown>, key: string, fallback: boolean): boolean {
   const value = config[key];
@@ -889,6 +961,7 @@ export async function runSocialProofAgent(args: {
       candidates: 0,
       assetsCreated: 0,
       jobsCreated: 0,
+      queuedContentItemIds: [],
       reason: setting.killSwitch ? 'kill_switch' : 'disabled',
     };
   }
@@ -896,7 +969,7 @@ export async function runSocialProofAgent(args: {
   try {
     const repo = createDistributionEngineRepository(args.supabase as never);
     const now = args.now ?? new Date();
-    const [scanResult, contentResult, accounts, existingAssets] = await Promise.all([
+    const [scanResult, contentResult, assignedSocialResult, accounts, existingAssets] = await Promise.all([
       args.supabase
         .from('scans')
         .select('id,domain,score,letter_grade,issues_json,run_source,created_at')
@@ -909,11 +982,20 @@ export async function runSocialProofAgent(args: {
         .eq('status', 'published')
         .order('published_at', { ascending: false })
         .limit(25),
+      args.supabase
+        .from('content_items')
+        .select('id,content_id,title,brief_markdown,metadata,created_at')
+        .eq('content_type', 'social_post')
+        .in('status', ['idea', 'brief', 'draft', 'approved'])
+        .eq('metadata->>proposed_by', 'seo_agent')
+        .order('created_at', { ascending: true })
+        .limit(10),
       repo.listAccounts({ status: 'connected' }),
       repo.listAssets({ providerFamily: 'instagram' }),
     ]);
     if (scanResult.error) throw scanResult.error;
     if (contentResult.error) throw contentResult.error;
+    if (assignedSocialResult.error) throw assignedSocialResult.error;
 
     let performanceLearning = { checked: 0, updated: 0, failed: 0 };
     if (config.learningEnabled && accountProviderIsInstagram(accounts)) {
@@ -930,7 +1012,48 @@ export async function runSocialProofAgent(args: {
 
     const scans = (scanResult.data ?? []) as ScanRow[];
     const content = (contentResult.data ?? []) as ContentRow[];
+    const assignedSocial = (assignedSocialResult.data ?? []) as AssignedSocialRow[];
     const candidates: SocialProofCandidate[] = [];
+    const opportunityIds = assignedSocial
+      .map((item) => item.metadata?.['seo_opportunity_id'])
+      .filter((value): value is string => typeof value === 'string' && Boolean(value));
+    const proofIntelligence = opportunityIds.length > 0
+      ? await retrieveIntelligenceEvidence(args.supabase, {
+          platformInternal: true,
+          sourceKinds: ['seo_opportunity'],
+          sourceIds: opportunityIds,
+          limit: 50,
+        }).catch(() => ({
+          status: 'insufficient_evidence' as const,
+          evidence: [] as const,
+          limitations: ['Continuous intelligence is pending.'],
+        }))
+      : {
+          status: 'insufficient_evidence' as const,
+          evidence: [] as const,
+          limitations: ['No assigned SEO evidence exists.'],
+        };
+    const proofEvidenceByOpportunity = new Map<string, string[]>();
+    for (const evidence of proofIntelligence.evidence) {
+      proofEvidenceByOpportunity.set(evidence.sourceId, [
+        ...(proofEvidenceByOpportunity.get(evidence.sourceId) ?? []),
+        evidence.evidenceId,
+      ]);
+    }
+
+    for (const item of assignedSocial) {
+      const opportunityId = typeof item.metadata?.['seo_opportunity_id'] === 'string'
+        ? item.metadata['seo_opportunity_id']
+        : '';
+      const candidate = assignedSocialCandidate({
+        ...item,
+        metadata: {
+          ...(item.metadata ?? {}),
+          intelligence_evidence_ids: proofEvidenceByOpportunity.get(opportunityId) ?? [],
+        },
+      }, args.appUrl);
+      if (candidate) candidates.push(candidate);
+    }
 
     if (config.beforeAfterEnabled) {
       const beforeAfter = buildBeforeAfterCandidate(scans, args.appUrl);
@@ -962,8 +1085,21 @@ export async function runSocialProofAgent(args: {
 
     let trendProvider: string | null = null;
     let trendReason: string | null = null;
-    if (config.trendResearchEnabled && args.env) {
-      const discovery = await discoverSocialTrends(args.env, now);
+    const recentSofiaResearch = existingAssets.some((asset) =>
+      (asset.source_key ?? '').startsWith('sofia-')
+      && now.getTime() - Date.parse(asset.created_at) < 20 * 3_600_000
+    );
+    if (config.trendResearchEnabled && args.env && !recentSofiaResearch) {
+      const discovery = await discoverSocialTrends(args.env, now, (provider, estimatedCostUsd) =>
+        reserveProviderSpend({
+          db: args.supabase,
+          provider,
+          idempotencyKey: `social-trend:${provider}:${now.toISOString().slice(0, 10)}`,
+          operation: 'daily_social_trend_research',
+          estimatedCostUsd,
+          metadata: { owner: 'Sofia', cadence: 'daily' },
+        })
+      );
       if (discovery.ok) {
         trendProvider = discovery.provider;
         await upsertPriyaResearchIdeas(
@@ -1055,9 +1191,11 @@ export async function runSocialProofAgent(args: {
       : baseOrderedCandidates;
     let assetsCreated = 0;
     let jobsCreated = 0;
+    const queuedContentItemIds: string[] = [];
+    const dailyCapacity = remainingDailyAssetCapacity(existingAssets, now, config.dailyCap);
 
     for (const rawCandidate of orderedCandidates) {
-      if (assetsCreated >= config.dailyCap) break;
+      if (assetsCreated >= dailyCapacity) break;
       const assetId = makeAssetId(rawCandidate, family);
       // A deterministic asset is immutable from the agent's perspective. Check before
       // rendering so retries never spend Browser Run time on an existing post.
@@ -1206,6 +1344,9 @@ export async function runSocialProofAgent(args: {
             status: 'draft',
           });
           if (autonomousReel) jobsCreated += 1;
+          if (autonomousReel && candidate.contentItemId) {
+            queuedContentItemIds.push(candidate.contentItemId);
+          }
         }
         continue;
       }
@@ -1233,6 +1374,7 @@ export async function runSocialProofAgent(args: {
             status: account.provider_name === 'instagram' ? 'scheduled' : 'queued',
           });
           jobsCreated += 1;
+          if (candidate.contentItemId) queuedContentItemIds.push(candidate.contentItemId);
         }
       }
     }
@@ -1243,6 +1385,7 @@ export async function runSocialProofAgent(args: {
       candidates: candidates.length,
       assetsCreated,
       jobsCreated,
+      queuedContentItemIds,
       ...(candidates.length === 0 ? { reason: 'no_safe_candidates' } : {}),
     };
     await structuredLogWithClientAndWait(
@@ -1278,6 +1421,7 @@ export async function runSocialProofAgent(args: {
       candidates: 0,
       assetsCreated: 0,
       jobsCreated: 0,
+      queuedContentItemIds: [],
       reason,
     };
   }

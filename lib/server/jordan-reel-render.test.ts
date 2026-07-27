@@ -142,7 +142,7 @@ describe('Jordan Reel render handoff', () => {
       validation: {
         width: 1080,
         height: 1920,
-        durationSeconds: 15,
+        durationSeconds: 28,
         audioTrackCount: 1,
         feedPreviewSafe: true,
         gridPreviewSafe: true,

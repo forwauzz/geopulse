@@ -23,6 +23,10 @@ function jsonFromModel(text: string): Record<string, unknown> | null {
 
 export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, fetchImpl: FetchLike = fetch): EditorialProvider {
   return {
+    heroSpend:
+      env.OPENAI_API_KEY?.trim() && env.EDITORIAL_HERO_PUBLIC_BASE && env.REPORT_FILES
+        ? { provider: 'openai', estimatedCostUsd: 0.25 }
+        : undefined,
     async draft({ topic, existingTitles }) {
       const result = await runWorkersAiPrompt({ ai: env.AI, model: env.EDITORIAL_WRITER_MODEL, maxTokens: 3500,
         system: 'You write source-backed GEO-Pulse blog drafts about generative engine optimization (GEO), AI-search visibility, citations, and answer-engine marketing. GEO always means generative engine optimization here, never geographic or local-search optimization. Never promise rankings. Output JSON only: {"title":"","markdown":"","sources":["https://..."]}. Include 2+ H2s, a direct answer, internal /blog links, and a bounded free-scan CTA.',

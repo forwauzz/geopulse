@@ -51,6 +51,7 @@ import { registerLlmVerdictCache } from './scan-engine/run-scan';
 import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-staff';
 import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
+import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -282,6 +283,19 @@ export default {
         await runScheduledDistributionDispatch(supabase as any, env as any);
       } catch (err) {
         structuredError('distribution_verification_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('intelligence_learning');
+        const result = await runIntelligenceLearningLoop(supabase);
+        structuredLog('intelligence_learning_loop', result, result.criticalQuarantined > 0 ? 'warning' : 'info');
+      } catch (err) {
+        structuredError('intelligence_learning_loop_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

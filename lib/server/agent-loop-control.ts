@@ -1,5 +1,6 @@
-type Db = { from(table: string): any };
+import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 
+type Db = { from(table: string): any };
 export type AgentLoopState =
   | 'discovered'
   | 'assigned'
@@ -67,6 +68,49 @@ function metadataObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+export type AcceptedLearningPattern = {
+  readonly id: string;
+  readonly effectSize: number;
+  readonly confidence: number;
+  readonly cohortDefinition?: Readonly<Record<string, unknown>>;
+};
+
+function matchingLearningPatterns(
+  opportunity: SeoOpportunity,
+  patterns: readonly AcceptedLearningPattern[],
+): AcceptedLearningPattern[] {
+  const title = String(opportunity.title ?? '').toLowerCase();
+  return patterns.filter((pattern) => {
+    if (pattern.effectSize <= 0) return false;
+    const cohort = pattern.cohortDefinition ?? {};
+    const seoKind = typeof cohort['seo_kind'] === 'string' ? cohort['seo_kind'] : '';
+    const topic = typeof cohort['topic_cluster'] === 'string'
+      ? cohort['topic_cluster'].trim().toLowerCase()
+      : '';
+    return (seoKind && seoKind === opportunity.kind)
+      || (topic.length >= 3 && title.includes(topic));
+  });
+}
+
+export function prioritizeWithAcceptedLearning(
+  opportunities: readonly SeoOpportunity[],
+  patterns: readonly AcceptedLearningPattern[],
+): SeoOpportunity[] {
+  // Learning may reorder work, but it never changes scoring, claims, or customer
+  // methodology. Only founder-accepted, positive observational patterns enter.
+  return [...opportunities].sort((left, right) => {
+    const leftControlled = metadataObject(left.metadata)['loop_controlled'] === true ? 1 : 0;
+    const rightControlled = metadataObject(right.metadata)['loop_controlled'] === true ? 1 : 0;
+    if (leftControlled !== rightControlled) return leftControlled - rightControlled;
+    const score = (opportunity: SeoOpportunity) =>
+      matchingLearningPatterns(opportunity, patterns)
+        .reduce((sum, pattern) => sum + pattern.effectSize * pattern.confidence, 0);
+    const learningDelta = score(right) - score(left);
+    if (learningDelta !== 0) return learningDelta;
+    return left.priority - right.priority;
+  });
+}
+
 export function buildSeoContentFamily(args: {
   keyword: string;
   opportunityTitle: string;
@@ -101,12 +145,18 @@ export function buildSeoContentFamily(args: {
 async function upsertLoop(
   db: Db,
   input: Record<string, unknown>,
-): Promise<{ id: string; state: AgentLoopState } | null> {
+): Promise<{
+  id: string;
+  state: AgentLoopState;
+  attemptCount: number;
+  maxAttempts: number;
+  lastAttemptedAt: string | null;
+} | null> {
   const sourceType = String(input['source_type']);
   const sourceKey = String(input['source_key']);
   const { data: existing } = await db
     .from('agent_work_loops')
-    .select('id,state')
+    .select('id,state,attempt_count,max_attempts,last_attempted_at')
     .eq('source_type', sourceType)
     .eq('source_key', sourceKey)
     .maybeSingle();
@@ -123,16 +173,40 @@ async function upsertLoop(
       metadata: input['metadata'],
     };
     await db.from('agent_work_loops').update(next).eq('id', existing.id);
-    return { id: String(existing.id), state: existing.state as AgentLoopState };
+    return {
+      id: String(existing.id),
+      state: existing.state as AgentLoopState,
+      attemptCount: Number(existing.attempt_count ?? 0),
+      maxAttempts: Number(existing.max_attempts ?? 3),
+      lastAttemptedAt: existing.last_attempted_at ? String(existing.last_attempted_at) : null,
+    };
   }
 
   const { data, error } = await db
     .from('agent_work_loops')
     .insert(input)
-    .select('id,state')
+    .select('id,state,attempt_count,max_attempts,last_attempted_at')
     .single();
   if (error || !data?.id) return null;
-  return { id: String(data.id), state: data.state as AgentLoopState };
+  return {
+    id: String(data.id),
+    state: data.state as AgentLoopState,
+    attemptCount: Number(data.attempt_count ?? 0),
+    maxAttempts: Number(data.max_attempts ?? 3),
+    lastAttemptedAt: data.last_attempted_at ? String(data.last_attempted_at) : null,
+  };
+}
+
+export function retryIsDue(input: {
+  attemptCount: number;
+  lastAttemptedAt: string | null;
+  now: Date;
+}): boolean {
+  if (!input.lastAttemptedAt) return true;
+  const attemptedAt = Date.parse(input.lastAttemptedAt);
+  if (!Number.isFinite(attemptedAt)) return true;
+  const backoffHours = Math.min(24, 2 ** Math.max(0, input.attemptCount - 1));
+  return input.now.getTime() - attemptedAt >= backoffHours * 3_600_000;
 }
 
 async function ensureContentItem(db: Db, payload: Record<string, unknown>): Promise<{ id: string } | null> {
@@ -163,16 +237,42 @@ export async function syncSeoOpportunityLoops(args: {
     .order('last_seen_at', { ascending: false })
     .limit(100);
 
+  const { data: acceptedPatternRows } = await args.db
+    .from('intelligence_learning_patterns')
+    .select('id,effect_size,confidence,cohort_definition')
+    .eq('status', 'accepted')
+    .eq('metric_key', 'intervention_delta')
+    .gt('effect_size', 0)
+    .order('confidence', { ascending: false })
+    .limit(20);
+  const acceptedPatterns: AcceptedLearningPattern[] = (acceptedPatternRows ?? []).map((row: any) => ({
+    id: String(row.id),
+    effectSize: Number(row.effect_size ?? 0),
+    confidence: Number(row.confidence ?? 0),
+    cohortDefinition: metadataObject(row.cohort_definition),
+  }));
+
   let contentItems = 0;
   let loops = 0;
-  const ordered = ([...(data ?? [])] as SeoOpportunity[]).sort((left, right) => {
-    const leftControlled = metadataObject(left.metadata)['loop_controlled'] === true ? 1 : 0;
-    const rightControlled = metadataObject(right.metadata)['loop_controlled'] === true ? 1 : 0;
-    return leftControlled - rightControlled;
-  });
+  const ordered = prioritizeWithAcceptedLearning(
+    [...(data ?? [])] as SeoOpportunity[],
+    acceptedPatterns,
+  );
   const selected = ordered.slice(0, args.limit ?? 10);
   for (const opportunity of selected) {
     const metadata = metadataObject(opportunity.metadata);
+    const appliedLearningPatternIds = matchingLearningPatterns(opportunity, acceptedPatterns)
+      .map((pattern) => pattern.id);
+    const intelligence = await retrieveIntelligenceEvidence(args.db, {
+      platformInternal: true,
+      sourceKinds: ['seo_opportunity'],
+      sourceIds: [opportunity.id],
+      limit: 10,
+    }).catch(() => ({
+      status: 'insufficient_evidence' as const,
+      evidence: [] as const,
+      limitations: ['Continuous intelligence is pending.'],
+    }));
     const owner = opportunity.kind === 'technical'
       ? 'Marcus'
       : String(metadata['owner'] ?? 'Jordan');
@@ -188,7 +288,13 @@ export async function syncSeoOpportunityLoops(args: {
       next_action: opportunity.recommendation,
       due_at: addHours(opportunity.first_seen_at, opportunity.priority === 1 ? 24 : 72),
       founder_required: false,
-      metadata: { opportunity_key: opportunity.opportunity_key, kind: opportunity.kind },
+      metadata: {
+        opportunity_key: opportunity.opportunity_key,
+        kind: opportunity.kind,
+        intelligence_status: intelligence.status,
+        intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
+        accepted_learning_pattern_ids: appliedLearningPatternIds,
+      },
     });
     if (!parent) continue;
     loops += 1;
@@ -229,6 +335,13 @@ export async function syncSeoOpportunityLoops(args: {
           seo_family_key: opportunity.opportunity_key,
           owner: member.owner,
           channel: member.contentType,
+          source_url: metadata['source_url'] ?? null,
+          source_label: metadata['source_label'] ?? null,
+          research_channel: metadata['research_channel'] ?? null,
+          recommendation: opportunity.recommendation,
+          evidence: opportunity.evidence,
+          intelligence_evidence_ids: intelligence.evidence.map((entry) => entry.evidenceId),
+          accepted_learning_pattern_ids: appliedLearningPatternIds,
           requires_source_backed_editorial_review: member.contentType === 'article',
         },
       });
@@ -410,6 +523,95 @@ export async function retireLegacySeoNewsletterLoops(db: Db, now = new Date()): 
   return loops?.length ?? 0;
 }
 
+export function seoParentCanClose(
+  children: readonly { state: string }[] | null | undefined,
+  measurementCount: number,
+): boolean {
+  return Boolean(children?.length)
+    && children!.every((child) => child.state === 'completed' || child.state === 'dismissed')
+    && measurementCount > 0;
+}
+
+export async function reconcileSeoFollowupMeasurements(db: Db): Promise<number> {
+  const { data: items, error } = await db
+    .from('content_items')
+    .select('id,content_type,canonical_url,published_at,metadata')
+    .eq('metadata->>proposed_by', 'seo_agent')
+    .eq('status', 'published')
+    .not('published_at', 'is', null)
+    .limit(100);
+  if (error) return 0;
+  let created = 0;
+  for (const item of items ?? []) {
+    const metadata = metadataObject(item.metadata);
+    const opportunityId = typeof metadata['seo_opportunity_id'] === 'string'
+      ? metadata['seo_opportunity_id']
+      : null;
+    if (!opportunityId) continue;
+    if (item.content_type === 'article' && item.canonical_url) {
+      const path = String(item.canonical_url).replace(/^https?:\/\/[^/]+/i, '');
+      const { data: measurements } = await db
+        .from('seo_measurements')
+        .select('id,source,measured_on,position,clicks,impressions,ctr,page_url')
+        .ilike('page_url', `%${path}%`)
+        .gte('measured_on', String(item.published_at).slice(0, 10))
+        .order('measured_on', { ascending: false })
+        .limit(1);
+      const measurement = measurements?.[0];
+      if (!measurement?.id) continue;
+      const { error: insertError } = await db.from('content_followup_measurements').upsert({
+        content_item_id: item.id,
+        seo_opportunity_id: opportunityId,
+        measurement_kind: measurement.source === 'google_search_console' ? 'search_console' : 'rank',
+        source_table: 'seo_measurements',
+        source_id: measurement.id,
+        measured_at: `${measurement.measured_on}T12:00:00.000Z`,
+        metrics: {
+          position: measurement.position,
+          clicks: measurement.clicks,
+          impressions: measurement.impressions,
+          ctr: measurement.ctr,
+        },
+        evidence_url: measurement.page_url,
+        quality_state: 'valid',
+      }, { onConflict: 'content_item_id,measurement_kind,source_table,source_id' });
+      if (!insertError) created += 1;
+      continue;
+    }
+    if (item.content_type === 'social_post') {
+      const { data: deliveries } = await db
+        .from('content_distribution_deliveries')
+        .select('id,destination_url,destination_post_id,published_at,metadata')
+        .eq('content_item_id', item.id)
+        .eq('destination_type', 'social')
+        .eq('status', 'published')
+        .not('destination_post_id', 'is', null)
+        .order('published_at', { ascending: false })
+        .limit(1);
+      const delivery = deliveries?.[0];
+      if (!delivery?.id || !delivery.destination_url) continue;
+      const { error: insertError } = await db.from('content_followup_measurements').upsert({
+        content_item_id: item.id,
+        seo_opportunity_id: opportunityId,
+        measurement_kind: 'social_provider',
+        source_table: 'content_distribution_deliveries',
+        source_id: delivery.id,
+        measured_at: delivery.published_at,
+        metrics: {
+          provider_post_id: delivery.destination_post_id,
+          ...(metadataObject(delivery.metadata)['instagram_performance']
+            ? { instagram_performance: metadataObject(delivery.metadata)['instagram_performance'] }
+            : {}),
+        },
+        evidence_url: delivery.destination_url,
+        quality_state: 'valid_partial',
+      }, { onConflict: 'content_item_id,measurement_kind,source_table,source_id' });
+      if (!insertError) created += 1;
+    }
+  }
+  return created;
+}
+
 export async function closeSatisfiedSeoParents(db: Db, now = new Date()): Promise<number> {
   const { data: parents } = await db
     .from('agent_work_loops')
@@ -423,9 +625,14 @@ export async function closeSatisfiedSeoParents(db: Db, now = new Date()): Promis
       .from('agent_work_loops')
       .select('state,evidence')
       .eq('parent_loop_id', parent.id);
-    const hasOpenChild = !children?.length
-      || children.some((child: any) => child.state !== 'completed' && child.state !== 'dismissed');
-    if (hasOpenChild) {
+    const { count: measurementCount, error: measurementError } = await db
+      .from('content_followup_measurements')
+      .select('id', { count: 'exact', head: true })
+      .eq('seo_opportunity_id', parent.source_key)
+      .in('quality_state', ['valid', 'valid_partial']);
+    const allChildrenComplete = Boolean(children?.length)
+      && children.every((child: any) => child.state === 'completed' || child.state === 'dismissed');
+    if (!allChildrenComplete) {
       await db.from('agent_work_loops').update({
         state: 'executing',
         evidence: { verification: 'waiting_for_all_channels_to_publish' },
@@ -436,6 +643,18 @@ export async function closeSatisfiedSeoParents(db: Db, now = new Date()): Promis
         status: 'in_progress',
         completed_at: null,
       }).eq('id', parent.source_key);
+      continue;
+    }
+    if (measurementError || !seoParentCanClose(children, measurementCount ?? 0)) {
+      await db.from('agent_work_loops').update({
+        state: 'verifying',
+        evidence: {
+          verification: 'publication_proven_measurement_pending',
+          child_loops_verified: children.length,
+        },
+        verified_at: null,
+        resolved_at: null,
+      }).eq('id', parent.id);
       continue;
     }
     await db.from('agent_work_loops').update({
@@ -462,6 +681,7 @@ export async function runAgentLoopControl(args: {
   contentCompleted: number;
   seoCompleted: number;
   legacyNewslettersRetired: number;
+  measurementsCreated: number;
 }> {
   const now = args.now ?? new Date();
   const legacyNewslettersRetired = await retireLegacySeoNewsletterLoops(args.db, now);
@@ -471,8 +691,15 @@ export async function runAgentLoopControl(args: {
     limit: args.seoBatch ?? 10,
   });
   const contentCompleted = await reconcileContentLoops(args.db, now);
+  const measurementsCreated = await reconcileSeoFollowupMeasurements(args.db);
   const seoCompleted = await closeSatisfiedSeoParents(args.db, now);
-  return { synced: synced.opportunities, contentCompleted, seoCompleted, legacyNewslettersRetired };
+  return {
+    synced: synced.opportunities,
+    contentCompleted,
+    seoCompleted,
+    legacyNewslettersRetired,
+    measurementsCreated,
+  };
 }
 
 export type CampaignLoopAction = {
@@ -626,6 +853,32 @@ export async function syncCampaignActionLoops(args: {
         blocker: null,
       }).eq('id', loop.id);
       resolvedCount += 1;
+    } else if (
+      loop
+      && action.resolution === 'agent'
+      && loop.attemptCount < loop.maxAttempts
+      && retryIsDue({
+        attemptCount: loop.attemptCount,
+        lastAttemptedAt: loop.lastAttemptedAt,
+        now,
+      })
+    ) {
+      await args.db.from('agent_work_loops').update({
+        state: 'executing',
+        attempt_count: loop.attemptCount + 1,
+        last_attempted_at: now.toISOString(),
+        evidence: {
+          verification: 'repair_attempt_started',
+          attempt_number: loop.attemptCount + 1,
+          replacement_success_pending: true,
+        },
+      }).eq('id', loop.id);
+    } else if (loop && action.resolution === 'agent' && loop.attemptCount >= loop.maxAttempts) {
+      await args.db.from('agent_work_loops').update({
+        state: 'blocked',
+        blocker: 'Bounded repair attempts are exhausted; Marcus must change the repair strategy.',
+        founder_required: false,
+      }).eq('id', loop.id);
     }
   }
 
@@ -637,9 +890,21 @@ export async function syncCampaignActionLoops(args: {
     .limit(250);
   for (const loop of prior ?? []) {
     if (activeKeys.has(String(loop.source_key))) continue;
+    const sourceKey = String(loop.source_key);
+    const verification = sourceKey.startsWith('runtime:') || sourceKey.startsWith('cron:')
+      ? 'successful_runtime_signal_observed'
+      : sourceKey.startsWith('distribution:')
+        ? 'provider_delivery_success_observed'
+        : sourceKey.startsWith('gpm:')
+          ? 'completed_measurement_observed'
+          : sourceKey.startsWith('agent:')
+            ? 'agent_enabled_without_blockers'
+            : 'source_action_no_longer_open';
     await args.db.from('agent_work_loops').update({
       state: 'completed',
-      evidence: { verification: 'source_action_no_longer_open' },
+      evidence: {
+        verification,
+      },
       verified_at: now.toISOString(),
       resolved_at: now.toISOString(),
       founder_required: false,

@@ -30,9 +30,9 @@ try {
   execFileSync('ffmpeg', [
     '-y',
     '-f', 'lavfi',
-    '-i', 'sine=frequency=72:sample_rate=48000:duration=15',
+    '-i', 'sine=frequency=72:sample_rate=48000:duration=28',
     '-filter_complex',
-    'volume=0.055,tremolo=f=2.4:d=0.68,afade=t=in:st=0:d=0.25,afade=t=out:st=14.2:d=0.8',
+    'volume=0.055,tremolo=f=2.4:d=0.68,afade=t=in:st=0:d=0.35,afade=t=out:st=27:d=1',
     join(working, 'assets', 'pulse-bed.wav'),
   ], { stdio: 'inherit' });
 
@@ -116,7 +116,7 @@ try {
   const audioTracks = probe.streams.filter((stream) => stream.codec_type === 'audio').length;
   const durationSeconds = Number.parseFloat(probe.format?.duration ?? '0');
   if (videoStream?.width !== 1080 || videoStream?.height !== 1920) throw new Error('render_dimensions_invalid');
-  if (!Number.isFinite(durationSeconds) || durationSeconds < 14 || durationSeconds > 20) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds < 26 || durationSeconds > 30) {
     throw new Error('render_duration_invalid');
   }
   if (audioTracks < 1) throw new Error('render_audio_missing');
@@ -124,9 +124,9 @@ try {
   const thumbnailPath = join(working, 'previews', 'thumbnail.jpg');
   const feedPath = join(working, 'previews', 'feed-4x5.jpg');
   const gridPath = join(working, 'previews', 'grid-1x1.jpg');
-  execFileSync('ffmpeg', ['-y', '-ss', '7.5', '-i', videoPath, '-frames:v', '1', '-update', '1', '-q:v', '2', thumbnailPath], { stdio: 'inherit' });
-  execFileSync('ffmpeg', ['-y', '-ss', '7.5', '-i', videoPath, '-vf', 'crop=1080:1350:0:285', '-frames:v', '1', '-update', '1', '-q:v', '2', feedPath], { stdio: 'inherit' });
-  execFileSync('ffmpeg', ['-y', '-ss', '7.5', '-i', videoPath, '-vf', 'crop=1080:1080:0:420', '-frames:v', '1', '-update', '1', '-q:v', '2', gridPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', '14', '-i', videoPath, '-frames:v', '1', '-update', '1', '-q:v', '2', thumbnailPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', '14', '-i', videoPath, '-vf', 'crop=1080:1350:0:285', '-frames:v', '1', '-update', '1', '-q:v', '2', feedPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', '14', '-i', videoPath, '-vf', 'crop=1080:1080:0:420', '-frames:v', '1', '-update', '1', '-q:v', '2', gridPath], { stdio: 'inherit' });
 
   const form = new FormData();
   form.set('assetId', claim.assetId);

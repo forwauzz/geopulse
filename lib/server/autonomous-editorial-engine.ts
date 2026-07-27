@@ -12,9 +12,14 @@ import {
   materializeSeoContentDerivatives,
   reconcileContentLoops,
 } from './agent-loop-control';
+import { reserveProviderSpend } from './provider-spend-control';
 
-type Db = { from(table: string): any };
+type Db = { from(table: string): any; rpc?(name: string, args: Record<string, unknown>): any };
 export type EditorialProvider = {
+  readonly heroSpend?: {
+    readonly provider: 'openai';
+    readonly estimatedCostUsd: number;
+  };
   draft(input: { topic: string; existingTitles: string[] }): Promise<{ title: string; markdown: string; sources: string[] }>;
   hero(input: { title: string; markdown: string }): Promise<{ url: string; alt: string } | null>;
   review(input: { title: string; markdown: string; sources: string[]; hero: { url: string; alt: string } }): Promise<{ approved: boolean; reasons: string[] }>;
@@ -116,6 +121,17 @@ export async function runAutonomousEditorialEngine(args: {
   const draft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
   if (!draft.title || !draft.markdown || draft.sources.length === 0) return { status: 'rejected', reason: 'incomplete_draft' };
 
+  if (args.provider.heroSpend) {
+    const reserved = await reserveProviderSpend({
+      db: args.supabase,
+      provider: args.provider.heroSpend.provider,
+      idempotencyKey: `editorial-hero:${candidate.content_id}`,
+      operation: 'autonomous_editorial_hero',
+      estimatedCostUsd: args.provider.heroSpend.estimatedCostUsd,
+      metadata: { content_id: candidate.content_id, topic: candidate.topic_cluster },
+    });
+    if (!reserved) return { status: 'skipped', reason: 'openai_spend_cap' };
+  }
   const hero = await args.provider.hero({ title: draft.title, markdown: draft.markdown });
   if (!hero?.url || !hero.alt) return { status: 'rejected', reason: 'missing_clean_hero' };
 

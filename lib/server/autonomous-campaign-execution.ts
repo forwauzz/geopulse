@@ -35,16 +35,16 @@ async function markContentLoopExecuting(args: {
     .eq('id', loop.id);
 }
 
-async function pendingSeoSocialDerivatives(db: Db): Promise<Array<{ content_id: string }>> {
+async function pendingSeoSocialDerivatives(db: Db): Promise<Array<{ id: string; content_id: string }>> {
   const { data, error } = await db
     .from('content_items')
-    .select('content_id')
+    .select('id,content_id')
     .eq('content_type', 'social_post')
     .in('status', ['idea', 'brief', 'draft', 'approved'])
-    .eq('metadata->>derived_from_canonical', 'true')
+    .eq('metadata->>proposed_by', 'seo_agent')
     .limit(10);
   if (error) throw error;
-  return (data ?? []) as Array<{ content_id: string }>;
+  return (data ?? []) as Array<{ id: string; content_id: string }>;
 }
 
 export async function runAutonomousCampaignExecution(args: {
@@ -73,8 +73,9 @@ export async function runAutonomousCampaignExecution(args: {
         now,
       })
     : null;
-  if ((social?.jobsCreated ?? 0) > 0) {
-    await Promise.all(pendingSocial.map((item) =>
+  const queuedIds = new Set(social?.queuedContentItemIds ?? []);
+  if (queuedIds.size > 0) {
+    await Promise.all(pendingSocial.filter((item) => queuedIds.has(item.id)).map((item) =>
       markContentLoopExecuting({
         db: args.supabase,
         contentId: item.content_id,

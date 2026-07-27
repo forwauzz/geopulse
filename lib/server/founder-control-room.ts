@@ -212,9 +212,12 @@ export function buildFounderControlRoom(args: {
     };
   });
 
-  const denominator = snapshot.leads + snapshot.activeProspects;
-  const conversion = denominator > 0 ? Math.round((snapshot.convertedLeads / denominator) * 100) : 0;
-  const activation = denominator > 0 ? Math.min(100, Math.round((snapshot.completedScans / denominator) * 100)) : 0;
+  const conversion = snapshot.checkoutStarts > 0
+    ? Math.min(100, Math.round((snapshot.convertedLeads / snapshot.checkoutStarts) * 100))
+    : 0;
+  const activation = snapshot.leads > 0
+    ? Math.min(100, Math.round((snapshot.activatedLeads / snapshot.leads) * 100))
+    : 0;
   const delivery = snapshot.completedScans > 0
     ? Math.min(100, Math.round((snapshot.deliveredReports / snapshot.completedScans) * 100))
     : 0;
@@ -233,10 +236,10 @@ export function buildFounderControlRoom(args: {
     currentBottleneck: snapshot.focusReason,
     metrics: [
       { label: 'Revenue', value: String(snapshot.convertedLeads), detail: 'paid relationships in 30 days' },
-      { label: 'Activation', value: `${activation}%`, detail: 'prospects reaching a completed scan' },
+      { label: 'Activation', value: `${activation}%`, detail: 'new leads linked to a completed scan' },
       { label: 'Monitoring', value: String(snapshot.activeMonitoring), detail: 'active recurring accounts' },
       { label: 'Delivery', value: `${delivery}%`, detail: 'completed scans with delivered reports' },
-      { label: 'Conversion', value: `${conversion}%`, detail: 'known prospects becoming paid' },
+      { label: 'Conversion', value: `${conversion}%`, detail: 'checkout starts becoming Stripe payments' },
     ],
     learningBrief: {
       headline: `Weakest handoff: ${snapshot.focus}`,

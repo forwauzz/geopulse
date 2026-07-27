@@ -7,6 +7,7 @@ import {
 import { loadCampaignControlRoom } from './campaign-control-room';
 import { agentEmailSignatureHtml } from './email-theme';
 import { structuredLogWithClientAndWait } from './structured-log';
+import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 
 function escapeHtml(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -24,6 +25,22 @@ export async function runCampaignChiefOfStaffCheck(args: {
     now: args.now,
   });
   const now = args.now ?? new Date();
+  const intelligence = await retrieveIntelligenceEvidence(args.supabase, {
+    platformInternal: true,
+    sourceKinds: [
+      'report_delivery',
+      'distribution_delivery',
+      'outreach_delivery',
+      'payment',
+      'subscription',
+    ],
+    observedAfter: new Date(now.getTime() - 30 * 86_400_000).toISOString(),
+    limit: 25,
+  }).catch(() => ({
+    status: 'insufficient_evidence' as const,
+    evidence: [] as const,
+    limitations: ['Continuous intelligence is pending.'],
+  }));
   const remediated = await attemptSafeCampaignRemediation({
     db: args.supabase,
     actions: room.actions,
@@ -48,6 +65,9 @@ export async function runCampaignChiefOfStaffCheck(args: {
       safely_remediated: remediated.size,
       loops_open: loopSync.open,
       loops_resolved: loopSync.resolved,
+      intelligence_status: intelligence.status,
+      intelligence_evidence_count: intelligence.evidence.length,
+      intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId).join(','),
     },
     urgent > 0 ? 'warning' : 'info',
   );

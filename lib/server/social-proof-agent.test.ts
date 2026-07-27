@@ -7,6 +7,7 @@ import {
   instagramScheduleSlot,
   orderAutonomousCandidates,
   preferredAccount,
+  remainingDailyAssetCapacity,
   reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
 } from './social-proof-agent';
@@ -242,5 +243,33 @@ describe('Social Proof Agent safeguards', () => {
     expect(
       reserveInstagramScheduleSlot('2026-07-23T21:00:00.000Z', occupied)
     ).toBe('2026-07-23T23:00:00.000Z');
+  });
+
+  it('enforces the creative cap across the UTC day instead of once per hourly run', () => {
+    const asset = (created_at: string, createdBy = 'jordan') => ({
+      id: created_at,
+      asset_id: created_at,
+      campaign_id: 'social-proof',
+      content_item_id: null,
+      asset_type: 'carousel_post' as const,
+      title: 'Test asset',
+      body_text: 'Test',
+      media_url: null,
+      media_mime_type: null,
+      media_alt: null,
+      cta_url: null,
+      utm: {},
+      metadata: { created_by_agent: createdBy },
+      status: 'ready' as const,
+      created_at,
+      updated_at: created_at,
+    });
+
+    expect(remainingDailyAssetCapacity([
+      asset('2026-07-27T01:00:00.000Z'),
+      asset('2026-07-27T02:00:00.000Z'),
+      asset('2026-07-27T03:00:00.000Z', 'manual'),
+      asset('2026-07-26T23:00:00.000Z'),
+    ], new Date('2026-07-27T08:00:00.000Z'), 4)).toBe(2);
   });
 });

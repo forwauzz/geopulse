@@ -12,6 +12,7 @@ import { executeGpmClientRun, resolveGpmPlatformModelMap } from '@/lib/server/ge
 import { parsePromptCsv } from '@/lib/server/prompt-csv';
 import { parseReportRecipients } from '@/lib/shared/report-recipients';
 import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
+import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -217,6 +218,17 @@ export async function activateClientMonitoring(formData: FormData): Promise<void
     .upsert(queryRows, { onConflict: 'query_set_id,query_key' });
   if (queryError) return;
 
+  const intelligence = await retrieveIntelligenceEvidence(admin, {
+    tenantType: 'agency_client',
+    tenantId: parsed.data.clientId,
+    domainHost: canonical,
+    limit: 25,
+  }).catch(() => ({
+    status: 'insufficient_evidence' as const,
+    evidence: [] as const,
+    limitations: ['Continuous intelligence is pending.'],
+  }));
+
   const configPayload = {
       agency_account_id: parsed.data.agencyAccountId,
       benchmark_domain_id: domainRow.id,
@@ -234,8 +246,11 @@ export async function activateClientMonitoring(formData: FormData): Promise<void
         prompt_source: 'customer_supplied',
         prompt_count: prompts.length,
         outcome_action_events: [],
-        report_recipients: recipients,
-      },
+         report_recipients: recipients,
+         intelligence_status: intelligence.status,
+         intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
+         intelligence_limitations: intelligence.limitations,
+       },
     };
   const { data: existingConfig } = await admin
     .from('client_benchmark_configs')

@@ -9,6 +9,7 @@ import {
   type CampaignHealth,
   type CampaignLane,
 } from '@/lib/server/campaign-control-room';
+import { loadProviderSpendSummary } from '@/lib/server/provider-spend-control';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,13 +83,14 @@ export default async function AdminCampaignsPage({
   }
 
   const agents = await loadAgentStatuses(ctx.adminDb, env);
-  const [room, loopResult] = await Promise.all([
+  const [room, loopResult, providerSpend] = await Promise.all([
     loadCampaignControlRoom({ supabase: ctx.adminDb, agents }),
     ctx.adminDb
       .from('agent_work_loops')
       .select('id,source_type,source_key,parent_loop_id,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,founder_required,blocker,evidence,metadata,resolved_at,updated_at')
       .order('updated_at', { ascending: false })
       .limit(100),
+    loadProviderSpendSummary(ctx.adminDb),
   ]);
   const loops = loopResult.data ?? [];
   const loopsById = new Map(loops.map((loop: any) => [String(loop.id), loop]));
@@ -169,6 +171,38 @@ export default async function AdminCampaignsPage({
                 </Link>
               );
             })}
+          </section>
+
+          <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Hard spend limits</p>
+              <h2 className="mt-2 font-headline text-xl font-bold text-on-background">Provider budgets</h2>
+              <p className="mt-1 text-sm text-on-surface-variant">New paid API work stops at these monthly application caps unless you set a time-limited founder override.</p>
+            </div>
+            {providerSpend.length > 0 ? (
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {providerSpend.map((row) => (
+                  <article key={row.provider} className="rounded-xl bg-surface-container-low p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold capitalize text-on-background">{row.provider}</p>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${
+                        row.status === 'blocked'
+                          ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                          : row.status === 'attention'
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                            : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                      }`}>{row.status}</span>
+                    </div>
+                    <p className="mt-3 text-2xl font-black text-on-background">${row.spentUsd.toFixed(2)} <span className="text-sm font-medium text-on-surface-variant">of ${row.capUsd.toFixed(2)}</span></p>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-container-high">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${row.percentUsed}%` }} />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-5 rounded-xl bg-surface-container-low px-4 py-4 text-sm text-on-surface-variant">Spend controls activate when migration 070 is installed.</p>
+            )}
           </section>
 
           <section id="loop-control" className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
