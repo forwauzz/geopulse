@@ -62,7 +62,9 @@ export async function discoverCompetitorsLive(
   const body = {
     contents: [{ parts: [{ text: buildDiscoveryPrompt(profile, selfDomain) }] }],
     // Google-Search grounding — the whole point of the live path. Requires a billed key.
-    tools: [{ google_search: {} }],
+    // Bind the entity to the customer's exact website before searching outward. Search alone can
+    // confuse similarly named companies in different countries.
+    tools: [{ url_context: {} }, { google_search: {} }],
     generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
   };
 
@@ -76,12 +78,23 @@ export async function discoverCompetitorsLive(
       });
 
       if (!res.ok) {
+        const responseText = await res.text().catch(() => '');
+        let providerReason = '';
+        try {
+          const parsed = JSON.parse(responseText) as { error?: { message?: string } };
+          providerReason = parsed.error?.message?.trim().slice(0, 180) ?? '';
+        } catch {
+          providerReason = responseText.trim().slice(0, 180);
+        }
         const retryable = TRANSIENT_STATUSES.has(res.status);
         if (retryable && attempt < MAX_ATTEMPTS) {
           await sleep(RETRY_DELAYS_MS[attempt - 1] ?? 1200);
           continue;
         }
-        return { ok: false, reason: `gemini_http_${String(res.status)}` };
+        return {
+          ok: false,
+          reason: `gemini_http_${String(res.status)}${providerReason ? `:${providerReason}` : ''}`,
+        };
       }
 
       const data = (await res.json()) as {
