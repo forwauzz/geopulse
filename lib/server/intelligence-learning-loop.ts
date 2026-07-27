@@ -33,6 +33,77 @@ export function isRepairableStaleBenchmarkAlert(input: {
     && Boolean(input.sourceId);
 }
 
+type MeasurementWindowIdentity = {
+  readonly domainId: string;
+  readonly querySetId: string;
+  readonly modelId: string;
+  readonly windowKey: string;
+};
+
+type WindowAssessment = {
+  readonly id: string;
+  readonly source_id: string;
+  readonly eligible: boolean;
+  readonly anomaly_codes: unknown;
+  readonly coverage_ratio?: number | null;
+  readonly assessed_at?: string | null;
+};
+
+export function parseMeasurementWindowIdentity(sourceId: string): MeasurementWindowIdentity | null {
+  const parts = sourceId.split(':');
+  if (parts.length < 4) return null;
+  const [domainId, querySetId, modelId] = parts.slice(-3);
+  const windowKey = parts.slice(0, -3).join(':');
+  if (!domainId || !querySetId || !modelId || !windowKey) return null;
+  return { domainId, querySetId, modelId, windowKey };
+}
+
+export function selectSupersedingHealthyAssessment(
+  sourceId: string,
+  assessments: readonly WindowAssessment[],
+): WindowAssessment | null {
+  const original = parseMeasurementWindowIdentity(sourceId);
+  if (!original) return null;
+  return assessments
+    .filter((assessment) => {
+      const replacement = parseMeasurementWindowIdentity(assessment.source_id);
+      const anomalies = Array.isArray(assessment.anomaly_codes) ? assessment.anomaly_codes : [];
+      return Boolean(
+        replacement
+        && assessment.eligible
+        && anomalies.length === 0
+        && replacement.domainId === original.domainId
+        && replacement.querySetId === original.querySetId
+        && replacement.windowKey !== original.windowKey
+        && !replacement.windowKey.startsWith('legacy:')
+        && (original.windowKey.startsWith('legacy:') || replacement.windowKey > original.windowKey),
+      );
+    })
+    .sort((left, right) => {
+      const leftIdentity = parseMeasurementWindowIdentity(left.source_id);
+      const rightIdentity = parseMeasurementWindowIdentity(right.source_id);
+      return String(rightIdentity?.windowKey ?? '').localeCompare(String(leftIdentity?.windowKey ?? ''));
+    })[0] ?? null;
+}
+
+async function findSupersedingHealthyAssessment(
+  db: Db,
+  sourceId: string,
+): Promise<WindowAssessment | null> {
+  const identity = parseMeasurementWindowIdentity(sourceId);
+  if (!identity) return null;
+  const { data, error } = await db
+    .from('intelligence_window_quality_assessments')
+    .select('id,source_id,eligible,anomaly_codes,coverage_ratio,assessed_at')
+    .eq('source_kind', 'benchmark_measurement_window')
+    .like('source_id', `%:${identity.domainId}:${identity.querySetId}:%`)
+    .eq('eligible', true)
+    .order('assessed_at', { ascending: false })
+    .limit(100);
+  if (error) return null;
+  return selectSupersedingHealthyAssessment(sourceId, (data ?? []) as WindowAssessment[]);
+}
+
 async function resolveAlertAndLoop(args: {
   db: Db;
   alertId: string;
@@ -184,6 +255,28 @@ async function reconcileQualityDebt(db: Db, now: Date): Promise<{
     }
 
     const sourceId = String(alert.source_id ?? '');
+    if (
+      alert.source_kind === 'benchmark_measurement_window'
+      && ['whole_cohort_all_zero', 'citation_rate_discontinuity'].includes(reason)
+    ) {
+      const replacement = await findSupersedingHealthyAssessment(db, sourceId);
+      if (replacement && await resolveAlertAndLoop({
+        db,
+        alertId: String(alert.id),
+        now,
+        resolutionNote: 'A newer measurement for the same domain and query lane passed the active quality gate.',
+        evidence: {
+          verification: 'superseding_measurement_window_passed',
+          replacement_assessment_id: replacement.id,
+          replacement_source_id: replacement.source_id,
+          replacement_coverage_ratio: replacement.coverage_ratio ?? null,
+        },
+      })) {
+        alertsResolved += 1;
+        continue;
+      }
+    }
+
     const { data: run } = sourceId
       ? await db
           .from('intelligence_runs')
