@@ -55,7 +55,7 @@ export async function discoverCompetitorsLive(
   const model =
     env.COMPETITOR_DISCOVERY_GEMINI_MODEL?.trim() ||
     env.GEMINI_MODEL?.trim() ||
-    'gemini-2.5-flash-lite';
+    'gemini-3.5-flash-lite';
   const base = (env.GEMINI_ENDPOINT?.trim() || 'https://generativelanguage.googleapis.com/v1beta/models').replace(/\/$/, '');
   const url = `${base}/${model}:generateContent?key=${encodeURIComponent(key)}`;
 

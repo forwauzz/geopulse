@@ -488,7 +488,7 @@ export type GpmScheduleEnvLike = {
 export function resolveGpmPlatformModelMap(env: GpmScheduleEnvLike): GpmPlatformModelMap {
   return {
     chatgpt: env.GPM_CHATGPT_MODEL_ID?.trim() || 'gpt-4o-mini',
-    gemini: env.GPM_GEMINI_MODEL_ID?.trim() || 'gemini-2.0-flash',
+    gemini: env.GPM_GEMINI_MODEL_ID?.trim() || 'gemini-3.5-flash-lite',
     perplexity: env.GPM_PERPLEXITY_MODEL_ID?.trim() || 'sonar',
   };
 }
