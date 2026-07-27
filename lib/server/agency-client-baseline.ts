@@ -352,6 +352,10 @@ export async function completeAgencyClientBaseline(args: {
   const failedPlatforms = summary.platformResults
     .filter((item) => item.status === 'failed')
     .map((item) => item.platform);
+  const monthSpendAfterUsd = Math.round((
+    monthSpendBeforeUsd +
+    summary.platformResults.reduce((sum, result) => sum + result.estimatedCostUsd, 0)
+  ) * 10_000) / 10_000;
   const baselineReady =
     baseline.competitors.length >= 3 &&
     launchedPlatforms.length === platforms.length &&
@@ -372,6 +376,7 @@ export async function completeAgencyClientBaseline(args: {
     args.supabase.from('client_benchmark_configs').update({
       metadata: {
         ...metadata,
+        spend_month_to_date_usd: monthSpendAfterUsd,
         baseline_status: baselineReady ? 'measured' : 'failed',
         baseline_completed_at: baselineReady ? now.toISOString() : null,
         baseline_run_group_ids: summary.platformResults.map((item) => item.runGroupId).filter(Boolean),
