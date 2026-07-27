@@ -7,7 +7,13 @@ export const dynamic = 'force-dynamic';
 export default async function WelcomePage({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ error?: string }>;
+  readonly searchParams?: Promise<{
+    error?: string;
+    bundle?: string;
+    autosubscribe?: string;
+    organization_name?: string;
+    website_url?: string;
+  }>;
 }) {
   const sp = (await searchParams) ?? {};
   const supabase = await createSupabaseServerClient();
@@ -22,6 +28,11 @@ export default async function WelcomePage({
         <p className="mx-auto mt-3 max-w-xl text-on-surface-variant">Two quick choices personalize your workspace. You can change them later.</p>
       </header>
       <form action={completeWelcome} className="mt-8 space-y-7 rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float sm:p-8">
+        {sp.bundle ? <input type="hidden" name="bundle" value={sp.bundle} /> : null}
+        {sp.autosubscribe ? <input type="hidden" name="autosubscribe" value={sp.autosubscribe} /> : null}
+        {sp.organization_name ? (
+          <input type="hidden" name="organization_name" value={sp.organization_name} />
+        ) : null}
         <fieldset>
           <legend className="font-semibold text-on-background">1. Which best describes you?</legend>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -30,7 +41,18 @@ export default async function WelcomePage({
               ['agency', 'Marketing agency', 'Manage clients and send branded reports.', 'groups'],
             ].map(([value, title, body, icon]) => (
               <label key={value} className="cursor-pointer rounded-xl border border-outline-variant/20 p-4 transition has-[:checked]:border-primary has-[:checked]:bg-primary/5">
-                <input type="radio" name="role" value={value} required className="sr-only" />
+                <input
+                  type="radio"
+                  name="role"
+                  value={value}
+                  required
+                  defaultChecked={
+                    value === 'agency'
+                      ? sp.bundle === 'agency_core' || sp.bundle === 'agency_pro'
+                      : sp.bundle === 'startup_dev'
+                  }
+                  className="sr-only"
+                />
                 <span className="material-symbols-outlined text-primary" aria-hidden>{icon}</span>
                 <span className="mt-3 block font-semibold text-on-background">{title}</span>
                 <span className="mt-1 block text-sm text-on-surface-variant">{body}</span>
@@ -55,7 +77,14 @@ export default async function WelcomePage({
         </fieldset>
         <label className="block">
           <span className="font-semibold text-on-background">Website <span className="font-normal text-on-surface-variant">(optional)</span></span>
-          <input name="website" type="text" inputMode="url" placeholder="yourbusiness.com" className="mt-3 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-on-background outline-none focus:border-primary" />
+          <input
+            name="website"
+            type="text"
+            inputMode="url"
+            defaultValue={sp.website_url ?? ''}
+            placeholder="yourbusiness.com"
+            className="mt-3 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-on-background outline-none focus:border-primary"
+          />
         </label>
         {sp.error ? <p className="rounded-xl bg-error/10 px-4 py-3 text-sm text-error">We could not save those choices. Please try again.</p> : null}
         <button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 font-semibold text-on-primary">

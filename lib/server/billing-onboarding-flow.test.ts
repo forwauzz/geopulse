@@ -25,6 +25,17 @@ describe('resolvePostSignupRedirect', () => {
         isNewUser: true,
         organizationName: 'North Star Agency',
       }),
+    ).toBe('/dashboard/welcome?bundle=agency_core&autosubscribe=1&organization_name=North+Star+Agency');
+  });
+
+  it('lets an existing onboarded buyer continue directly to checkout', () => {
+    expect(
+      resolvePostSignupRedirect({
+        nextParam: '/pricing',
+        bundleParam: 'agency_core',
+        isNewUser: false,
+        organizationName: 'North Star Agency',
+      }),
     ).toBe('/pricing?bundle=agency_core&autosubscribe=1&organization_name=North+Star+Agency');
   });
 

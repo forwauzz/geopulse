@@ -15,7 +15,11 @@ export function resolvePostSignupRedirect(args: {
     if (args.websiteUrl?.trim()) {
       params.set('website_url', args.websiteUrl.trim());
     }
-    return `/pricing?${params.toString()}`;
+    // A paid buyer still needs a persona + goal before workspace provisioning can
+    // succeed. Keep the selected plan through that short step, then continue to
+    // checkout. Sending a brand-new user straight to Stripe created a race between
+    // auth cookies, onboarding recovery, and the checkout request.
+    return `${args.isNewUser ? '/dashboard/welcome' : '/pricing'}?${params.toString()}`;
   }
 
   if (args.isNewUser && !args.nextParam) {

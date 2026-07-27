@@ -81,7 +81,9 @@ export default async function LoginPage({ searchParams }: Props) {
       </h1>
       <p className="mt-2 max-w-2xl font-body text-on-surface-variant">
         {isSignUp
-          ? 'Create your free account to save audits, track scores over time, and set up recurring reports. No credit card.'
+          ? bundleKey
+            ? 'Create your account, personalize your workspace, then review your secure trial checkout. A credit card is required to start the trial.'
+            : 'Create your free account to save audits, track scores over time, and set up recurring reports. No credit card.'
           : 'Enter your email and password.'}
       </p>
       <p className="mt-3 max-w-2xl font-body text-sm text-on-surface-variant">

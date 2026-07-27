@@ -9,16 +9,9 @@ export const dynamic = 'force-dynamic';
 
 const BUNDLE_NAMES: Record<string, string> = {
   startup_lite: 'Startup Lite',
-  startup_dev: 'Startup Dev',
-  agency_core: 'Agency Core',
-  agency_pro: 'Agency Pro',
-};
-
-const BUNDLE_PRICES: Record<string, string> = {
-  startup_lite: 'Free',
-  startup_dev: '$19.75 USD / month',
-  agency_core: '$49.99 USD / month',
-  agency_pro: '$129.99 USD / month',
+  startup_dev: 'Business',
+  agency_core: 'Agency',
+  agency_pro: 'Agency Scale',
 };
 
 const SCAN_QUOTA: Record<string, number | null> = {
@@ -54,6 +47,20 @@ function formatDate(ts: string | null | undefined): string {
   });
 }
 
+function formatBundlePrice(
+  cents: number | null | undefined,
+  billingMode: string | null | undefined,
+): string | null {
+  if (billingMode === 'free') return 'Free';
+  if (!cents || cents <= 0) return null;
+  const amount = new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  }).format(cents / 100);
+  return `${amount} CAD / ${billingMode === 'annual' ? 'year' : 'month'}`;
+}
+
 export default async function BillingPage() {
   const supabase = await createSupabaseServerClient();
   const {
@@ -64,7 +71,7 @@ export default async function BillingPage() {
     redirect('/login?next=/dashboard/billing');
   }
 
-  const [subResult, userResult] = await Promise.all([
+  const [subResult, userResult, bundleResult] = await Promise.all([
     supabase
       .from('user_subscriptions')
       .select('bundle_key, status, current_period_end, created_at, stripe_customer_id')
@@ -78,9 +85,20 @@ export default async function BillingPage() {
       .select('scans_this_month, stripe_customer_id')
       .eq('id', user.id)
       .maybeSingle(),
+    supabase
+      .from('service_bundles')
+      .select('bundle_key, monthly_price_cents, billing_mode')
+      .in('bundle_key', ['startup_lite', 'startup_dev', 'agency_core', 'agency_pro']),
   ]);
 
   const sub = subResult.data;
+  const currentBundle = sub
+    ? bundleResult.data?.find((bundle) => bundle.bundle_key === sub.bundle_key)
+    : null;
+  const currentBundlePrice = formatBundlePrice(
+    currentBundle?.monthly_price_cents,
+    currentBundle?.billing_mode,
+  );
   const env = await getPaymentApiEnv();
   const monitor =
     user.email && env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
@@ -177,8 +195,8 @@ export default async function BillingPage() {
                 <p className="mt-1 text-sm font-medium text-on-background">
                   {BUNDLE_NAMES[sub.bundle_key] ?? sub.bundle_key}
                 </p>
-                {BUNDLE_PRICES[sub.bundle_key] ? (
-                  <p className="mt-1 text-xs text-on-surface-variant">{BUNDLE_PRICES[sub.bundle_key]}</p>
+                {currentBundlePrice ? (
+                  <p className="mt-1 text-xs text-on-surface-variant">{currentBundlePrice}</p>
                 ) : null}
               </div>
               <div>

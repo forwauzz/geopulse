@@ -85,7 +85,7 @@ function formatPriceLabel(cents: number | null, billingMode: string): string {
   const dollars = Math.floor(cents / 100);
   const remainder = cents % 100;
   const formatted = remainder === 0 ? `$${dollars}` : `$${dollars}.${String(remainder).padStart(2, '0')}`;
-  return billingMode === 'monthly' ? `${formatted}/mo` : `${formatted}/yr`;
+  return billingMode === 'monthly' ? `${formatted} CAD/mo` : `${formatted} CAD/yr`;
 }
 
 type BundleRow = {
@@ -177,6 +177,13 @@ export default async function PricingPage() {
     authorUrl: toAbsoluteUrl(baseUrl, SITE_AUTHOR_URL_PATH),
   });
   const activeSubKeys = new Set(activeSubs.map((s) => s.bundle_key));
+  const paidTrialDays = Array.from(
+    new Set(
+      bundles
+        .filter((bundle) => bundle.billing_mode !== 'free' && bundle.trial_period_days > 0)
+        .map((bundle) => bundle.trial_period_days),
+    ),
+  );
 
   const cards: PricingBundleCardProps[] = DISPLAY_ORDER.flatMap((key) => {
     const row = bundles.find((b) => b.bundle_key === key);
@@ -249,7 +256,10 @@ export default async function PricingPage() {
       </section>
 
       <p className="mt-8 text-center font-body text-sm text-on-surface-variant">
-        Every paid plan includes a 7-day trial. Credit card required. Cancel before the trial ends and you will not be charged.
+        {paidTrialDays.length === 1
+          ? `Every paid plan includes a ${paidTrialDays[0]}-day trial. `
+          : 'Trial length is shown on each plan. '}
+        Credit card required. Cancel before the trial ends and you will not be charged.
       </p>
 
       <section className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-10 lg:grid-cols-12">

@@ -10,6 +10,9 @@ const schema = z.object({
   role: z.enum(['business', 'agency']),
   goal: z.enum(['visibility', 'competitors', 'reports']),
   website: z.string().trim().max(240).optional(),
+  bundle: z.enum(['startup_dev', 'agency_core', 'agency_pro']).optional(),
+  autosubscribe: z.literal('1').optional(),
+  organizationName: z.string().trim().max(120).optional(),
 });
 
 export async function completeWelcome(formData: FormData): Promise<void> {
@@ -17,6 +20,9 @@ export async function completeWelcome(formData: FormData): Promise<void> {
     role: formData.get('role'),
     goal: formData.get('goal'),
     website: formData.get('website') || undefined,
+    bundle: formData.get('bundle') || undefined,
+    autosubscribe: formData.get('autosubscribe') || undefined,
+    organizationName: formData.get('organization_name') || undefined,
   });
   if (!parsed.success) redirect('/dashboard/welcome?error=check_details');
 
@@ -37,12 +43,7 @@ export async function completeWelcome(formData: FormData): Promise<void> {
   });
   if (error) redirect('/dashboard/welcome?error=save_failed');
 
-  if (parsed.data.role === 'agency') {
-    const params = new URLSearchParams({ bundle: 'agency_core' });
-    if (parsed.data.website) params.set('website_url', parsed.data.website);
-    redirect(`/pricing?${params.toString()}`);
-  }
-  if (parsed.data.website) {
+  if (parsed.data.role === 'business' && parsed.data.website) {
     const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
     const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
     if (url && key) {
@@ -53,6 +54,26 @@ export async function completeWelcome(formData: FormData): Promise<void> {
         domain: parsed.data.website,
       });
     }
+  }
+
+  if (parsed.data.bundle && parsed.data.autosubscribe === '1') {
+    const params = new URLSearchParams({
+      bundle: parsed.data.bundle,
+      autosubscribe: '1',
+    });
+    if (parsed.data.organizationName) {
+      params.set('organization_name', parsed.data.organizationName);
+    }
+    if (parsed.data.website) {
+      params.set('website_url', parsed.data.website);
+    }
+    redirect(`/pricing?${params.toString()}`);
+  }
+
+  if (parsed.data.role === 'agency') {
+    const params = new URLSearchParams({ bundle: 'agency_core' });
+    if (parsed.data.website) params.set('website_url', parsed.data.website);
+    redirect(`/pricing?${params.toString()}`);
   }
   const query = parsed.data.website ? `?url=${encodeURIComponent(parsed.data.website)}` : '';
   redirect(`/dashboard${query}`);

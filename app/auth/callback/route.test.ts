@@ -76,7 +76,7 @@ describe('GET /auth/callback', () => {
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toContain('/pricing?bundle=startup_dev&autosubscribe=1');
+    expect(response.headers.get('location')).toContain('/dashboard/welcome?bundle=startup_dev&autosubscribe=1');
     expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith('abc123');
     expect(linkGuestPurchasesToUserMock).toHaveBeenCalledWith(
       expect.any(Object),

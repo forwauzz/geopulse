@@ -116,7 +116,7 @@ describe('login actions', () => {
     formData.set('organization_name', 'Acme Labs');
 
     await expect(signUpWithPassword(null, formData)).rejects.toThrow(
-      'redirect:/pricing?bundle=startup_dev&autosubscribe=1&organization_name=Acme+Labs'
+      'redirect:/dashboard/welcome?bundle=startup_dev&autosubscribe=1&organization_name=Acme+Labs'
     );
 
     expect(createUser).toHaveBeenCalledWith({

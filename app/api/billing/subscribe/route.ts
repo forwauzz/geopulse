@@ -39,14 +39,6 @@ export async function POST(request: Request): Promise<Response> {
     const env = await getPaymentApiEnv();
     const ip = getClientIp(request);
 
-    const rateLimit = await checkCheckoutRateLimit(env.SCAN_CACHE, ip);
-    if (!rateLimit.ok) {
-      return Response.json(
-        { error: { code: 'rate_limited', message: 'Too many requests. Try again later.' } },
-        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSec ?? 3600) } }
-      );
-    }
-
     let json: unknown;
     try {
       json = await request.json();
@@ -104,6 +96,17 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json(
         { error: { code: 'unauthenticated', message: 'You must be signed in to subscribe.' } },
         { status: 401 }
+      );
+    }
+
+    // Bundle checkout is authenticated, so rate-limit by user as well as network.
+    // A shared office, agency, or QA network must not exhaust checkout for every
+    // buyer behind the same IP address.
+    const rateLimit = await checkCheckoutRateLimit(env.SCAN_CACHE, `${ip}:user:${user.id}`);
+    if (!rateLimit.ok) {
+      return Response.json(
+        { error: { code: 'rate_limited', message: 'Too many requests. Try again later.' } },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSec ?? 3600) } }
       );
     }
 

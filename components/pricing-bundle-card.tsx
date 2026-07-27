@@ -148,7 +148,6 @@ export function PricingBundleCard({
         : null;
 
     if (!res.ok || !url) {
-      autoSubscribeFiredRef.current = false;
       setCheckoutError(formatSubscribeErrorMessage(data));
       resetTurnstile();
       return;
@@ -170,7 +169,6 @@ export function PricingBundleCard({
         await postSubscribe(t);
       } catch {
         setCheckoutError('Something went wrong. Please try again.');
-        autoSubscribeFiredRef.current = false;
         resetTurnstile();
       }
     });
@@ -299,6 +297,12 @@ export function PricingBundleCard({
                   setCheckoutError(null);
                   if (isAwaitingTurnstile) {
                     setIsAwaitingTurnstile(false);
+                    // onSuccess and the token-driven auto-subscribe effect run in
+                    // the same render window. Mark this before posting so only one
+                    // checkout session is requested.
+                    if (autoSubscribe) {
+                      autoSubscribeFiredRef.current = true;
+                    }
                     startTransition(async () => {
                       try {
                         await postSubscribe(next);
