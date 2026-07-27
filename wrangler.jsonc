@@ -186,7 +186,11 @@
     "GPM_SCHEDULE_ENABLED": "true",
     // Platform feature flag: only these platforms run. Gemini + ChatGPT have keys
     // (OPENAI_API_KEY secret). To add Perplexity: add PERPLEXITY_API_KEY and append it here.
-    "GPM_ENABLED_PLATFORMS": "gemini,chatgpt",
+    "GPM_ENABLED_PLATFORMS": "gemini,chatgpt,perplexity",
+    // Hard stops for the first revenue pilots. Estimates are deliberately conservative and
+    // recorded on every run group so the UI and Maya can audit what was allowed.
+    "GPM_MONTHLY_SPEND_CAP_USD": "5.00",
+    "GPM_CLIENT_ACTIVATION_CAP_USD": "0.20",
     "GPM_CHATGPT_MODEL_ID": "gpt-4o-mini",
     // Must be one of BENCHMARK_EXECUTION_ENABLED_MODELS or the Gemini adapter skips the
     // run as "model lane not enabled". Aligned with the benchmark lane model.

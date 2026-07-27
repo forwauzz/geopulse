@@ -10,6 +10,8 @@ import { structuredLog } from '@/lib/server/structured-log';
 import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscription-provisioning-gap';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
+import { getAutonomousEditorialEnv, getPaymentApiEnv } from '@/lib/server/cf-env';
 
 export async function signOut(): Promise<void> {
   const supabase = await createSupabaseServerClient();
@@ -147,6 +149,7 @@ async function loadAgencyMemberActionContext(agencyAccountId: string): Promise<
       ok: true;
       adminDb: ReturnType<typeof createServiceRoleClient>;
       userId: string;
+      userEmail: string | null;
     }
   | { ok: false; message: string }
 > {
@@ -203,7 +206,7 @@ async function loadAgencyMemberActionContext(agencyAccountId: string): Promise<
     return { ok: false, message: 'Agency dashboard is disabled for this account.' };
   }
 
-  return { ok: true, adminDb, userId: user.id };
+  return { ok: true, adminDb, userId: user.id, userEmail: user.email ?? null };
 }
 
 export async function createAgencyClientFromDashboard(
@@ -285,14 +288,46 @@ export async function createAgencyClientFromDashboard(
     subvertical: parsed.data.subvertical,
     source: 'agency_client_creation',
   });
+  let completedBaseline: Awaited<ReturnType<typeof completeAgencyClientBaseline>> | null = null;
+  if (baseline.ok) {
+    try {
+      const [env, editorialEnv] = await Promise.all([
+        getPaymentApiEnv(),
+        getAutonomousEditorialEnv(),
+      ]);
+      completedBaseline = await completeAgencyClientBaseline({
+        supabase: context.adminDb,
+        env,
+        agencyAccountId: parsed.data.agencyAccountId,
+        clientId: client.id,
+        userId: context.userId,
+        reportEmail: context.userEmail,
+        reportBucket: editorialEnv.REPORT_FILES
+          ? {
+              put: (key, value, options) =>
+                editorialEnv.REPORT_FILES!.put(
+                  key,
+                  value instanceof Uint8Array ? new Uint8Array(value).slice().buffer : value,
+                  options ? { httpMetadata: { contentType: options.httpMetadata?.contentType } } : undefined,
+                ),
+            }
+          : undefined,
+      });
+    } catch {
+      // The client is safely created and queued; the same idempotent loop can retry from its page.
+      completedBaseline = null;
+    }
+  }
 
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/clients');
   revalidatePath('/dashboard/visibility');
   return {
     ok: true,
-    message: baseline.ok
-      ? `Client created. ${baseline.promptCount} baseline questions are queued for measurement.`
+    message: completedBaseline?.ok
+      ? `Client created. ${completedBaseline.promptCount} questions, ${completedBaseline.competitorCount} competitors, and ${completedBaseline.launchedPlatforms.length} AI engines are measured.`
+      : baseline.ok
+      ? `Client created. ${baseline.promptCount} baseline questions are queued; open the client to complete or retry the live measurement.`
       : 'Client created. Baseline setup will retry automatically.',
   };
 }

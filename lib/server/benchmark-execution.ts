@@ -334,6 +334,11 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
 
         const data = (await response.json()) as {
           candidates?: { content?: { parts?: { text?: string }[] } }[];
+          usageMetadata?: {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+            totalTokenCount?: number;
+          };
         };
         const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
         if (!responseText) {
@@ -365,6 +370,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
             query_key: query.query_key,
             run_mode: context.runMode,
             attempts: attempt,
+            usage: data.usageMetadata ?? null,
           },
           errorMessage: null,
           executedAt,
@@ -548,6 +554,11 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
 
         const data = (await response.json()) as {
           choices?: { message?: { content?: string } }[];
+          usage?: {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            total_tokens?: number;
+          };
         };
         const responseText = data.choices?.[0]?.message?.content?.trim() ?? '';
         if (!responseText) {
@@ -579,6 +590,7 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
             query_key: query.query_key,
             run_mode: context.runMode,
             attempts: attempt,
+            usage: data.usage ?? null,
           },
           errorMessage: null,
           executedAt,

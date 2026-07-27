@@ -49,6 +49,7 @@ export type ScanApiEnv = {
   TURNSTILE_SECRET_KEY: string;
   GEMINI_API_KEY: string;
   OPENAI_API_KEY?: string;
+  PERPLEXITY_API_KEY?: string;
   GEMINI_MODEL: string;
   GEMINI_ENDPOINT: string;
   BENCHMARK_EXECUTION_PROVIDER: string;
@@ -56,6 +57,13 @@ export type ScanApiEnv = {
   BENCHMARK_EXECUTION_MODEL: string;
   BENCHMARK_EXECUTION_ENABLED_MODELS?: string;
   BENCHMARK_EXECUTION_ENDPOINT: string;
+  GPM_SCHEDULE_ENABLED?: string;
+  GPM_ENABLED_PLATFORMS?: string;
+  GPM_CHATGPT_MODEL_ID?: string;
+  GPM_GEMINI_MODEL_ID?: string;
+  GPM_PERPLEXITY_MODEL_ID?: string;
+  GPM_MONTHLY_SPEND_CAP_USD?: string;
+  GPM_CLIENT_ACTIVATION_CAP_USD?: string;
   GITHUB_APP_INSTALL_URL?: string;
   STARTUP_SLACK_APP_INSTALL_URL?: string;
   STARTUP_SLACK_CLIENT_ID?: string;
@@ -212,6 +220,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     TURNSTILE_SECRET_KEY: String(e['TURNSTILE_SECRET_KEY'] ?? ''),
     GEMINI_API_KEY: String(e['GEMINI_API_KEY'] ?? ''),
     OPENAI_API_KEY: String(e['OPENAI_API_KEY'] ?? ''),
+    PERPLEXITY_API_KEY: String(e['PERPLEXITY_API_KEY'] ?? ''),
     GEMINI_MODEL: String(e['GEMINI_MODEL'] ?? 'gemini-2.0-flash'),
     GEMINI_ENDPOINT: String(
       e['GEMINI_ENDPOINT'] ?? 'https://generativelanguage.googleapis.com/v1beta/models'
@@ -221,6 +230,13 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     BENCHMARK_EXECUTION_MODEL: String(e['BENCHMARK_EXECUTION_MODEL'] ?? ''),
     BENCHMARK_EXECUTION_ENABLED_MODELS: String(e['BENCHMARK_EXECUTION_ENABLED_MODELS'] ?? ''),
     BENCHMARK_EXECUTION_ENDPOINT: String(e['BENCHMARK_EXECUTION_ENDPOINT'] ?? ''),
+    GPM_SCHEDULE_ENABLED: String(e['GPM_SCHEDULE_ENABLED'] ?? ''),
+    GPM_ENABLED_PLATFORMS: String(e['GPM_ENABLED_PLATFORMS'] ?? ''),
+    GPM_CHATGPT_MODEL_ID: String(e['GPM_CHATGPT_MODEL_ID'] ?? ''),
+    GPM_GEMINI_MODEL_ID: String(e['GPM_GEMINI_MODEL_ID'] ?? ''),
+    GPM_PERPLEXITY_MODEL_ID: String(e['GPM_PERPLEXITY_MODEL_ID'] ?? ''),
+    GPM_MONTHLY_SPEND_CAP_USD: String(e['GPM_MONTHLY_SPEND_CAP_USD'] ?? ''),
+    GPM_CLIENT_ACTIVATION_CAP_USD: String(e['GPM_CLIENT_ACTIVATION_CAP_USD'] ?? ''),
     GITHUB_APP_INSTALL_URL: String(e['GITHUB_APP_INSTALL_URL'] ?? ''),
     STARTUP_SLACK_APP_INSTALL_URL: String(e['STARTUP_SLACK_APP_INSTALL_URL'] ?? ''),
     STARTUP_SLACK_CLIENT_ID: String(e['STARTUP_SLACK_CLIENT_ID'] ?? ''),
@@ -267,6 +283,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       TURNSTILE_SECRET_KEY: process.env['TURNSTILE_SECRET_KEY'] ?? '',
       GEMINI_API_KEY: process.env['GEMINI_API_KEY'] ?? '',
       OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? '',
+      PERPLEXITY_API_KEY: process.env['PERPLEXITY_API_KEY'] ?? '',
       GEMINI_MODEL: process.env['GEMINI_MODEL'] ?? 'gemini-2.0-flash',
       GEMINI_ENDPOINT:
         process.env['GEMINI_ENDPOINT'] ??
@@ -277,6 +294,14 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       BENCHMARK_EXECUTION_ENABLED_MODELS:
         process.env['BENCHMARK_EXECUTION_ENABLED_MODELS'] ?? '',
       BENCHMARK_EXECUTION_ENDPOINT: process.env['BENCHMARK_EXECUTION_ENDPOINT'] ?? '',
+      GPM_SCHEDULE_ENABLED: process.env['GPM_SCHEDULE_ENABLED'] ?? '',
+      GPM_ENABLED_PLATFORMS: process.env['GPM_ENABLED_PLATFORMS'] ?? '',
+      GPM_CHATGPT_MODEL_ID: process.env['GPM_CHATGPT_MODEL_ID'] ?? '',
+      GPM_GEMINI_MODEL_ID: process.env['GPM_GEMINI_MODEL_ID'] ?? '',
+      GPM_PERPLEXITY_MODEL_ID: process.env['GPM_PERPLEXITY_MODEL_ID'] ?? '',
+      GPM_MONTHLY_SPEND_CAP_USD: process.env['GPM_MONTHLY_SPEND_CAP_USD'] ?? '',
+      GPM_CLIENT_ACTIVATION_CAP_USD:
+        process.env['GPM_CLIENT_ACTIVATION_CAP_USD'] ?? '',
       GITHUB_APP_INSTALL_URL: process.env['GITHUB_APP_INSTALL_URL'] ?? '',
       STARTUP_SLACK_APP_INSTALL_URL: process.env['STARTUP_SLACK_APP_INSTALL_URL'] ?? '',
       STARTUP_SLACK_CLIENT_ID: process.env['STARTUP_SLACK_CLIENT_ID'] ?? '',

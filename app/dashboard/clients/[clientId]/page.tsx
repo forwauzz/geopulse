@@ -9,7 +9,7 @@ import { loadEngineCitationMetrics, type EngineKey } from '@/lib/server/dashboar
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
-import { activateClientMonitoring, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
+import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
 import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
 
@@ -27,11 +27,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -117,17 +117,25 @@ export default async function ClientScorecardPage({
         latestScan: latestScanDetail,
       })
     : null;
-  const { data: latestGpmReport } = configId
+  const { data: gpmReports } = configId
     ? await admin
         .from('gpm_reports')
-        .select('pdf_url,generated_at,platform')
+        .select('id,pdf_url,generated_at,platform,metadata')
         .eq('config_id', configId)
         .order('generated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+        .limit(6)
     : { data: null };
   const engineEntries = (Object.entries(engines) as Array<[EngineKey, { citationRate: number }]>);
   const reportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
+  const latestGpmReport = gpmReports?.[0] ?? null;
+  const baselineStatus = typeof configMetadata['onboarding_loop_status'] === 'string'
+    ? String(configMetadata['onboarding_loop_status'])
+    : typeof configMetadata['baseline_status'] === 'string'
+      ? String(configMetadata['baseline_status'])
+      : 'not_started';
+  const estimatedSpend = Number(configMetadata['spend_estimated_usd'] ?? 0);
+  const monthSpend = Number(configMetadata['spend_month_to_date_usd'] ?? 0);
+  const monthlyCap = Number(configMetadata['spend_monthly_cap_usd'] ?? 5);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 py-4">
@@ -145,7 +153,7 @@ export default async function ClientScorecardPage({
             <Link href={`/dashboard/new-scan?agencyAccount=${account.id}&agencyClient=${client.id}&url=${encodeURIComponent(domain ? `https://${domain}` : '')}`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
               <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check again
             </Link>
-            {latestScan ? <Link href={`/results/${latestScan.id}/report`} className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"><span className="material-symbols-outlined text-[18px]" aria-hidden>share</span> Share report</Link> : null}
+            {publicSummaryUrl ? <Link href={publicSummaryUrl} target="_blank" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"><span className="material-symbols-outlined text-[18px]" aria-hidden>share</span> Open client scorecard</Link> : null}
             {!shareToken ? (
               <form action={createClientShareLink}>
                 <input type="hidden" name="clientId" value={client.id} />
@@ -166,6 +174,42 @@ export default async function ClientScorecardPage({
             <ClientScorecardShareControls summaryUrl={publicSummaryUrl} />
           </div>
         ) : null}
+        <div className="mt-4 rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-5 shadow-float">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Automatic customer baseline</p>
+              <p className="mt-1 font-semibold text-on-background">
+                {baselineStatus === 'closed' || baselineStatus === 'measured'
+                  ? 'Research, audit, AI measurement, and scorecard are active'
+                  : 'Complete the first client-ready baseline'}
+              </p>
+              <p className="mt-1 text-sm text-on-surface-variant">
+                10 buyer questions · 3–5 researched competitors · ChatGPT, Gemini, and Perplexity · recurring {cadence ?? 'monthly'}
+              </p>
+              <p className="mt-2 text-xs text-on-surface-variant">
+                Spend guard: {estimatedSpend > 0 ? `$${estimatedSpend.toFixed(2)} estimated` : 'estimated before launch'}
+                {' · '}${monthSpend.toFixed(2)} of ${monthlyCap.toFixed(2)} monthly cap
+              </p>
+            </div>
+            <form action={completeClientBaseline}>
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <input type="hidden" name="reportEmail" value={reportRecipients[0] ?? user.email ?? ''} />
+              <PendingSubmitButton
+                idleLabel={baselineStatus === 'closed' || baselineStatus === 'measured' ? 'Verify baseline' : 'Complete baseline'}
+                pendingLabel="Researching and measuring…"
+                className="inline-flex items-center gap-2 rounded-xl bg-on-background px-4 py-2.5 text-sm font-semibold text-background"
+              />
+            </form>
+          </div>
+          {sp.baseline ? (
+            <p className={`mt-3 text-sm font-medium ${sp.baseline === 'complete' ? 'text-primary' : 'text-error'}`}>
+              {sp.baseline === 'complete'
+                ? 'Baseline complete and recurring monitoring scheduled.'
+                : `Baseline needs attention: ${sp.baseline.replaceAll('_', ' ')}.`}
+            </p>
+          ) : null}
+        </div>
       </header>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_2fr]">
@@ -308,6 +352,30 @@ export default async function ClientScorecardPage({
                     {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">Delivered by email</span>}
                   </div>
                 ) : <p className="text-on-surface-variant">The first report will appear after a visibility check.</p>}
+                {(gpmReports ?? []).length > 0 ? (
+                  <details className="mt-3 border-t border-outline-variant/15 pt-3">
+                    <summary className="cursor-pointer text-xs font-semibold text-on-background">Delivery history ({gpmReports!.length})</summary>
+                    <div className="mt-2 space-y-2">
+                      {gpmReports!.map((report: {
+                        id: string;
+                        platform: string;
+                        generated_at: string;
+                        metadata: Record<string, unknown> | null;
+                      }) => {
+                        const metadata = report.metadata && typeof report.metadata === 'object'
+                          ? report.metadata as Record<string, unknown>
+                          : {};
+                        const status = String(metadata['email_status'] ?? 'generated').replaceAll('_', ' ');
+                        return (
+                          <div key={report.id} className="flex items-center justify-between gap-3 text-xs text-on-surface-variant">
+                            <span className="capitalize">{String(report.platform) === 'chatgpt' ? 'ChatGPT' : String(report.platform)} · {status}</span>
+                            <span>{new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(report.generated_at))}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                ) : null}
               </div>
             </form>
           ) : (

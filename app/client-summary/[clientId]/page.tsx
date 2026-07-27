@@ -6,6 +6,7 @@ import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { getBrandSettingsView, resolveReportFilesPublicBase } from '@/lib/server/report-branding-settings';
 import { PrintScorecardButton } from '@/components/print-scorecard-button';
+import { getCitationEvidence } from '@/lib/server/citation-evidence';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,7 +77,7 @@ export default async function ClientSummaryPage({
         .eq('benchmark_domain_id', domainRow.id)
         .maybeSingle()
     : { data: null };
-  const [outcome, prompts, reportResult] = await Promise.all([
+  const [outcome, prompts, evidence, reportResult] = await Promise.all([
     loadClientOutcomeEngine({
       supabase: admin,
       domain,
@@ -84,6 +85,7 @@ export default async function ClientSummaryPage({
       latestScan,
     }),
     getTrackedPromptPanel({ supabase: admin, domain }),
+    getCitationEvidence({ supabase: admin, domain, maxRowsPerEngine: 3 }),
     config?.id
       ? admin
           .from('gpm_reports')
@@ -215,6 +217,29 @@ export default async function ClientSummaryPage({
               ) : null}
             </div>
           </div>
+          {evidence.length > 0 ? (
+            <div className="mt-9">
+              <p className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: brandColor }}>Measurement receipts</p>
+              <h2 className="mt-2 text-2xl font-bold">What the AI answers actually showed</h2>
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                {evidence.map((engine) => (
+                  <div key={engine.engine} className="rounded-xl border border-black/10 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-semibold capitalize">{engine.engine === 'chatgpt' ? 'ChatGPT' : engine.engine}</p>
+                      <p className="text-lg font-bold">{engine.citedCount}/{engine.totalCount}</p>
+                    </div>
+                    <p className="mt-3 text-xs leading-relaxed text-black/55">
+                      {engine.rows[0]?.cited && engine.rows[0]?.excerpt
+                        ? engine.rows[0].excerpt
+                        : engine.rows[0]?.namedInstead.length
+                          ? `Named instead: ${engine.rows[0].namedInstead.join(', ')}`
+                          : 'The raw answer and citation evidence are saved with this measurement.'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <footer className="mt-10 border-t border-black/10 pt-5 text-xs text-black/45">
             {brand?.footerNote || `Prepared for ${displayName} by ${agencyName}.`}
             {brand?.showPoweredBy !== false ? ' Powered by GEO-Pulse.' : ''}
