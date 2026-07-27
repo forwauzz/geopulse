@@ -120,7 +120,7 @@ describe('resolveGpmPlatformModelMap', () => {
   it('uses defaults when env vars are absent', () => {
     const map = resolveGpmPlatformModelMap({});
     expect(map.chatgpt).toBe('gpt-4o-mini');
-    expect(map.gemini).toBe('gemini-2.0-flash');
+    expect(map.gemini).toBe('gemini-3.5-flash-lite');
     expect(map.perplexity).toBe('sonar');
   });
 

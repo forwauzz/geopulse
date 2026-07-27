@@ -223,7 +223,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     GEMINI_API_KEY: String(e['GEMINI_API_KEY'] ?? ''),
     OPENAI_API_KEY: String(e['OPENAI_API_KEY'] ?? ''),
     PERPLEXITY_API_KEY: String(e['PERPLEXITY_API_KEY'] ?? ''),
-    GEMINI_MODEL: String(e['GEMINI_MODEL'] ?? 'gemini-2.0-flash'),
+    GEMINI_MODEL: String(e['GEMINI_MODEL'] ?? 'gemini-3.5-flash-lite'),
     GEMINI_ENDPOINT: String(
       e['GEMINI_ENDPOINT'] ?? 'https://generativelanguage.googleapis.com/v1beta/models'
     ),
@@ -287,7 +287,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       GEMINI_API_KEY: process.env['GEMINI_API_KEY'] ?? '',
       OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? '',
       PERPLEXITY_API_KEY: process.env['PERPLEXITY_API_KEY'] ?? '',
-      GEMINI_MODEL: process.env['GEMINI_MODEL'] ?? 'gemini-2.0-flash',
+      GEMINI_MODEL: process.env['GEMINI_MODEL'] ?? 'gemini-3.5-flash-lite',
       GEMINI_ENDPOINT:
         process.env['GEMINI_ENDPOINT'] ??
         'https://generativelanguage.googleapis.com/v1beta/models',
