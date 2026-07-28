@@ -500,20 +500,31 @@ class GpmPdfBuilder {
     this.y -= 8;
 
     const maxCount = Math.max(...payload.competitors.map((c) => c.citationCount), 1);
-    const barMaxW = MAX_W - 160; // leave room for label + count
+    const labelColumnW = 150;
+    const valueColumnW = 74;
+    const barGap = 8;
+    const barMaxW = MAX_W - labelColumnW - valueColumnW - barGap;
+    const barX = MARGIN + labelColumnW;
+    const valueX = barX + barMaxW + barGap;
     const rowH = 20;
 
     for (const comp of payload.competitors) {
       this.ensureSpace(rowH + 4);
 
       const barW = Math.max(4, Math.round((comp.citationCount / maxCount) * barMaxW));
-      const labelTrunc = comp.name.length > 28 ? `${comp.name.slice(0, 27)}\u2026` : comp.name;
+      const rawLabel = pdfSafeText(comp.name.trim(), 80);
+      let labelTrunc = rawLabel;
+      while (
+        labelTrunc.length > 1 &&
+        this.font.widthOfTextAtSize(labelTrunc, 8) > labelColumnW - 8
+      ) {
+        labelTrunc = `${labelTrunc.slice(0, -2)}\u2026`;
+      }
 
       // Name
       this.page.drawText(labelTrunc, { x: MARGIN, y: this.y, size: 8, font: this.font, color: INK });
 
       // Bar
-      const barX = MARGIN + 150;
       const barY = this.y - 4;
       this.page.drawRectangle({ x: barX, y: barY, width: barW, height: 12, color: ACCENT });
 
@@ -521,7 +532,7 @@ class GpmPdfBuilder {
       const pct = payload.competitors[0] ? Math.round((comp.citationCount / payload.prompts.length) * 100) : 0;
       this.page.drawText(
         `${String(comp.citationCount)} query${comp.citationCount !== 1 ? 's' : ''} (${String(pct)}%)`,
-        { x: barX + barW + 6, y: this.y, size: 8, font: this.font, color: MUTED }
+        { x: valueX, y: this.y, size: 8, font: this.font, color: MUTED }
       );
 
       this.y -= rowH;
