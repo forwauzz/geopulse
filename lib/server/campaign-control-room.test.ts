@@ -1,10 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isOperationsExcludedBenchmarkConfig,
   socialExperimentDetail,
   summarizeCampaignHealth,
   summarizeRuntimeHealth,
   type CampaignItem,
 } from './campaign-control-room';
+
+describe('isOperationsExcludedBenchmarkConfig', () => {
+  it('excludes only configs explicitly marked outside production operations', () => {
+    expect(isOperationsExcludedBenchmarkConfig({
+      operations_excluded: true,
+      operations_excluded_reason: 'orphaned QA fixture',
+    })).toBe(true);
+    expect(isOperationsExcludedBenchmarkConfig({
+      operations_excluded: false,
+    })).toBe(false);
+    expect(isOperationsExcludedBenchmarkConfig({
+      operations_excluded_reason: 'reason without an explicit control flag',
+    })).toBe(false);
+  });
+});
 
 function campaign(health: CampaignItem['health']): CampaignItem {
   return {

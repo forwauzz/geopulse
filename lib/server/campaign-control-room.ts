@@ -67,6 +67,12 @@ function object(row: Row, key: string): Record<string, unknown> {
     : {};
 }
 
+export function isOperationsExcludedBenchmarkConfig(
+  metadata: Record<string, unknown>,
+): boolean {
+  return metadata['operations_excluded'] === true;
+}
+
 function metric(value: unknown): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
@@ -525,6 +531,8 @@ export async function loadCampaignControlRoom(args: {
   }
 
   for (const config of gpmConfigs) {
+    if (isOperationsExcludedBenchmarkConfig(object(config, 'metadata'))) continue;
+
     const configReports = reportsByConfig.get(text(config, 'id') ?? '') ?? [];
     const latest = configReports[0];
     const cadence = text(config, 'cadence') ?? 'monthly';
