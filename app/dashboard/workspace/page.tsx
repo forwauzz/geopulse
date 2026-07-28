@@ -7,9 +7,14 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadUserSchedule } from '@/lib/server/recurring-audits';
 import { LocalTime } from '@/components/local-time';
-import { saveMyRecurringAudit, runMyRecurringAuditNow } from './actions';
+import {
+  runMyRecurringAuditNow,
+  saveExperiencePreferences,
+  saveMyRecurringAudit,
+} from './actions';
 import { AgencyBrandingSettings } from '@/components/agency-branding-settings';
 import { getBrandSettingsView, resolveReportFilesPublicBase } from '@/lib/server/report-branding-settings';
+import { readOnboardingProfile, resolveOnboardingGoal } from '@/lib/server/onboarding-profile';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +25,7 @@ type Props = {
     startupWorkspace?: string;
     recurring?: string;
     brand?: string;
+    experience?: string;
   }>;
 };
 
@@ -75,6 +81,11 @@ export default async function WorkspacePage({ searchParams }: Props) {
     agencyDashboard.accounts.find((a) => a.id === agencyDashboard.selectedAccountId) ?? null;
   const selectedStartupWorkspace =
     startupDashboard.workspaces.find((w) => w.id === startupDashboard.selectedWorkspaceId) ?? null;
+  const experienceRole = selectedAgencyAccount ? 'agency' : 'business';
+  const onboardingProfile = readOnboardingProfile(user.user_metadata);
+  const experienceGoal = resolveOnboardingGoal(user.user_metadata, experienceRole);
+  const experienceWebsite =
+    onboardingProfile?.website ?? selectedStartupWorkspace?.canonicalDomain ?? '';
 
   const hasAny =
     agencyDashboard.accounts.length > 0 || startupDashboard.workspaces.length > 0;
@@ -119,7 +130,7 @@ export default async function WorkspacePage({ searchParams }: Props) {
             Workspace
           </h1>
           <p className="mt-1 text-sm text-on-surface-variant">
-            Read-only metadata for your active workspace. Contact GEO-Pulse admin to make changes.
+            Manage how GEO-Pulse prioritizes your experience, reporting, and recurring work.
           </p>
         </div>
         <Link
@@ -129,6 +140,100 @@ export default async function WorkspacePage({ searchParams }: Props) {
           <span className="material-symbols-outlined text-[16px]" aria-hidden>arrow_back</span>
           Dashboard
         </Link>
+      </div>
+
+      <div
+        id="experience-preferences"
+        className="scroll-mt-24 rounded-2xl border border-primary/20 bg-surface-container-lowest p-5 shadow-float md:p-6"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-primary">
+              Experience preferences
+            </p>
+            <h2 className="mt-2 font-headline text-xl font-bold text-on-background">
+              What should GEO-Pulse prioritize?
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-on-surface-variant">
+              This changes the guidance and first action shown on your dashboard. Your active plan
+              still controls whether you have a business or agency workspace.
+            </p>
+          </div>
+          <div className="rounded-xl bg-surface-container px-3 py-2 text-xs text-on-surface-variant">
+            Account type: <strong className="capitalize text-on-background">{experienceRole}</strong>
+          </div>
+        </div>
+        {sp.experience === 'saved' ? (
+          <p className="mt-4 rounded-xl bg-primary/10 px-3 py-2 text-sm font-medium text-primary">
+            Saved. Your dashboard now reflects this priority.
+          </p>
+        ) : sp.experience === 'error' ? (
+          <p className="mt-4 rounded-xl bg-error/10 px-3 py-2 text-sm font-medium text-error">
+            We could not save that preference. Please try again.
+          </p>
+        ) : null}
+        <form action={saveExperiencePreferences} className="mt-5">
+          <input type="hidden" name="role" value={experienceRole} />
+          <input type="hidden" name="website" value={experienceWebsite} />
+          <fieldset>
+            <legend className="sr-only">Primary GEO-Pulse goal</legend>
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                {
+                  value: 'visibility',
+                  icon: 'monitoring',
+                  title: 'Improve AI visibility',
+                  text: 'Lead with prompts, engines, citations, and the next visibility action.',
+                },
+                {
+                  value: 'competitors',
+                  icon: 'leaderboard',
+                  title: 'Beat competitors',
+                  text: 'Lead with comparison, content gaps, and where another brand is winning.',
+                },
+                {
+                  value: 'reports',
+                  icon: 'description',
+                  title: 'Prove progress',
+                  text: 'Lead with reports, client-ready outcomes, and the next delivery step.',
+                },
+              ].map((option) => (
+                <label
+                  key={option.value}
+                  className="cursor-pointer rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 transition has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:checked]:ring-1 has-[:checked]:ring-primary/20"
+                >
+                  <input
+                    type="radio"
+                    name="goal"
+                    value={option.value}
+                    defaultChecked={experienceGoal === option.value}
+                    className="sr-only"
+                  />
+                  <span className="material-symbols-outlined text-primary" aria-hidden>
+                    {option.icon}
+                  </span>
+                  <span className="mt-3 block text-sm font-semibold text-on-background">
+                    {option.title}
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed text-on-surface-variant">
+                    {option.text}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-on-surface-variant">
+              Saved website: {experienceWebsite || 'Not provided'}
+            </p>
+            <button
+              type="submit"
+              className="inline-flex min-h-[42px] items-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-on-primary transition hover:bg-primary-dim"
+            >
+              Save dashboard priority
+            </button>
+          </div>
+        </form>
       </div>
 
       {selectedAgencyAccount ? (

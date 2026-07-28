@@ -21,6 +21,8 @@ import { AgencyHome } from '@/components/agency-home';
 import { shouldRecoverOnboarding } from '@/lib/server/onboarding-recovery';
 import { loadAgencyPortfolio } from '@/lib/server/agency-portfolio';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
+import { resolveOnboardingGoal } from '@/lib/server/onboarding-profile';
+import { OnboardingGoalPanel } from '@/components/onboarding-goal-panel';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +49,15 @@ export default async function DashboardHomePage({
       data: agencyWorkspace.data,
       account,
     });
-    return <AgencyHome data={agencyWorkspace.data} portfolio={portfolio} />;
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-4 py-4">
+        <OnboardingGoalPanel
+          goal={resolveOnboardingGoal(user.user_metadata, 'agency')}
+          role="agency"
+        />
+        <AgencyHome data={agencyWorkspace.data} portfolio={portfolio} />
+      </div>
+    );
   }
 
   // Attribute scans to the user's first startup workspace, if any.
@@ -140,6 +150,10 @@ export default async function DashboardHomePage({
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 py-8">
+      <OnboardingGoalPanel
+        goal={resolveOnboardingGoal(user.user_metadata, 'business')}
+        role="business"
+      />
       <div className="mx-auto w-full max-w-2xl">
         <DashboardScanHero
           siteKey={getTurnstileSiteKey()}

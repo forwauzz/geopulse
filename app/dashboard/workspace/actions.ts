@@ -6,6 +6,53 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { upsertUserSchedule, runUserAuditNow, type Cadence } from '@/lib/server/recurring-audits';
+import { z } from 'zod';
+
+const experienceSchema = z.object({
+  goal: z.enum(['visibility', 'competitors', 'reports']),
+  role: z.enum(['business', 'agency']),
+  website: z.string().trim().max(240).optional(),
+});
+
+export async function saveExperiencePreferences(formData: FormData): Promise<void> {
+  const parsed = experienceSchema.safeParse({
+    goal: formData.get('goal'),
+    role: formData.get('role'),
+    website: formData.get('website') || undefined,
+  });
+  if (!parsed.success) redirect('/dashboard/workspace?experience=error#experience-preferences');
+
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login?next=/dashboard/workspace');
+
+  const current =
+    user.user_metadata?.['gp_onboarding_v1'] &&
+    typeof user.user_metadata['gp_onboarding_v1'] === 'object'
+      ? user.user_metadata['gp_onboarding_v1'] as Record<string, unknown>
+      : {};
+  const { error } = await supabase.auth.updateUser({
+    data: {
+      ...user.user_metadata,
+      gp_onboarding_v1: {
+        ...current,
+        role: parsed.data.role,
+        goal: parsed.data.goal,
+        website: parsed.data.website ?? null,
+        completed_at:
+          typeof current['completed_at'] === 'string'
+            ? current['completed_at']
+            : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    },
+  });
+  if (error) redirect('/dashboard/workspace?experience=error#experience-preferences');
+
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/workspace');
+  redirect('/dashboard/workspace?experience=saved#experience-preferences');
+}
 
 /** Self-serve: any signed-in user sets up / toggles their own recurring audit from Settings. */
 export async function saveMyRecurringAudit(formData: FormData): Promise<void> {
