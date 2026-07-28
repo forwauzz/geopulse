@@ -1,6 +1,18 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
+import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage,
+  type RGB,
+} from 'pdf-lib';
 import type { GpmReportPayload } from './geo-performance-report-payload';
-import { GEO_PULSE_BRAND, type BrandConfig } from '../../workers/report/report-branding';
+import {
+  GEO_PULSE_BRAND,
+  mutedInkOn,
+  type BrandConfig,
+} from '../../workers/report/report-branding';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -67,12 +79,20 @@ function platformLabel(platform: string): string {
   return platform;
 }
 
+function toPdfRgb(color: BrandConfig['primary']): RGB {
+  return rgb(color.r, color.g, color.b);
+}
+
 function formatWindowDate(w: string): string {
   // 'YYYY-MM' → 'April 2026' | 'YYYY-W07' → 'Week 7, 2026'
   const monthMatch = /^(\d{4})-(\d{2})$/.exec(w);
   if (monthMatch) {
-    const d = new Date(`${monthMatch[1]}-${monthMatch[2]}-01`);
-    return d.toLocaleDateString('en-CA', { month: 'long', year: 'numeric' });
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    const monthIndex = Number.parseInt(monthMatch[2]!, 10) - 1;
+    return `${monthNames[monthIndex] ?? monthMatch[2]} ${monthMatch[1]}`;
   }
   const weekMatch = /^(\d{4})-W(\d+)$/.exec(w);
   if (weekMatch) return `Week ${weekMatch[2]}, ${weekMatch[1]}`;
@@ -91,14 +111,43 @@ class GpmPdfBuilder {
   private footerDomain = '';
   private footerPeriod = '';
   private brand: BrandConfig = GEO_PULSE_BRAND;
+  private embeddedLogo: PDFImage | null = null;
+  private embeddedPlatformLogo: PDFImage | null = null;
 
-  async init(domain: string, period: string, brand: BrandConfig): Promise<void> {
+  async init(
+    domain: string,
+    period: string,
+    brand: BrandConfig,
+    logoBytes?: Uint8Array | null,
+    platformLogoBytes?: Uint8Array | null
+  ): Promise<void> {
     this.doc = await PDFDocument.create();
     this.font = await this.doc.embedFont(StandardFonts.Helvetica);
     this.fontBold = await this.doc.embedFont(StandardFonts.HelveticaBold);
     this.footerDomain = domain;
     this.footerPeriod = period;
     this.brand = brand;
+    if (logoBytes && logoBytes.length > 0 && brand.logo) {
+      try {
+        this.embeddedLogo =
+          brand.logo.mime === 'image/png'
+            ? await this.doc.embedPng(logoBytes)
+            : await this.doc.embedJpg(logoBytes);
+      } catch {
+        this.embeddedLogo = null;
+      }
+    }
+    if (platformLogoBytes && platformLogoBytes.length > 0) {
+      try {
+        this.embeddedPlatformLogo = await this.doc.embedJpg(platformLogoBytes);
+      } catch {
+        try {
+          this.embeddedPlatformLogo = await this.doc.embedPng(platformLogoBytes);
+        } catch {
+          this.embeddedPlatformLogo = null;
+        }
+      }
+    }
     this.newPage();
   }
 
@@ -115,14 +164,14 @@ class GpmPdfBuilder {
     }
   }
 
-  private drawPageFooter(): void {
+  private drawPageFooter(color: RGB = MUTED): void {
     const y = 25;
-    this.page.drawText(this.footerDomain, { x: MARGIN, y, size: 7, font: this.font, color: MUTED });
+    this.page.drawText(this.footerDomain, { x: MARGIN, y, size: 7, font: this.font, color });
     const numText = `Page ${String(this.pageNum)}`;
     const nW = this.font.widthOfTextAtSize(numText, 7);
-    this.page.drawText(numText, { x: (PAGE_W - nW) / 2, y, size: 7, font: this.font, color: MUTED });
+    this.page.drawText(numText, { x: (PAGE_W - nW) / 2, y, size: 7, font: this.font, color });
     const rW = this.font.widthOfTextAtSize(this.footerPeriod, 7);
-    this.page.drawText(this.footerPeriod, { x: PAGE_W - MARGIN - rW, y, size: 7, font: this.font, color: MUTED });
+    this.page.drawText(this.footerPeriod, { x: PAGE_W - MARGIN - rW, y, size: 7, font: this.font, color });
   }
 
   // ── Cover ──────────────────────────────────────────────────────────────────
@@ -131,8 +180,10 @@ class GpmPdfBuilder {
     const { domain, topic, location, windowDate, platform } = payload;
     const period = formatWindowDate(windowDate);
     const pColor = platformColor(platform);
-    const brandColor = rgb(this.brand.primary.r, this.brand.primary.g, this.brand.primary.b);
-    const brandInk = rgb(this.brand.onPrimary.r, this.brand.onPrimary.g, this.brand.onPrimary.b);
+    const brandColor = toPdfRgb(this.brand.primary);
+    const brandInk = toPdfRgb(this.brand.onPrimary);
+    const brandMuted = toPdfRgb(mutedInkOn(this.brand.primary, 0.35));
+    const brandHairline = toPdfRgb(mutedInkOn(this.brand.primary, 0.5));
 
     // Full-bleed dark background
     this.page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: brandColor });
@@ -142,19 +193,35 @@ class GpmPdfBuilder {
 
     // Logo + report type
     const logoY = PAGE_H - 72;
-    this.page.drawText(pdfSafeText(this.brand.companyName, 42), {
-      x: MARGIN, y: logoY, size: 22, font: this.fontBold, color: brandInk,
-    });
+    let reportTitleY = logoY - 22;
+    if (this.embeddedLogo) {
+      const maxW = 160;
+      const maxH = 34;
+      const scale = Math.min(maxW / this.embeddedLogo.width, maxH / this.embeddedLogo.height, 1);
+      const width = this.embeddedLogo.width * scale;
+      const height = this.embeddedLogo.height * scale;
+      this.page.drawImage(this.embeddedLogo, {
+        x: MARGIN,
+        y: logoY - height + 12,
+        width,
+        height,
+      });
+      reportTitleY = logoY - height - 8;
+    } else {
+      this.page.drawText(pdfSafeText(this.brand.companyName, 42), {
+        x: MARGIN, y: logoY, size: 22, font: this.fontBold, color: brandInk,
+      });
+    }
     this.page.drawText('GEO Performance Report', {
-      x: MARGIN, y: logoY - 22, size: 11, font: this.font, color: brandInk,
+      x: MARGIN, y: reportTitleY, size: 11, font: this.font, color: brandMuted,
     });
 
     // Separator
     this.page.drawLine({
-      start: { x: MARGIN, y: logoY - 38 },
-      end: { x: PAGE_W - MARGIN, y: logoY - 38 },
+      start: { x: MARGIN, y: reportTitleY - 16 },
+      end: { x: PAGE_W - MARGIN, y: reportTitleY - 16 },
       thickness: 0.5,
-      color: rgb(0.5, 0.52, 0.58),
+      color: brandHairline,
     });
 
     // Domain + topic/location
@@ -163,27 +230,52 @@ class GpmPdfBuilder {
       x: MARGIN, y: domainY, size: 32, font: this.fontBold, color: brandInk,
     });
     this.page.drawText(`${topic} \u00b7 ${location}`, {
-      x: MARGIN, y: domainY - 28, size: 12, font: this.font, color: rgb(0.8, 0.82, 0.87),
+      x: MARGIN, y: domainY - 28, size: 12, font: this.font, color: brandMuted,
     });
     this.page.drawText(period, {
-      x: MARGIN, y: domainY - 46, size: 10, font: this.font, color: rgb(0.65, 0.67, 0.72),
+      x: MARGIN, y: domainY - 46, size: 10, font: this.font, color: brandMuted,
     });
 
     // Platform badge — bottom right
     const pLabel = platformLabel(platform);
-    const badgeW = 90;
-    const badgeH = 28;
+    const badgeW = this.embeddedPlatformLogo ? 110 : 90;
+    const badgeH = this.embeddedPlatformLogo ? 44 : 28;
     const badgeX = PAGE_W - MARGIN - badgeW;
     const badgeY = 110;
-    this.page.drawRectangle({ x: badgeX, y: badgeY, width: badgeW, height: badgeH, color: pColor });
-    const labelW = this.fontBold.widthOfTextAtSize(pLabel, 11);
-    this.page.drawText(pLabel, {
-      x: badgeX + (badgeW - labelW) / 2,
-      y: badgeY + 9,
-      size: 11,
-      font: this.fontBold,
-      color: WHITE,
-    });
+    if (this.embeddedPlatformLogo) {
+      this.page.drawRectangle({
+        x: badgeX,
+        y: badgeY,
+        width: badgeW,
+        height: badgeH,
+        color: WHITE,
+        borderColor: pColor,
+        borderWidth: 2,
+      });
+      const inset = 4;
+      const scale = Math.min(
+        (badgeW - inset * 2) / this.embeddedPlatformLogo.width,
+        (badgeH - inset * 2) / this.embeddedPlatformLogo.height
+      );
+      const width = this.embeddedPlatformLogo.width * scale;
+      const height = this.embeddedPlatformLogo.height * scale;
+      this.page.drawImage(this.embeddedPlatformLogo, {
+        x: badgeX + (badgeW - width) / 2,
+        y: badgeY + (badgeH - height) / 2,
+        width,
+        height,
+      });
+    } else {
+      this.page.drawRectangle({ x: badgeX, y: badgeY, width: badgeW, height: badgeH, color: pColor });
+      const labelW = this.fontBold.widthOfTextAtSize(pLabel, 11);
+      this.page.drawText(pLabel, {
+        x: badgeX + (badgeW - labelW) / 2,
+        y: badgeY + 9,
+        size: 11,
+        font: this.fontBold,
+        color: WHITE,
+      });
+    }
 
     // Visibility pct large number — center-left bottom area
     const pctStr = fmtPct(payload.visibilityPct);
@@ -191,14 +283,21 @@ class GpmPdfBuilder {
       x: MARGIN, y: 150, size: 64, font: this.fontBold, color: WHITE,
     });
     this.page.drawText('AI VISIBILITY', {
-      x: MARGIN, y: 118, size: 9, font: this.fontBold, color: rgb(0.65, 0.67, 0.72),
+      x: MARGIN, y: 118, size: 9, font: this.fontBold, color: brandMuted,
     });
 
-    this.page.drawText('GEO-Pulse monitors AI search visibility across ChatGPT, Gemini, and Perplexity.', {
-      x: MARGIN, y: 42, size: 7, font: this.font, color: rgb(0.55, 0.57, 0.62),
-    });
+    if (this.brand.footerNote) {
+      this.page.drawText(pdfSafeText(this.brand.footerNote, 100), {
+        x: MARGIN, y: 56, size: 7, font: this.font, color: brandMuted,
+      });
+    }
+    if (this.brand.showPoweredBy) {
+      this.page.drawText('Powered by GEO-Pulse - AI search visibility across ChatGPT, Gemini, and Perplexity.', {
+        x: MARGIN, y: 42, size: 7, font: this.font, color: brandMuted,
+      });
+    }
 
-    this.drawPageFooter();
+    this.drawPageFooter(brandMuted);
     this.newPage();
   }
 
@@ -391,6 +490,8 @@ class GpmPdfBuilder {
   drawCompetitorChart(payload: GpmReportPayload): void {
     if (payload.competitors.length === 0) return;
 
+    // Keep the heading, explanation, and first chart rows together.
+    this.ensureSpace(110);
     this.drawSectionTitle('Competitor Co-citations');
     this.drawText(
       'Domains or brands that appeared in AI responses alongside queries for your topic.',
@@ -439,6 +540,8 @@ class GpmPdfBuilder {
       return;
     }
 
+    // Avoid an orphaned heading at the foot of the previous page.
+    this.ensureSpace(100);
     this.drawSectionTitle(`Opportunities (${String(payload.opportunities.length)})`);
     this.drawText(
       'These queries did not cite your domain. Consider building content that directly answers them.',
@@ -448,21 +551,42 @@ class GpmPdfBuilder {
 
     let i = 0;
     for (const opp of payload.opportunities) {
-      this.ensureSpace(30);
       i += 1;
       const prefix = `${String(i).padStart(2, '0')}.`;
+      const queryWidth = MAX_W - 36;
+      const queryMaxChars = Math.floor(queryWidth / (9 * 0.52));
+      const queryLines = wrapLine(opp.queryText, queryMaxChars).slice(0, 2);
+      const competitorLines = opp.topCompetitorInQuery
+        ? wrapLine(
+            `Who appeared instead: ${opp.topCompetitorInQuery}`,
+            Math.floor(queryWidth / (8 * 0.52))
+          ).slice(0, 2)
+        : [];
+      const queryBlockHeight = Math.max(22, queryLines.length * 12 + 8);
+      const itemHeight = queryBlockHeight + competitorLines.length * 11 + 8;
+      this.ensureSpace(itemHeight);
 
-      this.page.drawRectangle({ x: MARGIN, y: this.y - 4, width: MAX_W, height: 22, color: ROW_ALT });
+      this.page.drawRectangle({
+        x: MARGIN,
+        y: this.y - queryBlockHeight + 8,
+        width: MAX_W,
+        height: queryBlockHeight,
+        color: ROW_ALT,
+      });
       this.page.drawText(prefix, { x: MARGIN + 4, y: this.y, size: 9, font: this.fontBold, color: MUTED });
 
-      const qTrunc = opp.queryText.length > 80 ? `${opp.queryText.slice(0, 79)}\u2026` : opp.queryText;
-      this.page.drawText(qTrunc, { x: MARGIN + 28, y: this.y, size: 9, font: this.font, color: INK });
-      this.y -= 22;
-
-      if (opp.topCompetitorInQuery) {
-        this.drawText(`Who appeared instead: ${opp.topCompetitorInQuery}`, 8, false, MUTED, 28);
+      let lineY = this.y;
+      for (const line of queryLines) {
+        this.page.drawText(line, { x: MARGIN + 28, y: lineY, size: 9, font: this.font, color: INK });
+        lineY -= 12;
       }
-      this.y -= 4;
+      this.y -= queryBlockHeight;
+
+      for (const line of competitorLines) {
+        this.page.drawText(line, { x: MARGIN + 28, y: this.y, size: 8, font: this.font, color: MUTED });
+        this.y -= 11;
+      }
+      this.y -= 8;
     }
 
     this.y -= 8;
@@ -511,11 +635,22 @@ class GpmPdfBuilder {
 
 export async function buildGpmReportPdf(
   payload: GpmReportPayload,
-  options?: { readonly narrative?: string; readonly brand?: BrandConfig }
+  options?: {
+    readonly narrative?: string;
+    readonly brand?: BrandConfig;
+    readonly logoBytes?: Uint8Array | null;
+    readonly platformLogoBytes?: Uint8Array | null;
+  }
 ): Promise<Uint8Array> {
   const period = formatWindowDate(payload.windowDate);
   const builder = new GpmPdfBuilder();
-  await builder.init(payload.domain, period, options?.brand ?? GEO_PULSE_BRAND);
+  await builder.init(
+    payload.domain,
+    period,
+    options?.brand ?? GEO_PULSE_BRAND,
+    options?.logoBytes,
+    options?.platformLogoBytes
+  );
 
   builder.drawCover(payload);
   if (options?.narrative) {

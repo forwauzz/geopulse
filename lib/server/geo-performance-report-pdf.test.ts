@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { PDFDocument, PDFName, PDFRawStream } from 'pdf-lib';
 import { buildGpmReportPdf } from './geo-performance-report-pdf';
 import type { GpmReportPayload } from './geo-performance-report-payload';
+import { parseBrandConfig } from '../../workers/report/report-branding';
 
 const basePayload: GpmReportPayload = {
   configId: 'config-001',
@@ -120,5 +123,30 @@ describe('buildGpmReportPdf', () => {
     }));
     const pdf = await buildGpmReportPdf({ ...basePayload, prompts: manyPrompts });
     expect(pdf.length).toBeGreaterThan(1000);
+  });
+
+  it('embeds the saved agency logo and the measured engine logo', async () => {
+    const brandLogo = new Uint8Array(readFileSync('public/ai-engines/chatgpt.jpg'));
+    const platformLogo = new Uint8Array(readFileSync('public/ai-engines/perplexity.jpg'));
+    const brand = parseBrandConfig({
+      brand: {
+        companyName: 'Lifter',
+        primary: '#3c88af',
+        logoKey: 'brand-logos/lifter/logo.jpg',
+        logoMime: 'image/jpeg',
+      },
+    });
+
+    const pdf = await buildGpmReportPdf(
+      { ...basePayload, platform: 'perplexity' },
+      { brand, logoBytes: brandLogo, platformLogoBytes: platformLogo }
+    );
+    const loaded = await PDFDocument.load(pdf);
+    const imageCount = Array.from(loaded.context.enumerateIndirectObjects()).filter(([, object]) => {
+      if (!(object instanceof PDFRawStream)) return false;
+      return object.dict.get(PDFName.of('Subtype')) === PDFName.of('Image');
+    }).length;
+
+    expect(imageCount).toBeGreaterThanOrEqual(2);
   });
 });
