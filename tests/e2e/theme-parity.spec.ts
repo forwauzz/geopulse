@@ -6,7 +6,7 @@ type RouteCase = {
 };
 
 const ROUTE_CASES: RouteCase[] = [
-  { path: '/', heading: /win visibility in google and ai search/i },
+  { path: '/', heading: /ai visibility you can prove, fix, and report/i },
   // /dashboard is the scan hero and nothing else now — its heading is the hero's, not "Dashboard".
   { path: '/dashboard', heading: /audit any website/i },
   { path: '/dashboard/startup', heading: /e2e startup workspace/i },
