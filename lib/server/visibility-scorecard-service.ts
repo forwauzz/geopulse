@@ -223,6 +223,7 @@ export async function loadVisibilityScorecard(args: {
   if (!row) return null;
   const storedToken = readVisibilityScorecardShareToken(row['metadata'], args.subject.kind);
   if (!storedToken || storedToken !== args.shareToken) return null;
+  if (!(await hasActivePaidScope({ supabase: args.supabase, subject: args.subject, subjectRow: row }))) return null;
 
   let domain = typeof row['canonical_domain'] === 'string' ? row['canonical_domain'] : null;
   let displayName = String(row['display_name'] || row['name'] || 'Business');
@@ -321,7 +322,10 @@ export async function loadVisibilityScorecard(args: {
   const readinessChange = typeof latestScan?.score === 'number' && typeof previousScan?.score === 'number'
     ? latestScan.score - previousScan.score
     : null;
-  const preparedByName = brand?.companyName || preparedByFallback;
+  const scorecardBrand = brand && args.subject.kind === 'startup_workspace'
+    ? { ...brand, showPoweredBy: true }
+    : brand;
+  const preparedByName = scorecardBrand?.companyName || preparedByFallback;
   const preparedAt = reports[0]?.generatedAt
     ?? outcome.measuredAt
     ?? latestScan?.created_at
@@ -333,7 +337,7 @@ export async function loadVisibilityScorecard(args: {
     domain: canonicalDomain,
     location: typeof config?.location === 'string' ? config.location : null,
     preparedByName,
-    brand,
+    brand: scorecardBrand,
     readinessScore,
     readinessChange,
     outcome,

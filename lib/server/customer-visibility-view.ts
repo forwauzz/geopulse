@@ -1,4 +1,10 @@
 import { loadClientOutcomeEngine, type OutcomeEngineView } from './client-outcome-engine';
+import {
+  canManageVisibilityScorecard,
+  listVisibilityReports,
+  readVisibilityScorecardShareToken,
+  type VisibilityReportSummary,
+} from './visibility-scorecard-service';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -12,6 +18,9 @@ export type CustomerVisibilityView = {
   readonly statusMessage: string | null;
   readonly prompts: readonly string[];
   readonly competitors: readonly string[];
+  readonly canShareScorecard: boolean;
+  readonly shareToken: string | null;
+  readonly reports: readonly VisibilityReportSummary[];
   readonly outcome: OutcomeEngineView;
 };
 
@@ -52,7 +61,7 @@ export async function loadCustomerVisibilityView(args: {
 
   const { data: workspace } = await args.supabase
     .from('startup_workspaces')
-    .select('id,name,canonical_domain')
+    .select('id,name,canonical_domain,metadata')
     .eq('id', membership.startup_workspace_id)
     .maybeSingle();
   if (!workspace?.id) return null;
@@ -75,6 +84,9 @@ export async function loadCustomerVisibilityView(args: {
       statusMessage: null,
       prompts: [],
       competitors: [],
+      canShareScorecard: false,
+      shareToken: null,
+      reports: [],
       outcome: EMPTY_OUTCOME,
     };
   }
@@ -101,20 +113,28 @@ export async function loadCustomerVisibilityView(args: {
     config?.metadata && typeof config.metadata === 'object'
       ? config.metadata as Record<string, unknown>
       : null;
-  const { data: queryRows } = config?.query_set_id
-    ? await args.supabase
-        .from('benchmark_queries')
-        .select('query_text')
-        .eq('query_set_id', config.query_set_id)
-        .order('query_key', { ascending: true })
-        .limit(12)
-    : { data: [] };
-  const outcome = await loadClientOutcomeEngine({
-    supabase: args.supabase,
-    domain,
-    configMetadata: metadata,
-    latestScan,
-  });
+  const subject = { kind: 'startup_workspace' as const, id: workspace.id };
+  const [queryResult, outcome, canShareScorecard, reports] = await Promise.all([
+    config?.query_set_id
+      ? args.supabase
+          .from('benchmark_queries')
+          .select('query_text')
+          .eq('query_set_id', config.query_set_id)
+          .order('query_key', { ascending: true })
+          .limit(12)
+      : Promise.resolve({ data: [] }),
+    loadClientOutcomeEngine({
+      supabase: args.supabase,
+      domain,
+      configMetadata: metadata,
+      latestScan,
+    }),
+    canManageVisibilityScorecard({ supabase: args.supabase, userId: args.userId, subject }),
+    config?.id
+      ? listVisibilityReports({ supabase: args.supabase, subject, configId: config.id })
+      : Promise.resolve([]),
+  ]);
+  const queryRows = queryResult.data;
 
   return {
     workspaceId: workspace.id,
@@ -126,6 +146,9 @@ export async function loadCustomerVisibilityView(args: {
     statusMessage: typeof metadata?.['baseline_error'] === 'string' ? metadata['baseline_error'] : null,
     prompts: ((queryRows ?? []) as Array<{ query_text: string }>).map((row) => row.query_text),
     competitors: Array.isArray(config?.competitor_list) ? config.competitor_list : [],
+    canShareScorecard,
+    shareToken: readVisibilityScorecardShareToken(workspace.metadata, 'startup_workspace'),
+    reports,
     outcome,
   };
 }

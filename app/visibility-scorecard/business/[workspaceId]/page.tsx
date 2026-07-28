@@ -6,6 +6,10 @@ import { loadVisibilityScorecard } from '@/lib/server/visibility-scorecard-servi
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export const dynamic = 'force-dynamic';
+export const metadata = {
+  robots: { index: false, follow: false },
+  referrer: 'no-referrer' as const,
+};
 
 export default async function BusinessVisibilityScorecardPage({
   params,
