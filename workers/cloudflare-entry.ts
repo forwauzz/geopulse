@@ -365,6 +365,7 @@ export default {
           GPM_NARRATIVE_GEMINI_MODEL: envRecord['GPM_NARRATIVE_GEMINI_MODEL'],
           GEMINI_ENDPOINT:         envRecord['GEMINI_ENDPOINT'],
           GPM_REPORT_R2_PUBLIC_BASE: envRecord['GPM_REPORT_R2_PUBLIC_BASE'],
+          NEXT_PUBLIC_APP_URL:      envRecord['NEXT_PUBLIC_APP_URL'],
           RESEND_API_KEY:          resendKey || undefined,
           RESEND_FROM_EMAIL:       resendFrom || undefined,
           GPM_MONTHLY_SPEND_CAP_USD: envRecord['GPM_MONTHLY_SPEND_CAP_USD'],

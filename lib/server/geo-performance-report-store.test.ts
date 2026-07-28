@@ -116,7 +116,7 @@ describe('storeGpmReport versioning', () => {
     });
   });
 
-  it('loads the saved agency logo and fetches the measured engine logo for the PDF', async () => {
+  it('loads saved agency and measured engine logos from the report bucket', async () => {
     const inserted: Record<string, unknown>[] = [];
     const logoBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const engineBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]);
@@ -161,13 +161,14 @@ describe('storeGpmReport versioning', () => {
     };
     const bucket = {
       async put() {},
-      async get() {
-        return { arrayBuffer: async () => logoBytes.buffer };
+      async get(key: string) {
+        const bytes = key === 'report-assets/ai-engines/perplexity.jpg'
+          ? engineBytes
+          : logoBytes;
+        return { arrayBuffer: async () => bytes.buffer };
       },
     };
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(engineBytes, { status: 200, headers: { 'content-type': 'image/jpeg' } }));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const config = {
       id: 'config-2',
       startup_workspace_id: null,
@@ -199,7 +200,7 @@ describe('storeGpmReport versioning', () => {
       },
     });
 
-    expect(fetchSpy).toHaveBeenCalledWith('https://getgeopulse.com/ai-engines/perplexity.jpg');
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(vi.mocked(buildGpmReportPdf)).toHaveBeenCalledWith(
       expect.objectContaining({ domain: 'steinbergurology.com' }),
       expect.objectContaining({
