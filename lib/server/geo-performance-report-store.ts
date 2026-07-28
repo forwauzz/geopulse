@@ -6,8 +6,9 @@ import { structuredLog, structuredError } from './structured-log';
 import type { ClientBenchmarkConfigRow } from './benchmark-repository';
 import { sendGpmReportEmail } from '../../workers/report/gpm-email-delivery';
 import type { GpmReportPayload } from './geo-performance-report-payload';
-import { parseBrandConfig } from '../../workers/report/report-branding';
 import { recipientsFromMetadata } from '../shared/report-recipients';
+import { resolveReportBrand } from '../../workers/report/resolve-report-brand';
+import { detectImageType } from '../../workers/scan-engine/parse-brand-signals';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,7 @@ export type GpmReportStoreEnvLike = {
   readonly GPM_REPORT_R2_PUBLIC_BASE?: string;
   readonly RESEND_API_KEY?: string;
   readonly RESEND_FROM_EMAIL?: string;
+  readonly NEXT_PUBLIC_APP_URL?: string;
 };
 
 export type GpmR2BucketLike = {
@@ -25,6 +27,7 @@ export type GpmR2BucketLike = {
     value: Uint8Array,
     options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }
   ): Promise<unknown>;
+  get?(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
 };
 
 export type GpmReportStoreResult = {
@@ -34,6 +37,31 @@ export type GpmReportStoreResult = {
   readonly narrativeGenerated: boolean;
   readonly payload: GpmReportPayload;
 };
+
+const platformLogoCache = new Map<string, Uint8Array>();
+
+async function fetchPlatformLogo(
+  platform: string,
+  appUrl: string | undefined
+): Promise<Uint8Array | null> {
+  if (!['chatgpt', 'gemini', 'perplexity'].includes(platform)) return null;
+  const cached = platformLogoCache.get(platform);
+  if (cached) return cached;
+  const base = appUrl?.trim().replace(/\/+$/, '');
+  if (!base) return null;
+  try {
+    const response = await fetch(`${base}/ai-engines/${platform}.jpg`);
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength === 0 || buffer.byteLength > 100_000) return null;
+    const bytes = new Uint8Array(buffer);
+    if (detectImageType(bytes) !== 'image/jpeg') return null;
+    platformLogoCache.set(platform, bytes);
+    return bytes;
+  } catch {
+    return null;
+  }
+}
 
 // ── Core store function ───────────────────────────────────────────────────────
 
@@ -48,26 +76,19 @@ export async function storeGpmReport(args: {
   readonly env: GpmReportStoreEnvLike;
 }): Promise<GpmReportStoreResult> {
   const { config, runGroupId, platform, windowDate, measuredCanonicalDomain } = args;
-  let brand = parseBrandConfig(null);
-  try {
-    if (config.agency_account_id) {
-      const { data: agency } = await args.supabase
-        .from('agency_accounts')
-        .select('metadata')
-        .eq('id', config.agency_account_id)
-        .maybeSingle();
-      brand = parseBrandConfig(agency?.metadata);
-    } else if (config.startup_workspace_id) {
-      const { data: workspace } = await args.supabase
-        .from('startup_workspaces')
-        .select('metadata')
-        .eq('id', config.startup_workspace_id)
-        .maybeSingle();
-      brand = parseBrandConfig(workspace?.metadata);
-    }
-  } catch {
-    // Branding is presentation-only; a lookup failure must never block report generation.
-  }
+  const brandResolution = await resolveReportBrand({
+    supabase: args.supabase as any,
+    scan: {
+      agency_client_id: null,
+      agency_account_id: config.agency_account_id,
+      startup_workspace_id: config.startup_workspace_id,
+    },
+    bucket:
+      args.bucket && typeof args.bucket.get === 'function'
+        ? (args.bucket as any)
+        : undefined,
+  });
+  const { brand, logoBytes } = brandResolution;
 
   structuredLog('gpm_report_store_started', {
     config_id: config.id,
@@ -110,7 +131,13 @@ export async function storeGpmReport(args: {
   }
 
   // 3. Render PDF
-  const pdfBytes = await buildGpmReportPdf(payload, { narrative, brand });
+  const platformLogoBytes = await fetchPlatformLogo(platform, args.env.NEXT_PUBLIC_APP_URL);
+  const pdfBytes = await buildGpmReportPdf(payload, {
+    narrative,
+    brand,
+    logoBytes,
+    platformLogoBytes,
+  });
 
   // 4. Upload to R2 if bucket is available
   let pdfR2Key: string | null = null;
