@@ -41,6 +41,7 @@ type BaselineEnv = {
   readonly ANTHROPIC_API_KEY?: string;
   readonly GPM_NARRATIVE_MODEL?: string;
   readonly GPM_REPORT_R2_PUBLIC_BASE?: string;
+  readonly NEXT_PUBLIC_APP_URL?: string;
   readonly RESEND_API_KEY?: string;
   readonly RESEND_FROM_EMAIL?: string;
 };
@@ -51,6 +52,7 @@ type ReportBucket = {
     value: ArrayBuffer | Uint8Array,
     options?: { httpMetadata?: { contentType?: string } },
   ): Promise<unknown>;
+  get?(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
 };
 
 export type AgencyClientBaselineResult = {
@@ -343,6 +345,9 @@ export async function completeAgencyClientBaseline(args: {
     reportBucket: args.reportBucket
       ? {
           put: (key, value, options) => args.reportBucket!.put(key, value, options),
+          get: args.reportBucket.get
+            ? (key) => args.reportBucket!.get!(key)
+            : undefined,
         }
       : undefined,
   });

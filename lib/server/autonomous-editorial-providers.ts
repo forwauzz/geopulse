@@ -1,7 +1,14 @@
 import type { EditorialProvider } from './autonomous-editorial-engine';
 import { runWorkersAiPrompt, type WorkersAiBinding } from './workers-ai';
 
-type R2Bucket = { put(key: string, value: ArrayBuffer, options?: { httpMetadata?: { contentType?: string } }): Promise<unknown> };
+type R2Bucket = {
+  put(
+    key: string,
+    value: ArrayBuffer,
+    options?: { httpMetadata?: { contentType?: string } }
+  ): Promise<unknown>;
+  get?(key: string): Promise<{ arrayBuffer(): Promise<ArrayBuffer> } | null>;
+};
 type FetchLike = typeof fetch;
 
 export type AutonomousEditorialEnv = {

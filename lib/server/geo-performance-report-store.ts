@@ -42,20 +42,41 @@ const platformLogoCache = new Map<string, Uint8Array>();
 
 async function fetchPlatformLogo(
   platform: string,
-  appUrl: string | undefined
+  appUrl: string | undefined,
+  bucket: GpmR2BucketLike | undefined
 ): Promise<Uint8Array | null> {
   if (!['chatgpt', 'gemini', 'perplexity'].includes(platform)) return null;
   const cached = platformLogoCache.get(platform);
   if (cached) return cached;
+
+  const validate = (buffer: ArrayBuffer): Uint8Array | null => {
+    if (buffer.byteLength === 0 || buffer.byteLength > 100_000) return null;
+    const bytes = new Uint8Array(buffer);
+    return detectImageType(bytes) === 'image/jpeg' ? bytes : null;
+  };
+
+  if (bucket?.get) {
+    try {
+      const object = await bucket.get(`report-assets/ai-engines/${platform}.jpg`);
+      if (object) {
+        const bytes = validate(await object.arrayBuffer());
+        if (bytes) {
+          platformLogoCache.set(platform, bytes);
+          return bytes;
+        }
+      }
+    } catch {
+      // Fall through to the public static asset.
+    }
+  }
+
   const base = appUrl?.trim().replace(/\/+$/, '');
   if (!base) return null;
   try {
     const response = await fetch(`${base}/ai-engines/${platform}.jpg`);
     if (!response.ok) return null;
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength === 0 || buffer.byteLength > 100_000) return null;
-    const bytes = new Uint8Array(buffer);
-    if (detectImageType(bytes) !== 'image/jpeg') return null;
+    const bytes = validate(await response.arrayBuffer());
+    if (!bytes) return null;
     platformLogoCache.set(platform, bytes);
     return bytes;
   } catch {
@@ -131,7 +152,11 @@ export async function storeGpmReport(args: {
   }
 
   // 3. Render PDF
-  const platformLogoBytes = await fetchPlatformLogo(platform, args.env.NEXT_PUBLIC_APP_URL);
+  const platformLogoBytes = await fetchPlatformLogo(
+    platform,
+    args.env.NEXT_PUBLIC_APP_URL,
+    args.bucket
+  );
   const pdfBytes = await buildGpmReportPdf(payload, {
     narrative,
     brand,

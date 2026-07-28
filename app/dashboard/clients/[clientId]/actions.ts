@@ -362,6 +362,9 @@ export async function runClientVisibilityCheck(formData: FormData): Promise<void
               new Uint8Array(value).buffer,
               options ? { httpMetadata: { contentType: options.httpMetadata?.contentType } } : undefined,
             ),
+          get: editorialEnv.REPORT_FILES.get
+            ? (key) => editorialEnv.REPORT_FILES!.get!(key)
+            : undefined,
         }
       : undefined,
   });
@@ -402,6 +405,9 @@ export async function completeClientBaseline(formData: FormData): Promise<void> 
               value instanceof Uint8Array ? new Uint8Array(value).slice().buffer : value,
               options ? { httpMetadata: { contentType: options.httpMetadata?.contentType } } : undefined,
             ),
+          get: editorialEnv.REPORT_FILES.get
+            ? (key) => editorialEnv.REPORT_FILES!.get!(key)
+            : undefined,
         }
       : undefined,
   });
