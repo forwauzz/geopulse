@@ -121,6 +121,7 @@ export type SocialProductionEnv = SocialTrendEnv & {
   readonly REPORT_FILES?: SocialMediaBucket;
   readonly SOCIAL_MEDIA_PUBLIC_BASE?: string;
   readonly INSTAGRAM_GRAPH_API_BASE_URL?: string;
+  readonly DISTRIBUTION_TOKEN_ENCRYPTION_KEY?: string;
 };
 
 type ScanRow = {
@@ -1003,6 +1004,7 @@ export async function runSocialProofAgent(args: {
         performanceLearning = await collectInstagramPerformance({
           supabase: args.supabase,
           graphBaseUrl: args.env?.INSTAGRAM_GRAPH_API_BASE_URL,
+          tokenEncryptionKey: args.env?.DISTRIBUTION_TOKEN_ENCRYPTION_KEY,
           now,
         });
       } catch {

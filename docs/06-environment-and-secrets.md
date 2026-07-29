@@ -128,6 +128,7 @@ Conditional secrets:
 - `LINKEDIN_AUTHOR_URN`
 - `X_OAUTH_CLIENT_ID`
 - `X_OAUTH_CLIENT_SECRET`
+- `DISTRIBUTION_TOKEN_ENCRYPTION_KEY`
 - `LINKEDIN_OAUTH_CLIENT_ID`
 - `LINKEDIN_OAUTH_CLIENT_SECRET`
 - `RECONCILE_SECRET`
@@ -413,8 +414,16 @@ To match the current repo/runtime features in Cloudflare production, make sure t
 - optional: `LINKEDIN_AUTHOR_URN`
 - optional: `X_OAUTH_CLIENT_ID`
 - optional: `X_OAUTH_CLIENT_SECRET`
+- optional: `DISTRIBUTION_TOKEN_ENCRYPTION_KEY`
 - optional: `LINKEDIN_OAUTH_CLIENT_ID`
 - optional: `LINKEDIN_OAUTH_CLIENT_SECRET`
 - optional: `RECONCILE_SECRET`
 - optional: `BROWSER_RENDERING_API_TOKEN`
 - optional: `CLOUDFLARE_ACCOUNT_ID`
+
+`DISTRIBUTION_TOKEN_ENCRYPTION_KEY` is required before any social OAuth callback or
+manual distribution-token save. It must be an independently generated 32-byte
+base64url value stored as a Cloudflare secret; do not reuse
+`SEO_TOKEN_ENCRYPTION_KEY`. The default X OAuth request is fixed to `tweet.read`,
+`tweet.write`, `users.read`, `media.write`, and `offline.access`. Overrides that omit
+a required scope or add an unapproved scope fail closed.

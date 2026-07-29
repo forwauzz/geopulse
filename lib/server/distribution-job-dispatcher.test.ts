@@ -47,6 +47,7 @@ const baseEnv = {
   X_OAUTH_CLIENT_ID: 'x-client-id',
   X_OAUTH_CLIENT_SECRET: 'x-client-secret',
   X_OAUTH_TOKEN_URL: '',
+  DISTRIBUTION_TOKEN_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
   LINKEDIN_OAUTH_CLIENT_ID: '',
   LINKEDIN_OAUTH_CLIENT_SECRET: '',
   LINKEDIN_OAUTH_TOKEN_URL: '',
@@ -3237,6 +3238,12 @@ describe('dispatchDistributionJobs', () => {
       })
     );
     expect(repo.upsertAccountToken).toHaveBeenCalledOnce();
+    expect(repo.upsertAccountToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessTokenEncrypted: expect.stringMatching(/^dt1\./),
+        refreshTokenEncrypted: expect.stringMatching(/^dt1\./),
+      })
+    );
   });
 
   it('refreshes an expiring LinkedIn token before dispatch and uses the refreshed token', async () => {
@@ -3440,5 +3447,11 @@ describe('dispatchDistributionJobs', () => {
       })
     );
     expect(repo.upsertAccountToken).toHaveBeenCalledOnce();
+    expect(repo.upsertAccountToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessTokenEncrypted: expect.stringMatching(/^dt1\./),
+        refreshTokenEncrypted: expect.stringMatching(/^dt1\./),
+      })
+    );
   });
 });

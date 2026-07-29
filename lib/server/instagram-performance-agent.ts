@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createDistributionEngineRepository } from './distribution-engine-repository';
+import { decryptDistributionToken } from './distribution-token-crypto';
 import { scoreInstagramPerformance } from './instagram-organic-strategy';
 
 export type InstagramPerformanceSnapshot = {
@@ -51,14 +52,16 @@ export function parseInstagramInsights(
 export async function collectInstagramPerformance(args: {
   readonly supabase: SupabaseClient;
   readonly graphBaseUrl?: string;
+  readonly tokenEncryptionKey?: string;
   readonly now?: Date;
 }): Promise<{ checked: number; updated: number; failed: number }> {
   const repo = createDistributionEngineRepository(args.supabase as never);
   const accounts = await repo.listAccounts({ providerName: 'instagram', status: 'connected' });
   const account = accounts[0];
   if (!account) return { checked: 0, updated: 0, failed: 0 };
-  const token = (await repo.listAccountTokensForAccount(account.id))[0]?.access_token_encrypted?.trim();
-  if (!token) return { checked: 0, updated: 0, failed: 0 };
+  const tokenEnvelope = (await repo.listAccountTokensForAccount(account.id))[0]?.access_token_encrypted?.trim();
+  if (!tokenEnvelope) return { checked: 0, updated: 0, failed: 0 };
+  const token = await decryptDistributionToken(tokenEnvelope, args.tokenEncryptionKey);
   const since = new Date((args.now ?? new Date()).getTime() - 14 * 86_400_000).toISOString();
   const { data, error } = await args.supabase
     .from('distribution_jobs')

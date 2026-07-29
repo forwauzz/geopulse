@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  assertRequiredSocialOAuthScopes,
   buildSocialOAuthAuthorizeUrl,
   exchangeSocialOAuthCode,
+  fetchXOAuthProfile,
   refreshSocialOAuthToken,
+  sanitizeOAuthTokenMetadata,
   validateSignedOAuthState,
+  X_REQUIRED_PUBLISH_SCOPES,
 } from '@/lib/server/distribution-social-oauth';
 
 const originalFetch = global.fetch;
@@ -34,6 +38,81 @@ describe('distribution-social-oauth', () => {
     expect(validated?.accountId).toBe('acct-row-1');
     expect(validated?.provider).toBe('x');
     expect(validated?.codeVerifier).toBeTruthy();
+    expect(parsed.searchParams.get('scope')?.split(' ')).toEqual(X_REQUIRED_PUBLISH_SCOPES);
+  });
+
+  it('fails closed when X omits any required publishing scope', () => {
+    expect(() =>
+      assertRequiredSocialOAuthScopes('x', [
+        'tweet.read',
+        'tweet.write',
+        'users.read',
+        'offline.access',
+      ])
+    ).toThrow('media.write');
+    expect(() =>
+      assertRequiredSocialOAuthScopes('x', [...X_REQUIRED_PUBLISH_SCOPES])
+    ).not.toThrow();
+    expect(() =>
+      assertRequiredSocialOAuthScopes('x', [...X_REQUIRED_PUBLISH_SCOPES, 'dm.write'])
+    ).toThrow('unapproved scopes');
+    expect(() =>
+      buildSocialOAuthAuthorizeUrl({
+        provider: 'x',
+        accountId: 'acct-row-1',
+        userId: 'user-1',
+        appUrl: 'https://getgeopulse.com',
+        stateSecret: 'secret',
+        xClientId: 'x-client-id',
+        xScope: `${X_REQUIRED_PUBLISH_SCOPES.join(' ')} dm.write`,
+      })
+    ).toThrow('unapproved scopes');
+  });
+
+  it('verifies the connected X identity with a read-only request', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          data: {
+            id: 'x-user-1',
+            username: 'get_geopulse',
+            name: 'GEO-Pulse',
+            profile_image_url: 'https://pbs.twimg.com/profile_images/geopulse.jpg',
+          },
+        }),
+    } as Response) as typeof fetch;
+
+    await expect(fetchXOAuthProfile({ accessToken: 'access-token' })).resolves.toEqual({
+      id: 'x-user-1',
+      username: 'get_geopulse',
+      name: 'GEO-Pulse',
+      profileImageUrl: 'https://pbs.twimg.com/profile_images/geopulse.jpg',
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.x.com/2/users/me?user.fields=username,name,profile_image_url',
+      {
+        headers: {
+          Authorization: 'Bearer access-token',
+        },
+      }
+    );
+  });
+
+  it('removes token material from stored OAuth response metadata', () => {
+    expect(
+      sanitizeOAuthTokenMetadata({
+        access_token: 'secret-access',
+        refresh_token: 'secret-refresh',
+        token_type: 'bearer',
+        expires_in: 7200,
+        scope: 'tweet.read tweet.write users.read media.write offline.access',
+      })
+    ).toEqual({
+      token_type: 'bearer',
+      expires_in: 7200,
+      scope: 'tweet.read tweet.write users.read media.write offline.access',
+    });
   });
 
   it('rejects state for the wrong user', () => {
@@ -110,7 +189,7 @@ describe('distribution-social-oauth', () => {
           access_token: 'new-access-token',
           refresh_token: 'new-refresh-token',
           expires_in: 7200,
-          scope: 'tweet.read tweet.write users.read offline.access',
+          scope: 'tweet.read tweet.write users.read media.write offline.access',
         }),
     } as Response) as typeof fetch;
 
@@ -123,7 +202,7 @@ describe('distribution-social-oauth', () => {
 
     expect(token.accessToken).toBe('new-access-token');
     expect(token.refreshToken).toBe('new-refresh-token');
-    expect(token.scopeList).toEqual(['tweet.read', 'tweet.write', 'users.read', 'offline.access']);
+    expect(token.scopeList).toEqual(['tweet.read', 'tweet.write', 'users.read', 'media.write', 'offline.access']);
     expect(token.expiresAt).toBeTruthy();
   });
 
