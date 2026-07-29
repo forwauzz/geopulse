@@ -20,6 +20,25 @@ describe('agency prospecting qualification', () => {
     ] }))).toHaveLength(2);
   });
 
+  it('extracts the first strict agency payload when grounded citations add trailing JSON', () => {
+    expect(parseAgencyDiscovery([
+      'Grounded results:',
+      JSON.stringify({ agencies: [{ name: 'A', url: 'https://agency.example/' }] }),
+      'Grounding metadata:',
+      JSON.stringify({ sources: [{ uri: 'https://directory.example/' }] }),
+    ].join('\n'))).toEqual([
+      { name: 'A', url: 'https://agency.example/' },
+    ]);
+  });
+
+  it('accepts a strict bare agency array without accepting unrelated JSON', () => {
+    expect(parseAgencyDiscovery(JSON.stringify([
+      { name: 'A', url: 'https://agency.example/' },
+      { name: 'B', url: 'https://other.example/' },
+    ]))).toHaveLength(2);
+    expect(parseAgencyDiscovery(JSON.stringify({ sources: [] }))).toEqual([]);
+  });
+
   it('accepts a relevant email published on the official domain', () => {
     expect(selectPublicBusinessEmail(
       '<a href="mailto:info@agency.example">Email</a><span>owner@agency.example</span>',
