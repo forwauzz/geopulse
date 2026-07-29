@@ -32,6 +32,22 @@ describe('Revenue Agency control plane', () => {
     });
   });
 
+  it('preserves city-country prospecting markets instead of splitting every comma', () => {
+    expect(resolveRevenueAgencyConfig({
+      prospecting_markets: 'Toronto, Canada, Montreal, Canada, New York, USA',
+    }, true, false).prospectingMarkets).toEqual([
+      'Toronto, Canada',
+      'Montreal, Canada',
+      'New York, USA',
+    ]);
+    expect(resolveRevenueAgencyConfig({
+      prospecting_markets: 'Toronto, Canada; Vancouver, Canada',
+    }, true, false).prospectingMarkets).toEqual([
+      'Toronto, Canada',
+      'Vancouver, Canada',
+    ]);
+  });
+
   it('moves focus through the revenue hand-offs without inventing activity', () => {
     expect(
       chooseRevenueAgencyFocus({

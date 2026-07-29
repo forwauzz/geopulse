@@ -20,6 +20,7 @@ import { structuredLogWithClientAndWait } from './structured-log';
 import { runRevenueNurtureAgent, type RevenueNurtureResult } from './revenue-nurture-agent';
 import type { LeadEmailEnv } from './lead-email';
 import {
+  parseProspectingMarkets,
   runAgencyProspectingAgent,
   type AgencyProspectingEnv,
   type AgencyProspectingResult,
@@ -119,10 +120,7 @@ export function resolveRevenueAgencyConfig(
     prospectingEnabled:
       typeof config['prospecting_enabled'] === 'boolean' ? config['prospecting_enabled'] : false,
     prospectingDailyCap: positiveInt(config['prospecting_daily_cap'], 5, 10),
-    prospectingMarkets:
-      typeof config['prospecting_markets'] === 'string'
-        ? config['prospecting_markets'].split(',').map((item) => item.trim()).filter(Boolean).slice(0, 12)
-        : ['Toronto, Canada'],
+    prospectingMarkets: parseProspectingMarkets(config['prospecting_markets']),
   };
 }
 
@@ -399,7 +397,7 @@ export async function runRevenueAgency(args: {
       config.prospectingEnabled && mode === 'autonomous' && judge.allowProspecting
         ? await runAgencyProspectingAgent({
             supabase: args.supabase,
-            env: args.env ?? process.env,
+            env: args.env ?? (process.env as AgencyProspectingEnv),
             market,
             dailyCap: config.prospectingDailyCap,
           })
@@ -420,7 +418,7 @@ export async function runRevenueAgency(args: {
         ? await runRevenueNurtureAgent({
             supabase: args.supabase,
             appUrl: args.appUrl,
-            env: args.env ?? process.env,
+            env: args.env ?? (process.env as LeadEmailEnv),
             now,
             dailyCap: config.nurtureDailyCap,
             delayHours: config.nurtureDelayHours,

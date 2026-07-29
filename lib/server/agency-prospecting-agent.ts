@@ -19,34 +19,95 @@ export type AgencyProspectingResult = {
   readonly reason?: string;
 };
 
-const resultSchema = z.object({
-  agencies: z.array(z.object({
-    name: z.string().min(1).max(120),
-    url: z.string().url(),
-  })).max(20),
+const agencySchema = z.object({
+  name: z.string().min(1).max(120),
+  url: z.string().url(),
 });
+const agencyListSchema = z.array(agencySchema).max(20);
+const resultSchema = z.object({ agencies: agencyListSchema });
 
 const BLOCKED_EMAIL_PREFIXES = ['noreply', 'no-reply', 'privacy', 'abuse', 'legal', 'billing'];
 const PREFERRED_EMAIL_PREFIXES = ['partnerships', 'growth', 'marketing', 'hello', 'info', 'contact'];
+const COUNTRY_TOKEN_RE = /^(?:canada|usa|u\.s\.a\.|us|u\.s\.|united states)$/i;
+
+export function parseProspectingMarkets(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    const markets = value.map((item) => String(item).trim()).filter(Boolean).slice(0, 12);
+    return markets.length > 0 ? markets : ['Toronto, Canada'];
+  }
+  if (typeof value !== 'string' || !value.trim()) return ['Toronto, Canada'];
+  const delimited = value.split(/[;\n|]+/).map((item) => item.trim()).filter(Boolean);
+  if (delimited.length > 1) return delimited.slice(0, 12);
+
+  const tokens = value.split(',').map((item) => item.trim()).filter(Boolean);
+  if (!tokens.some((token) => COUNTRY_TOKEN_RE.test(token))) return tokens.slice(0, 12);
+  const markets: string[] = [];
+  let parts: string[] = [];
+  for (const token of tokens) {
+    parts.push(token);
+    if (COUNTRY_TOKEN_RE.test(token)) {
+      markets.push(parts.join(', '));
+      parts = [];
+    }
+  }
+  if (parts.length > 0) markets.push(parts.join(', '));
+  return markets.filter(Boolean).slice(0, 12);
+}
+
+function extractJsonValues(raw: string): unknown[] {
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const values: unknown[] = [];
+  for (let start = 0; start < cleaned.length; start += 1) {
+    const opener = cleaned[start];
+    if (opener !== '{' && opener !== '[') continue;
+    const stack: string[] = [];
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < cleaned.length; index += 1) {
+      const char = cleaned[index]!;
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+      if (char === '{' || char === '[') stack.push(char);
+      else if (char === '}' || char === ']') {
+        const expected = char === '}' ? '{' : '[';
+        if (stack.pop() !== expected) break;
+        if (stack.length === 0) {
+          try {
+            values.push(JSON.parse(cleaned.slice(start, index + 1)));
+            start = index;
+          } catch {
+            // Continue scanning for the next independently valid JSON value.
+          }
+          break;
+        }
+      }
+    }
+  }
+  return values;
+}
 
 export function parseAgencyDiscovery(raw: string): { name: string; url: string }[] {
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start < 0 || end <= start) return [];
-  try {
-    const parsed = resultSchema.safeParse(JSON.parse(cleaned.slice(start, end + 1)));
-    if (!parsed.success) return [];
+  for (const value of extractJsonValues(raw)) {
+    const wrapped = resultSchema.safeParse(value);
+    const direct = wrapped.success ? wrapped.data.agencies : agencyListSchema.safeParse(value).data;
+    if (!direct?.length) continue;
     const seen = new Set<string>();
-    return parsed.data.agencies.filter((agency) => {
+    return direct.filter((agency) => {
       const domain = new URL(agency.url).hostname.replace(/^www\./, '').toLowerCase();
       if (!domain || seen.has(domain)) return false;
       seen.add(domain);
       return true;
     });
-  } catch {
-    return [];
   }
+  return [];
 }
 
 export function resolveAgencyProspectingModel(env: AgencyProspectingEnv): string {
