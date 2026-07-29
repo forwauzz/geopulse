@@ -4,7 +4,7 @@ import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createDistributionEngineAdminData } from '@/lib/server/distribution-engine-admin-data';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
-import { startInstagramOauthConnect } from './actions';
+import { startInstagramOauthConnect, startXOauthConnect } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -171,6 +171,10 @@ export default async function DistributionAdminPage(props: {
       ['draft', 'queued', 'scheduled', 'processing'].includes(job.status)
     ).length;
     const assetsWithMedia = overview.assets.filter((asset) => asset.media_count > 0).length;
+    const xOauthConfigured = Boolean(
+      adminContext.env.X_OAUTH_CLIENT_ID?.trim() &&
+        adminContext.env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY?.trim()
+    );
 
     return (
       <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16">
@@ -263,6 +267,65 @@ export default async function DistributionAdminPage(props: {
             {oauthOutcome.replaceAll('_', ' ')}
           </div>
         ) : null}
+
+        <section className="mt-6 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float">
+          <div className="flex flex-wrap items-center gap-4">
+            <div
+              className="grid h-11 w-11 place-items-center rounded-xl bg-black font-headline text-xl font-bold text-white"
+              aria-hidden
+            >
+              X
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="font-headline text-lg font-semibold text-on-background">
+                  X · @get_geopulse
+                </h2>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    overview.accounts.some(
+                      (account) =>
+                        account.provider_name === 'x' && account.status === 'connected'
+                    )
+                      ? 'bg-primary/15 text-primary'
+                      : 'bg-surface-container-high text-on-surface-variant'
+                  }`}
+                >
+                  {overview.accounts.some(
+                    (account) =>
+                      account.provider_name === 'x' && account.status === 'connected'
+                  )
+                    ? 'Connected'
+                    : xOauthConfigured
+                      ? 'Ready to authorize'
+                      : 'Developer app required'}
+                </span>
+              </div>
+              <p className="mt-1 font-body text-sm text-on-surface-variant">
+                Official API publishing with identity verification, encrypted tokens, approval
+                gates, attribution, and publication proof.
+              </p>
+            </div>
+            {flags.socialOauthEnabled ? (
+              <form action={startXOauthConnect}>
+                <button
+                  type="submit"
+                  disabled={!xOauthConfigured}
+                  className="rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {overview.accounts.some(
+                    (account) =>
+                      account.provider_name === 'x' && account.status === 'connected'
+                  )
+                    ? 'Reconnect X'
+                    : xOauthConfigured
+                      ? 'Connect X'
+                      : 'Developer app required'}
+                </button>
+              </form>
+            ) : null}
+          </div>
+        </section>
 
         <section className="mt-6 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float">
           <div className="flex flex-wrap items-center gap-4">

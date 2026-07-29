@@ -2,6 +2,21 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 
 export type SocialOAuthProvider = 'x' | 'linkedin' | 'instagram';
 
+export const X_REQUIRED_PUBLISH_SCOPES = [
+  'tweet.read',
+  'tweet.write',
+  'users.read',
+  'media.write',
+  'offline.access',
+] as const;
+
+export type XOAuthProfile = {
+  readonly id: string;
+  readonly username: string;
+  readonly name: string;
+  readonly profileImageUrl: string | null;
+};
+
 type OAuthStatePayload = {
   readonly provider: SocialOAuthProvider;
   readonly accountId: string;
@@ -140,6 +155,35 @@ function splitScopes(scopeValue: string | undefined, fallback: string): string[]
     .filter((value) => value.length > 0);
 }
 
+export function assertRequiredSocialOAuthScopes(
+  provider: SocialOAuthProvider,
+  scopeList: ReadonlyArray<string>
+): void {
+  if (provider !== 'x') return;
+  const granted = new Set(scopeList);
+  const missing = X_REQUIRED_PUBLISH_SCOPES.filter((scope) => !granted.has(scope));
+  const unexpected = [...granted].filter(
+    (scope) => !X_REQUIRED_PUBLISH_SCOPES.includes(scope as (typeof X_REQUIRED_PUBLISH_SCOPES)[number])
+  );
+  if (missing.length > 0) {
+    throw new Error(`X OAuth grant is missing required scopes: ${missing.join(', ')}`);
+  }
+  if (unexpected.length > 0) {
+    throw new Error(`X OAuth grant contains unapproved scopes: ${unexpected.join(', ')}`);
+  }
+}
+
+export function sanitizeOAuthTokenMetadata(
+  raw: Record<string, unknown>
+): Record<string, unknown> {
+  const safeKeys = ['token_type', 'expires_in', 'scope', 'id_token_sub', 'user_id'] as const;
+  return Object.fromEntries(
+    safeKeys
+      .filter((key) => raw[key] !== undefined)
+      .map((key) => [key, raw[key]])
+  );
+}
+
 export function buildSocialOAuthAuthorizeUrl(input: SocialOAuthStartInput): string {
   const now = Date.now();
   const expiresAt = now + 1000 * 60 * 10;
@@ -169,10 +213,9 @@ export function buildSocialOAuthAuthorizeUrl(input: SocialOAuthStartInput): stri
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', redirectUri);
-    url.searchParams.set(
-      'scope',
-      splitScopes(input.xScope, 'tweet.read tweet.write users.read offline.access').join(' ')
-    );
+    const requestedScopes = splitScopes(input.xScope, X_REQUIRED_PUBLISH_SCOPES.join(' '));
+    assertRequiredSocialOAuthScopes('x', requestedScopes);
+    url.searchParams.set('scope', requestedScopes.join(' '));
     url.searchParams.set('state', state);
     url.searchParams.set('code_challenge', codeChallenge);
     url.searchParams.set('code_challenge_method', 'S256');
@@ -277,6 +320,52 @@ function parseTokenExchangeResponse(rawText: string, providerLabel: string): Soc
     expiresAt: readExpiresAt(json['expires_in']),
     scopeList: readScopeList(json['scope']),
     raw: json,
+  };
+}
+
+export async function fetchXOAuthProfile(input: {
+  readonly accessToken: string;
+  readonly apiBaseUrl?: string;
+}): Promise<XOAuthProfile> {
+  const baseUrl = (input.apiBaseUrl?.trim() || 'https://api.x.com').replace(/\/+$/, '');
+  const response = await fetch(
+    `${baseUrl}/2/users/me?user.fields=username,name,profile_image_url`,
+    {
+      headers: {
+        Authorization: `Bearer ${input.accessToken}`,
+      },
+    }
+  );
+  const rawText = await response.text();
+  if (!response.ok) {
+    throw new Error(`X OAuth identity verification failed (${response.status}): ${rawText}`);
+  }
+
+  const payload = JSON.parse(rawText) as {
+    data?: {
+      id?: unknown;
+      username?: unknown;
+      name?: unknown;
+      profile_image_url?: unknown;
+    };
+  };
+  const id = typeof payload.data?.id === 'string' ? payload.data.id.trim() : '';
+  const username =
+    typeof payload.data?.username === 'string' ? payload.data.username.trim() : '';
+  const name = typeof payload.data?.name === 'string' ? payload.data.name.trim() : '';
+  if (!id || !username || !name) {
+    throw new Error('X OAuth identity verification returned an incomplete profile.');
+  }
+
+  return {
+    id,
+    username,
+    name,
+    profileImageUrl:
+      typeof payload.data?.profile_image_url === 'string' &&
+      payload.data.profile_image_url.trim().length > 0
+        ? payload.data.profile_image_url.trim()
+        : null,
   };
 }
 

@@ -47,6 +47,9 @@ export type ScanApiEnv = {
   DISTRIBUTION_ENGINE_SOCIAL_OAUTH_ENABLED?: string;
   DISTRIBUTION_ENGINE_BACKGROUND_ENABLED?: string;
   DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT?: string;
+  X_OAUTH_CLIENT_ID?: string;
+  /** AES-GCM key for distribution account access and refresh tokens. */
+  DISTRIBUTION_TOKEN_ENCRYPTION_KEY?: string;
   TURNSTILE_SECRET_KEY: string;
   GEMINI_API_KEY: string;
   OPENAI_API_KEY?: string;
@@ -219,6 +222,10 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT: String(
       e['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? ''
     ),
+    X_OAUTH_CLIENT_ID: String(e['X_OAUTH_CLIENT_ID'] ?? ''),
+    DISTRIBUTION_TOKEN_ENCRYPTION_KEY: String(
+      e['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? ''
+    ),
     TURNSTILE_SECRET_KEY: String(e['TURNSTILE_SECRET_KEY'] ?? ''),
     GEMINI_API_KEY: String(e['GEMINI_API_KEY'] ?? ''),
     OPENAI_API_KEY: String(e['OPENAI_API_KEY'] ?? ''),
@@ -283,6 +290,9 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
         process.env['DISTRIBUTION_ENGINE_BACKGROUND_ENABLED'] ?? '',
       DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT:
         process.env['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? '',
+      X_OAUTH_CLIENT_ID: process.env['X_OAUTH_CLIENT_ID'] ?? '',
+      DISTRIBUTION_TOKEN_ENCRYPTION_KEY:
+        process.env['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? '',
       TURNSTILE_SECRET_KEY: process.env['TURNSTILE_SECRET_KEY'] ?? '',
       GEMINI_API_KEY: process.env['GEMINI_API_KEY'] ?? '',
       OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? '',

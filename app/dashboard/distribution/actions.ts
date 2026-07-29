@@ -10,6 +10,7 @@ import { dispatchDistributionJobs } from '@/lib/server/distribution-job-dispatch
 import { createDistributionEngineRepository } from '@/lib/server/distribution-engine-repository';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
 import { buildSocialOAuthAuthorizeUrl } from '@/lib/server/distribution-social-oauth';
+import { encryptDistributionToken } from '@/lib/server/distribution-token-crypto';
 
 const accountSchema = z.object({
   accountId: z
@@ -451,11 +452,22 @@ export async function saveDistributionAccountToken(
   }
 
   const repo = createDistributionEngineRepository(context.adminDb);
+  const tokenEncryptionKey = context.env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY?.trim();
+  if (!tokenEncryptionKey) {
+    return {
+      ok: false,
+      message: 'Distribution token encryption is not configured.',
+    };
+  }
   await repo.upsertAccountToken({
     distributionAccountId: parsed.data.distributionAccountId,
     tokenType: parsed.data.tokenType,
-    accessTokenEncrypted: parsed.data.accessTokenEncrypted ?? null,
-    refreshTokenEncrypted: parsed.data.refreshTokenEncrypted ?? null,
+    accessTokenEncrypted: parsed.data.accessTokenEncrypted
+      ? await encryptDistributionToken(parsed.data.accessTokenEncrypted, tokenEncryptionKey)
+      : null,
+    refreshTokenEncrypted: parsed.data.refreshTokenEncrypted
+      ? await encryptDistributionToken(parsed.data.refreshTokenEncrypted, tokenEncryptionKey)
+      : null,
     expiresAt: normalizeScheduledFor(parsed.data.expiresAt),
     scopes: parseScopesCsv(parsed.data.scopesCsv),
     metadata: {
@@ -843,6 +855,48 @@ export async function startSocialDistributionOauthConnect(formData: FormData): P
     instagramScope: process.env['INSTAGRAM_OAUTH_SCOPE'],
   });
   redirect(authorizeUrl);
+}
+
+export async function startXOauthConnect(): Promise<void> {
+  const context = await requireSocialOauthEnabled();
+  if (!context.ok) throw new Error(context.message);
+  const repo = createDistributionEngineRepository(context.adminDb);
+  const existing = await repo.getAccountByAccountId('x_geopulse');
+  const account = await repo.upsertAccount({
+    accountId: 'x_geopulse',
+    providerName: 'x',
+    accountLabel: 'GEO-Pulse X',
+    externalAccountId: existing?.external_account_id ?? null,
+    status: existing?.status === 'connected' ? 'connected' : 'draft',
+    connectedByUserId: existing?.connected_by_user_id ?? context.user.id,
+    lastVerifiedAt: existing?.last_verified_at ?? null,
+    metadata: {
+      ...(existing?.metadata ?? {}),
+      source: 'x_quick_connect',
+      expected_username: 'get_geopulse',
+    },
+  });
+  const appUrl =
+    process.env['NEXT_PUBLIC_APP_URL']?.trim() || context.env.NEXT_PUBLIC_APP_URL?.trim();
+  const stateSecret =
+    process.env['SUPABASE_SERVICE_ROLE_KEY']?.trim() ||
+    context.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!appUrl || !stateSecret) {
+    throw new Error('X OAuth is missing the app URL or state secret.');
+  }
+  redirect(
+    buildSocialOAuthAuthorizeUrl({
+      provider: 'x',
+      accountId: account.id,
+      userId: context.user.id,
+      appUrl,
+      stateSecret,
+      xClientId:
+        process.env['X_OAUTH_CLIENT_ID'] || context.env.X_OAUTH_CLIENT_ID,
+      xAuthorizeUrl: process.env['X_OAUTH_AUTH_URL'],
+      xScope: process.env['X_OAUTH_SCOPE'],
+    })
+  );
 }
 
 export async function startInstagramOauthConnect(): Promise<void> {

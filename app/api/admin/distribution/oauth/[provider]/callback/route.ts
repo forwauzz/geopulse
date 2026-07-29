@@ -1,12 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getScanApiEnv } from '@/lib/server/cf-env';
+import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createDistributionEngineRepository } from '@/lib/server/distribution-engine-repository';
 import {
+  assertRequiredSocialOAuthScopes,
   exchangeSocialOAuthCode,
   fetchInstagramOAuthProfile,
+  fetchXOAuthProfile,
+  sanitizeOAuthTokenMetadata,
   validateSignedOAuthState,
   type SocialOAuthProvider,
 } from '@/lib/server/distribution-social-oauth';
+import { encryptDistributionToken } from '@/lib/server/distribution-token-crypto';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
 import { isDistributionOAuthAdmin } from '@/lib/server/distribution-oauth-admin-gate';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -35,7 +39,7 @@ export async function GET(
     return NextResponse.json({ error: 'Unsupported OAuth provider.' }, { status: 404 });
   }
 
-  const env = await getScanApiEnv();
+  const env = await getPaymentApiEnv();
   const flags = resolveDistributionEngineFlags(env);
   const appUrl = (process.env['NEXT_PUBLIC_APP_URL'] || env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin).trim();
   if (!flags.socialOauthEnabled) {
@@ -109,6 +113,7 @@ export async function GET(
       instagramTokenUrl: process.env['INSTAGRAM_OAUTH_TOKEN_URL'],
       instagramGraphBaseUrl: process.env['INSTAGRAM_GRAPH_API_BASE_URL'],
     });
+    assertRequiredSocialOAuthScopes(provider, token.scopeList);
 
     const instagramProfile =
       provider === 'instagram'
@@ -117,19 +122,49 @@ export async function GET(
             graphBaseUrl: process.env['INSTAGRAM_GRAPH_API_BASE_URL'],
           })
         : null;
+    const xProfile =
+      provider === 'x'
+        ? await fetchXOAuthProfile({
+            accessToken: token.accessToken,
+            apiBaseUrl: env.X_API_BASE_URL,
+          })
+        : null;
+    const expectedXUsername =
+      provider === 'x' && typeof account.metadata?.['expected_username'] === 'string'
+        ? String(account.metadata['expected_username']).replace(/^@/, '').trim().toLowerCase()
+        : null;
+    if (
+      xProfile &&
+      expectedXUsername &&
+      xProfile.username.trim().toLowerCase() !== expectedXUsername
+    ) {
+      throw new Error(
+        `X OAuth connected @${xProfile.username}, expected @${expectedXUsername}.`
+      );
+    }
+
+    const tokenEncryptionKey = env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY?.trim();
+    if (!tokenEncryptionKey) {
+      throw new Error('Distribution token encryption is not configured.');
+    }
 
     await repo.upsertAccountToken({
       distributionAccountId: account.id,
       tokenType: 'oauth',
-      accessTokenEncrypted: token.accessToken,
-      refreshTokenEncrypted: token.refreshToken,
+      accessTokenEncrypted: await encryptDistributionToken(
+        token.accessToken,
+        tokenEncryptionKey
+      ),
+      refreshTokenEncrypted: token.refreshToken
+        ? await encryptDistributionToken(token.refreshToken, tokenEncryptionKey)
+        : null,
       expiresAt: token.expiresAt,
       scopes: token.scopeList,
       metadata: {
         source: 'provider_oauth_callback',
         provider,
         connected_by_user_id: user.id,
-        raw: token.raw,
+        raw: sanitizeOAuthTokenMetadata(token.raw),
       },
     });
 
@@ -143,7 +178,8 @@ export async function GET(
       accountId: account.account_id,
       providerName: account.provider_name,
       accountLabel: account.account_label,
-      externalAccountId: instagramProfile?.userId ?? account.external_account_id,
+      externalAccountId:
+        xProfile?.id ?? instagramProfile?.userId ?? account.external_account_id,
       status: 'connected',
       defaultAudienceId: account.default_audience_id,
       connectedByUserId: account.connected_by_user_id ?? user.id,
@@ -161,6 +197,15 @@ export async function GET(
               instagram_user_id: instagramProfile.userId,
               instagram_username: instagramProfile.username,
               instagram_account_type: instagramProfile.accountType,
+            }
+          : {}),
+        ...(xProfile
+          ? {
+              x_user_id: xProfile.id,
+              x_username: xProfile.username,
+              x_name: xProfile.name,
+              x_profile_image_url: xProfile.profileImageUrl,
+              x_identity_verified_at: new Date().toISOString(),
             }
           : {}),
       },

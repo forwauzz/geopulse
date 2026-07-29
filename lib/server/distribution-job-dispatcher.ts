@@ -3,7 +3,14 @@ import {
   ContentDestinationPublishError,
   resolveContentDestinationAdapter,
 } from '@/lib/server/content-destination-adapters';
-import { refreshSocialOAuthToken } from '@/lib/server/distribution-social-oauth';
+import {
+  refreshSocialOAuthToken,
+  sanitizeOAuthTokenMetadata,
+} from '@/lib/server/distribution-social-oauth';
+import {
+  decryptDistributionToken,
+  encryptDistributionToken,
+} from '@/lib/server/distribution-token-crypto';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
 import { publishInstagramAsset } from '@/lib/server/instagram-publisher';
 import { recordDistributionPublicationProof } from '@/lib/server/distribution-publication-proof';
@@ -241,14 +248,20 @@ function pickPreferredToken(
   return sorted[0] ?? null;
 }
 
-function resolveProviderRuntimeEnv(
+async function resolveProviderRuntimeEnv(
   env: PaymentApiEnv,
   account: DistributionAccountRow,
   token: DistributionAccountTokenRow | null
-): PaymentApiEnv {
+): Promise<PaymentApiEnv> {
   if (!token) return env;
 
-  const accessToken = readString(token.access_token_encrypted);
+  const accessTokenEnvelope = readString(token.access_token_encrypted);
+  const accessToken = accessTokenEnvelope
+    ? await decryptDistributionToken(
+        accessTokenEnvelope,
+        env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY
+      )
+    : null;
   const metadata = token.metadata ?? {};
   const accountMetadata = account.metadata ?? {};
 
@@ -1320,8 +1333,8 @@ async function ensureActiveProviderToken(
     return token;
   }
 
-  const refreshToken = readString(token.refresh_token_encrypted);
-  if (!refreshToken) {
+  const refreshTokenEnvelope = readString(token.refresh_token_encrypted);
+  if (!refreshTokenEnvelope) {
     await markAccountTokenExpired(
       repo,
       account,
@@ -1333,6 +1346,11 @@ async function ensureActiveProviderToken(
       retryable: false,
     });
   }
+
+  const refreshToken = await decryptDistributionToken(
+    refreshTokenEnvelope,
+    env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY
+  );
 
   try {
     const refreshed = await refreshSocialOAuthToken({
@@ -1347,18 +1365,28 @@ async function ensureActiveProviderToken(
       instagramGraphBaseUrl: env.INSTAGRAM_GRAPH_API_BASE_URL,
     });
 
+    const tokenEncryptionKey = env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY?.trim();
+    if (!tokenEncryptionKey) {
+      throw new Error('Distribution token encryption is not configured.');
+    }
     const refreshedToken = await repo.upsertAccountToken({
       distributionAccountId: account.id,
       tokenType: 'oauth',
-      accessTokenEncrypted: refreshed.accessToken,
-      refreshTokenEncrypted: refreshed.refreshToken ?? refreshToken,
+      accessTokenEncrypted: await encryptDistributionToken(
+        refreshed.accessToken,
+        tokenEncryptionKey
+      ),
+      refreshTokenEncrypted: await encryptDistributionToken(
+        refreshed.refreshToken ?? refreshToken,
+        tokenEncryptionKey
+      ),
       expiresAt: refreshed.expiresAt,
       scopes: refreshed.scopeList.length > 0 ? refreshed.scopeList : token.scopes,
       metadata: {
         ...(token.metadata ?? {}),
         source: 'provider_oauth_refresh',
         provider: account.provider_name,
-        raw: refreshed.raw,
+        raw: sanitizeOAuthTokenMetadata(refreshed.raw),
         refreshed_at: new Date().toISOString(),
       },
     });
@@ -1548,7 +1576,7 @@ export async function dispatchDistributionJobById(
       });
     }
     const activeToken = await ensureActiveProviderToken(repo, env, account, preferredToken);
-    const runtimeEnv = resolveProviderRuntimeEnv(env, account, activeToken);
+    const runtimeEnv = await resolveProviderRuntimeEnv(env, account, activeToken);
 
     const attemptNumber = (await repo.listJobAttempts(currentJob.id)).length + 1;
     const destination = buildSyntheticDestination(account);
