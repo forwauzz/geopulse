@@ -31,7 +31,7 @@ SET enabled = false,
 FROM public.outreach_contacts AS contact
 WHERE contact.prospect_id = prospect.id
   AND prospect.max_sequence_steps IS NOT NULL
-  AND prospect.lifecycle_status = 'active'
+  AND prospect.lifecycle_status IN ('active', 'paused')
   AND prospect.last_error ~ '^Target returned HTTP (401|403|404|410|451)$';
 
 -- Historical MSP/agency first sends were already provider-accepted. Re-stage their
