@@ -386,17 +386,20 @@ export async function exchangeSocialOAuthCode(
     form.set('grant_type', 'authorization_code');
     form.set('code', input.code);
     form.set('redirect_uri', redirectUri);
-    form.set('client_id', clientId);
     form.set('code_verifier', input.codeVerifier.trim());
-    if (input.xClientSecret?.trim()) {
-      form.set('client_secret', input.xClientSecret.trim());
+    const clientSecret = input.xClientSecret?.trim() ?? '';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (clientSecret) {
+      headers['Authorization'] = `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
+    } else {
+      form.set('client_id', clientId);
     }
 
     const response = await fetch(tokenUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers,
       body: form.toString(),
     });
     const rawText = await response.text();
@@ -516,16 +519,19 @@ export async function refreshSocialOAuthToken(
     const form = new URLSearchParams();
     form.set('grant_type', 'refresh_token');
     form.set('refresh_token', refreshToken);
-    form.set('client_id', clientId);
-    if (input.xClientSecret?.trim()) {
-      form.set('client_secret', input.xClientSecret.trim());
+    const clientSecret = input.xClientSecret?.trim() ?? '';
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (clientSecret) {
+      headers['Authorization'] = `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
+    } else {
+      form.set('client_id', clientId);
     }
 
     const response = await fetch(tokenUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers,
       body: form.toString(),
     });
     const rawText = await response.text();
