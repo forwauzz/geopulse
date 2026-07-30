@@ -13,7 +13,10 @@ import {
 } from '@/lib/server/distribution-social-oauth';
 import { encryptDistributionToken } from '@/lib/server/distribution-token-crypto';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
-import { resolveDistributionOAuthCallbackConfig } from '@/lib/server/distribution-oauth-callback-env';
+import {
+  resolveDistributionOAuthAppUrl,
+  resolveDistributionOAuthCallbackConfig,
+} from '@/lib/server/distribution-oauth-callback-env';
 import {
   buildDistributionOAuthFailureLog,
   buildDistributionOAuthFailureOutcome,
@@ -48,7 +51,7 @@ export async function GET(
 
   const env = await getPaymentApiEnv();
   const flags = resolveDistributionEngineFlags(env);
-  const appUrl = (process.env['NEXT_PUBLIC_APP_URL'] || env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin).trim();
+  const appUrl = resolveDistributionOAuthAppUrl(process.env, env, request.nextUrl.origin);
   if (!flags.socialOauthEnabled) {
     return buildRedirect(appUrl, 'feature_flag_off', provider);
   }

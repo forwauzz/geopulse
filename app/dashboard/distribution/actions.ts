@@ -9,6 +9,7 @@ import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { dispatchDistributionJobs } from '@/lib/server/distribution-job-dispatcher';
 import { createDistributionEngineRepository } from '@/lib/server/distribution-engine-repository';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
+import { resolveDistributionOAuthAppUrl } from '@/lib/server/distribution-oauth-callback-env';
 import { buildSocialOAuthAuthorizeUrl } from '@/lib/server/distribution-social-oauth';
 import { encryptDistributionToken } from '@/lib/server/distribution-token-crypto';
 
@@ -832,7 +833,7 @@ export async function startSocialDistributionOauthConnect(formData: FormData): P
     throw new Error('Social OAuth connect supports x, LinkedIn, and Instagram accounts only.');
   }
 
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL']?.trim() || context.env.NEXT_PUBLIC_APP_URL?.trim();
+  const appUrl = resolveDistributionOAuthAppUrl(process.env, context.env);
   const stateSecret = process.env['SUPABASE_SERVICE_ROLE_KEY']?.trim() || context.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   if (!appUrl || !stateSecret) {
     throw new Error('OAuth is not configured: missing app URL or state secret.');
@@ -876,8 +877,7 @@ export async function startXOauthConnect(): Promise<void> {
       expected_username: 'get_geopulse',
     },
   });
-  const appUrl =
-    process.env['NEXT_PUBLIC_APP_URL']?.trim() || context.env.NEXT_PUBLIC_APP_URL?.trim();
+  const appUrl = resolveDistributionOAuthAppUrl(process.env, context.env);
   const stateSecret =
     process.env['SUPABASE_SERVICE_ROLE_KEY']?.trim() ||
     context.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -917,7 +917,7 @@ export async function startInstagramOauthConnect(): Promise<void> {
       source: 'instagram_quick_connect',
     },
   });
-  const appUrl = process.env['NEXT_PUBLIC_APP_URL']?.trim() || context.env.NEXT_PUBLIC_APP_URL?.trim();
+  const appUrl = resolveDistributionOAuthAppUrl(process.env, context.env);
   const stateSecret =
     process.env['SUPABASE_SERVICE_ROLE_KEY']?.trim() ||
     context.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
