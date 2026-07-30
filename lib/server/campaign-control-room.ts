@@ -73,6 +73,31 @@ export function isOperationsExcludedBenchmarkConfig(
   return metadata['operations_excluded'] === true;
 }
 
+export function completedBenchmarkSibling(
+  failedRun: Record<string, unknown>,
+  runs: readonly Record<string, unknown>[],
+): Record<string, unknown> | null {
+  if (text(failedRun, 'status') !== 'failed') return null;
+  const querySetId = text(failedRun, 'query_set_id');
+  const failedMetadata = object(failedRun, 'metadata');
+  const identityKeys = [
+    'domain_id',
+    'run_mode',
+    'schedule_window_utc',
+    'schedule_query_set_name',
+    'schedule_query_set_version',
+  ] as const;
+  if (!querySetId || identityKeys.some((key) => !text(failedMetadata, key))) return null;
+
+  return runs.find((run) => {
+    if (text(run, 'status') !== 'completed' || text(run, 'query_set_id') !== querySetId) return false;
+    const metadata = object(run, 'metadata');
+    if (!identityKeys.every((key) => text(metadata, key) === text(failedMetadata, key))) return false;
+    const queryCount = metric(metadata['query_run_count']);
+    return queryCount > 0 && metric(metadata['completed_query_count']) >= queryCount;
+  }) ?? null;
+}
+
 function metric(value: unknown): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
@@ -255,7 +280,7 @@ export async function loadCampaignControlRoom(args: {
     safeRows(args.supabase.from('content_distribution_deliveries').select('id,content_item_id,destination_type,destination_name,status,published_at,updated_at').order('updated_at', { ascending: false }).limit(300)),
     safeRows(args.supabase.from('outreach_prospects').select('id,email,name,company,url,cadence,enabled,last_run_at,next_run_at,last_error').order('next_run_at', { ascending: true }).limit(200)),
     safeRows(args.supabase.from('outreach_sends').select('id,prospect_id,sent_at,opened_at').gte('sent_at', since).order('sent_at', { ascending: false }).limit(400)),
-    safeRows(args.supabase.from('benchmark_run_groups').select('id,label,status,started_at,completed_at,created_at,metadata').gte('created_at', since).order('created_at', { ascending: false }).limit(100)),
+    safeRows(args.supabase.from('benchmark_run_groups').select('id,query_set_id,label,status,started_at,completed_at,created_at,metadata').gte('created_at', since).order('created_at', { ascending: false }).limit(100)),
     safeRows(args.supabase.from('benchmark_domains').select('id,domain,metadata').order('updated_at', { ascending: false }).limit(500)),
     safeRows(args.supabase.from('client_benchmark_configs').select('id,topic,location,cadence,report_email,updated_at,metadata').order('updated_at', { ascending: false }).limit(200)),
     safeRows(args.supabase.from('gpm_reports').select('id,config_id,platform,generated_at').gte('generated_at', since).order('generated_at', { ascending: false }).limit(300)),
@@ -457,19 +482,24 @@ export async function loadCampaignControlRoom(args: {
 
   const latestBenchmark = benchmarkRuns[0];
   if (latestBenchmark) {
-    const status = text(latestBenchmark, 'status') ?? 'unknown';
+    const fallback = completedBenchmarkSibling(latestBenchmark, benchmarkRuns);
+    const status = fallback ? 'completed_with_provider_fallback' : text(latestBenchmark, 'status') ?? 'unknown';
     const lastAt = text(latestBenchmark, 'completed_at') ?? text(latestBenchmark, 'created_at');
+    const fallbackModel = fallback ? text(object(fallback, 'metadata'), 'model_id') : null;
+    const failedModel = fallback ? text(object(latestBenchmark, 'metadata'), 'model_id') : null;
     campaigns.push({
       id: `benchmark:${text(latestBenchmark, 'id') ?? 'latest'}`,
       lane: 'benchmarks',
       name: text(latestBenchmark, 'label') ?? 'AI visibility benchmark',
       channel: 'AI engines',
       status,
-      health: status === 'failed' ? 'blocked' : ['running', 'queued'].includes(status) && isOlderThan(lastAt, nowMs, 8) ? 'attention' : isOlderThan(lastAt, nowMs, 36) ? 'attention' : 'healthy',
+      health: fallback ? 'healthy' : status === 'failed' ? 'blocked' : ['running', 'queued'].includes(status) && isOlderThan(lastAt, nowMs, 8) ? 'attention' : isOlderThan(lastAt, nowMs, 36) ? 'attention' : 'healthy',
       owner: 'Marcus',
       lastActivityAt: lastAt,
       nextActivityAt: null,
-      detail: 'Scheduled benchmark run across configured domains and query sets.',
+      detail: fallback
+        ? `Equivalent ${fallbackModel ?? 'supported provider'} sibling completed the full query set; ${failedModel ?? 'provider'} failure is non-blocking.`
+        : 'Scheduled benchmark run across configured domains and query sets.',
       href: '/dashboard/benchmarks',
     });
   }
