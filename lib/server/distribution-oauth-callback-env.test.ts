@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveDistributionOAuthCallbackConfig } from './distribution-oauth-callback-env';
+import {
+  resolveDistributionOAuthAppUrl,
+  resolveDistributionOAuthCallbackConfig,
+} from './distribution-oauth-callback-env';
 
 describe('resolveDistributionOAuthCallbackConfig', () => {
   it('uses Worker-bound OAuth credentials when process.env is empty', () => {
@@ -43,5 +46,21 @@ describe('resolveDistributionOAuthCallbackConfig', () => {
       xClientId: 'process-x-id',
       xClientSecret: 'worker-x-secret',
     });
+  });
+
+  it('prefers the live Worker app URL over a stale build-time process value', () => {
+    expect(
+      resolveDistributionOAuthAppUrl(
+        { NEXT_PUBLIC_APP_URL: 'http://localhost:3002' },
+        { NEXT_PUBLIC_APP_URL: ' https://getgeopulse.com/ ' },
+        'https://request-origin.example'
+      )
+    ).toBe('https://getgeopulse.com/');
+  });
+
+  it('falls back to the request origin when no configured app URL exists', () => {
+    expect(resolveDistributionOAuthAppUrl({}, {}, ' https://request-origin.example ')).toBe(
+      'https://request-origin.example'
+    );
   });
 });

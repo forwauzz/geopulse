@@ -14,6 +14,10 @@ type OAuthCallbackEnvironment = Partial<
   Record<OAuthCallbackEnvironmentKey, string | undefined>
 >;
 
+type OAuthAppUrlEnvironment = {
+  readonly NEXT_PUBLIC_APP_URL?: string;
+};
+
 function resolveValue(
   key: OAuthCallbackEnvironmentKey,
   processEnvironment: OAuthCallbackEnvironment,
@@ -66,4 +70,17 @@ export function resolveDistributionOAuthCallbackConfig(
       workerEnvironment
     ),
   };
+}
+
+export function resolveDistributionOAuthAppUrl(
+  processEnvironment: OAuthAppUrlEnvironment,
+  workerEnvironment: OAuthAppUrlEnvironment,
+  requestOrigin?: string
+): string {
+  return (
+    workerEnvironment.NEXT_PUBLIC_APP_URL?.trim() ||
+    processEnvironment.NEXT_PUBLIC_APP_URL?.trim() ||
+    requestOrigin?.trim() ||
+    ''
+  );
 }
