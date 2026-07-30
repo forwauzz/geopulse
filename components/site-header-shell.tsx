@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { GeoPulseLogo } from '@/components/geopulse-logo';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { isPublicSiteRoute } from '@/lib/public-route';
 
 type SiteHeaderShellProps = {
   readonly isSignedIn: boolean;
@@ -30,12 +31,12 @@ export function SiteHeaderShell({
   // Dashboard chrome lives entirely in the left sidebar (branding, sign out, theme toggle),
   // so there's no top header on dashboard routes.
   if (isDashboardRoute) return null;
-  const isBlogRoute = pathname.startsWith('/blog');
-  const headerClassName = isBlogRoute
-    ? 'blog-chrome-light sticky top-0 z-50 border-b border-outline-variant/30 bg-surface backdrop-blur'
+  const isPublicRoute = isPublicSiteRoute(pathname);
+  const headerClassName = isPublicRoute
+    ? 'public-chrome-light sticky top-0 z-50 border-b border-gold/30 bg-surface/90 shadow-[0_1px_0_rgb(var(--color-gold)/0.08)] backdrop-blur-xl'
     : 'sticky top-0 z-50 bg-surface';
   const primaryNavLinkClassName =
-    'hidden font-body text-sm font-semibold text-on-background md:inline';
+    'hidden border-b border-transparent py-1 font-body text-sm font-semibold text-on-background transition-colors hover:border-gold hover:text-primary md:inline';
   const subtleNavLinkClassName =
     'text-xs font-semibold uppercase tracking-widest text-on-surface-variant transition-colors hover:text-on-background';
   const dashboardLinkClassName =
@@ -147,7 +148,7 @@ export function SiteHeaderShell({
                 </Link>
                 <Link
                   href="/#audit"
-                  className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 sm:px-5"
+                  className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary shadow-sm transition hover:-translate-y-0.5 hover:bg-primary-dim sm:px-6"
                 >
                   Free audit
                 </Link>

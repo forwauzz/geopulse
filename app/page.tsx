@@ -145,7 +145,7 @@ export default async function HomePage({
         <script key={index} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
 
-      <section className="relative border-b border-outline-variant/20 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.16),transparent_48%)] px-5 pb-14 pt-12 sm:px-6 md:pb-20 md:pt-16">
+      <section className="relative border-b border-gold/25 bg-[linear-gradient(180deg,rgb(var(--blog-hero-tint)),rgb(var(--color-background)))] px-5 pb-14 pt-12 sm:px-6 md:pb-20 md:pt-16">
         <div className="mx-auto max-w-6xl text-center">
           <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 font-body text-xs font-semibold text-primary">
             <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
@@ -180,7 +180,7 @@ export default async function HomePage({
             <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
               Measure visibility across the engines buyers use
             </p>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-10 gap-y-6 rounded-2xl border border-outline-variant/25 bg-white px-6 py-6 shadow-sm md:gap-x-14 md:px-10">
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-10 gap-y-6 rounded-2xl border border-gold/25 bg-surface-container-lowest px-6 py-6 shadow-sm md:gap-x-14 md:px-10">
               {AI_ENGINES.map((engine) => (
                 <EngineLogo
                   key={engine.key}
@@ -191,7 +191,7 @@ export default async function HomePage({
             </div>
           </div>
 
-          <div className="mx-auto mt-10 overflow-hidden rounded-[2rem] border border-outline-variant/30 bg-surface-container-lowest p-3 text-left shadow-[0_24px_80px_rgba(15,23,42,0.12)] md:p-5">
+          <div className="mx-auto mt-10 overflow-hidden rounded-[2rem] border border-gold/30 bg-surface-container-lowest p-3 text-left shadow-[0_24px_80px_rgba(15,23,42,0.12)] md:p-5">
             <div className="rounded-[1.35rem] border border-outline-variant/20 bg-surface-container-low p-5 md:p-7">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/20 pb-5">
                 <div>
@@ -201,7 +201,7 @@ export default async function HomePage({
                 <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 font-body text-xs font-semibold text-emerald-700 dark:text-emerald-300">Example data · Monitoring active</span>
               </div>
               <div className="mt-5 grid gap-4 md:grid-cols-[0.8fr_1.2fr_1fr]">
-                <div className="rounded-2xl bg-surface-container-lowest p-5">
+                <div className="rounded-2xl border border-gold/15 bg-[rgb(var(--blog-card-a))] p-5">
                   <p className="font-body text-xs text-on-surface-variant">AI visibility score</p>
                   <div className="mt-3 flex items-end gap-2">
                     <span className="font-headline text-5xl font-semibold tracking-tight text-on-background">72</span>
@@ -212,7 +212,7 @@ export default async function HomePage({
                   </div>
                   <p className="mt-3 font-body text-[11px] text-on-surface-variant">Measured across buyer questions</p>
                 </div>
-                <div className="rounded-2xl bg-surface-container-lowest p-5">
+                <div className="rounded-2xl border border-gold/15 bg-[rgb(var(--blog-card-a))] p-5">
                   <p className="font-body text-xs text-on-surface-variant">Visibility by engine</p>
                   <div className="mt-5 space-y-4">
                     {previewEngines.map((engine) => (
@@ -223,7 +223,7 @@ export default async function HomePage({
                     ))}
                   </div>
                 </div>
-                <div className="rounded-2xl bg-surface-container-lowest p-5">
+                <div className="rounded-2xl border border-gold/15 bg-[rgb(var(--blog-card-a))] p-5">
                   <p className="font-body text-xs text-on-surface-variant">Why competitors win</p>
                   <p className="mt-3 font-headline text-lg font-semibold leading-snug text-on-background">Their service pages answer the buyer question more directly.</p>
                   <p className="mt-3 font-body text-xs leading-5 text-on-surface-variant">Next: improve 3 priority pages · verify on the next run</p>
@@ -277,7 +277,7 @@ export default async function HomePage({
         </div>
       </section>
 
-      <section className="border-y border-outline-variant/20 bg-surface-container-low px-5 py-12 sm:px-6">
+      <section className="border-y border-gold/25 bg-[rgb(var(--blog-card-c))] px-5 py-12 sm:px-6">
         <div className="mx-auto grid max-w-6xl gap-8 text-center sm:grid-cols-3">
           {[['Measure', 'buyer questions and visibility'], ['Explain', 'why competitors are winning'], ['Verify', 'whether the fix worked']].map(([number, label]) => (
             <div key={label}>
@@ -350,7 +350,7 @@ export default async function HomePage({
       </section>
 
       <section className="px-5 pb-16 sm:px-6 md:pb-24">
-        <div className="mx-auto flex max-w-6xl flex-col items-center rounded-3xl bg-surface-container-low px-6 py-12 text-center md:px-10">
+        <div className="mx-auto flex max-w-6xl flex-col items-center rounded-[2rem] border border-gold/25 bg-[rgb(var(--blog-card-a))] px-6 py-12 text-center shadow-float md:px-10">
           <h2 className="max-w-3xl text-balance font-headline text-3xl font-semibold tracking-tight text-on-background md:text-4xl">Find out where your next customer can and cannot find you.</h2>
           <p className="mt-4 font-body text-on-surface-variant">Start free. Get a clear score and your first priorities in about 90 seconds.</p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">

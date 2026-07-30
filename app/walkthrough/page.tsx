@@ -38,7 +38,7 @@ export default async function WalkthroughPage({
 
   return (
     <main className="px-6 py-16 md:px-10 md:py-24">
-      <section className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+      <section className="mx-auto grid max-w-6xl gap-10 rounded-[2rem] border border-gold/25 bg-[rgb(var(--blog-card-a))] p-7 shadow-float md:p-12 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
           <p className="font-label text-xs font-semibold uppercase tracking-[0.16em] text-primary">
             Talk through the evidence
@@ -50,7 +50,7 @@ export default async function WalkthroughPage({
             Send the site and the question you are trying to answer. We will review the public
             evidence and keep the conversation grounded in what GEO-Pulse can actually observe.
           </p>
-          <div className="mt-8 rounded-2xl bg-surface-container-low p-6">
+          <div className="mt-8 rounded-2xl border border-gold/25 bg-surface-container-lowest p-6">
             <p className="font-sans text-sm font-semibold text-on-background">What happens next</p>
             <ol className="mt-4 space-y-4 font-body text-sm leading-6 text-on-surface-variant">
               <li><strong className="text-on-background">1.</strong> Elena reviews the public site and your stated goal.</li>
@@ -62,7 +62,7 @@ export default async function WalkthroughPage({
             Prefer self-serve? Run the free audit →
           </Link>
         </div>
-        <div className="rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-7 shadow-float md:p-10">
+        <div className="rounded-3xl border border-gold/30 bg-surface-container-lowest p-7 shadow-float md:p-10">
           <WalkthroughRequestForm
             siteKey={getTurnstileSiteKey()}
             source={sourceFor(source)}

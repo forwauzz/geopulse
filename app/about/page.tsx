@@ -51,7 +51,7 @@ export default async function AboutPage() {
   });
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-16 md:px-10 md:py-24">
+    <main className="mx-auto max-w-6xl px-6 py-12 md:px-10 md:py-20">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
@@ -61,14 +61,14 @@ export default async function AboutPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(webPageSchema) }}
       />
 
-      <div className="max-w-3xl">
+      <div className="editorial-panel-warm max-w-5xl p-7 md:p-12">
         <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
           About
         </p>
         <p className="mt-3 font-body text-sm text-on-surface-variant">
           Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
-        <h1 className="mt-4 font-sans text-5xl font-black uppercase leading-[0.9] tracking-tighter text-on-background md:text-7xl">
+        <h1 className="editorial-display mt-4 text-5xl md:text-7xl">
           GEO-Pulse is a founder-led product for AI search readiness
         </h1>
         <p className="mt-6 font-body text-lg leading-relaxed text-on-surface-variant">
@@ -80,9 +80,9 @@ export default async function AboutPage() {
       </div>
 
       <section className="mt-12 grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <div className="rounded-3xl border border-gold/20 bg-[rgb(var(--blog-card-b))] p-7 shadow-float">
           <p className="font-label text-xs uppercase tracking-widest text-primary">Founder</p>
-          <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background">
+          <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight text-on-background">
             {SITE_AUTHOR_NAME}
           </h2>
           <p className="mt-3 font-body leading-relaxed text-on-surface-variant">
@@ -91,9 +91,9 @@ export default async function AboutPage() {
             material.
           </p>
         </div>
-        <div className="rounded-2xl bg-surface-container-low p-6 shadow-float">
+        <div className="rounded-3xl border border-gold/20 bg-[rgb(var(--blog-card-b))] p-7 shadow-float">
           <p className="font-label text-xs uppercase tracking-widest text-primary">What this page is for</p>
-          <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background">
+          <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight text-on-background">
             A trust anchor for public pages
           </h2>
           <p className="mt-3 font-body leading-relaxed text-on-surface-variant">
@@ -104,7 +104,7 @@ export default async function AboutPage() {
         </div>
       </section>
 
-      <section className="mt-12 rounded-2xl bg-surface-container-lowest p-6 shadow-float">
+      <section className="mt-12 rounded-3xl border border-gold/20 bg-surface-container-lowest p-7 shadow-float">
         <p className="font-label text-xs uppercase tracking-widest text-primary">Operating rules</p>
         <ul className="mt-4 space-y-3 font-body text-on-surface-variant">
           <li>Public pages should be crawlable when they are meant to be discovered.</li>
@@ -114,7 +114,7 @@ export default async function AboutPage() {
         </ul>
       </section>
 
-      <section className="mt-12 rounded-2xl bg-surface-container-low p-6 shadow-float">
+      <section className="mt-12 rounded-3xl border border-gold/20 bg-[rgb(var(--blog-card-c))] p-7 shadow-float">
         <p className="font-label text-xs uppercase tracking-widest text-primary">References</p>
         <p className="mt-3 max-w-3xl font-body text-sm leading-relaxed text-on-surface-variant">
           GEO-Pulse uses the following public references as a baseline for crawlability, structured
@@ -151,13 +151,13 @@ export default async function AboutPage() {
       <div className="mt-10 flex flex-wrap gap-4">
         <Link
           href="/blog"
-          className="inline-flex rounded-xl bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
+          className="editorial-button-primary"
         >
           Read the blog
         </Link>
         <Link
           href="/"
-          className="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-6 py-3 font-body text-sm font-semibold text-on-background transition hover:bg-surface-container-low"
+          className="editorial-button-secondary"
         >
           Run a scan
         </Link>
