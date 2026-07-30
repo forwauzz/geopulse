@@ -92,8 +92,10 @@ export type PaymentApiEnv = ScanApiEnv & {
   STRIPE_PRICE_ID_MONITOR_ANNUAL?: string;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
-  /** Optional mailbox used for direct prospect replies and internal sales-request alerts. */
+  /** Public Resend receiving address used for direct prospect replies. */
   SALES_REPLY_TO_EMAIL?: string;
+  /** Private operator inbox that receives forwarded sales replies. */
+  SALES_OPERATOR_EMAIL?: string;
   /** Resend webhook signing secret for verified inbound email events. */
   RESEND_INBOUND_WEBHOOK_SECRET?: string;
   /** Existing operator digest recipient; also receives requested walkthrough alerts. */
@@ -353,6 +355,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: pickEnvString(e, 'RESEND_API_KEY'),
       RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
       SALES_REPLY_TO_EMAIL: pickEnvString(e, 'SALES_REPLY_TO_EMAIL'),
+      SALES_OPERATOR_EMAIL: pickEnvString(e, 'SALES_OPERATOR_EMAIL'),
       RESEND_INBOUND_WEBHOOK_SECRET: pickEnvString(e, 'RESEND_INBOUND_WEBHOOK_SECRET'),
       MARKETING_REPORT_TO: pickEnvString(e, 'MARKETING_REPORT_TO'),
       ANTHROPIC_API_KEY: pickEnvString(e, 'ANTHROPIC_API_KEY'),
@@ -409,6 +412,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
       SALES_REPLY_TO_EMAIL: process.env['SALES_REPLY_TO_EMAIL'] ?? '',
+      SALES_OPERATOR_EMAIL: process.env['SALES_OPERATOR_EMAIL'] ?? '',
       RESEND_INBOUND_WEBHOOK_SECRET: process.env['RESEND_INBOUND_WEBHOOK_SECRET'] ?? '',
       MARKETING_REPORT_TO: process.env['MARKETING_REPORT_TO'] ?? '',
       ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY'] ?? '',

@@ -73,7 +73,7 @@ export async function POST(request: Request): Promise<Response> {
   let forwarded = false;
   let forwardReason = result.matched ? 'operator_recipient_missing' : 'not_matched';
   const operatorRecipient =
-    env.SALES_REPLY_TO_EMAIL?.trim() ||
+    env.SALES_OPERATOR_EMAIL?.trim() ||
     env.MARKETING_REPORT_TO?.trim() ||
     env.SELF_IMPROVEMENT_REPORT_TO?.trim() ||
     '';
