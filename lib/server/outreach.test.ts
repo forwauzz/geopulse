@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildBoundedOutreachMessage,
   buildOutreachEmailHtml,
   computeNextOutreachRun,
   normalizeOutreachCadence,
@@ -67,6 +68,50 @@ describe('buildOutreachEmailHtml', () => {
     expect(html).toContain('Montréal, Québec, Canada');
   });
 });
+describe('buildBoundedOutreachMessage', () => {
+  const args = {
+    recipientName: 'Ernesto',
+    domain: 'mipsmedia.com',
+    score: 67,
+    grade: 'C+',
+    topIssues: [{ check: 'Organization schema', fix: 'Add a supported JSON-LD block.' }],
+    resultsUrl: 'https://getgeopulse.com/results/abc?utm_content=sequence-2',
+    walkthroughUrl: 'https://getgeopulse.com/walkthrough?source=outreach',
+    pixelUrl: 'https://getgeopulse.com/api/outreach/open/send-1',
+    unsubscribeUrl: 'https://getgeopulse.com/api/outreach/unsubscribe/p-1',
+  };
+
+  it('keeps the evidence-rich scorecard as sequence step one', () => {
+    const message = buildBoundedOutreachMessage({ ...args, sequenceStep: 1 });
+    expect(message.variant).toBe('evidence_opener');
+    expect(message.subject).toContain('67/100');
+    expect(message.html).toContain('Request a focused walkthrough');
+  });
+
+  it('turns sequence step two into one reply-oriented question', () => {
+    const message = buildBoundedOutreachMessage({ ...args, sequenceStep: 2 });
+    expect(message).toMatchObject({
+      variant: 'reply_first_followup',
+      subject: 'Quick question about mipsmedia.com',
+    });
+    expect(message.html).toContain('Is AI-search visibility something your team owns');
+    expect(message.html).toContain('Reply with "walkthrough"');
+    expect(message.html).toContain('Organization schema');
+    expect(message.html).not.toContain('Request a focused walkthrough');
+  });
+
+  it('makes sequence step three a transparent close-the-loop note', () => {
+    const message = buildBoundedOutreachMessage({ ...args, sequenceStep: 3 });
+    expect(message).toMatchObject({
+      variant: 'close_the_loop',
+      subject: 'Should I close the loop on mipsmedia.com?',
+    });
+    expect(message.html).toContain('I do not want to keep sending this');
+    expect(message.html).toContain('Either reply is helpful');
+    expect(message.html).toContain('Unsubscribe');
+  });
+});
+
 describe('sendOutreachEmail', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
