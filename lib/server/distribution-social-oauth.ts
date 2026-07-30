@@ -17,6 +17,27 @@ export type XOAuthProfile = {
   readonly profileImageUrl: string | null;
 };
 
+export type SocialOAuthFailureReason =
+  | `provider_http_${number}`
+  | 'invalid_provider_response'
+  | 'incomplete_profile';
+
+export class SocialOAuthProviderError extends Error {
+  readonly reason: SocialOAuthFailureReason;
+
+  constructor(reason: SocialOAuthFailureReason) {
+    super(`Social OAuth provider operation failed: ${reason}.`);
+    this.name = 'SocialOAuthProviderError';
+    this.reason = reason;
+  }
+}
+
+export function readSocialOAuthFailureReason(
+  error: unknown
+): SocialOAuthFailureReason | null {
+  return error instanceof SocialOAuthProviderError ? error.reason : null;
+}
+
 type OAuthStatePayload = {
   readonly provider: SocialOAuthProvider;
   readonly accountId: string;
@@ -338,10 +359,10 @@ export async function fetchXOAuthProfile(input: {
   );
   const rawText = await response.text();
   if (!response.ok) {
-    throw new Error(`X OAuth identity verification failed (${response.status}): ${rawText}`);
+    throw new SocialOAuthProviderError(`provider_http_${response.status}`);
   }
 
-  const payload = JSON.parse(rawText) as {
+  let payload: {
     data?: {
       id?: unknown;
       username?: unknown;
@@ -349,12 +370,17 @@ export async function fetchXOAuthProfile(input: {
       profile_image_url?: unknown;
     };
   };
+  try {
+    payload = JSON.parse(rawText) as typeof payload;
+  } catch {
+    throw new SocialOAuthProviderError('invalid_provider_response');
+  }
   const id = typeof payload.data?.id === 'string' ? payload.data.id.trim() : '';
   const username =
     typeof payload.data?.username === 'string' ? payload.data.username.trim() : '';
   const name = typeof payload.data?.name === 'string' ? payload.data.name.trim() : '';
   if (!id || !username || !name) {
-    throw new Error('X OAuth identity verification returned an incomplete profile.');
+    throw new SocialOAuthProviderError('incomplete_profile');
   }
 
   return {

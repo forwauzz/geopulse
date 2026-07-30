@@ -99,6 +99,22 @@ describe('distribution-social-oauth', () => {
     );
   });
 
+  it('classifies an X identity provider HTTP failure without exposing its body', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 402,
+      text: async () => '{"detail":"provider billing response"}',
+    } as Response) as typeof fetch;
+
+    await expect(
+      fetchXOAuthProfile({ accessToken: 'access-token' })
+    ).rejects.toMatchObject({
+      name: 'SocialOAuthProviderError',
+      message: 'Social OAuth provider operation failed: provider_http_402.',
+      reason: 'provider_http_402',
+    });
+  });
+
   it('removes token material from stored OAuth response metadata', () => {
     expect(
       sanitizeOAuthTokenMetadata({

@@ -6,6 +6,7 @@ import {
   exchangeSocialOAuthCode,
   fetchInstagramOAuthProfile,
   fetchXOAuthProfile,
+  readSocialOAuthFailureReason,
   sanitizeOAuthTokenMetadata,
   validateSignedOAuthState,
   type SocialOAuthProvider,
@@ -216,11 +217,16 @@ export async function GET(
           : {}),
       },
     });
-  } catch {
-    console.error(JSON.stringify(buildDistributionOAuthFailureLog(provider, callbackStage)));
+  } catch (error) {
+    const failureReason = readSocialOAuthFailureReason(error);
+    console.error(
+      JSON.stringify(
+        buildDistributionOAuthFailureLog(provider, callbackStage, failureReason)
+      )
+    );
     return buildRedirect(
       appUrl,
-      buildDistributionOAuthFailureOutcome(callbackStage),
+      buildDistributionOAuthFailureOutcome(callbackStage, failureReason),
       provider
     );
   }

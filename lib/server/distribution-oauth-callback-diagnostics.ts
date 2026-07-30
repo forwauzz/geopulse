@@ -1,4 +1,7 @@
-import type { SocialOAuthProvider } from './distribution-social-oauth';
+import type {
+  SocialOAuthFailureReason,
+  SocialOAuthProvider,
+} from './distribution-social-oauth';
 
 export type DistributionOAuthCallbackStage =
   | 'token_exchange'
@@ -9,18 +12,21 @@ export type DistributionOAuthCallbackStage =
   | 'account_persistence';
 
 export function buildDistributionOAuthFailureOutcome(
-  stage: DistributionOAuthCallbackStage
+  stage: DistributionOAuthCallbackStage,
+  reason?: SocialOAuthFailureReason | null
 ): string {
-  return `${stage}_failed`;
+  return reason ? `${stage}_${reason}_failed` : `${stage}_failed`;
 }
 
 export function buildDistributionOAuthFailureLog(
   provider: SocialOAuthProvider,
-  stage: DistributionOAuthCallbackStage
+  stage: DistributionOAuthCallbackStage,
+  reason?: SocialOAuthFailureReason | null
 ) {
   return {
     event: 'distribution_oauth_callback_failed',
     provider,
     stage,
+    ...(reason ? { reason } : {}),
   } as const;
 }
