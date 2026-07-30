@@ -9,6 +9,10 @@ import {
   refreshGoogleSearchConsoleToken,
   type SearchConsoleRow,
 } from './seo-providers';
+import {
+  classifyCampaignVertical,
+  resolveGrowthCampaignForOpportunity,
+} from './growth-campaign-intelligence';
 
 type Db = { from(table: string): any };
 
@@ -152,7 +156,23 @@ async function createOpportunity(
   now: Date,
   metadata: Record<string, unknown> = {}
 ): Promise<boolean> {
-  const { data: existing } = await db.from('seo_opportunities').select('id').eq('opportunity_key', draft.key).maybeSingle();
+  const { data: existing } = await db
+    .from('seo_opportunities')
+    .select('id,growth_campaign_id,metadata')
+    .eq('opportunity_key', draft.key)
+    .maybeSingle();
+  const candidate = {
+    id: existing?.id ? String(existing.id) : draft.key,
+    title: draft.title,
+    evidence: draft.evidence,
+    recommendation: draft.recommendation,
+    growth_campaign_id: existing?.growth_campaign_id
+      ? String(existing.growth_campaign_id)
+      : null,
+    metadata,
+  };
+  const classification = classifyCampaignVertical(candidate);
+  const scoped = await resolveGrowthCampaignForOpportunity(db, candidate);
   const payload = {
     opportunity_key: draft.key,
     kind: draft.kind,
@@ -161,7 +181,18 @@ async function createOpportunity(
     evidence: draft.evidence,
     recommendation: draft.recommendation,
     keyword_id: keywordId,
-    metadata: { ...metadata, owner: draft.owner },
+    growth_campaign_id: scoped?.campaign.id ?? existing?.growth_campaign_id ?? null,
+    metadata: {
+      ...((existing?.metadata && typeof existing.metadata === 'object') ? existing.metadata : {}),
+      ...metadata,
+      owner: draft.owner,
+      campaign_vertical: classification.vertical,
+      campaign_gate: scoped?.gateReason ?? 'background_index_only',
+      campaign_key: scoped?.campaign.campaign_key ?? null,
+      campaign_role: scoped?.campaign.role ?? null,
+      buyer_role: scoped?.campaign.buyer_role ?? null,
+      offer_key: scoped?.campaign.offer_key ?? null,
+    },
     last_seen_at: now.toISOString(),
   };
   if (existing?.id) {
