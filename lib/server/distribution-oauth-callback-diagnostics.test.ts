@@ -12,6 +12,12 @@ describe('distribution OAuth callback diagnostics', () => {
     expect(buildDistributionOAuthFailureOutcome('identity_verification')).toBe(
       'identity_verification_failed'
     );
+    expect(
+      buildDistributionOAuthFailureOutcome(
+        'identity_verification',
+        'provider_http_402'
+      )
+    ).toBe('identity_verification_provider_http_402_failed');
   });
 
   it('builds a structured log without credential or token fields', () => {
@@ -19,6 +25,18 @@ describe('distribution OAuth callback diagnostics', () => {
       event: 'distribution_oauth_callback_failed',
       provider: 'x',
       stage: 'scope_validation',
+    });
+    expect(
+      buildDistributionOAuthFailureLog(
+        'x',
+        'identity_verification',
+        'provider_http_402'
+      )
+    ).toEqual({
+      event: 'distribution_oauth_callback_failed',
+      provider: 'x',
+      stage: 'identity_verification',
+      reason: 'provider_http_402',
     });
   });
 });
