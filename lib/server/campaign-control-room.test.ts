@@ -1,11 +1,59 @@
 import { describe, expect, it } from 'vitest';
 import {
+  completedBenchmarkSibling,
   isOperationsExcludedBenchmarkConfig,
   socialExperimentDetail,
   summarizeCampaignHealth,
   summarizeRuntimeHealth,
   type CampaignItem,
 } from './campaign-control-room';
+
+describe('completedBenchmarkSibling', () => {
+  const cohort = {
+    domain_id: 'domain-1',
+    run_mode: 'grounded_site',
+    schedule_window_utc: '2026-07-30T00',
+    schedule_query_set_name: 'business-counsel',
+    schedule_query_set_version: 'v1',
+  };
+
+  it('accepts a fully completed provider sibling for the same scheduled cohort', () => {
+    const failed = {
+      id: 'openai-run',
+      query_set_id: 'query-set-1',
+      status: 'failed',
+      metadata: { ...cohort, model_id: 'gpt-4o-mini', query_run_count: 6, completed_query_count: 0 },
+    };
+    const completed = {
+      id: 'gemini-run',
+      query_set_id: 'query-set-1',
+      status: 'completed',
+      metadata: { ...cohort, model_id: 'gemini-3.5-flash-lite', query_run_count: 6, completed_query_count: 6 },
+    };
+
+    expect(completedBenchmarkSibling(failed, [failed, completed])).toBe(completed);
+  });
+
+  it('does not hide partial or different-cohort failures', () => {
+    const failed = {
+      query_set_id: 'query-set-1',
+      status: 'failed',
+      metadata: { ...cohort, query_run_count: 6, completed_query_count: 0 },
+    };
+    const partial = {
+      query_set_id: 'query-set-1',
+      status: 'completed',
+      metadata: { ...cohort, query_run_count: 6, completed_query_count: 5 },
+    };
+    const otherMode = {
+      query_set_id: 'query-set-1',
+      status: 'completed',
+      metadata: { ...cohort, run_mode: 'ungrounded_inference', query_run_count: 6, completed_query_count: 6 },
+    };
+
+    expect(completedBenchmarkSibling(failed, [failed, partial, otherMode])).toBeNull();
+  });
+});
 
 describe('isOperationsExcludedBenchmarkConfig', () => {
   it('excludes only configs explicitly marked outside production operations', () => {
