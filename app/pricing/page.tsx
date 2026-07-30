@@ -217,8 +217,8 @@ export default async function PricingPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(pageSchema) }}
       />
 
-      <section className="mx-auto max-w-4xl text-center">
-        <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">
+      <section className="editorial-panel-warm mx-auto max-w-5xl px-7 py-10 text-center md:px-12 md:py-14">
+        <p className="editorial-kicker">
           Pricing
         </p>
         <h1 className="mt-4 text-balance font-headline text-4xl font-semibold leading-[1.05] tracking-[-0.04em] text-on-background md:text-6xl">
@@ -231,11 +231,11 @@ export default async function PricingPage() {
       </section>
 
       <section className="mx-auto mt-9 grid max-w-3xl gap-3 text-left sm:grid-cols-2">
-        <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-5">
+        <div className="rounded-2xl border border-gold/25 bg-[rgb(var(--blog-card-b))] p-5">
           <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-primary">One business</p>
           <p className="mt-2 font-body text-sm leading-6 text-on-surface-variant">Choose Business for your own website, competitors, and monthly progress.</p>
         </div>
-        <div className="rounded-2xl border border-outline-variant/25 bg-surface-container-low p-5">
+        <div className="rounded-2xl border border-gold/25 bg-[rgb(var(--blog-card-c))] p-5">
           <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-primary">Client portfolio</p>
           <p className="mt-2 font-body text-sm leading-6 text-on-surface-variant">Choose an Agency plan to manage, measure, and report across clients.</p>
         </div>
@@ -265,7 +265,7 @@ export default async function PricingPage() {
       <section className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-10 lg:grid-cols-12">
         <div className="lg:col-span-4">
           <p className="font-label text-xs uppercase tracking-widest text-primary">Pricing questions</p>
-          <h2 className="mt-3 font-sans text-2xl font-black uppercase tracking-tight text-on-background md:text-3xl">
+          <h2 className="mt-3 font-headline text-3xl font-semibold tracking-tight text-on-background md:text-4xl">
             Direct answers before checkout
           </h2>
           <p className="mt-4 font-body text-sm leading-7 text-on-surface-variant">Choose based on who you manage and how often you need proof of progress.</p>
@@ -274,9 +274,9 @@ export default async function PricingPage() {
           {pricingFaqItems.map((item) => (
             <div
               key={item.question}
-              className="rounded-2xl border border-outline-variant/50 bg-surface-container-lowest p-6 shadow-float"
+              className="rounded-2xl border border-gold/25 bg-surface-container-lowest p-6 shadow-float"
             >
-              <h3 className="font-sans text-lg font-black uppercase tracking-tight text-on-background">{item.question}</h3>
+              <h3 className="font-headline text-xl font-semibold tracking-tight text-on-background">{item.question}</h3>
               <p className="mt-3 font-body text-sm leading-7 text-on-surface-variant">
                 {item.answer}
               </p>

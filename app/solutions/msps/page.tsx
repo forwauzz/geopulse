@@ -104,7 +104,7 @@ export default async function MspsSolutionPage({
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
       />
 
-      <section className="border-b border-outline-variant/20 bg-[radial-gradient(circle_at_15%_0%,rgba(99,102,241,0.18),transparent_40%)] px-6 py-16 md:px-10 md:py-24">
+      <section className="border-b border-gold/25 bg-[linear-gradient(145deg,rgb(var(--blog-hero-tint)),rgb(var(--color-background)))] px-6 py-16 md:px-10 md:py-24">
         <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.08fr_0.92fr]">
           <div>
             <p className="font-label text-xs font-semibold uppercase tracking-[0.18em] text-primary">
@@ -121,13 +121,13 @@ export default async function MspsSolutionPage({
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/#audit"
-                className="inline-flex min-h-[48px] items-center rounded-xl bg-primary px-6 font-body text-sm font-semibold text-on-primary"
+                className="editorial-button-primary min-h-[48px]"
               >
                 Run the free MSP audit
               </Link>
               <Link
                 href="#walkthrough"
-                className="inline-flex min-h-[48px] items-center rounded-xl border border-outline-variant/35 bg-surface-container-lowest px-6 font-body text-sm font-semibold text-on-background"
+                className="editorial-button-secondary min-h-[48px]"
               >
                 Request a focused walkthrough
               </Link>
@@ -137,7 +137,7 @@ export default async function MspsSolutionPage({
             </p>
           </div>
 
-          <div className="rounded-[2rem] border border-outline-variant/25 bg-surface-container-lowest p-6 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
+          <div className="rounded-[2rem] border border-gold/25 bg-[rgb(var(--blog-card-a))] p-6 shadow-[0_24px_80px_rgba(15,23,42,0.12)]">
             <p className="font-label text-xs font-semibold uppercase tracking-[0.16em] text-primary">
               Buyer-question lens
             </p>
@@ -196,7 +196,7 @@ export default async function MspsSolutionPage({
 
       <section
         id="example-scorecard"
-        className="border-y border-outline-variant/20 bg-surface-container-low px-6 py-16 md:px-10 md:py-20"
+        className="border-y border-gold/25 bg-[rgb(var(--blog-card-c))] px-6 py-16 md:px-10 md:py-20"
       >
         <div className="mx-auto max-w-6xl">
           <div className="flex flex-wrap items-end justify-between gap-6">
@@ -294,7 +294,7 @@ export default async function MspsSolutionPage({
       </section>
 
       <section id="walkthrough" className="scroll-mt-24 px-6 py-16 md:px-10 md:py-20">
-        <div className="mx-auto grid max-w-6xl gap-10 rounded-3xl border border-outline-variant/25 bg-surface-container-lowest p-7 shadow-float md:p-10 lg:grid-cols-[0.82fr_1.18fr]">
+        <div className="mx-auto grid max-w-6xl gap-10 rounded-[2rem] border border-gold/25 bg-[rgb(var(--blog-card-a))] p-7 shadow-float md:p-10 lg:grid-cols-[0.82fr_1.18fr]">
           <div>
             <p className="font-label text-xs font-semibold uppercase tracking-[0.16em] text-primary">
               Sales-assisted path

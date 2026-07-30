@@ -7,6 +7,7 @@ import { getCfWebAnalyticsToken } from '@/lib/server/cf-env';
 import { LongWaitProvider } from '@/components/long-wait-provider';
 import { SiteFooter } from '@/components/site-footer';
 import { SiteHeader } from '@/components/site-header';
+import { PublicBrandShell } from '@/components/public-brand-shell';
 import {
   SITE_AUTHOR_NAME,
   SITE_AUTHOR_URL_PATH,
@@ -88,7 +89,7 @@ export default async function RootLayout({
         <LongWaitProvider>
           <AttributionInit />
           <SiteHeader />
-          <div className="flex-1">{children}</div>
+          <PublicBrandShell>{children}</PublicBrandShell>
           <SiteFooter />
         </LongWaitProvider>
       </body>

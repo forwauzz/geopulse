@@ -30,7 +30,9 @@
 
 /* Light tokens for blog pages + matching header/footer when route is /blog (html may still be .dark). */
 .blog-theme,
-.blog-chrome-light {
+.blog-chrome-light,
+.public-brand,
+.public-chrome-light {
   --foreground: #2c3435;
   --background: #f8f9f9;
   --color-background: 248 249 249;
@@ -58,6 +60,46 @@
   --blog-card-a: 248 246 238;
   --blog-card-b: 242 238 228;
   --blog-card-c: 236 232 220;
+}
+
+.public-brand {
+  min-height: 100%;
+  color: rgb(var(--color-on-background));
+  background:
+    radial-gradient(circle at 8% 0%, rgb(var(--color-gold) / 0.12), transparent 28rem),
+    linear-gradient(180deg, rgb(var(--blog-hero-tint)) 0, rgb(var(--color-background)) 30rem);
+}
+
+.public-brand ::selection,
+.public-chrome-light ::selection {
+  background: rgb(var(--color-gold) / 0.35);
+}
+
+@layer components {
+  .editorial-kicker {
+    @apply font-label text-xs font-semibold uppercase tracking-[0.18em] text-primary;
+  }
+
+  .editorial-display {
+    @apply text-balance font-headline font-semibold leading-[1.02] tracking-[-0.04em] text-on-background;
+  }
+
+  .editorial-panel {
+    @apply rounded-3xl border border-gold/25 bg-surface-container-lowest shadow-float;
+  }
+
+  .editorial-panel-warm {
+    @apply rounded-3xl border border-gold/20 shadow-float;
+    background: rgb(var(--blog-card-a));
+  }
+
+  .editorial-button-primary {
+    @apply inline-flex items-center justify-center rounded-full bg-primary px-6 py-3 font-body text-sm font-semibold text-on-primary shadow-sm transition hover:-translate-y-0.5 hover:bg-primary-dim;
+  }
+
+  .editorial-button-secondary {
+    @apply inline-flex items-center justify-center rounded-full border border-gold/45 bg-surface-container-lowest px-6 py-3 font-body text-sm font-semibold text-on-background transition hover:-translate-y-0.5 hover:border-gold hover:bg-surface-container-low;
+  }
 }
 
 .dark {
