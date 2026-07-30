@@ -181,6 +181,37 @@ describe('distribution-social-oauth', () => {
     expect(token.expiresAt).toBeTruthy();
   });
 
+  it('uses HTTP Basic authentication for an X confidential-client code exchange', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () =>
+        JSON.stringify({
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          expires_in: 7200,
+          scope: 'tweet.read tweet.write users.read media.write offline.access',
+        }),
+    } as Response) as typeof fetch;
+
+    await exchangeSocialOAuthCode({
+      provider: 'x',
+      code: 'authorization-code',
+      appUrl: 'https://getgeopulse.com',
+      codeVerifier: 'pkce-verifier',
+      xClientId: 'x-client-id',
+      xClientSecret: 'x-client-secret',
+    });
+
+    const [, request] = vi.mocked(global.fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(request?.body));
+    expect(request?.headers).toEqual({
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${btoa('x-client-id:x-client-secret')}`,
+    });
+    expect(body.get('client_id')).toBeNull();
+    expect(body.get('client_secret')).toBeNull();
+    expect(body.get('code_verifier')).toBe('pkce-verifier');
+  });
   it('refreshes x oauth token into normalized payload', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -204,6 +235,15 @@ describe('distribution-social-oauth', () => {
     expect(token.refreshToken).toBe('new-refresh-token');
     expect(token.scopeList).toEqual(['tweet.read', 'tweet.write', 'users.read', 'media.write', 'offline.access']);
     expect(token.expiresAt).toBeTruthy();
+    const [, request] = vi.mocked(global.fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(request?.body));
+    expect(request?.headers).toEqual({
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${btoa('x-client-id:x-client-secret')}`,
+    });
+    expect(body.get('client_id')).toBeNull();
+    expect(body.get('client_secret')).toBeNull();
+    expect(body.get('refresh_token')).toBe('old-refresh-token');
   });
 
   it('refreshes linkedin oauth token into normalized payload', async () => {
