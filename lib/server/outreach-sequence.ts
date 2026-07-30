@@ -129,3 +129,52 @@ export function progressAfterFailedSend(args: {
       : `retry delivery (${failures}/${Math.max(1, args.maxAttempts)}): ${args.reason}`,
   };
 }
+
+export function isPermanentOutreachScanFailure(reason: string): boolean {
+  return /^Target returned HTTP (401|403|404|410|451)$/.test(reason.trim());
+}
+
+export function progressAfterFailedScan(args: {
+  consecutiveFailures: number;
+  maxAttempts: number;
+  nowMs: number;
+  reason: string;
+  permanent: boolean;
+}): {
+  enabled: boolean;
+  lifecycleStatus: OutreachLifecycleStatus;
+  consecutiveFailures: number;
+  nextRunAt: string;
+  nextAction: string | null;
+  exitedAt: string | null;
+  exitReason: string | null;
+} {
+  const failures = Math.max(0, args.consecutiveFailures) + 1;
+  const nowIso = new Date(args.nowMs).toISOString();
+  if (args.permanent) {
+    return {
+      enabled: false,
+      lifecycleStatus: 'disqualified',
+      consecutiveFailures: failures,
+      nextRunAt: nowIso,
+      nextAction: null,
+      exitedAt: nowIso,
+      exitReason: `scan_access_failure:${args.reason}`.slice(0, 300),
+    };
+  }
+
+  const retry = progressAfterFailedSend({
+    consecutiveFailures: args.consecutiveFailures,
+    maxAttempts: args.maxAttempts,
+    nowMs: args.nowMs,
+    reason: args.reason,
+  });
+  return {
+    ...retry,
+    nextAction: retry.lifecycleStatus === 'paused'
+      ? `owner must resolve scan failure: ${args.reason}`
+      : `retry scan (${failures}/${Math.max(1, args.maxAttempts)}): ${args.reason}`,
+    exitedAt: null,
+    exitReason: null,
+  };
+}

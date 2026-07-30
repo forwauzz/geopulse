@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   isOutreachStopped,
+  isPermanentOutreachScanFailure,
   normalizeOutreachLifecycleStatus,
+  progressAfterFailedScan,
   progressAfterFailedSend,
   progressAfterSuccessfulSend,
 } from './outreach-sequence';
@@ -76,6 +78,60 @@ describe('outreach commercial sequence', () => {
     expect(result.lifecycleStatus).toBe('paused');
     expect(result.consecutiveFailures).toBe(3);
     expect(result.nextAction).toContain('owner must resolve');
+  });
+
+  it('only treats durable client-side HTTP access failures as permanent', () => {
+    expect(isPermanentOutreachScanFailure('Target returned HTTP 403')).toBe(true);
+    expect(isPermanentOutreachScanFailure('Target returned HTTP 404')).toBe(true);
+    expect(isPermanentOutreachScanFailure('Target returned HTTP 500')).toBe(false);
+    expect(isPermanentOutreachScanFailure('network_error')).toBe(false);
+  });
+  it('disqualifies a bounded cold prospect after a permanent scan access failure', () => {
+    const result = progressAfterFailedScan({
+      consecutiveFailures: 0,
+      maxAttempts: 3,
+      nowMs: NOW,
+      reason: 'Target returned HTTP 403',
+      permanent: true,
+    });
+
+    expect(result).toMatchObject({
+      enabled: false,
+      lifecycleStatus: 'disqualified',
+      consecutiveFailures: 1,
+      nextAction: null,
+      exitReason: 'scan_access_failure:Target returned HTTP 403',
+    });
+  });
+
+  it('retries a transient scan failure before pausing it at the retry cap', () => {
+    const retry = progressAfterFailedScan({
+      consecutiveFailures: 0,
+      maxAttempts: 3,
+      nowMs: NOW,
+      reason: 'network_error',
+      permanent: false,
+    });
+    const exhausted = progressAfterFailedScan({
+      consecutiveFailures: 2,
+      maxAttempts: 3,
+      nowMs: NOW,
+      reason: 'network_error',
+      permanent: false,
+    });
+
+    expect(retry).toMatchObject({
+      enabled: true,
+      lifecycleStatus: 'active',
+      consecutiveFailures: 1,
+    });
+    expect(retry.nextAction).toContain('retry scan (1/3)');
+    expect(exhausted).toMatchObject({
+      enabled: false,
+      lifecycleStatus: 'paused',
+      consecutiveFailures: 3,
+    });
+    expect(exhausted.nextAction).toContain('owner must resolve scan failure');
   });
 
   it('treats every non-active lifecycle state as a send stop', () => {

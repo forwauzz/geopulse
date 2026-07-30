@@ -15,7 +15,9 @@ import { renderOutreachTemplate, resolveOutreachTemplate } from './outreach-temp
 import { structuredLog } from './structured-log';
 import {
   isOutreachStopped,
+  isPermanentOutreachScanFailure,
   normalizeOutreachLifecycleStatus,
+  progressAfterFailedScan,
   progressAfterFailedSend,
   progressAfterSuccessfulSend,
   type OutreachLifecycleStatus,
@@ -245,6 +247,31 @@ export async function runOutreachForProspect(args: {
 
   const scan = await runFreeScan(prospect.url, buildAuditLlm(env));
   if (!scan.ok) {
+    if (prospect.maxSequenceSteps != null) {
+      const failure = progressAfterFailedScan({
+        consecutiveFailures: prospect.consecutiveFailures,
+        maxAttempts: prospect.maxAttempts,
+        nowMs,
+        reason: scan.reason,
+        permanent: isPermanentOutreachScanFailure(scan.reason),
+      });
+      await supabase
+        .from('outreach_prospects')
+        .update({
+          enabled: failure.enabled,
+          lifecycle_status: failure.lifecycleStatus,
+          consecutive_failures: failure.consecutiveFailures,
+          last_run_at: nowIso,
+          next_run_at: failure.nextRunAt,
+          last_error: scan.reason,
+          next_action: failure.nextAction,
+          exited_at: failure.exitedAt,
+          exit_reason: failure.exitReason,
+          updated_at: nowIso,
+        })
+        .eq('id', prospect.id);
+      return { ok: false, reason: scan.reason };
+    }
     await supabase
       .from('outreach_prospects')
       .update({ last_run_at: nowIso, next_run_at: computeNextOutreachRun(prospect.cadence, nowMs), last_error: scan.reason, updated_at: nowIso })
