@@ -62,6 +62,9 @@ export type OutreachProspect = {
   readonly consecutiveFailures: number;
   readonly maxAttempts: number;
   readonly nextAction: string | null;
+  readonly segment: string | null;
+  readonly personalizationReason: string | null;
+  readonly personalizationSourceUrl: string | null;
 };
 
 export type OutreachEnvLike = {
@@ -70,6 +73,7 @@ export type OutreachEnvLike = {
   readonly GEMINI_ENDPOINT?: string;
   readonly RESEND_API_KEY?: string;
   readonly RESEND_FROM_EMAIL?: string;
+  readonly SALES_REPLY_TO_EMAIL?: string;
   readonly NEXT_PUBLIC_APP_URL?: string;
 };
 
@@ -110,6 +114,9 @@ type ProspectRow = {
   consecutive_failures?: number | null;
   max_attempts?: number | null;
   next_action?: string | null;
+  segment?: string | null;
+  personalization_reason?: string | null;
+  personalization_source_url?: string | null;
 };
 
 function toProspect(row: ProspectRow): OutreachProspect {
@@ -133,6 +140,9 @@ function toProspect(row: ProspectRow): OutreachProspect {
     consecutiveFailures: Math.max(0, Number(row.consecutive_failures ?? 0)),
     maxAttempts: Math.max(1, Number(row.max_attempts ?? 3)),
     nextAction: row.next_action ?? null,
+    segment: row.segment ?? null,
+    personalizationReason: row.personalization_reason ?? null,
+    personalizationSourceUrl: row.personalization_source_url ?? null,
   };
 }
 
@@ -152,6 +162,7 @@ export function buildOutreachEmailHtml(args: {
   readonly grade: string;
   readonly topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
   readonly resultsUrl: string;
+  readonly walkthroughUrl: string;
   readonly pixelUrl: string;
   readonly unsubscribeUrl: string;
 }): string {
@@ -162,11 +173,13 @@ export function buildOutreachEmailHtml(args: {
     sender: 'elena',
     bodyHtml: [
       `<p style="margin:0 0 10px;">${greeting}</p>`,
-      `<p style="margin:0 0 14px;">We ran an AI-readiness audit of <strong>${escapeEmailHtml(args.domain)}</strong> — how clearly AI engines like ChatGPT, Gemini and Perplexity can read, understand and cite your site.</p>`,
+      `<p style="margin:0 0 14px;">We ran a public-site AI-search readiness audit of <strong>${escapeEmailHtml(args.domain)}</strong>. It checks observable access, structure, content, and trust signals; it does not predict or guarantee citations.</p>`,
       scoreBlock(args.score, args.grade, 'Your AI search readiness'),
       issueListHtml(args.topIssues),
       ctaButton('See your full report', args.resultsUrl),
-      `<p style="margin:0;color:#586162;font-size:13px;">The full report shows every check, what it means for your business, and exactly what to change — with copy-paste fixes. No account needed to view it.</p>`,
+      `<p style="margin:0 0 14px;color:#586162;font-size:13px;">The report shows what each check observed and a practical next step. No account is needed to view it.</p>`,
+      ctaButton('Request a focused walkthrough', args.walkthroughUrl),
+      `<p style="margin:0;color:#586162;font-size:13px;">Prefer a conversation? Send the site and your question. A person will review the public evidence before replying.</p>`,
     ].join('\n'),
     unsubscribeUrl: args.unsubscribeUrl,
     pixelUrl: args.pixelUrl,
@@ -184,7 +197,14 @@ export async function sendOutreachEmail(
   const from = env.RESEND_FROM_EMAIL?.trim();
   if (!key || !from) return { ok: false, detail: 'resend_credentials_missing' };
 
-  const body = JSON.stringify({ from, to, subject, html });
+  const replyTo = env.SALES_REPLY_TO_EMAIL?.trim();
+  const body = JSON.stringify({
+    from,
+    to,
+    subject,
+    html,
+    ...(replyTo ? { reply_to: replyTo } : {}),
+  });
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
@@ -360,7 +380,18 @@ export async function runOutreachForProspect(args: {
     detail: 'send_row_insert_failed',
   };
   if (sendId) {
-    const resultsUrl = `${appUrl}/results/${scanId}`;
+    const campaign = prospect.segment === 'msp-qc' ? 'msp-first-customer' : 'agency-first-customer';
+    const resultParams = new URLSearchParams({
+      utm_source: 'outreach',
+      utm_medium: 'email',
+      utm_campaign: campaign,
+      utm_content: `sequence-${String(prospect.sequenceStep)}`,
+    });
+    const walkthroughParams = new URLSearchParams(resultParams);
+    walkthroughParams.set('website', prospect.url);
+    walkthroughParams.set('source', 'outreach');
+    const resultsUrl = `${appUrl}/results/${scanId}?${resultParams.toString()}`;
+    const walkthroughUrl = `${appUrl}/walkthrough?${walkthroughParams.toString()}`;
     const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
     const unsubscribeUrl = `${appUrl}/api/outreach/unsubscribe/${prospect.id}`;
 
@@ -378,6 +409,9 @@ export async function runOutreachForProspect(args: {
             grade: scan.output.letterGrade,
             topIssues: topFailed,
             reportUrl: resultsUrl,
+            walkthroughUrl,
+            personalizationReason: prospect.personalizationReason,
+            personalizationSourceUrl: prospect.personalizationSourceUrl,
           },
           pixelUrl,
           unsubscribeUrl
@@ -391,6 +425,7 @@ export async function runOutreachForProspect(args: {
             grade: scan.output.letterGrade,
             topIssues: topFailed,
             resultsUrl,
+            walkthroughUrl,
             pixelUrl,
             unsubscribeUrl,
           }),

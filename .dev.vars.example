@@ -60,6 +60,10 @@ GEMINI_API_KEY=your-gemini-api-key-here
 RESEND_API_KEY=re_your_resend_api_key
 # Verified sender (domain or onboarding@resend.dev for tests)
 RESEND_FROM_EMAIL=GEO-Pulse <onboarding@resend.dev>
+# Optional verified receiving mailbox used as Reply-To and for operator routing.
+# SALES_REPLY_TO_EMAIL=sales@replies.getgeopulse.com
+# Secret shown once when the email.received webhook is created in Resend.
+# RESEND_INBOUND_WEBHOOK_SECRET=whsec_your_resend_signing_secret
 
 # Cloudflare Turnstile — CAPTCHA
 # Use always-pass test key for local dev: 1x0000000000000000000000000000000AA

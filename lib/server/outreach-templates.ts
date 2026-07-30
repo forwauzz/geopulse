@@ -2,7 +2,7 @@
  * Outreach message templates (spec §9) — admin-authored subject/body with variables,
  * rendered into the branded email shell.
  *
- * Variables: {{name}} {{company}} {{domain}} {{score}} {{grade}} {{top_issues}} {{report_url}}
+ * Variables: {{name}} {{company}} {{domain}} {{score}} {{grade}} {{top_issues}} {{report_url}} {{walkthrough_url}} {{personalization_reason}} {{personalization_source_url}}
  *   - All variable VALUES are HTML-escaped except {{top_issues}} and {{report_url}}
  *     (we generate that markup ourselves).
  *   - 'text' bodies are escaped and paragraph-wrapped, then branded — an admin can
@@ -34,6 +34,9 @@ export interface OutreachTemplateVars {
   grade: string;
   topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
   reportUrl: string;
+  walkthroughUrl: string;
+  personalizationReason: string | null;
+  personalizationSourceUrl: string | null;
 }
 
 export function escapeHtml(value: string): string {
@@ -67,6 +70,9 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
     .replaceAll('{{score}}', esc(String(vars.score)))
     .replaceAll('{{grade}}', esc(vars.grade))
     .replaceAll('{{report_url}}', vars.reportUrl)
+    .replaceAll('{{walkthrough_url}}', vars.walkthroughUrl)
+    .replaceAll('{{personalization_reason}}', esc(vars.personalizationReason ?? 'This site matches the current audit cohort.'))
+    .replaceAll('{{personalization_source_url}}', vars.personalizationSourceUrl ?? '')
     .replaceAll('{{top_issues}}', topIssuesHtml(vars.topIssues));
 }
 
@@ -189,75 +195,94 @@ export const PRESET_OUTREACH_TEMPLATES: ReadonlyArray<{
   body: string;
 }> = [
   {
-    key: 'first-scorecard',
-    name: 'First scorecard — the gift opener',
-    description: 'Warm first touch: we did real work for you before asking for anything.',
-    subject: 'We audited {{domain}} — your AI search readiness is {{score}}/100',
+    key: 'msp-evidence-first',
+    name: 'MSP evidence-first - walkthrough opener',
+    description: 'MSP-specific first touch: public evidence, transparent boundary, and a human next step.',
+    subject: '{{company}}: an AI-search readiness audit of {{domain}}',
     bodyFormat: 'text',
     body: `Hi {{name}},
 
-Quick heads-up from a fellow Montréal company: we ran {{company}} through our AI search readiness audit — the same checks ChatGPT, Gemini and Perplexity effectively apply when they decide whether to cite a business like yours.
+We ran a public-site AI-search readiness audit of {{domain}} because it matches our current managed-services cohort.
 
-{{domain}} scored {{score}}/100 (grade {{grade}}). Here is what is holding it back the most:
+The site scored {{score}}/100 (grade {{grade}}). That score summarizes observable access, structure, content, and trust checks; it does not predict or guarantee an AI citation.
+
+The highest-confidence gaps were:
 
 {{top_issues}}
 
-The full report explains every check in plain English, with copy-paste fixes your web person can apply — no account, no strings: {{report_url}}
+The full report is free to view, with no account required: {{report_url}}
 
-We re-run this on a schedule so you can watch the score move as things get fixed.`,
+If it would help, request a focused walkthrough and we will review the public evidence before replying: {{walkthrough_url}}`,
+  },
+  {
+    key: 'first-scorecard',
+    name: 'First scorecard - the evidence opener',
+    description: 'First touch grounded in an already-completed public-site audit.',
+    subject: 'We audited {{domain}} - AI-search readiness {{score}}/100',
+    bodyFormat: 'text',
+    body: `Hi {{name}},
+
+We ran a public-site AI-search readiness audit of {{domain}}. It checks observable access, structure, content, and trust signals; it does not claim to reproduce an answer engine's private ranking logic.
+
+The site scored {{score}}/100 (grade {{grade}}). The highest-confidence gaps were:
+
+{{top_issues}}
+
+The full report is free to view, with no account required: {{report_url}}
+
+Prefer to talk through it? Request a focused walkthrough here: {{walkthrough_url}}`,
   },
   {
     key: 'monthly-pulse',
-    name: 'Monthly pulse — the returning cadence',
-    description: 'For prospects already receiving audits: this month’s standings, brief and confident.',
-    subject: '{{domain}} this month: {{score}}/100 on AI search readiness',
+    name: 'Monthly pulse - the returning cadence',
+    description: 'For an existing recurring audit: what changed and the next observed gap.',
+    subject: '{{domain}} this month: AI-search readiness {{score}}/100',
     bodyFormat: 'text',
     body: `Hi {{name}},
 
-Your monthly AI-visibility pulse for {{domain}} is in: {{score}}/100 ({{grade}}).
+The latest public-site readiness audit for {{domain}} is in: {{score}}/100 (grade {{grade}}).
 
-Where the easiest points are sitting right now:
+The current highest-confidence gaps are:
 
 {{top_issues}}
 
-Full breakdown, matrix of which AI engines can see you, and the fixes: {{report_url}}
+See the full observed breakdown: {{report_url}}
 
-Same time next month — unless the score jumps first.`,
+If you want help choosing the first change, request a focused walkthrough: {{walkthrough_url}}`,
   },
   {
     key: 'quick-wins',
-    name: 'Quick wins — the nudge',
-    description: 'Short and surgical: three fixes, one link, no fluff.',
-    subject: '3 fixes that would move {{domain}} up in AI search',
+    name: 'Priority gaps - the nudge',
+    description: 'Short follow-up: observed gaps, one report, one human next step.',
+    subject: 'Three observed gaps on {{domain}}',
     bodyFormat: 'text',
     body: `Hi {{name}},
 
-Three things on {{domain}} are costing you visibility in AI search results right now:
+The latest audit found three public-site signals worth reviewing on {{domain}}:
 
 {{top_issues}}
 
-Each one has a copy-paste fix in your report ({{score}}/100 today): {{report_url}}
+See the supporting checks and practical next steps here: {{report_url}}
 
-Most of these are under 30 minutes for whoever manages your site.`,
+Want a person to help pick the first one? {{walkthrough_url}}`,
   },
   {
     key: 'plain-personal',
-    name: 'Plain & personal — the founder note',
-    description: 'Reads like a one-to-one email; the brand shell keeps it credible.',
-    subject: 'Noticed something about {{domain}}',
+    name: 'Plain & personal - the founder note',
+    description: 'Concise one-to-one note with an evidence boundary and explicit reply path.',
+    subject: 'A public-site audit of {{domain}}',
     bodyFormat: 'text',
     body: `Hi {{name}},
 
-I run GEO-Pulse here in Montréal — we measure how visible businesses are when people ask AI assistants for recommendations instead of Googling.
+I run GEO-Pulse. We audit the public signals that help search and AI systems access and understand a business website.
 
-I ran {{domain}} through it. You came out at {{score}}/100. Some of what is in the way is genuinely quick to fix.
+I ran {{domain}} through it. The current readiness score is {{score}}/100. That is a summary of observable site checks, not a promise of rankings or citations.
 
-The full report is here, free, no sign-up: {{report_url}}
+The report is free to view, with no sign-up: {{report_url}}
 
-Happy to point your web person at the two changes that matter most — just reply.`,
+If you want, request a focused walkthrough and I will point to the first two changes I would review: {{walkthrough_url}}`,
   },
 ];
-
 /** Sample variables for the admin preview. */
 export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {
   name: 'Alex',
@@ -270,4 +295,7 @@ export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {
     { check: 'Structured data validity', fix: 'Add LocalBusiness schema with your name and address.' },
   ],
   reportUrl: 'https://getgeopulse.com/results/sample',
+  walkthroughUrl: 'https://getgeopulse.com/walkthrough?source=outreach',
+  personalizationReason: 'The site matches the current managed-services audit cohort.',
+  personalizationSourceUrl: 'https://acme-it.example/about',
 };

@@ -29,6 +29,12 @@ export function SiteFooter() {
         <div className="flex flex-col gap-4 font-body text-sm uppercase tracking-wide text-on-surface-variant md:flex-row md:justify-end md:gap-8">
           <span className="opacity-80">&copy; {new Date().getFullYear()} GEO-Pulse</span>
           <Link
+            href="/solutions/msps"
+            className="hover:text-on-background hover:underline"
+          >
+            For MSPs
+          </Link>
+          <Link
             href="/about"
             className="hover:text-on-background hover:underline"
           >

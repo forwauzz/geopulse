@@ -66,6 +66,9 @@ export function SiteHeaderShell({
             </>
           ) : isSignedIn ? (
             <>
+              <Link href="/solutions/msps" className={primaryNavLinkClassName}>
+                For MSPs
+              </Link>
               {showBlog ? (
                 <Link href="/blog" className={primaryNavLinkClassName}>
                   Blog
@@ -107,6 +110,9 @@ export function SiteHeaderShell({
             </>
           ) : (
             <>
+              <Link href="/solutions/msps" className={primaryNavLinkClassName}>
+                For MSPs
+              </Link>
               {showBlog ? (
                 <Link href="/blog" className={primaryNavLinkClassName}>
                   Blog

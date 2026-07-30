@@ -304,6 +304,9 @@ export async function runOutreachNowAction(formData: FormData): Promise<void> {
     consecutiveFailures: Math.max(0, Number(data.consecutive_failures ?? 0)),
     maxAttempts: Math.max(1, Number(data.max_attempts ?? 3)),
     nextAction: data.next_action ?? null,
+    segment: data.segment ?? null,
+    personalizationReason: data.personalization_reason ?? null,
+    personalizationSourceUrl: data.personalization_source_url ?? null,
   };
 
   await runOutreachForProspect({
