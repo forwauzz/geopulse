@@ -847,7 +847,12 @@ export async function attemptSafeCampaignRemediation(args: {
       if (action.detail.includes('HTTP 403')) {
         const { error } = await args.db.from('outreach_prospects').update({
           enabled: false,
+          lifecycle_status: 'disqualified',
           last_error: null,
+          next_action: null,
+          exited_at: now.toISOString(),
+          exit_reason: 'blocked_target_http_403',
+          updated_at: now.toISOString(),
         }).eq('id', id);
         if (!error) {
           resolved.set(action.key, {

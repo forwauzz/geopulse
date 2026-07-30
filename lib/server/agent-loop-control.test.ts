@@ -122,7 +122,12 @@ describe('closed-loop agent control', () => {
 
     expect(update).toHaveBeenCalledWith({
       enabled: false,
+      lifecycle_status: 'disqualified',
       last_error: null,
+      next_action: null,
+      exited_at: '2026-07-26T12:00:00.000Z',
+      exit_reason: 'blocked_target_http_403',
+      updated_at: '2026-07-26T12:00:00.000Z',
     });
     expect(eq).toHaveBeenCalledWith('id', 'abc');
     expect(result.get('prospect:abc')).toMatchObject({

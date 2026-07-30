@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  quality:
     runs-on: ubuntu-latest
     env:
       # Build-time placeholders only — real secrets never go in CI env (see SECURITY.md)
@@ -41,6 +41,24 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+  browser:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder-anon-key-not-for-production
+      NEXT_PUBLIC_APP_URL: https://placeholder.example
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -52,5 +70,45 @@ jobs:
       - name: Browser smoke tests
         run: npm run test:e2e
 
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder-anon-key-not-for-production
+      NEXT_PUBLIC_APP_URL: https://placeholder.example
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Cloudflare Worker types
+        run: npm run cf-typegen
+
+      - name: Wrangler config for CI (no Workers AI binding)
+        run: node scripts/wrangler-config-for-ci.mjs
+
       - name: Production build (OpenNext + Next — matches Cloudflare)
         run: npm run build:worker
+
+  # Preserve the existing required-check name while the expensive work runs in parallel.
+  verify:
+    if: always()
+    needs: [quality, browser, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every verification lane
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          test "$QUALITY_RESULT" = success
+          test "$BROWSER_RESULT" = success
+          test "$BUILD_RESULT" = success

@@ -43,7 +43,15 @@ export async function GET(
     const nowIso = new Date().toISOString();
     const { error } = await supabase
       .from('outreach_prospects')
-      .update({ enabled: false, unsubscribed_at: nowIso, updated_at: nowIso })
+      .update({
+        enabled: false,
+        lifecycle_status: 'unsubscribed',
+        unsubscribed_at: nowIso,
+        exited_at: nowIso,
+        exit_reason: 'unsubscribe',
+        next_action: null,
+        updated_at: nowIso,
+      })
       .eq('id', parsed.data);
     if (error) {
       // Column missing pre-migration — the part that stops sends must still land.

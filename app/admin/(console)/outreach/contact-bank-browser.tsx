@@ -167,10 +167,10 @@ export function ContactBankBrowser({
                         </span>
                         <input name="startAt" type="datetime-local" className={input} />
                       </label>
-                      <select name="cadence" defaultValue="monthly" className={input}>
-                        <option value="monthly">monthly</option>
-                        <option value="weekly">weekly</option>
-                      </select>
+                      <input type="hidden" name="cadence" value="weekly" />
+                      <span className="pb-2 font-sans text-xs text-on-surface-variant">
+                        3 messages · days 0, 4, and 10 · stops on reply, conversion, unsubscribe, or completion
+                      </span>
                       <button className="inline-flex min-h-[40px] items-center rounded-xl bg-primary px-4 text-sm font-semibold text-on-primary hover:opacity-90">
                         Add {seg.saved} to sequence
                       </button>
