@@ -12,6 +12,7 @@ import {
 } from '@/lib/server/distribution-social-oauth';
 import { encryptDistributionToken } from '@/lib/server/distribution-token-crypto';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
+import { resolveDistributionOAuthCallbackConfig } from '@/lib/server/distribution-oauth-callback-env';
 import { isDistributionOAuthAdmin } from '@/lib/server/distribution-oauth-admin-gate';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -95,6 +96,7 @@ export async function GET(
   if (!account || account.provider_name !== provider) {
     return buildRedirect(appUrl, 'account_mismatch', provider);
   }
+  const oauthConfig = resolveDistributionOAuthCallbackConfig(process.env, env);
 
   try {
     const token = await exchangeSocialOAuthCode({
@@ -102,16 +104,7 @@ export async function GET(
       code,
       appUrl,
       codeVerifier: statePayload.codeVerifier,
-      xClientId: process.env['X_OAUTH_CLIENT_ID'],
-      xClientSecret: process.env['X_OAUTH_CLIENT_SECRET'],
-      xTokenUrl: process.env['X_OAUTH_TOKEN_URL'],
-      linkedinClientId: process.env['LINKEDIN_OAUTH_CLIENT_ID'],
-      linkedinClientSecret: process.env['LINKEDIN_OAUTH_CLIENT_SECRET'],
-      linkedinTokenUrl: process.env['LINKEDIN_OAUTH_TOKEN_URL'],
-      instagramClientId: process.env['INSTAGRAM_OAUTH_CLIENT_ID'],
-      instagramClientSecret: process.env['INSTAGRAM_OAUTH_CLIENT_SECRET'],
-      instagramTokenUrl: process.env['INSTAGRAM_OAUTH_TOKEN_URL'],
-      instagramGraphBaseUrl: process.env['INSTAGRAM_GRAPH_API_BASE_URL'],
+      ...oauthConfig,
     });
     assertRequiredSocialOAuthScopes(provider, token.scopeList);
 
