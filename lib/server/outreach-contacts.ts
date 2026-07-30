@@ -206,6 +206,15 @@ export async function addSegmentToSequence(args: {
         url: contact.url,
         cadence,
         enabled: true,
+        lifecycle_status: 'active',
+        sequence_step: 1,
+        max_sequence_steps: 3,
+        sequence_delays_days: [0, 4, 10],
+        consecutive_failures: 0,
+        max_attempts: 3,
+        owner: 'elena',
+        next_action: 'send sequence step 1 of 3',
+        closure_condition: 'reply, unsubscribe, disqualification, conversion, or sequence completion',
         next_run_at: times[i],
       })
       .select('id')

@@ -13,6 +13,13 @@ import { buildAuditLlm } from './fix-agent-run';
 import { ctaButton, emailShell, escapeEmailHtml, issueListHtml, scoreBlock } from './email-theme';
 import { renderOutreachTemplate, resolveOutreachTemplate } from './outreach-templates';
 import { structuredLog } from './structured-log';
+import {
+  isOutreachStopped,
+  normalizeOutreachLifecycleStatus,
+  progressAfterFailedSend,
+  progressAfterSuccessfulSend,
+  type OutreachLifecycleStatus,
+} from './outreach-sequence';
 import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../../workers/report/report-qa-gate';
 
 /**
@@ -45,6 +52,14 @@ export type OutreachProspect = {
   readonly lastError: string | null;
   /** Pinned message template; null = use the default template or the built-in email. */
   readonly templateId: string | null;
+  readonly lifecycleStatus: OutreachLifecycleStatus;
+  /** Current outbound step; maxSequenceSteps null preserves legacy recurring audits. */
+  readonly sequenceStep: number;
+  readonly maxSequenceSteps: number | null;
+  readonly sequenceDelaysDays: number[];
+  readonly consecutiveFailures: number;
+  readonly maxAttempts: number;
+  readonly nextAction: string | null;
 };
 
 export type OutreachEnvLike = {
@@ -86,6 +101,13 @@ type ProspectRow = {
   last_scan_id: string | null;
   last_error: string | null;
   template_id?: string | null;
+  lifecycle_status?: string | null;
+  sequence_step?: number | null;
+  max_sequence_steps?: number | null;
+  sequence_delays_days?: number[] | null;
+  consecutive_failures?: number | null;
+  max_attempts?: number | null;
+  next_action?: string | null;
 };
 
 function toProspect(row: ProspectRow): OutreachProspect {
@@ -102,6 +124,13 @@ function toProspect(row: ProspectRow): OutreachProspect {
     lastScanId: row.last_scan_id,
     lastError: row.last_error,
     templateId: row.template_id ?? null,
+    lifecycleStatus: normalizeOutreachLifecycleStatus(row.lifecycle_status),
+    sequenceStep: Math.max(1, Number(row.sequence_step ?? 1)),
+    maxSequenceSteps: row.max_sequence_steps == null ? null : Math.max(1, Number(row.max_sequence_steps)),
+    sequenceDelaysDays: Array.isArray(row.sequence_delays_days) ? row.sequence_delays_days.map(Number) : [0, 4, 10],
+    consecutiveFailures: Math.max(0, Number(row.consecutive_failures ?? 0)),
+    maxAttempts: Math.max(1, Number(row.max_attempts ?? 3)),
+    nextAction: row.next_action ?? null,
   };
 }
 
@@ -142,42 +171,64 @@ export function buildOutreachEmailHtml(args: {
   });
 }
 
-async function sendOutreachEmail(
+export async function sendOutreachEmail(
   env: OutreachEnvLike,
   to: string,
   subject: string,
-  html: string
-): Promise<{ ok: true } | { ok: false; detail: string }> {
+  html: string,
+  idempotencyKey: string,
+): Promise<{ ok: true; providerMessageId: string | null } | { ok: false; detail: string }> {
   const key = env.RESEND_API_KEY?.trim();
   const from = env.RESEND_FROM_EMAIL?.trim();
   if (!key || !from) return { ok: false, detail: 'resend_credentials_missing' };
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      signal: AbortSignal.timeout(15_000),
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ from, to, subject, html }),
-    });
-    if (res.ok) return { ok: true };
-    // The real reason must reach the admin UI — a bare boolean cost us a debugging
-    // round-trip on the first live send (issue #112).
-    let detail = `http_${String(res.status)}`;
-    try {
-      const body = (await res.json()) as { message?: string; name?: string };
-      const message = [body.name, body.message].filter(Boolean).join(': ');
-      if (message) detail = `${detail} ${message}`.slice(0, 300);
-    } catch {
-      /* keep the status-only detail */
-    }
-    structuredLog('outreach_email_send_failed', { detail }, 'warning');
-    return { ok: false, detail };
-  } catch (err) {
-    const detail = err instanceof Error && err.name === 'TimeoutError' ? 'send_timeout' : 'network_error';
-    structuredLog('outreach_email_send_failed', { detail }, 'warning');
-    return { ok: false, detail };
-  }
-}
 
+  const body = JSON.stringify({ from, to, subject, html });
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        signal: AbortSignal.timeout(15_000),
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${key}`,
+          'Idempotency-Key': idempotencyKey,
+        },
+        body,
+      });
+      if (res.ok) {
+        let providerMessageId: string | null = null;
+        try {
+          const responseBody = (await res.json()) as { id?: string };
+          providerMessageId = responseBody.id ?? null;
+        } catch {
+          /* provider accepted the request; the identifier is optional evidence */
+        }
+        return { ok: true, providerMessageId };
+      }
+
+      // The real reason must reach the admin UI — a bare boolean cost us a debugging
+      // round-trip on the first live send (issue #112).
+      let detail = `http_${String(res.status)}`;
+      try {
+        const responseBody = (await res.json()) as { message?: string; name?: string };
+        const message = [responseBody.name, responseBody.message].filter(Boolean).join(': ');
+        if (message) detail = `${detail} ${message}`.slice(0, 300);
+      } catch {
+        /* keep the status-only detail */
+      }
+      if (attempt === 1 && (res.status === 429 || res.status >= 500)) continue;
+      structuredLog('outreach_email_send_failed', { detail, attempts: attempt }, 'warning');
+      return { ok: false, detail };
+    } catch (err) {
+      const detail = err instanceof Error && err.name === 'TimeoutError' ? 'send_timeout' : 'network_error';
+      if (attempt === 1) continue;
+      structuredLog('outreach_email_send_failed', { detail, attempts: attempt }, 'warning');
+      return { ok: false, detail };
+    }
+  }
+
+  return { ok: false, detail: 'delivery_retry_exhausted' };
+}
 /** Audit one prospect's site now, email the scorecard, and advance the schedule. */
 export async function runOutreachForProspect(args: {
   readonly supabase: SupabaseClient;
@@ -187,6 +238,10 @@ export async function runOutreachForProspect(args: {
 }): Promise<{ ok: true; scanId: string; score: number } | { ok: false; reason: string }> {
   const { supabase, env, prospect, nowMs } = args;
   const nowIso = new Date(nowMs).toISOString();
+
+  if (!prospect.enabled || isOutreachStopped(prospect.lifecycleStatus)) {
+    return { ok: false, reason: `outreach_stopped:${prospect.lifecycleStatus}` };
+  }
 
   const scan = await runFreeScan(prospect.url, buildAuditLlm(env));
   if (!scan.ok) {
@@ -253,7 +308,13 @@ export async function runOutreachForProspect(args: {
 
   const { data: sendRow } = await supabase
     .from('outreach_sends')
-    .insert({ prospect_id: prospect.id, scan_id: scanId, score: scan.output.score })
+    .insert({
+      prospect_id: prospect.id,
+      scan_id: scanId,
+      score: scan.output.score,
+      delivery_status: 'pending',
+      sequence_step: prospect.maxSequenceSteps == null ? null : prospect.sequenceStep,
+    })
     .select('id')
     .single();
   const sendId = (sendRow?.id as string | undefined) ?? null;
@@ -267,7 +328,10 @@ export async function runOutreachForProspect(args: {
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
     .slice(0, 3);
 
-  let sendOutcome: { ok: true } | { ok: false; detail: string } = { ok: false, detail: 'send_row_insert_failed' };
+  let sendOutcome: { ok: true; providerMessageId: string | null } | { ok: false; detail: string } = {
+    ok: false,
+    detail: 'send_row_insert_failed',
+  };
   if (sendId) {
     const resultsUrl = `${appUrl}/results/${scanId}`;
     const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
@@ -305,16 +369,73 @@ export async function runOutreachForProspect(args: {
           }),
         };
 
-    sendOutcome = await sendOutreachEmail(env, prospect.email, message.subject, message.html);
+    // The provider receives the same key for the bounded in-process retry, so an
+    // accepted request with a lost response cannot produce a duplicate email.
+    const idempotencyKey = `outreach-send-${sendId}`;
+    sendOutcome = await sendOutreachEmail(
+      env,
+      prospect.email,
+      message.subject,
+      message.html,
+      idempotencyKey,
+    );
   }
 
+  if (sendId) {
+    await supabase
+      .from('outreach_sends')
+      .update({
+        delivery_status: sendOutcome.ok ? 'sent' : 'failed',
+        provider_message_id: sendOutcome.ok ? sendOutcome.providerMessageId : null,
+        delivery_error: sendOutcome.ok ? null : sendOutcome.detail,
+        updated_at: nowIso,
+      })
+      .eq('id', sendId);
+  }
+
+  if (!sendOutcome.ok) {
+    const failure = progressAfterFailedSend({
+      consecutiveFailures: prospect.consecutiveFailures,
+      maxAttempts: prospect.maxAttempts,
+      nowMs,
+      reason: sendOutcome.detail,
+    });
+    await supabase
+      .from('outreach_prospects')
+      .update({
+        enabled: failure.enabled,
+        lifecycle_status: failure.lifecycleStatus,
+        consecutive_failures: failure.consecutiveFailures,
+        last_run_at: nowIso,
+        next_run_at: failure.nextRunAt,
+        last_scan_id: scanId,
+        last_error: `email_send_failed: ${sendOutcome.detail}`,
+        next_action: failure.nextAction,
+        updated_at: nowIso,
+      })
+      .eq('id', prospect.id);
+    return { ok: false, reason: `email_send_failed:${sendOutcome.detail}` };
+  }
+
+  const progress = progressAfterSuccessfulSend(
+    prospect,
+    nowMs,
+    computeNextOutreachRun(prospect.cadence, nowMs),
+  );
   await supabase
     .from('outreach_prospects')
     .update({
+      enabled: progress.enabled,
+      lifecycle_status: progress.lifecycleStatus,
+      sequence_step: progress.sequenceStep,
+      consecutive_failures: 0,
       last_run_at: nowIso,
-      next_run_at: computeNextOutreachRun(prospect.cadence, nowMs),
+      next_run_at: progress.nextRunAt,
       last_scan_id: scanId,
-      last_error: sendOutcome.ok ? null : `email_send_failed: ${sendOutcome.detail}`,
+      last_error: null,
+      next_action: progress.nextAction,
+      exited_at: progress.exitedAt,
+      exit_reason: progress.exitReason,
       updated_at: nowIso,
     })
     .eq('id', prospect.id);
@@ -337,7 +458,39 @@ export async function runDueOutreach(args: {
     .lte('next_run_at', nowIso)
     .limit(args.limit ?? 10);
 
-  const due = ((data ?? []) as ProspectRow[]).map(toProspect);
+  let due = ((data ?? []) as ProspectRow[]).map(toProspect);
+
+  // Conversion is a hard stop. Reconcile active/trialing subscriptions by email before
+  // attempting another campaign step so a customer never receives a cold follow-up.
+  if (due.length > 0) {
+    const { data: subscriptions, error: subscriptionError } = await args.supabase
+      .from('monitoring_subscriptions')
+      .select('email')
+      .in('status', ['active', 'trialing'])
+      .limit(1000);
+    if (!subscriptionError) {
+      const convertedEmails = new Set(
+        ((subscriptions ?? []) as Array<{ email: string }>).map((row) => row.email.toLowerCase()),
+      );
+      const converted = due.filter((prospect) => convertedEmails.has(prospect.email.toLowerCase()));
+      if (converted.length > 0) {
+        await Promise.all(converted.map((prospect) => args.supabase
+          .from('outreach_prospects')
+          .update({
+            enabled: false,
+            lifecycle_status: 'converted',
+            converted_at: nowIso,
+            exited_at: nowIso,
+            exit_reason: 'active_subscription',
+            next_action: null,
+            updated_at: nowIso,
+          })
+          .eq('id', prospect.id)));
+        due = due.filter((prospect) => !convertedEmails.has(prospect.email.toLowerCase()));
+      }
+    }
+  }
+
   let ran = 0;
   let failed = 0;
   for (const prospect of due) {

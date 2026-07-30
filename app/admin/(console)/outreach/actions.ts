@@ -18,6 +18,7 @@ import {
   type OutreachProspect,
 } from '@/lib/server/outreach';
 import { structuredLog } from '@/lib/server/structured-log';
+import { normalizeOutreachLifecycleStatus } from '@/lib/server/outreach-sequence';
 
 export async function addOutreachProspect(formData: FormData): Promise<void> {
   const ctx = await loadAdminActionContext();
@@ -88,7 +89,12 @@ export async function toggleOutreachProspect(formData: FormData): Promise<void> 
 
   await ctx.adminDb
     .from('outreach_prospects')
-    .update({ enabled: enable, updated_at: new Date().toISOString() })
+    .update({
+      enabled: enable,
+      lifecycle_status: enable ? 'active' : 'paused',
+      next_action: enable ? 'run next scheduled outreach step' : 'operator paused outreach',
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id);
   revalidatePath('/admin/outreach');
 }
@@ -291,6 +297,13 @@ export async function runOutreachNowAction(formData: FormData): Promise<void> {
     lastScanId: data.last_scan_id ?? null,
     lastError: data.last_error ?? null,
     templateId: data.template_id ?? null,
+    lifecycleStatus: normalizeOutreachLifecycleStatus(data.lifecycle_status),
+    sequenceStep: Math.max(1, Number(data.sequence_step ?? 1)),
+    maxSequenceSteps: data.max_sequence_steps == null ? null : Math.max(1, Number(data.max_sequence_steps)),
+    sequenceDelaysDays: Array.isArray(data.sequence_delays_days) ? data.sequence_delays_days.map(Number) : [0, 4, 10],
+    consecutiveFailures: Math.max(0, Number(data.consecutive_failures ?? 0)),
+    maxAttempts: Math.max(1, Number(data.max_attempts ?? 3)),
+    nextAction: data.next_action ?? null,
   };
 
   await runOutreachForProspect({
@@ -302,6 +315,48 @@ export async function runOutreachNowAction(formData: FormData): Promise<void> {
   revalidatePath('/admin/outreach');
 }
 
+/** Manual reply/disqualification closure until provider reply ingestion is connected. */
+export async function setOutreachLifecycleAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const id = String(formData.get('prospectId') ?? '').trim();
+  const status = normalizeOutreachLifecycleStatus(String(formData.get('status') ?? ''));
+  if (!id) return;
+
+  const { data: existing } = await ctx.adminDb
+    .from('outreach_prospects')
+    .select('unsubscribed_at')
+    .eq('id', id)
+    .maybeSingle();
+  if (!existing || (existing.unsubscribed_at && status === 'active')) return;
+
+  const nowIso = new Date().toISOString();
+  const terminal = !['active', 'paused'].includes(status);
+  const replyClassification = status === 'positive_reply'
+    ? 'positive'
+    : status === 'replied'
+      ? 'neutral'
+      : status === 'disqualified'
+        ? 'not_interested'
+        : null;
+  const update: Record<string, unknown> = {
+    lifecycle_status: status,
+    enabled: status === 'active',
+    reply_classification: replyClassification,
+    next_action: status === 'active' ? 'run next scheduled outreach step' : null,
+    exited_at: terminal ? nowIso : null,
+    exit_reason: terminal ? status : null,
+    updated_at: nowIso,
+  };
+  if (status === 'replied' || status === 'positive_reply') update.replied_at = nowIso;
+  if (status === 'converted') update.converted_at = nowIso;
+  if (status === 'unsubscribed') update.unsubscribed_at = nowIso;
+
+  await ctx.adminDb.from('outreach_prospects').update(update).eq('id', id);
+  structuredLog('outreach_lifecycle_changed', { prospectId: id, status }, 'info');
+  revalidatePath('/admin/outreach');
+}
 // ── Contact bank (issue #135) — save now, sequence later ─────────────────────
 
 export async function importOutreachContactsAction(formData: FormData): Promise<void> {

@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildOutreachEmailHtml,
   computeNextOutreachRun,
   normalizeOutreachCadence,
+  sendOutreachEmail,
 } from './outreach';
 
 describe('normalizeOutreachCadence', () => {
@@ -62,5 +63,52 @@ describe('buildOutreachEmailHtml', () => {
     expect(html).toContain('https://getgeopulse.com/api/outreach/unsubscribe/p-1');
     expect(html).toContain('Unsubscribe');
     expect(html).toContain('Montréal, Québec, Canada');
+  });
+});
+describe('sendOutreachEmail', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('retries a transient provider failure with the same idempotency key', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ message: 'slow down' }), { status: 429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'email_123' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await sendOutreachEmail(
+      { RESEND_API_KEY: 're_test', RESEND_FROM_EMAIL: 'reports@getgeopulse.com' },
+      'buyer@example.com',
+      'Subject',
+      '<p>Hello</p>',
+      'outreach-send-123',
+    );
+
+    expect(result).toEqual({ ok: true, providerMessageId: 'email_123' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstInit = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const secondInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+    expect(firstInit.headers).toMatchObject({ 'Idempotency-Key': 'outreach-send-123' });
+    expect(secondInit.headers).toMatchObject({ 'Idempotency-Key': 'outreach-send-123' });
+    expect(secondInit.body).toBe(firstInit.body);
+  });
+
+  it('does not retry a permanent provider rejection', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ name: 'validation_error', message: 'bad recipient' }), { status: 400 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await sendOutreachEmail(
+      { RESEND_API_KEY: 're_test', RESEND_FROM_EMAIL: 'reports@getgeopulse.com' },
+      'bad@example.com',
+      'Subject',
+      '<p>Hello</p>',
+      'outreach-send-456',
+    );
+
+    expect(result).toEqual({ ok: false, detail: 'http_400 validation_error: bad recipient' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

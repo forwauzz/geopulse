@@ -24,6 +24,7 @@ import {
   rescheduleOutreachProspect,
   runOutreachNowAction,
   saveOutreachTemplate,
+  setOutreachLifecycleAction,
   toggleOutreachProspect,
 } from './actions';
 
@@ -44,6 +45,7 @@ type SendRow = {
   opened_at: string | null;
   open_count: number;
   scan_id: string | null;
+  delivery_status: 'pending' | 'sent' | 'failed';
 };
 
 export default async function AdminOutreachPage({
@@ -107,7 +109,7 @@ export default async function AdminOutreachPage({
   }
   const { data: sendsData } = await ctx.adminDb
     .from('outreach_sends')
-    .select('prospect_id, score, sent_at, opened_at, open_count, scan_id')
+    .select('prospect_id, score, sent_at, opened_at, open_count, scan_id, delivery_status')
     .order('sent_at', { ascending: false })
     .limit(400);
   const sendsByProspect = new Map<string, SendRow[]>();
@@ -139,9 +141,9 @@ export default async function AdminOutreachPage({
 
   // Full funnel roll-up (prospect-level): Sent → Opened → Clicked → Full audit → Subscribed.
   const flags = prospects.map((p) => {
-    const sends = sendsByProspect.get(p.id) ?? [];
+    const sends = (sendsByProspect.get(p.id) ?? []).filter((send) => send.delivery_status === 'sent');
     return {
-      sent: sends.length > 0 || Boolean(p.lastScanId),
+      sent: sends.length > 0,
       opened: sends.some((s) => s.opened_at != null),
       clicked: sends.some((s) => s.scan_id != null && viewedScanIds.has(s.scan_id)),
       fullAudit: sends.some((s) => s.scan_id != null && fullAuditScanIds.has(s.scan_id)),
@@ -546,6 +548,7 @@ export default async function AdminOutreachPage({
               <thead>
                 <tr className="border-b border-outline-variant/20 text-[11px] uppercase tracking-widest text-on-surface-variant">
                   <th className="py-2 pr-3 font-semibold">Prospect</th>
+                  <th className="py-2 pr-3 font-semibold">State</th>
                   <th className="py-2 pr-3 font-semibold">Cadence</th>
                   <th className="py-2 pr-3 font-semibold">Last send</th>
                   <th className="py-2 pr-3 font-semibold">Opened</th>
@@ -555,7 +558,8 @@ export default async function AdminOutreachPage({
               </thead>
               <tbody className="divide-y divide-outline-variant/15">
                 {prospects.map((prospect) => {
-                  const sends = sendsByProspect.get(prospect.id) ?? [];
+                  const sends = (sendsByProspect.get(prospect.id) ?? [])
+                    .filter((send) => send.delivery_status === 'sent');
                   const latest = sends[0] ?? null;
                   const openedCount = sends.filter((s) => s.opened_at).length;
                   return (
@@ -568,6 +572,17 @@ export default async function AdminOutreachPage({
                         {prospect.lastError ? (
                           <p className="text-xs text-error">Last error: {prospect.lastError}</p>
                         ) : null}
+                      </td>
+                      <td className="py-2.5 pr-3 text-xs text-on-background">
+                        <span className="font-semibold capitalize">{prospect.lifecycleStatus.replace('_', ' ')}</span>
+                        {prospect.maxSequenceSteps != null ? (
+                          <p className="text-on-surface-variant">
+                            Step {prospect.sequenceStep}/{prospect.maxSequenceSteps}
+                          </p>
+                        ) : (
+                          <p className="text-on-surface-variant">Recurring</p>
+                        )}
+                        {prospect.nextAction ? <p className="max-w-52 text-on-surface-variant">{prospect.nextAction}</p> : null}
                       </td>
                       <td className="py-2.5 pr-3 capitalize text-on-background">{prospect.cadence}</td>
                       <td className="py-2.5 pr-3 text-on-background">
@@ -629,8 +644,9 @@ export default async function AdminOutreachPage({
                         {prospect.enabled ? fmt(prospect.nextRunAt) : 'paused'}
                       </td>
                       <td className="py-2.5 pr-3">
-                        <div className="flex items-center gap-2">
-                          <form action={runOutreachNowAction}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {prospect.lifecycleStatus === 'active' && (
+                            <form action={runOutreachNowAction}>
                             <input type="hidden" name="prospectId" value={prospect.id} />
                             <button
                               type="submit"
@@ -638,8 +654,10 @@ export default async function AdminOutreachPage({
                             >
                               Run now
                             </button>
-                          </form>
-                          <form action={toggleOutreachProspect}>
+                            </form>
+                          )}
+                          {(prospect.lifecycleStatus === 'active' || prospect.lifecycleStatus === 'paused') && (
+                            <form action={toggleOutreachProspect}>
                             <input type="hidden" name="prospectId" value={prospect.id} />
                             <input type="hidden" name="enable" value={prospect.enabled ? 'false' : 'true'} />
                             <button
@@ -647,6 +665,27 @@ export default async function AdminOutreachPage({
                               className="rounded-lg border border-outline-variant/30 px-2.5 py-1 text-xs font-semibold text-on-background transition hover:bg-surface-container-low"
                             >
                               {prospect.enabled ? 'Pause' : 'Resume'}
+                            </button>
+                            </form>
+                          )}
+                          <form action={setOutreachLifecycleAction} className="flex items-center gap-1">
+                            <input type="hidden" name="prospectId" value={prospect.id} />
+                            <select
+                              name="status"
+                              defaultValue={prospect.lifecycleStatus}
+                              className="min-h-[28px] rounded-lg border border-outline-variant/20 bg-surface-container-low px-1.5 text-xs text-on-surface"
+                            >
+                              <option value="active">Active</option>
+                              <option value="paused">Paused</option>
+                              <option value="replied">Replied</option>
+                              <option value="positive_reply">Positive reply</option>
+                              <option value="converted">Converted</option>
+                              <option value="disqualified">Disqualified</option>
+                              <option value="unsubscribed">Unsubscribed</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                            <button className="rounded-lg border border-outline-variant/30 px-2 py-1 text-xs font-semibold text-on-background hover:bg-surface-container-low">
+                              Set
                             </button>
                           </form>
                           <form action={rescheduleOutreachProspect} className="flex items-center gap-1">
