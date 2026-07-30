@@ -13,6 +13,11 @@ import {
 import { encryptDistributionToken } from '@/lib/server/distribution-token-crypto';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
 import { resolveDistributionOAuthCallbackConfig } from '@/lib/server/distribution-oauth-callback-env';
+import {
+  buildDistributionOAuthFailureLog,
+  buildDistributionOAuthFailureOutcome,
+  type DistributionOAuthCallbackStage,
+} from '@/lib/server/distribution-oauth-callback-diagnostics';
 import { isDistributionOAuthAdmin } from '@/lib/server/distribution-oauth-admin-gate';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
@@ -97,6 +102,7 @@ export async function GET(
     return buildRedirect(appUrl, 'account_mismatch', provider);
   }
   const oauthConfig = resolveDistributionOAuthCallbackConfig(process.env, env);
+  let callbackStage: DistributionOAuthCallbackStage = 'token_exchange';
 
   try {
     const token = await exchangeSocialOAuthCode({
@@ -106,8 +112,10 @@ export async function GET(
       codeVerifier: statePayload.codeVerifier,
       ...oauthConfig,
     });
+    callbackStage = 'scope_validation';
     assertRequiredSocialOAuthScopes(provider, token.scopeList);
 
+    callbackStage = 'identity_verification';
     const instagramProfile =
       provider === 'instagram'
         ? await fetchInstagramOAuthProfile({
@@ -136,21 +144,25 @@ export async function GET(
       );
     }
 
+    callbackStage = 'token_encryption';
     const tokenEncryptionKey = env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY?.trim();
     if (!tokenEncryptionKey) {
       throw new Error('Distribution token encryption is not configured.');
     }
+    const accessTokenEncrypted = await encryptDistributionToken(
+      token.accessToken,
+      tokenEncryptionKey
+    );
+    const refreshTokenEncrypted = token.refreshToken
+      ? await encryptDistributionToken(token.refreshToken, tokenEncryptionKey)
+      : null;
 
+    callbackStage = 'token_persistence';
     await repo.upsertAccountToken({
       distributionAccountId: account.id,
       tokenType: 'oauth',
-      accessTokenEncrypted: await encryptDistributionToken(
-        token.accessToken,
-        tokenEncryptionKey
-      ),
-      refreshTokenEncrypted: token.refreshToken
-        ? await encryptDistributionToken(token.refreshToken, tokenEncryptionKey)
-        : null,
+      accessTokenEncrypted,
+      refreshTokenEncrypted,
       expiresAt: token.expiresAt,
       scopes: token.scopeList,
       metadata: {
@@ -167,6 +179,7 @@ export async function GET(
         : null
       : null;
 
+    callbackStage = 'account_persistence';
     await repo.upsertAccount({
       accountId: account.account_id,
       providerName: account.provider_name,
@@ -204,7 +217,12 @@ export async function GET(
       },
     });
   } catch {
-    return buildRedirect(appUrl, 'token_exchange_failed', provider);
+    console.error(JSON.stringify(buildDistributionOAuthFailureLog(provider, callbackStage)));
+    return buildRedirect(
+      appUrl,
+      buildDistributionOAuthFailureOutcome(callbackStage),
+      provider
+    );
   }
 
   return buildRedirect(appUrl, 'connected', provider);
