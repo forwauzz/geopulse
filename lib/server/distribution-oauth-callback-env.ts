@@ -10,13 +10,13 @@ type OAuthCallbackEnvironmentKey =
   | 'INSTAGRAM_OAUTH_TOKEN_URL'
   | 'INSTAGRAM_GRAPH_API_BASE_URL';
 
-type OAuthCallbackEnvironment = Partial<
-  Record<OAuthCallbackEnvironmentKey, string | undefined>
->;
+type OAuthCallbackEnvironment =
+  | Partial<Record<OAuthCallbackEnvironmentKey, string | undefined>>
+  | NodeJS.ProcessEnv;
 
-type OAuthAppUrlEnvironment = {
-  readonly NEXT_PUBLIC_APP_URL?: string;
-};
+type OAuthAppUrlEnvironment =
+  | { readonly NEXT_PUBLIC_APP_URL?: string }
+  | NodeJS.ProcessEnv;
 
 function resolveValue(
   key: OAuthCallbackEnvironmentKey,

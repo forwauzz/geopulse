@@ -186,6 +186,81 @@ export function buildOutreachEmailHtml(args: {
   });
 }
 
+type BoundedOutreachMessageArgs = {
+  readonly recipientName: string | null;
+  readonly domain: string;
+  readonly score: number;
+  readonly grade: string;
+  readonly topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
+  readonly resultsUrl: string;
+  readonly walkthroughUrl: string;
+  readonly pixelUrl: string;
+  readonly unsubscribeUrl: string;
+  readonly sequenceStep: number;
+};
+
+export function buildBoundedOutreachMessage(
+  args: BoundedOutreachMessageArgs,
+): {
+  readonly subject: string;
+  readonly html: string;
+  readonly variant: 'evidence_opener' | 'reply_first_followup' | 'close_the_loop';
+} {
+  if (args.sequenceStep <= 1) {
+    return {
+      subject: `${args.domain}: AI search readiness score ${args.score}/100`,
+      html: buildOutreachEmailHtml(args),
+      variant: 'evidence_opener',
+    };
+  }
+
+  const greeting = args.recipientName ? `Hi ${escapeEmailHtml(args.recipientName)},` : 'Hi,';
+
+  if (args.sequenceStep === 2) {
+    const firstIssue = args.topIssues[0];
+    const issueContext = firstIssue?.check
+      ? `<p style="margin:0 0 14px;">One confirmed gap was <strong>${escapeEmailHtml(firstIssue.check)}</strong>${firstIssue.fix ? `: ${escapeEmailHtml(firstIssue.fix)}` : '.'}</p>`
+      : '';
+    return {
+      subject: `Quick question about ${args.domain}`,
+      html: emailShell({
+        kicker: 'AI search readiness | follow-up',
+        mastheadNote: 'One practical question',
+        sender: 'elena',
+        bodyHtml: [
+          `<p style="margin:0 0 10px;">${greeting}</p>`,
+          `<p style="margin:0 0 14px;">I sent the public-site audit for <strong>${escapeEmailHtml(args.domain)}</strong> earlier. It found observable access, structure, content, and trust gaps; it did not predict or guarantee citations.</p>`,
+          issueContext,
+          '<p style="margin:0 0 14px;">Is AI-search visibility something your team owns, or should I send the evidence to someone else?</p>',
+          ctaButton('Review the audit', args.resultsUrl),
+          '<p style="margin:0;color:#586162;font-size:13px;">Reply with "walkthrough" if a focused review of the first two checks would help.</p>',
+        ].join('\n'),
+        unsubscribeUrl: args.unsubscribeUrl,
+        pixelUrl: args.pixelUrl,
+      }),
+      variant: 'reply_first_followup',
+    };
+  }
+
+  return {
+    subject: `Should I close the loop on ${args.domain}?`,
+    html: emailShell({
+      kicker: 'AI search readiness | final note',
+      mastheadNote: 'Closing the loop',
+      sender: 'elena',
+      bodyHtml: [
+        `<p style="margin:0 0 10px;">${greeting}</p>`,
+        `<p style="margin:0 0 14px;">Last note on the public-site audit for <strong>${escapeEmailHtml(args.domain)}</strong>. I do not want to keep sending this if the timing or fit is wrong.</p>`,
+        '<p style="margin:0 0 14px;">Should I close this out, or would a short walkthrough be useful? Either reply is helpful.</p>',
+        ctaButton('Keep the audit for reference', args.resultsUrl),
+      ].join('\n'),
+      unsubscribeUrl: args.unsubscribeUrl,
+      pixelUrl: args.pixelUrl,
+    }),
+    variant: 'close_the_loop',
+  };
+}
+
 export async function sendOutreachEmail(
   env: OutreachEnvLike,
   to: string,
@@ -398,6 +473,34 @@ export async function runOutreachForProspect(args: {
     // Custom template (pinned or default) wins; the built-in scorecard email is the
     // fallback so outreach keeps working before migration 054 is applied.
     const template = await resolveOutreachTemplate(supabase, prospect.templateId);
+    const builtInMessage = prospect.maxSequenceSteps == null
+      ? {
+          subject: `${scan.domain}: AI search readiness score ${scan.output.score}/100`,
+          html: buildOutreachEmailHtml({
+            recipientName: prospect.name,
+            domain: scan.domain,
+            score: scan.output.score,
+            grade: scan.output.letterGrade,
+            topIssues: topFailed,
+            resultsUrl,
+            walkthroughUrl,
+            pixelUrl,
+            unsubscribeUrl,
+          }),
+          variant: 'recurring_scorecard',
+        }
+      : buildBoundedOutreachMessage({
+          recipientName: prospect.name,
+          domain: scan.domain,
+          score: scan.output.score,
+          grade: scan.output.letterGrade,
+          topIssues: topFailed,
+          resultsUrl,
+          walkthroughUrl,
+          pixelUrl,
+          unsubscribeUrl,
+          sequenceStep: prospect.sequenceStep,
+        });
     const message = template
       ? renderOutreachTemplate(
           template,
@@ -416,20 +519,14 @@ export async function runOutreachForProspect(args: {
           pixelUrl,
           unsubscribeUrl
         )
-      : {
-          subject: `${scan.domain}: AI search readiness score ${scan.output.score}/100`,
-          html: buildOutreachEmailHtml({
-            recipientName: prospect.name,
-            domain: scan.domain,
-            score: scan.output.score,
-            grade: scan.output.letterGrade,
-            topIssues: topFailed,
-            resultsUrl,
-            walkthroughUrl,
-            pixelUrl,
-            unsubscribeUrl,
-          }),
-        };
+      : builtInMessage;
+    structuredLog('outreach_message_variant_selected', {
+      prospectId: prospect.id,
+      sendId,
+      campaign,
+      sequenceStep: prospect.maxSequenceSteps == null ? null : prospect.sequenceStep,
+      variant: 'variant' in message ? message.variant : 'custom_template',
+    });
 
     // The provider receives the same key for the bounded in-process retry, so an
     // accepted request with a lost response cannot produce a duplicate email.
