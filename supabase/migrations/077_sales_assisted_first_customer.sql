@@ -1,4 +1,4 @@
-﻿-- Sales-assisted path for the first recurring customer.
+-- Sales-assisted path for the first recurring customer.
 --
 -- This migration extends the existing lead and outreach control planes instead
 -- of introducing a separate CRM. All fields remain service-role only.
