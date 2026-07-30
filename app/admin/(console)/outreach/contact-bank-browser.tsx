@@ -44,7 +44,7 @@ export function ContactBankBrowser({
       if (status === 'saved' && inSeq) continue;
       if (status === 'in_sequence' && !inSeq) continue;
       if (q) {
-        const hay = `${c.email} ${c.company ?? ''} ${c.city ?? ''} ${c.segment} ${c.tags.join(' ')}`.toLowerCase();
+        const hay = `${c.email} ${c.company ?? ''} ${c.city ?? ''} ${c.segment} ${c.tags.join(' ')} ${c.personalization_reason ?? ''}`.toLowerCase();
         if (!hay.includes(q)) continue;
       }
       const list = grouped.get(c.segment) ?? [];
@@ -181,12 +181,13 @@ export function ContactBankBrowser({
                     <p className="font-sans text-xs text-on-surface-variant">No contacts match here.</p>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[720px] text-left font-sans text-sm">
+                      <table className="w-full min-w-[920px] text-left font-sans text-sm">
                         <thead>
                           <tr className="text-xs uppercase tracking-wider text-on-surface-variant">
                             <th className="pb-2 pr-3 font-semibold">Contact</th>
                             <th className="pb-2 pr-3 font-semibold">Company</th>
                             <th className="pb-2 pr-3 font-semibold">City</th>
+                            <th className="pb-2 pr-3 font-semibold">Evidence</th>
                             <th className="pb-2 pr-3 font-semibold">Status</th>
                             <th className="pb-2 font-semibold" />
                           </tr>
@@ -203,6 +204,25 @@ export function ContactBankBrowser({
                               </td>
                               <td className="py-2 pr-3 text-on-surface-variant">{c.company ?? '—'}</td>
                               <td className="py-2 pr-3 text-on-surface-variant">{c.city ?? '—'}</td>
+                              <td className="max-w-[260px] py-2 pr-3 text-xs text-on-surface-variant">
+                                {c.personalization_reason ? (
+                                  <>
+                                    <span>{c.personalization_reason}</span>
+                                    {c.personalization_source_url ? (
+                                      <a
+                                        href={c.personalization_source_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="ml-1 font-semibold text-primary hover:underline"
+                                      >
+                                        source
+                                      </a>
+                                    ) : null}
+                                  </>
+                                ) : (
+                                  <span className="text-amber-700 dark:text-amber-300">Not recorded</span>
+                                )}
+                              </td>
                               <td className="py-2 pr-3 text-xs">
                                 {c.added_to_sequence_at ? (
                                   <span className="font-semibold text-sky-700 dark:text-sky-300">In sequence</span>

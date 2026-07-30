@@ -92,6 +92,12 @@ export type PaymentApiEnv = ScanApiEnv & {
   STRIPE_PRICE_ID_MONITOR_ANNUAL?: string;
   RESEND_API_KEY: string;
   RESEND_FROM_EMAIL: string;
+  /** Optional mailbox used for direct prospect replies and internal sales-request alerts. */
+  SALES_REPLY_TO_EMAIL?: string;
+  /** Resend webhook signing secret for verified inbound email events. */
+  RESEND_INBOUND_WEBHOOK_SECRET?: string;
+  /** Existing operator digest recipient; also receives requested walkthrough alerts. */
+  MARKETING_REPORT_TO?: string;
   ANTHROPIC_API_KEY?: string;
   GPM_NARRATIVE_MODEL?: string;
   GPM_REPORT_R2_PUBLIC_BASE?: string;
@@ -346,6 +352,9 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       STRIPE_PRICE_ID_MONITOR_ANNUAL: pickEnvString(e, 'STRIPE_PRICE_ID_MONITOR_ANNUAL'),
       RESEND_API_KEY: pickEnvString(e, 'RESEND_API_KEY'),
       RESEND_FROM_EMAIL: pickEnvString(e, 'RESEND_FROM_EMAIL'),
+      SALES_REPLY_TO_EMAIL: pickEnvString(e, 'SALES_REPLY_TO_EMAIL'),
+      RESEND_INBOUND_WEBHOOK_SECRET: pickEnvString(e, 'RESEND_INBOUND_WEBHOOK_SECRET'),
+      MARKETING_REPORT_TO: pickEnvString(e, 'MARKETING_REPORT_TO'),
       ANTHROPIC_API_KEY: pickEnvString(e, 'ANTHROPIC_API_KEY'),
       GPM_NARRATIVE_MODEL: pickEnvString(e, 'GPM_NARRATIVE_MODEL'),
       GPM_REPORT_R2_PUBLIC_BASE: pickEnvString(e, 'GPM_REPORT_R2_PUBLIC_BASE'),
@@ -399,6 +408,9 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       STRIPE_PRICE_ID_MONITOR_ANNUAL: process.env['STRIPE_PRICE_ID_MONITOR_ANNUAL'] ?? '',
       RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
       RESEND_FROM_EMAIL: process.env['RESEND_FROM_EMAIL'] ?? '',
+      SALES_REPLY_TO_EMAIL: process.env['SALES_REPLY_TO_EMAIL'] ?? '',
+      RESEND_INBOUND_WEBHOOK_SECRET: process.env['RESEND_INBOUND_WEBHOOK_SECRET'] ?? '',
+      MARKETING_REPORT_TO: process.env['MARKETING_REPORT_TO'] ?? '',
       ANTHROPIC_API_KEY: process.env['ANTHROPIC_API_KEY'] ?? '',
       GPM_NARRATIVE_MODEL: process.env['GPM_NARRATIVE_MODEL'] ?? '',
       GPM_REPORT_R2_PUBLIC_BASE: process.env['GPM_REPORT_R2_PUBLIC_BASE'] ?? '',

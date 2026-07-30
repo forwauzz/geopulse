@@ -38,6 +38,7 @@ describe('buildOutreachEmailHtml', () => {
       { check: 'llms.txt', fix: 'Publish /llms.txt.' },
     ],
     resultsUrl: 'https://getgeopulse.com/results/abc',
+    walkthroughUrl: 'https://getgeopulse.com/walkthrough?source=outreach',
     pixelUrl: 'https://getgeopulse.com/api/outreach/open/send-1',
     unsubscribeUrl: 'https://getgeopulse.com/api/outreach/unsubscribe/p-1',
   };
@@ -48,6 +49,7 @@ describe('buildOutreachEmailHtml', () => {
     expect(html).toContain('67');
     expect(html).toContain('Grade C+');
     expect(html).toContain('https://getgeopulse.com/results/abc');
+    expect(html).toContain('https://getgeopulse.com/walkthrough?source=outreach');
     expect(html).toContain('https://getgeopulse.com/api/outreach/open/send-1');
     expect(html).toContain('JSON-LD');
   });

@@ -27,6 +27,9 @@ export interface ContactRow {
   readonly tags: string[];
   readonly city: string | null;
   readonly source: string | null;
+  readonly personalization_reason: string | null;
+  readonly personalization_source_url: string | null;
+  readonly personalization_verified_at: string | null;
   readonly added_to_sequence_at: string | null;
   readonly created_at: string;
 }
@@ -37,6 +40,8 @@ export interface ParsedContact {
   name: string | null;
   company: string | null;
   city: string | null;
+  personalizationReason?: string | null;
+  personalizationSourceUrl?: string | null;
 }
 
 export interface ContactParseResult {
@@ -59,7 +64,7 @@ export function normalizeSegment(raw: string): string | null {
  *   email, url
  *   email, url, name
  *   email, url, name, company
- *   email, url, name, company, city
+ *   email, url, name, company, city, personalization reason, https source URL
  * Header rows containing "email", blank lines and #comments are skipped.
  */
 export function parseContactImport(text: string): ContactParseResult {
@@ -83,12 +88,31 @@ export function parseContactImport(text: string): ContactParseResult {
     }
     if (seen.has(email)) continue;
     seen.add(email);
+    const personalizationReason = (parts[5] ?? '').slice(0, 300) || null;
+    const sourceCandidate = parts[6] ?? '';
+    let personalizationSourceUrl = null;
+    if (sourceCandidate) {
+      try {
+        const parsedSource = new URL(sourceCandidate);
+        if (parsedSource.protocol !== 'https:') throw new Error('source must use https');
+        personalizationSourceUrl = parsedSource.toString();
+      } catch {
+        result.invalid.push({
+          line: i + 1,
+          text: raw.slice(0, 120),
+          reason: 'invalid personalization source url',
+        });
+        continue;
+      }
+    }
     result.rows.push({
       email,
       url,
       name: parts[2] || null,
       company: parts[3] || null,
       city: parts[4] || null,
+      personalizationReason,
+      personalizationSourceUrl,
     });
     if (result.rows.length >= MAX_ROWS) break;
   }
@@ -119,6 +143,10 @@ export async function importContacts(
     segment: meta.segment,
     tags: meta.tags ?? [],
     source: meta.source ?? 'manual',
+    personalization_reason: r.personalizationReason ?? null,
+    personalization_source_url: r.personalizationSourceUrl ?? null,
+    personalization_verified_at:
+      r.personalizationReason && r.personalizationSourceUrl ? new Date().toISOString() : null,
     updated_at: new Date().toISOString(),
   }));
   const { error } = await supabase.from('outreach_contacts').upsert(payload, { onConflict: 'email' });
@@ -129,7 +157,7 @@ export async function importContacts(
 export async function listContacts(supabase: SupabaseClient, segment?: string | null): Promise<ContactRow[]> {
   let query = supabase
     .from('outreach_contacts')
-    .select('id,email,name,company,url,segment,tags,city,source,added_to_sequence_at,created_at')
+    .select('id,email,name,company,url,segment,tags,city,source,personalization_reason,personalization_source_url,personalization_verified_at,added_to_sequence_at,created_at')
     .order('created_at', { ascending: false })
     .limit(5000);
   if (segment) query = query.eq('segment', segment);
@@ -215,6 +243,10 @@ export async function addSegmentToSequence(args: {
         owner: 'elena',
         next_action: 'send sequence step 1 of 3',
         closure_condition: 'reply, unsubscribe, disqualification, conversion, or sequence completion',
+        segment: contact.segment,
+        personalization_reason: contact.personalization_reason,
+        personalization_source_url: contact.personalization_source_url,
+        personalization_verified_at: contact.personalization_verified_at,
         next_run_at: times[i],
       })
       .select('id')

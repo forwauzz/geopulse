@@ -28,9 +28,27 @@ describe('parseContactImport', () => {
       name: 'Jane Roy',
       company: 'Acme Marketing',
       city: 'Montréal',
+      personalizationReason: null,
+      personalizationSourceUrl: null,
     });
     expect(out.invalid).toHaveLength(1);
     expect(out.invalid[0]?.reason).toBe('invalid email');
+  });
+  it('captures a truthful personalization reason only with a valid HTTPS source', () => {
+    const out = parseContactImport(
+      'owner@msp.ca, msp.ca, Alex, Northstar IT, Toronto, Public security services page, https://msp.ca/security'
+    );
+    expect(out.invalid).toEqual([]);
+    expect(out.rows[0]).toMatchObject({
+      personalizationReason: 'Public security services page',
+      personalizationSourceUrl: 'https://msp.ca/security',
+    });
+
+    const invalid = parseContactImport(
+      'owner@msp.ca, msp.ca, Alex, Northstar IT, Toronto, Claimed signal, http://msp.ca/security'
+    );
+    expect(invalid.rows).toEqual([]);
+    expect(invalid.invalid[0]?.reason).toBe('invalid personalization source url');
   });
 });
 

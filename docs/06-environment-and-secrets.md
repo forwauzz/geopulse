@@ -53,6 +53,7 @@ Required:
 - `DEEP_AUDIT_DEFAULT_PAGE_LIMIT`
 - `DEEP_AUDIT_BROWSER_RENDER_MODE`
 - `RESEND_FROM_EMAIL`
+- optional: `SALES_REPLY_TO_EMAIL` — verified receiving mailbox used for prospect replies and operator routing
 - `GEMINI_MODEL`
 - `GEMINI_ENDPOINT`
 - `BENCHMARK_EXECUTION_PROVIDER`
@@ -104,6 +105,7 @@ Core app secrets:
 - `GEMINI_API_KEY`
 - `BENCHMARK_EXECUTION_API_KEY`
 - `RESEND_API_KEY`
+- `RESEND_INBOUND_WEBHOOK_SECRET` — signing secret for `/api/webhooks/resend/inbound`; create only after the receiving domain is verified
 - `TURNSTILE_SECRET_KEY`
 - `OPENAI_API_KEY` — required when `BENCHMARK_EXECUTION_PROVIDER=openai` or `multi`
 - `PERPLEXITY_API_KEY` — required when `BENCHMARK_EXECUTION_PROVIDER=perplexity` or `multi`

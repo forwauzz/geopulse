@@ -310,7 +310,7 @@ export default async function AdminOutreachPage({
         <p className="mt-1 font-sans text-sm text-on-surface-variant">
           Saved contacts receive <strong>nothing</strong> until you add their segment to the
           sequence. One line per contact:{' '}
-          <code className="rounded bg-surface-container-low px-1">email, website, name, company, city</code>.
+          <code className="rounded bg-surface-container-low px-1">email, website, name, company, city, reason, https evidence URL</code>.
         </p>
         {!contactsReady ? (
           <p className="mt-3 rounded-xl bg-amber-100 px-4 py-2 font-sans text-sm font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">
@@ -337,7 +337,7 @@ export default async function AdminOutreachPage({
               <textarea
                 name="contacts"
                 rows={4}
-                placeholder={'ceo@agence.ca, agence.ca, Jane Roy, Agence Créative, Montréal'}
+                placeholder={'owner@msp.ca, msp.ca, Jane Roy, Northstar IT, Montréal, Public site lists managed security services, https://msp.ca/security'}
                 className={`${input} min-h-[100px] py-2 font-mono text-xs`}
               />
               <div className="flex flex-wrap items-end gap-3">
@@ -383,7 +383,9 @@ export default async function AdminOutreachPage({
           <code className="rounded bg-surface-container-low px-1">{'{{score}}'}</code>{' '}
           <code className="rounded bg-surface-container-low px-1">{'{{grade}}'}</code>{' '}
           <code className="rounded bg-surface-container-low px-1">{'{{top_issues}}'}</code>{' '}
-          <code className="rounded bg-surface-container-low px-1">{'{{report_url}}'}</code>. GEO-Pulse
+          <code className="rounded bg-surface-container-low px-1">{'{{report_url}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{walkthrough_url}}'}</code>{' '}
+          <code className="rounded bg-surface-container-low px-1">{'{{personalization_reason}}'}</code>. GEO-Pulse
           branding (header, footer, open tracking) is applied automatically.
         </p>
 
