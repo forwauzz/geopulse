@@ -4,6 +4,7 @@ import {
   buildDailyCompanyStandup,
   DEPARTMENT_RUBRICS,
   isExcludedRevenueIdentity,
+  isVerifiedStripeSubscriptionId,
   renderDailyCompanyStandupHtml,
   type StandupWorkLoop,
 } from './daily-company-standup';
@@ -108,9 +109,15 @@ describe('recurring revenue identity exclusions', () => {
       metadata: { environment: 'sandbox' },
     })).toBe(true);
     expect(isExcludedRevenueIdentity({
+      email: 'owner@gmail.com',
+      metadata: { source: 'admin_assign_plan' },
+    })).toBe(true);
+    expect(isExcludedRevenueIdentity({
       email: 'owner@northstarmsp.ca',
       domain: 'northstarmsp.ca',
     })).toBe(false);
+    expect(isVerifiedStripeSubscriptionId('admin_comp_123')).toBe(false);
+    expect(isVerifiedStripeSubscriptionId('sub_1AbCdEfGhIjK')).toBe(true);
   });
 });
 describe('daily company standup', () => {

@@ -649,6 +649,7 @@ export function isExcludedRevenueIdentity(args: {
     metadata['revenue_classification'],
     metadata['environment'],
   ].map((value) => String(value ?? '').toLowerCase());
+  const source = String(metadata['source'] ?? '').trim().toLowerCase();
 
   return !email
     || INTERNAL_REVENUE_EMAILS.has(email)
@@ -657,7 +658,12 @@ export function isExcludedRevenueIdentity(args: {
     || email.startsWith('test@')
     || email.includes('+test@')
     || explicitInternal
+    || ['admin_assign_plan', 'admin_comp'].includes(source)
     || classification.some((value) => ['internal', 'test', 'sandbox'].includes(value));
+}
+
+export function isVerifiedStripeSubscriptionId(value: string | null | undefined): boolean {
+  return /^sub_[A-Za-z0-9]+$/.test(value?.trim() ?? '');
 }
 
 async function loadVerifiedRecurringCustomers(
@@ -684,7 +690,7 @@ async function loadVerifiedRecurringCustomers(
     } else {
       for (const row of (monitoringResult.data ?? []) as ActiveMonitoringSubscription[]) {
         if (
-          row.stripe_subscription_id?.trim()
+          isVerifiedStripeSubscriptionId(row.stripe_subscription_id)
           && !isExcludedRevenueIdentity({ email: row.email, domain: row.domain })
         ) {
           customers.add(row.email.trim().toLowerCase());
@@ -711,7 +717,7 @@ async function loadVerifiedRecurringCustomers(
           for (const row of subscriptions) {
             const email = emailByUser.get(row.user_id) ?? null;
             if (
-              row.stripe_subscription_id?.trim()
+              isVerifiedStripeSubscriptionId(row.stripe_subscription_id)
               && !isExcludedRevenueIdentity({ email, metadata: row.metadata })
             ) {
               customers.add(email!.trim().toLowerCase());
