@@ -4,6 +4,7 @@ import {
   buildBeforeAfterCandidate,
   buildEducationalCandidate,
   buildIndustryHumorCandidate,
+  filterCampaignAssignedSocial,
   instagramScheduleSlot,
   orderAutonomousCandidates,
   preferredAccount,
@@ -26,6 +27,16 @@ function scan(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Social Proof Agent safeguards', () => {
+  it('keeps autonomous social candidates inside the active vertical campaigns', () => {
+    const items = [
+      { id: 'msp', metadata: { growth_campaign_id: 'msp-1', campaign_vertical: 'msp_it_services' } },
+      { id: 'agency', metadata: { campaign_id: 'agency-1', vertical: 'marketing_agencies' } },
+      { id: 'generic', metadata: { campaign_id: 'generic', vertical: 'small_business' } },
+      { id: 'untagged', metadata: {} },
+    ];
+    expect(filterCampaignAssignedSocial(items).map((item) => item.id)).toEqual(['msp', 'agency']);
+  });
+
   it('prefers a social account over connected newsletter accounts', () => {
     const account = (provider_name: 'buttondown' | 'instagram', id: string) => ({
       id,

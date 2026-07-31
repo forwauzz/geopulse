@@ -152,6 +152,25 @@ type AssignedSocialRow = {
   readonly created_at: string;
 };
 
+const CAMPAIGN_SOCIAL_VERTICALS = new Set([
+  'msp_it_services',
+  'managed_service_providers',
+  'marketing_agencies',
+]);
+
+export function filterCampaignAssignedSocial<T extends {
+  readonly metadata?: Record<string, unknown> | null;
+}>(items: readonly T[]): T[] {
+  return items.filter((item) => {
+    const metadata = item.metadata ?? {};
+    const campaignId = String(
+      metadata['growth_campaign_id'] ?? metadata['campaign_id'] ?? metadata['campaign_key'] ?? '',
+    ).trim();
+    const vertical = String(metadata['campaign_vertical'] ?? metadata['vertical'] ?? '').trim();
+    return Boolean(campaignId) && CAMPAIGN_SOCIAL_VERTICALS.has(vertical);
+  });
+}
+
 export function remainingDailyAssetCapacity(
   assets: readonly Pick<DistributionAssetRow, 'created_at' | 'metadata'>[],
   now: Date,
@@ -951,6 +970,7 @@ export async function runSocialProofAgent(args: {
   readonly env?: SocialProductionEnv;
   readonly force?: boolean;
   readonly now?: Date;
+  readonly campaignOnly?: boolean;
 }): Promise<SocialProofAgentResult> {
   const setting = await loadAutomationSetting(args.supabase, 'social_proof_agent');
   const config = resolveSocialProofAgentConfig(setting.config, setting.enabled, setting.killSwitch);
@@ -1014,7 +1034,9 @@ export async function runSocialProofAgent(args: {
 
     const scans = (scanResult.data ?? []) as ScanRow[];
     const content = (contentResult.data ?? []) as ContentRow[];
-    const assignedSocial = (assignedSocialResult.data ?? []) as AssignedSocialRow[];
+    const allAssignedSocial = (assignedSocialResult.data ?? []) as AssignedSocialRow[];
+    const assignedSocial = args.campaignOnly
+      ? filterCampaignAssignedSocial(allAssignedSocial) : allAssignedSocial;
     const candidates: SocialProofCandidate[] = [];
     const opportunityIds = assignedSocial
       .map((item) => item.metadata?.['seo_opportunity_id'])
@@ -1057,33 +1079,33 @@ export async function runSocialProofAgent(args: {
       if (candidate) candidates.push(candidate);
     }
 
-    if (config.beforeAfterEnabled) {
+    if (!args.campaignOnly && config.beforeAfterEnabled) {
       const beforeAfter = buildBeforeAfterCandidate(scans, args.appUrl);
       if (beforeAfter) candidates.push(beforeAfter);
     }
-    if (config.aggregateDataEnabled) {
+    if (!args.campaignOnly && config.aggregateDataEnabled) {
       const aggregate = buildAggregateCandidate(scans, args.appUrl, config.minAggregateSampleSize);
       if (aggregate) candidates.push(aggregate);
     }
-    if (config.educationalEnabled) {
+    if (!args.campaignOnly && config.educationalEnabled) {
       for (const item of content) {
         const candidate = buildEducationalCandidate(item, args.appUrl);
         if (candidate) candidates.push(candidate);
       }
     }
-    if (config.industryHumorEnabled) {
+    if (!args.campaignOnly && config.industryHumorEnabled) {
       for (const item of content) {
         const candidate = buildIndustryHumorCandidate(item, args.appUrl);
         if (candidate) candidates.push(candidate);
       }
     }
-    if (config.carouselEnabled) {
+    if (!args.campaignOnly && config.carouselEnabled) {
       for (const item of content) {
         const candidate = buildEducationalCarouselCandidate(item, args.appUrl);
         if (candidate) candidates.push(candidate);
       }
     }
-    candidates.push(buildProductDemoCandidate(args.appUrl));
+    if (!args.campaignOnly) candidates.push(buildProductDemoCandidate(args.appUrl));
 
     let trendProvider: string | null = null;
     let trendReason: string | null = null;
@@ -1091,7 +1113,7 @@ export async function runSocialProofAgent(args: {
       (asset.source_key ?? '').startsWith('sofia-')
       && now.getTime() - Date.parse(asset.created_at) < 20 * 3_600_000
     );
-    if (config.trendResearchEnabled && args.env && !recentSofiaResearch) {
+    if (!args.campaignOnly && config.trendResearchEnabled && args.env && !recentSofiaResearch) {
       const discovery = await discoverSocialTrends(args.env, now, (provider, estimatedCostUsd) =>
         reserveProviderSpend({
           db: args.supabase,

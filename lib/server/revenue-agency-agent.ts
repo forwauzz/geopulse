@@ -411,7 +411,8 @@ export async function runRevenueAgency(args: {
           appUrl: args.appUrl,
           env: args.env,
           now,
-          })
+          campaignOnly: true,
+        })
         : undefined;
     const nurture =
       config.nurtureEnabled && mode === 'autonomous' && judge.allowNurture

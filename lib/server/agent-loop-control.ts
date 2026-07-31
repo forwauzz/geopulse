@@ -79,6 +79,10 @@ function metadataObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+export function shouldReactivateExistingLoop(state: string): boolean {
+  return state === 'discovered';
+}
+
 export type AcceptedLearningPattern = {
   readonly id: string;
   readonly effectSize: number;
@@ -179,7 +183,7 @@ async function upsertLoop(
 
   if (existing?.id) {
     const next = {
-      ...(['discovered', 'dismissed'].includes(String(existing.state))
+      ...(shouldReactivateExistingLoop(String(existing.state))
         ? {
             state: input['state'],
             verified_at: null,
@@ -444,6 +448,8 @@ export async function syncSeoOpportunityLoops(args: {
         campaign_role: campaign.role,
         campaign_vertical: campaign.vertical,
         campaign_gate: gateReason,
+        retry_policy: metadata['retry_policy'] ?? null,
+        closure_condition: metadata['closure_condition'] ?? null,
         intelligence_status: intelligence.status,
         intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
         accepted_learning_pattern_ids: appliedLearningPatternIds,
@@ -538,6 +544,8 @@ export async function syncSeoOpportunityLoops(args: {
           campaign_key: campaign.campaign_key,
           campaign_role: campaign.role,
           campaign_vertical: campaign.vertical,
+          retry_policy: metadata['retry_policy'] ?? null,
+          closure_condition: metadata['closure_condition'] ?? null,
         },
       });
       if (child) loops += 1;

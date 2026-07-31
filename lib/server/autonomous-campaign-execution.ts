@@ -71,6 +71,7 @@ export async function runAutonomousCampaignExecution(args: {
         appUrl: args.appUrl,
         env: args.env,
         now,
+        campaignOnly: true,
       })
     : null;
   const queuedIds = new Set(social?.queuedContentItemIds ?? []);
