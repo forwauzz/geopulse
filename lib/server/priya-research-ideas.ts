@@ -1,4 +1,8 @@
 import type { SocialTrendIdea } from './social-trend-agent';
+import {
+  classifyCampaignVertical,
+  resolveGrowthCampaignForOpportunity,
+} from './growth-campaign-intelligence';
 
 type Db = { from(table: string): any };
 
@@ -82,6 +86,36 @@ export async function upsertPriyaResearchIdeas(
     const channel = idea.channel || classifyPriyaIdeaChannel(source.toString());
     const opportunityKey = `research:${channel}:${fingerprint(`${source.toString()}|${title.toLowerCase()}`)}`;
     const priority = Number(idea.score ?? 0) >= 75 ? 1 : Number(idea.score ?? 0) >= 55 ? 2 : 3;
+    const baseMetadata = {
+      owner: 'Jordan',
+      researched_by_agent: 'priya',
+      research_channel: channel,
+      source_url: source.toString(),
+      source_label: clean(idea.sourceLabel, 160) || source.hostname,
+      suggested_reply: clean(idea.replyDraft ?? '', 1_500) || null,
+      audience: clean(idea.audience ?? 'both', 80),
+      research_score: Number(idea.score ?? 0) || null,
+      discovered_at: idea.discoveredAt || now.toISOString(),
+      public_reply_requires_approval: channel === 'reddit' || channel === 'twitter',
+      disclosure_required: channel === 'reddit' || channel === 'twitter',
+    };
+    const classification = classifyCampaignVertical({
+      id: opportunityKey,
+      title,
+      evidence: idea.evidence,
+      recommendation: idea.recommendation,
+      metadata: baseMetadata,
+    });
+    const scoped = await resolveGrowthCampaignForOpportunity(db, {
+      id: opportunityKey,
+      title,
+      evidence: idea.evidence,
+      recommendation: idea.recommendation,
+      metadata: {
+        ...baseMetadata,
+        campaign_vertical: classification.vertical,
+      },
+    });
     const payload = {
       opportunity_key: opportunityKey,
       kind: 'content_gap',
@@ -89,28 +123,32 @@ export async function upsertPriyaResearchIdeas(
       title,
       evidence: clean(idea.evidence, 2_000),
       recommendation: clean(idea.recommendation, 2_000),
+      growth_campaign_id: scoped?.campaign.id ?? null,
       metadata: {
-        owner: 'Jordan',
-        researched_by_agent: 'priya',
-        research_channel: channel,
-        source_url: source.toString(),
-        source_label: clean(idea.sourceLabel, 160) || source.hostname,
-        suggested_reply: clean(idea.replyDraft ?? '', 1_500) || null,
-        audience: clean(idea.audience ?? 'both', 80),
-        research_score: Number(idea.score ?? 0) || null,
-        discovered_at: idea.discoveredAt || now.toISOString(),
-        public_reply_requires_approval: channel === 'reddit' || channel === 'twitter',
-        disclosure_required: channel === 'reddit' || channel === 'twitter',
+        ...baseMetadata,
+        campaign_vertical: classification.vertical,
+        campaign_gate: scoped?.gateReason ?? 'background_index_only',
+        campaign_key: scoped?.campaign.campaign_key ?? null,
+        campaign_role: scoped?.campaign.role ?? null,
+        buyer_role: scoped?.campaign.buyer_role ?? null,
+        offer_key: scoped?.campaign.offer_key ?? null,
       },
       last_seen_at: now.toISOString(),
     };
     const { data: existing } = await db
       .from('seo_opportunities')
-      .select('id')
+      .select('id,growth_campaign_id,metadata')
       .eq('opportunity_key', opportunityKey)
       .maybeSingle();
     if (existing?.id) {
-      await db.from('seo_opportunities').update(payload).eq('id', existing.id);
+      await db.from('seo_opportunities').update({
+        ...payload,
+        growth_campaign_id: scoped?.campaign.id ?? existing.growth_campaign_id ?? null,
+        metadata: {
+          ...((existing.metadata && typeof existing.metadata === 'object') ? existing.metadata : {}),
+          ...payload.metadata,
+        },
+      }).eq('id', existing.id);
       saved += 1;
       continue;
     }

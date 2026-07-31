@@ -1,4 +1,10 @@
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
+import {
+  campaignBriefSections,
+  classifyCampaignVertical,
+  loadActiveGrowthCampaigns,
+  selectCampaignScopedOpportunities,
+} from './growth-campaign-intelligence';
 
 type Db = { from(table: string): any };
 export type AgentLoopState =
@@ -20,8 +26,13 @@ type SeoOpportunity = {
   evidence: string;
   recommendation: string;
   first_seen_at: string;
+  growth_campaign_id?: string | null;
+  growth_intervention_id?: string | null;
   metadata?: Record<string, unknown> | null;
-  seo_keywords?: { keyword?: string | null } | null;
+  seo_keywords?: {
+    keyword?: string | null;
+    metadata?: Record<string, unknown> | null;
+  } | null;
 };
 
 export type SeoContentFamilyMember = {
@@ -80,9 +91,14 @@ function matchingLearningPatterns(
   patterns: readonly AcceptedLearningPattern[],
 ): AcceptedLearningPattern[] {
   const title = String(opportunity.title ?? '').toLowerCase();
+  const opportunityVertical = classifyCampaignVertical(opportunity).vertical;
   return patterns.filter((pattern) => {
     if (pattern.effectSize <= 0) return false;
     const cohort = pattern.cohortDefinition ?? {};
+    const campaignVertical = typeof cohort['campaign_vertical'] === 'string'
+      ? cohort['campaign_vertical']
+      : '';
+    if (campaignVertical && campaignVertical !== opportunityVertical) return false;
     const seoKind = typeof cohort['seo_kind'] === 'string' ? cohort['seo_kind'] : '';
     const topic = typeof cohort['topic_cluster'] === 'string'
       ? cohort['topic_cluster'].trim().toLowerCase()
@@ -344,7 +360,7 @@ export async function syncSeoOpportunityLoops(args: {
   const now = args.now ?? new Date();
   const { data } = await args.db
     .from('seo_opportunities')
-    .select('id,opportunity_key,kind,status,priority,title,evidence,recommendation,first_seen_at,metadata,seo_keywords(keyword)')
+    .select('id,opportunity_key,kind,status,priority,title,evidence,recommendation,first_seen_at,growth_campaign_id,growth_intervention_id,metadata,seo_keywords(keyword,metadata)')
     .in('status', ['queued', 'in_progress'])
     .order('priority', { ascending: true })
     .order('last_seen_at', { ascending: false })
@@ -367,12 +383,18 @@ export async function syncSeoOpportunityLoops(args: {
 
   let contentItems = 0;
   let loops = 0;
+  const campaigns = await loadActiveGrowthCampaigns(args.db);
   const ordered = prioritizeWithAcceptedLearning(
     [...(data ?? [])] as SeoOpportunity[],
     acceptedPatterns,
   );
-  const selected = ordered.slice(0, args.limit ?? 10);
-  for (const opportunity of selected) {
+  const selected = selectCampaignScopedOpportunities(
+    ordered,
+    campaigns,
+    args.limit ?? 10,
+  );
+  for (const scoped of selected) {
+    const { opportunity, campaign, gateReason } = scoped;
     const metadata = metadataObject(opportunity.metadata);
     const appliedLearningPatternIds = matchingLearningPatterns(opportunity, acceptedPatterns)
       .map((pattern) => pattern.id);
@@ -389,6 +411,18 @@ export async function syncSeoOpportunityLoops(args: {
     const owner = opportunity.kind === 'technical'
       ? 'Marcus'
       : String(metadata['owner'] ?? 'Jordan');
+    await args.db.from('seo_opportunities').update({
+      growth_campaign_id: campaign.id,
+      metadata: {
+        ...metadata,
+        campaign_key: campaign.campaign_key,
+        campaign_role: campaign.role,
+        campaign_vertical: campaign.vertical,
+        campaign_gate: gateReason,
+        buyer_role: campaign.buyer_role,
+        offer_key: campaign.offer_key,
+      },
+    }).eq('id', opportunity.id);
     const parent = await upsertLoop(args.db, {
       source_type: 'seo_opportunity',
       source_key: opportunity.id,
@@ -404,6 +438,12 @@ export async function syncSeoOpportunityLoops(args: {
       metadata: {
         opportunity_key: opportunity.opportunity_key,
         kind: opportunity.kind,
+        growth_campaign_id: campaign.id,
+        growth_intervention_id: opportunity.growth_intervention_id ?? null,
+        campaign_key: campaign.campaign_key,
+        campaign_role: campaign.role,
+        campaign_vertical: campaign.vertical,
+        campaign_gate: gateReason,
         intelligence_status: intelligence.status,
         intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
         accepted_learning_pattern_ids: appliedLearningPatternIds,
@@ -428,13 +468,16 @@ export async function syncSeoOpportunityLoops(args: {
         title: member.title,
         status: member.status,
         content_type: member.contentType,
-        target_persona: 'small_business_and_agency',
-        primary_problem: opportunity.evidence,
+        target_persona: campaign.buyer_role,
+        primary_problem: campaign.primary_problem,
         topic_cluster: keyword,
         keyword_cluster: keyword,
         cta_goal: 'free_scan',
         source_type: 'internal_plus_research',
+        growth_campaign_id: campaign.id,
+        growth_intervention_id: opportunity.growth_intervention_id ?? null,
         brief_markdown: [
+          ...campaignBriefSections(scoped),
           `## SEO opportunity`,
           opportunity.evidence,
           `## Recommended angle`,
@@ -448,6 +491,17 @@ export async function syncSeoOpportunityLoops(args: {
           seo_family_key: opportunity.opportunity_key,
           owner: member.owner,
           channel: member.contentType,
+          growth_campaign_id: campaign.id,
+          growth_intervention_id: opportunity.growth_intervention_id ?? null,
+          campaign_key: campaign.campaign_key,
+          campaign_role: campaign.role,
+          campaign_vertical: campaign.vertical,
+          campaign_gate: gateReason,
+          buyer_role: campaign.buyer_role,
+          offer_key: campaign.offer_key,
+          cta_goal: campaign.cta_goal,
+          success_condition: campaign.success_condition,
+          stop_condition: campaign.stop_condition,
           source_url: metadata['source_url'] ?? null,
           source_label: metadata['source_label'] ?? null,
           research_channel: metadata['research_channel'] ?? null,
@@ -476,7 +530,15 @@ export async function syncSeoOpportunityLoops(args: {
         resolved_at: null,
         verified_at: null,
         evidence: {},
-        metadata: { content_item_id: item.id, content_type: member.contentType },
+        metadata: {
+          content_item_id: item.id,
+          content_type: member.contentType,
+          growth_campaign_id: campaign.id,
+          growth_intervention_id: opportunity.growth_intervention_id ?? null,
+          campaign_key: campaign.campaign_key,
+          campaign_role: campaign.role,
+          campaign_vertical: campaign.vertical,
+        },
       });
       if (child) loops += 1;
     }
@@ -486,7 +548,18 @@ export async function syncSeoOpportunityLoops(args: {
         .from('seo_opportunities')
         .update({
           status: 'in_progress',
-          metadata: { ...metadata, owner, loop_controlled: true, family_created_at: now.toISOString() },
+          metadata: {
+            ...metadata,
+            owner,
+            loop_controlled: true,
+            family_created_at: now.toISOString(),
+            campaign_key: campaign.campaign_key,
+            campaign_role: campaign.role,
+            campaign_vertical: campaign.vertical,
+            campaign_gate: gateReason,
+            buyer_role: campaign.buyer_role,
+            offer_key: campaign.offer_key,
+          },
         })
         .eq('id', opportunity.id);
     }
