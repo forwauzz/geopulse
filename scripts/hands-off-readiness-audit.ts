@@ -111,6 +111,7 @@ async function main(): Promise<void> {
         'chief_of_staff_campaign_escalation',
         'chief_of_staff_founder_attention_sent',
         'chief_of_staff_resolved_digest_sent',
+        'chief_of_staff_daily_standup_sent',
         'chief_of_staff_campaign_digest_failed',
       ])
       .order('created_at', { ascending: false })
