@@ -7,6 +7,7 @@ import {
   retryIsDue,
   selectSeoFamilyIdsToDefer,
   seoParentCanClose,
+  shouldReactivateExistingLoop,
 } from './agent-loop-control';
 
 describe('closed-loop agent control', () => {
@@ -98,6 +99,11 @@ describe('closed-loop agent control', () => {
       2,
     );
     expect(deferred).toEqual(['normal-1']);
+  });
+
+  it('keeps dismissed work stopped while allowing deferred discoveries to re-enter WIP', () => {
+    expect(shouldReactivateExistingLoop('discovered')).toBe(true);
+    expect(shouldReactivateExistingLoop('dismissed')).toBe(false);
   });
 
   it('skips a 403 prospect instead of leaving Maya with a repeating open loop', async () => {
