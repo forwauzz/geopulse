@@ -117,6 +117,13 @@ function providerChannel(value: unknown): GrowthCalendarChannel {
   return 'internal';
 }
 
+function explicitChannel(value: unknown): GrowthCalendarChannel | null {
+  const channel = text(value)?.toLowerCase();
+  return channel && ['instagram', 'linkedin', 'email', 'blog', 'sales', 'experiment', 'internal'].includes(channel)
+    ? (channel as GrowthCalendarChannel)
+    : null;
+}
+
 function defaultOwner(channel: GrowthCalendarChannel): string {
   if (channel === 'email' || channel === 'sales') return 'Elena';
   if (channel === 'instagram' || channel === 'blog') return 'Jordan';
@@ -388,42 +395,64 @@ export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<Growth
 
   for (const loop of loopRows) {
     if (!loop.due_at) continue;
+    const metadata = record(loop.metadata);
+    const linkedAssetId = text(metadata['distribution_asset_id']);
+    const linkedAsset = linkedAssetId ? assetById.get(linkedAssetId) : null;
+    const linkedContent = linkedAsset?.content_item_id
+      ? contentById.get(String(linkedAsset.content_item_id))
+      : null;
+    const linkedMedia = linkedAsset ? mediaByAsset.get(String(linkedAsset.id)) ?? [] : [];
     const lane = String(loop.lane).toLowerCase();
-    const channel: GrowthCalendarChannel = lane.includes('sales') || lane.includes('outreach') ? 'sales' : lane.includes('content') || lane.includes('distribution') ? 'internal' : 'internal';
+    const channel: GrowthCalendarChannel =
+      explicitChannel(metadata['channel']) ??
+      (linkedAsset ? providerChannel(linkedAsset.provider_family) : null) ??
+      (lane.includes('sales') || lane.includes('outreach') ? 'sales' : 'internal');
+    const campaign = campaignById.get(String(linkedAsset?.growth_campaign_id ?? metadata['growth_campaign_id']));
+    const intervention = interventionById.get(String(linkedAsset?.growth_intervention_id ?? metadata['growth_intervention_id']));
+    const dependencies: string[] = loop.blocker ? [String(loop.blocker)] : [];
+    if (linkedAsset && !['approved', 'scheduled', 'published'].includes(String(linkedAsset.status))) {
+      dependencies.push(`Asset approval is ${titleCase(linkedAsset.status).toLowerCase()}`);
+    }
+    if (linkedMedia.some((item) => !['ready', 'uploaded'].includes(item.readyStatus))) {
+      dependencies.push('Media still needs provider-ready QA');
+    }
+    const isManualDistribution = Boolean(linkedAsset && metadata['manual_publish'] === true);
     activities.push({
       id: `loop:${loop.id}`,
       sourceType: 'work_loop',
       sourceId: String(loop.id),
-      displayState: displayStateFor(loop.state, { hasDependency: Boolean(loop.blocker), dueAt: loop.due_at }),
+      displayState: displayStateFor(loop.state, { hasDependency: dependencies.length > 0, dueAt: loop.due_at }),
       channel,
       title: String(loop.title),
       startsAt: String(loop.due_at),
       status: String(loop.state),
       owner: titleCase(loop.owner),
-      summary: text(loop.detail),
-      previewTitle: String(loop.title),
-      previewText: text(loop.detail),
-      media: [],
-      destinationUrl: null,
-      campaignName: null,
-      campaignRole: null,
-      vertical: null,
-      interventionName: null,
-      funnelStage: lane.includes('sales') ? 'sales follow-up' : 'operating dependency',
-      sourceContentTitle: null,
-      sourceContentUrl: null,
-      approvedAt: null,
-      approvalLabel: null,
+      summary: isManualDistribution
+        ? `${titleCase(channel)} manual publishing fallback`
+        : text(loop.detail),
+      previewTitle: text(linkedAsset?.title) ?? String(loop.title),
+      previewText: text(linkedAsset?.caption_text) ?? text(linkedAsset?.body_plaintext) ?? text(loop.detail),
+      media: linkedMedia,
+      destinationUrl: text(metadata['destination_url']),
+      campaignName: text(campaign?.name),
+      campaignRole: text(campaign?.role),
+      vertical: text(campaign?.vertical),
+      interventionName: text(intervention?.name),
+      funnelStage: text(metadata['funnel_stage']) ?? (lane.includes('sales') ? 'sales follow-up' : isManualDistribution ? 'qualified traffic' : 'operating dependency'),
+      sourceContentTitle: text(linkedContent?.title),
+      sourceContentUrl: text(linkedContent?.canonical_url),
+      approvedAt: text(linkedAsset?.approved_at),
+      approvalLabel: linkedAsset?.approved_at ? 'Approved manual publishing asset' : null,
       nextAction: text(loop.next_action),
       dueAt: text(loop.due_at),
       attemptCount: number(loop.attempt_count),
       maxAttempts: number(loop.max_attempts, 3),
-      dependencies: loop.blocker ? [String(loop.blocker)] : [],
-      successCondition: text(record(loop.metadata)['success_condition']),
-      stopCondition: text(record(loop.metadata)['stop_condition']),
-      outcomeLabel: 'Loop state',
-      outcomeValue: titleCase(loop.state),
-      detailHref: '/admin/agents',
+      dependencies,
+      successCondition: text(metadata['success_condition']) ?? text(intervention?.success_condition) ?? text(campaign?.success_condition),
+      stopCondition: text(metadata['stop_condition']) ?? text(intervention?.stop_condition) ?? text(campaign?.stop_condition),
+      outcomeLabel: isManualDistribution ? 'Publishing route' : 'Loop state',
+      outcomeValue: isManualDistribution ? 'Scheduled browser fallback' : titleCase(loop.state),
+      detailHref: isManualDistribution ? '/dashboard/distribution' : '/admin/agents',
     });
   }
 
