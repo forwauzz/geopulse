@@ -3,6 +3,8 @@
 import { useMemo, useState, useTransition } from 'react';
 import {
   DEFAULT_REPORT_SETTINGS,
+  PLANNED_SECTIONS,
+  SECTION_DESCRIPTORS,
   describeOverrides,
   diffAgainstInherited,
   isLockedSection,
@@ -10,60 +12,40 @@ import {
   type ReportEngineKey,
   type ReportSectionKey,
   type ReportSettings,
+  type SectionDescriptor,
 } from '@/lib/server/report-settings';
 import type { ReportPreviewPayload } from '@/lib/server/report-preview-payload';
 import { ReportPreviewPage } from '@/components/report-preview-page';
 
-type SectionMeta = {
-  readonly key: ReportSectionKey;
-  readonly label: string;
-  readonly help: string;
-  readonly source: string;
-};
+/**
+ * Groups are derived from SECTION_DESCRIPTORS rather than hardcoded, so the checklist can never
+ * drift from what actually renders. Ordering follows the delivered artifacts.
+ */
+type SectionMeta = SectionDescriptor;
 
-/** Grouped for the checklist. Order here is the order of the report itself. */
+const pick = (...keys: readonly ReportSectionKey[]): readonly SectionMeta[] =>
+  keys.map((key) => SECTION_DESCRIPTORS.find((s) => s.key === key)!).filter(Boolean);
+
 const GROUPS: readonly { readonly title: string; readonly items: readonly SectionMeta[] }[] = [
   {
-    title: 'Site health',
-    items: [
-      { key: 'readinessScore', label: 'Overall readiness score and grade', help: 'The headline number, out of 100.', source: 'scans.score' },
-      { key: 'categoryBreakdown', label: 'Category breakdown', help: 'Readiness, extractability and trust, with weights. This is what explains a low visibility result.', source: 'categoryScores' },
-      { key: 'holdingScoreDown', label: "What's holding the score down", help: 'The failing checks, in plain language, ordered by impact.', source: 'highlightedIssues' },
-      { key: 'crawlDetail', label: 'Crawl and access detail', help: 'Robots status, pages fetched, render mode. Technical.', source: 'coverageSummary' },
-    ],
+    title: 'The shareable summary',
+    items: pick(
+      'headlineStats',
+      'executiveSummary',
+      'visibilityByEngine',
+      'competitorsTracked',
+      'buyerQuestions',
+      'priorityActionPlan',
+      'measurementReceipts'
+    ),
   },
   {
-    title: 'AI answer visibility',
-    items: [
-      { key: 'combinedVisibility', label: 'Combined visibility', help: 'One figure across every included engine.', source: 'citation_rate' },
-      { key: 'perEngineBreakdown', label: 'Per-engine breakdown', help: 'Visibility on each engine separately.', source: '*_visibility_pct' },
-      { key: 'namedVsLinked', label: 'Named vs linked', help: 'Whether engines mention the business, and whether they cite the site as a source.', source: 'brand_mention / url_citation' },
-      { key: 'questionByQuestion', label: 'Question-by-question results', help: 'Every tracked question, cited or not, and who appeared instead.', source: 'prompts[]' },
-      { key: 'averagePosition', label: 'Average position when cited', help: 'Empty until the client has a citation to average.', source: 'rankPosition' },
-    ],
-  },
-  {
-    title: 'Competitive',
-    items: [
-      { key: 'whoIsWinning', label: 'Who is winning these answers', help: 'Ranked by how many tracked questions each domain wins.', source: 'competitors[]' },
-      { key: 'shareOfAnswers', label: 'Share of answers', help: "The client's share of all sources cited.", source: 'share_of_voice' },
-      { key: 'trackedCompetitorSet', label: 'Tracked competitive set', help: 'Names the competitors being measured against.', source: 'competitor_list' },
-    ],
-  },
-  {
-    title: 'Framing',
-    items: [
-      { key: 'executiveSummary', label: 'Executive summary', help: 'A written opening that states the finding.', source: 'narrative' },
-      { key: 'trendOverTime', label: 'Trend over time', help: 'Appears once there are two comparable periods.', source: 'period rollup' },
-      { key: 'whatWeAreDoingNext', label: "What we're doing next", help: 'The open actions, presented as the plan.', source: 'outcome actions' },
-    ],
+    title: 'The downloadable report',
+    items: pick('promptPerformance', 'opportunities', 'competitorCoCitations'),
   },
   {
     title: 'Always included',
-    items: [
-      { key: 'scopeStatement', label: 'Scope statement', help: 'Which engines, how many questions, tracked since when.', source: 'Always' },
-      { key: 'methodology', label: 'Methodology and definitions', help: 'How each figure is measured, and the session-variance caveat.', source: 'Always' },
-    ],
+    items: pick('scopeStatement', 'methodology'),
   },
 ];
 
@@ -144,10 +126,14 @@ export function ReportContentsSettings({
   function toggleSection(key: ReportSectionKey) {
     if (isLockedSection(key)) return;
     setSaved(null);
-    setSettings((prev) => ({
-      ...prev,
-      sections: { ...prev.sections, [key]: !prev.sections[key] },
-    }));
+    setSettings((prev) => {
+      const next = !prev.sections[key];
+      const sections = { ...prev.sections, [key]: next };
+      // Paired sections share a row on the summary; moving one alone strands a half-width column.
+      const partner = SECTION_DESCRIPTORS.find((s) => s.key === key)?.pairedWith;
+      if (partner) sections[partner] = next;
+      return { ...prev, sections };
+    });
   }
 
   function toggleEngine(key: ReportEngineKey) {
@@ -285,17 +271,48 @@ export function ReportContentsSettings({
                     >
                       <Check on={settings.sections[item.key]} locked={locked} />
                       <span className="flex-1">
-                        <span className="block text-[13px] font-semibold leading-snug text-on-background">{item.label}</span>
-                        <span className="mt-0.5 block text-[11.5px] leading-snug text-on-surface-variant">{item.help}</span>
+                        <span className="block text-[13px] font-semibold leading-snug text-on-background">
+                          {item.label}
+                          {item.pairedWith ? (
+                            <span className="ml-1.5 align-middle text-[10px] font-medium text-on-surface-variant">
+                              · paired
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mt-0.5 block text-[11.5px] leading-snug text-on-surface-variant">
+                          {item.help}
+                          {item.conditional ? ' Only renders when the period produced this data.' : ''}
+                        </span>
                       </span>
-                      <span className="mt-0.5 shrink-0 rounded bg-surface-container-low px-1.5 py-0.5 text-[9.5px] font-semibold text-on-surface-variant">
-                        {item.source}
+                      <span className="mt-0.5 flex shrink-0 flex-col items-end gap-1">
+                        <span className="rounded bg-surface-container-low px-1.5 py-0.5 text-[9.5px] font-semibold text-on-surface-variant">
+                          {item.source}
+                        </span>
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">
+                          {item.surfaces.length === 2 ? 'both' : item.surfaces[0] === 'pdf' ? 'PDF' : 'summary'}
+                        </span>
                       </span>
                     </button>
                   );
                 })}
               </div>
             ))}
+
+            <div className="mt-6 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-on-surface-variant">
+                Not available yet
+              </p>
+              <p className="mt-1.5 text-[12px] leading-snug text-on-surface-variant">
+                These are collected but not yet rendered in either artifact, so there is nothing to switch on.
+              </p>
+              <ul className="mt-2.5 space-y-1.5">
+                {PLANNED_SECTIONS.map((planned) => (
+                  <li key={planned.label} className="text-[11.5px] leading-snug text-on-surface-variant">
+                    <span className="font-semibold text-on-background/70">{planned.label}</span> — {planned.blockedBy}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </section>
         </div>
 

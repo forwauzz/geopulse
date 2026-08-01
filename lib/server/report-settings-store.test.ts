@@ -55,10 +55,10 @@ describe('getReportOverride', () => {
 
   it('reads back only what was stored', async () => {
     const { supabase } = makeSupabase({
-      'agency_accounts:agency-1': { metadata: { report: { sections: { crawlDetail: true } } } },
+      'agency_accounts:agency-1': { metadata: { report: { sections: { opportunities: false } } } },
     });
     expect(await getReportOverride({ supabase, scope: AGENCY })).toEqual({
-      sections: { crawlDetail: true },
+      sections: { opportunities: false },
     });
   });
 
@@ -90,9 +90,9 @@ describe('saveReportOverride', () => {
     await saveReportOverride({
       supabase,
       scope: AGENCY,
-      override: { sections: { crawlDetail: true } },
+      override: { sections: { opportunities: false } },
     });
-    expect(writes[0]!.metadata).toEqual({ report: { sections: { crawlDetail: true } } });
+    expect(writes[0]!.metadata).toEqual({ report: { sections: { opportunities: false } } });
   });
 
   it('preserves sibling metadata such as brand', async () => {
@@ -136,7 +136,7 @@ describe('saveReportOverride', () => {
     // This is what "reset to the default" writes. An empty object would read back as an override.
     const { supabase, writes } = makeSupabase({
       'agency_clients:client-1': {
-        metadata: { brand: { primary: '#3c88af' }, report: { sections: { whoIsWinning: false } } },
+        metadata: { brand: { primary: '#3c88af' }, report: { sections: { promptPerformance: false } } },
       },
     });
     await saveReportOverride({ supabase, scope: CLIENT, override: {} });
@@ -149,18 +149,19 @@ describe('resolveForClient', () => {
   it('returns the client effective state and what it would inherit without its own override', async () => {
     const { supabase } = makeSupabase({
       'agency_accounts:agency-1': {
-        metadata: { report: { sections: { crawlDetail: true, whoIsWinning: true } } },
+        metadata: { report: { sections: { opportunities: false, promptPerformance: true } } },
       },
-      'agency_clients:client-1': { metadata: { report: { sections: { whoIsWinning: false } } } },
+      'agency_clients:client-1': { metadata: { report: { sections: { promptPerformance: false } } } },
     });
 
     const result = await resolveForClient({ supabase, agency: AGENCY, client: CLIENT });
 
-    expect(result.effective.sections.whoIsWinning).toBe(false);
-    expect(result.effective.sections.crawlDetail).toBe(true);
+    expect(result.effective.sections.promptPerformance).toBe(false);
+    // Not overridden by the client, so it still follows the agency's false.
+    expect(result.effective.sections.opportunities).toBe(false);
     // Without the client override this row would follow the agency.
-    expect(result.inherited.sections.whoIsWinning).toBe(true);
-    expect(result.clientOverride).toEqual({ sections: { whoIsWinning: false } });
+    expect(result.inherited.sections.promptPerformance).toBe(true);
+    expect(result.clientOverride).toEqual({ sections: { promptPerformance: false } });
   });
 
   it('leaves a client following the agency entirely when it has stored nothing', async () => {
