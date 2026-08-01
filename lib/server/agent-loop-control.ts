@@ -226,13 +226,17 @@ async function upsertLoop(
   };
 }
 
-export const SEO_FAMILY_WIP_CAP = 15;
+// Keep acquisition work coherent: one primary family and at most one challenger.
+// Additional evidence stays queued until a live family produces measurement evidence.
+export const SEO_FAMILY_WIP_CAP = 2;
 
 export function selectSeoFamilyIdsToDefer(
   parents: readonly {
     id: string;
+    state?: string | null;
     due_at?: string | null;
     severity?: string | null;
+    metadata?: Record<string, unknown> | null;
   }[],
   children: readonly {
     parent_loop_id?: string | null;
@@ -248,9 +252,18 @@ export function selectSeoFamilyIdsToDefer(
   );
   const severityRank: Record<string, number> = { urgent: 0, today: 1, normal: 2, watch: 3 };
   const ordered = [...parents].sort((left, right) => {
+    const verificationDelta =
+      Number(right.state === 'verifying') - Number(left.state === 'verifying');
+    if (verificationDelta !== 0) return verificationDelta;
     const childDelta =
       Number(activeChildParents.has(right.id)) - Number(activeChildParents.has(left.id));
     if (childDelta !== 0) return childDelta;
+    const isGoverned = (parent: typeof left) => {
+      const metadata = metadataObject(parent.metadata);
+      return Boolean(metadata['closure_condition'] || metadata['growth_intervention_id']);
+    };
+    const governanceDelta = Number(isGoverned(right)) - Number(isGoverned(left));
+    if (governanceDelta !== 0) return governanceDelta;
     const severityDelta =
       (severityRank[String(left.severity)] ?? 9) - (severityRank[String(right.severity)] ?? 9);
     if (severityDelta !== 0) return severityDelta;
@@ -260,13 +273,13 @@ export function selectSeoFamilyIdsToDefer(
   return ordered.slice(Math.max(0, cap)).map((parent) => parent.id);
 }
 
-async function enforceSeoFamilyWorkInProgress(db: Db): Promise<{
+async function enforceSeoFamilyWorkInProgress(db: Db, now = new Date()): Promise<{
   activeFamilies: number;
   deferredFamilies: number;
 }> {
   const { data: parents } = await db
     .from('agent_work_loops')
-    .select('id,source_key,state,severity,due_at')
+    .select('id,source_key,state,severity,due_at,metadata')
     .eq('source_type', 'seo_opportunity')
     .in('state', ['assigned', 'executing', 'verifying', 'blocked'])
     .order('due_at', { ascending: true })
@@ -289,6 +302,7 @@ async function enforceSeoFamilyWorkInProgress(db: Db): Promise<{
   const deferredOpportunityIds = deferredParents.map((row: any) => String(row.source_key));
   await db.from('agent_work_loops').update({
     state: 'discovered',
+    due_at: addHours(now.toISOString(), 168),
     blocker: null,
     founder_required: false,
     evidence: {
@@ -300,6 +314,7 @@ async function enforceSeoFamilyWorkInProgress(db: Db): Promise<{
   }).in('id', deferredIds);
   await db.from('agent_work_loops').update({
     state: 'discovered',
+    due_at: addHours(now.toISOString(), 168),
     blocker: null,
     founder_required: false,
     evidence: {
@@ -881,7 +896,7 @@ export async function runAgentLoopControl(args: {
 }> {
   const now = args.now ?? new Date();
   const legacyNewslettersRetired = await retireLegacySeoNewsletterLoops(args.db, now);
-  const familyCapacity = await enforceSeoFamilyWorkInProgress(args.db);
+  const familyCapacity = await enforceSeoFamilyWorkInProgress(args.db, now);
   const synced = await syncSeoOpportunityLoops({
     db: args.db,
     now,

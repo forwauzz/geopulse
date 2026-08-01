@@ -102,6 +102,20 @@ describe('vertical campaign intelligence', () => {
     expect(selected).toHaveLength(2);
   });
 
+  it('keeps one primary and one challenger when the active-family cap is two', () => {
+    const selected = selectCampaignScopedOpportunities(
+      [
+        { id: 'msp-1', growth_campaign_id: 'msp' },
+        { id: 'msp-2', growth_campaign_id: 'msp' },
+        { id: 'agency-1', growth_campaign_id: 'agency' },
+      ],
+      campaigns,
+      2,
+    );
+    expect(selected.filter((item) => item.campaign.role === 'primary')).toHaveLength(1);
+    expect(selected.filter((item) => item.campaign.role === 'challenger')).toHaveLength(1);
+  });
+
   it('injects buyer, offer, success, and stop context into the brief', () => {
     const selected = selectCampaignScopedOpportunities(
       [{ id: 'msp-opportunity', growth_campaign_id: 'msp' }],

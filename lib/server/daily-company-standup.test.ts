@@ -241,4 +241,26 @@ describe('daily company standup', () => {
     });
     expect(report.verdict).toBe('healthy and growing');
   });
+
+  it('does not let one-time payments or internal plans move the company into retention', () => {
+    const report = buildDailyCompanyStandup({
+      snapshot: {
+        ...snapshot,
+        convertedLeads: 2,
+        paymentsCompleted: 2,
+        paidSubscriptionsStarted: 0,
+        focus: 'retain',
+        focusReason: 'Conversions exist, but monitoring is inactive.',
+      },
+      workforce: room.workforce,
+      loops: [],
+      founderDecisions: [],
+      verifiedRecurringCustomers: 0,
+      now,
+    });
+    expect(report.focus).toBe('convert');
+    expect(report.focusReason).toContain('No verified non-internal recurring customer');
+    expect(report.departments.find((department) => department.id === 'codex')?.outcome)
+      .toContain('Company focus is convert');
+  });
 });

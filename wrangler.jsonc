@@ -185,9 +185,10 @@
     // GEO Performance Monitoring scheduled sweep.
     // Runtime defaults live here; provider API keys remain secrets.
     "GPM_SCHEDULE_ENABLED": "true",
-    // Platform feature flag: only these platforms run. Gemini + ChatGPT have keys
-    // (OPENAI_API_KEY secret). To add Perplexity: add PERPLEXITY_API_KEY and append it here.
-    "GPM_ENABLED_PLATFORMS": "gemini,chatgpt,perplexity",
+    // Platform feature flag: only funded, production-healthy providers run. ChatGPT is
+    // temporarily excluded after the provider returned credit_balance_exhausted; reports
+    // disclose unavailable assistants instead of retrying a known-unavailable lane.
+    "GPM_ENABLED_PLATFORMS": "gemini,perplexity",
     // Hard stops for the first revenue pilots. Estimates are deliberately conservative and
     // recorded on every run group so the UI and Maya can audit what was allowed.
     "GPM_MONTHLY_SPEND_CAP_USD": "5.00",

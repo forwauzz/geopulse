@@ -528,19 +528,27 @@ export function buildDailyCompanyStandup(args: {
   const overdue = open.filter((loop) => isOverdue(loop, now));
   const exhausted = open.filter(isExhausted);
   const founderRequired = open.filter((loop) => loop.founder_required);
+  const revenueTruthSnapshot: RevenueAgencySnapshot =
+    args.verifiedRecurringCustomers === 0 && args.snapshot.focus === 'retain'
+      ? {
+          ...args.snapshot,
+          focus: 'convert',
+          focusReason: 'No verified non-internal recurring customer exists; one-time payments, trials, and comps do not advance the company to retention.',
+        }
+      : args.snapshot;
   const departments = [
     ...args.workforce.map((view) =>
       buildDepartment({
         view,
         loops: args.loops,
-        snapshot: args.snapshot,
+        snapshot: revenueTruthSnapshot,
         now,
         verifiedRecurring: args.verifiedRecurringCustomers,
       })
     ),
     buildCodexDepartment({
       loops: args.loops,
-      snapshot: args.snapshot,
+      snapshot: revenueTruthSnapshot,
       now,
       verifiedRecurring: args.verifiedRecurringCustomers,
     }),
@@ -556,8 +564,8 @@ export function buildDailyCompanyStandup(args: {
       args.verifiedRecurringCustomers > 0
         ? 'healthy and growing'
         : 'revenue stalled with corrective action underway',
-    focus: args.snapshot.focus,
-    focusReason: args.snapshot.focusReason,
+    focus: revenueTruthSnapshot.focus,
+    focusReason: revenueTruthSnapshot.focusReason,
     strongestSignal: strongestSignal(args.snapshot, args.verifiedRecurringCustomers),
     verifiedRecurringCustomers: args.verifiedRecurringCustomers,
     revenue: {
