@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   attemptSafeCampaignRemediation,
   buildSeoContentFamily,
+  exhaustedRepairAssignment,
   isContentLoopSatisfied,
   prioritizeWithAcceptedLearning,
   retryIsDue,
@@ -99,6 +100,17 @@ describe('closed-loop agent control', () => {
       2,
     );
     expect(deferred).toEqual(['normal-1']);
+  });
+
+  it('reassigns exhausted repairs to the operator responsible for changing strategy', () => {
+    expect(exhaustedRepairAssignment(new Date('2026-08-01T13:00:00.000Z'))).toEqual({
+      state: 'blocked',
+      owner: 'Marcus',
+      blocker: 'Bounded repair attempts are exhausted; Marcus must change the repair strategy.',
+      next_action: 'Marcus inspects the prior failures, changes the repair strategy, and records a replacement successful run before closure.',
+      due_at: '2026-08-02T13:00:00.000Z',
+      founder_required: false,
+    });
   });
 
   it('keeps measurement and governed campaign families ahead of unbounded gaps', () => {

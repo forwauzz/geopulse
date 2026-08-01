@@ -930,6 +930,17 @@ export type CampaignLoopAction = {
   href: string;
 };
 
+export function exhaustedRepairAssignment(now: Date): Record<string, unknown> {
+  return {
+    state: 'blocked',
+    owner: 'Marcus',
+    blocker: 'Bounded repair attempts are exhausted; Marcus must change the repair strategy.',
+    next_action: 'Marcus inspects the prior failures, changes the repair strategy, and records a replacement successful run before closure.',
+    due_at: addHours(now.toISOString(), 24),
+    founder_required: false,
+  };
+}
+
 export async function attemptSafeCampaignRemediation(args: {
   db: Db;
   actions: readonly CampaignLoopAction[];
@@ -1100,11 +1111,7 @@ export async function syncCampaignActionLoops(args: {
         },
       }).eq('id', loop.id);
     } else if (loop && action.resolution === 'agent' && loop.attemptCount >= loop.maxAttempts) {
-      await args.db.from('agent_work_loops').update({
-        state: 'blocked',
-        blocker: 'Bounded repair attempts are exhausted; Marcus must change the repair strategy.',
-        founder_required: false,
-      }).eq('id', loop.id);
+      await args.db.from('agent_work_loops').update(exhaustedRepairAssignment(now)).eq('id', loop.id);
     }
   }
 
