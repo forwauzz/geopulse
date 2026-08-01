@@ -251,6 +251,15 @@ export default async function WorkspacePage({ searchParams }: Props) {
               Plan &amp; billing
             </Link>
           </div>
+          <div className="mt-4 border-t border-primary/15 pt-4">
+            <Link
+              href="/dashboard/workspace/report-contents"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:underline"
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden>checklist</span>
+              Choose what client reports include
+            </Link>
+          </div>
         </div>
       ) : null}
 
