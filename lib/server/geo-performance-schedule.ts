@@ -9,7 +9,9 @@ import {
 } from './geo-performance-entitlements';
 import { createBenchmarkRepository, type ClientBenchmarkConfigRow } from './benchmark-repository';
 import { runBenchmarkGroupSkeleton } from './benchmark-runner';
-import { storeGpmReport, type GpmReportStoreEnvLike, type GpmR2BucketLike } from './geo-performance-report-store';
+import { type GpmReportStoreEnvLike, type GpmR2BucketLike } from './geo-performance-report-store';
+import { storeAgencyReport } from './agency-report-store';
+import { agencySnapshotToGpmPayload, type GpmReportPlatform } from './agency-report-snapshot';
 import { sendGpmReportSlackSummary } from './geo-performance-slack';
 import { structuredError, structuredLog } from './structured-log';
 import {
@@ -273,7 +275,7 @@ export async function executeGpmClientRun(args: {
     Number(args.config.metadata?.['prompt_count'] ?? 10) || 10,
   );
 
-  for (const [platformIndex, platform] of args.config.platforms_enabled.entries()) {
+  for (const platform of args.config.platforms_enabled) {
     const modelId = args.platformModelMap[platform as keyof GpmPlatformModelMap];
     if (!modelId) {
       structuredLog('gpm_platform_skipped_no_model', {
@@ -370,63 +372,6 @@ export async function executeGpmClientRun(args: {
         measuredCanonicalDomain: domain.canonical_domain,
       });
 
-      // Generate + store PDF report (non-fatal — run is already recorded)
-      if (args.reportEnv) {
-        try {
-          const storeResult = await storeGpmReport({
-            supabase: args.supabase,
-            // Generate every provider artifact, but send one client email per measurement cycle.
-            // The final provider is the delivery carrier; the signed-out scorecard combines all
-            // provider results.
-            config:
-              platformIndex === args.config.platforms_enabled.length - 1 &&
-              platformResults.every((item) => item.status !== 'failed')
-              ? args.config
-              : {
-                  ...args.config,
-                  report_email: null,
-                  metadata: { ...args.config.metadata, report_recipients: [] },
-                },
-            runGroupId: result.runGroupId,
-            platform,
-            windowDate,
-            measuredCanonicalDomain: domain.canonical_domain,
-            bucket: args.reportBucket,
-            env: args.reportEnv,
-          });
-
-          // Slack delivery — only for startup workspaces with 'slack' in deliverySurfaces
-          if (
-            args.config.startup_workspace_id &&
-            args.entitlement.deliverySurfaces.includes('slack')
-          ) {
-            try {
-              await sendGpmReportSlackSummary({
-                supabase: args.supabase,
-                startupWorkspaceId: args.config.startup_workspace_id,
-                payload: storeResult.payload,
-                pdfUrl: storeResult.pdfUrl,
-                configId: args.config.id,
-              });
-            } catch (slackErr) {
-              structuredError('gpm_slack_delivery_failed', {
-                config_id: args.config.id,
-                run_group_id: result.runGroupId,
-                platform,
-                error: slackErr instanceof Error ? slackErr.message : 'unknown',
-              });
-            }
-          }
-        } catch (reportErr) {
-          structuredError('gpm_report_store_failed', {
-            config_id: args.config.id,
-            run_group_id: result.runGroupId,
-            platform,
-            error: reportErr instanceof Error ? reportErr.message : 'unknown',
-          });
-        }
-      }
-
       structuredLog('gpm_client_run_launched', {
         config_id: args.config.id,
         platform,
@@ -458,6 +403,57 @@ export async function executeGpmClientRun(args: {
     }
   }
 
+  // Generate one canonical artifact after every provider has settled. Completed existing runs are
+  // valid sources, so this also repairs a missing artifact without paying for another measurement.
+  if (args.reportEnv) {
+    const platformRuns = platformResults.flatMap((item) =>
+      item.runGroupId && item.status !== 'failed'
+        ? [{ platform: item.platform as GpmReportPlatform, runGroupId: item.runGroupId }]
+        : []
+    );
+    if (platformRuns.length > 0) {
+      try {
+        const stored = await storeAgencyReport({
+          supabase: args.supabase,
+          config: args.config,
+          platformRuns,
+          windowDate,
+          measuredCanonicalDomain: domain.canonical_domain,
+          bucket: args.reportBucket,
+          env: args.reportEnv,
+        });
+        if (
+          stored.created &&
+          args.config.startup_workspace_id &&
+          args.entitlement.deliverySurfaces.includes('slack')
+        ) {
+          try {
+            await sendGpmReportSlackSummary({
+              supabase: args.supabase,
+              startupWorkspaceId: args.config.startup_workspace_id,
+              payload: agencySnapshotToGpmPayload(stored.snapshot),
+              pdfUrl: stored.secureReportUrl,
+              configId: args.config.id,
+            });
+          } catch (slackErr) {
+            structuredError('gpm_slack_delivery_failed', {
+              config_id: args.config.id,
+              report_id: stored.reportId,
+              error: slackErr instanceof Error ? slackErr.message : 'unknown',
+            });
+          }
+        }
+      } catch (reportErr) {
+        structuredError('agency_report_store_failed', {
+          config_id: args.config.id,
+          window_date: windowDate,
+          source_run_count: platformRuns.length,
+          error: reportErr instanceof Error ? reportErr.message : 'unknown',
+        });
+      }
+    }
+  }
+
   return {
     configId: args.config.id,
     windowDate,
@@ -479,6 +475,8 @@ export type GpmScheduleEnvLike = {
   readonly ANTHROPIC_API_KEY?: string;
   readonly GPM_NARRATIVE_MODEL?: string;
   readonly GPM_REPORT_R2_PUBLIC_BASE?: string;
+  readonly GPM_REPORT_DELIVERY_ENABLED?: string;
+  readonly NEXT_PUBLIC_APP_URL?: string;
   // Email delivery
   readonly RESEND_API_KEY?: string;
   readonly RESEND_FROM_EMAIL?: string;

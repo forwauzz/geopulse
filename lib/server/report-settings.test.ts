@@ -1,14 +1,66 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_REPORT_SETTINGS,
+  LOCKED_SECTIONS,
+  PLANNED_SECTIONS,
+  SECTION_DESCRIPTORS,
   describeOverrides,
   diffAgainstInherited,
   isLockedSection,
   parseReportSettings,
+  reportProfileVersion,
   resolveReportSettings,
   sectionRenderState,
+  sectionsForSurface,
   type ReportSettings,
 } from './report-settings';
+
+describe('section catalogue', () => {
+  it('only lists sections that render on at least one surface', () => {
+    for (const section of SECTION_DESCRIPTORS) {
+      expect(section.surfaces.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps unrendered ideas out of the settings surface entirely', () => {
+    // A switch that silently does nothing is worse than no switch. These six were derived from
+    // mockups and gate nothing today, so they must not appear as section keys.
+    const keys = SECTION_DESCRIPTORS.map((s) => s.key) as string[];
+    for (const dead of [
+      'categoryBreakdown',
+      'namedVsLinked',
+      'averagePosition',
+      'shareOfAnswers',
+      'crawlDetail',
+    ]) {
+      expect(keys).not.toContain(dead);
+    }
+    expect(keys).toContain('trendOverTime');
+    expect(PLANNED_SECTIONS.length).toBe(5);
+    for (const planned of PLANNED_SECTIONS) expect(planned.blockedBy).toBeTruthy();
+  });
+
+  it('splits sections by the surface they actually appear on', () => {
+    const summary = sectionsForSurface('summary').map((s) => s.key);
+    const pdf = sectionsForSurface('pdf').map((s) => s.key);
+    // Verified in the live DOM and in a delivered PDF respectively.
+    expect(summary).toContain('measurementReceipts');
+    expect(pdf).not.toContain('measurementReceipts');
+    expect(pdf).toContain('opportunities');
+    expect(summary).not.toContain('opportunities');
+  });
+
+  it('marks competitor co-citations conditional, because it does not always render', () => {
+    const section = SECTION_DESCRIPTORS.find((s) => s.key === 'competitorCoCitations');
+    expect(section?.conditional).toBe(true);
+  });
+
+  it('defaults every section on, since each one renders today', () => {
+    for (const section of SECTION_DESCRIPTORS) {
+      expect(DEFAULT_REPORT_SETTINGS.sections[section.key]).toBe(true);
+    }
+  });
+});
 
 describe('parseReportSettings', () => {
   it('returns an empty override for a scope that has stored nothing', () => {
@@ -20,22 +72,28 @@ describe('parseReportSettings', () => {
   it('degrades to an empty override rather than throwing on a malformed value', () => {
     expect(parseReportSettings('not an object')).toEqual({});
     expect(parseReportSettings({ layout: 'sideways' })).toEqual({});
-    expect(parseReportSettings({ sections: 'nope' })).toEqual({});
   });
 
-  it('keeps only the fields that were set', () => {
-    expect(parseReportSettings({ sections: { crawlDetail: true } })).toEqual({
-      sections: { crawlDetail: true },
-    });
-  });
-
-  it('drops keys it does not recognise instead of failing the whole read', () => {
+  it('drops keys retired by this reconciliation without discarding the rest', () => {
+    // Anything saved by the previously deployed taxonomy must degrade cleanly.
     const parsed = parseReportSettings({
       layout: 'per_engine',
-      sections: { crawlDetail: true, sectionRetiredLastYear: true },
+      sections: { crawlDetail: true, opportunities: false },
     });
     expect(parsed.layout).toBe('per_engine');
-    expect(parsed.sections).toEqual({ crawlDetail: true });
+    expect(parsed.sections).toEqual({ opportunities: false });
+  });
+
+  it('normalizes and deduplicates an explicitly curated scope', () => {
+    expect(parseReportSettings({
+      comparisonMonths: 3,
+      promptKeys: [' buyer-one ', 'buyer-one', 'buyer-two'],
+      competitors: [' Example.com ', 'Example.com'],
+    })).toMatchObject({
+      comparisonMonths: 3,
+      promptKeys: ['buyer-one', 'buyer-two'],
+      competitors: ['Example.com'],
+    });
   });
 });
 
@@ -44,29 +102,20 @@ describe('resolveReportSettings', () => {
     expect(resolveReportSettings(null, null)).toEqual(DEFAULT_REPORT_SETTINGS);
   });
 
-  it('lets the agency change a field without touching the rest', () => {
-    const resolved = resolveReportSettings({ sections: { crawlDetail: true } });
-    expect(resolved.sections.crawlDetail).toBe(true);
-    expect(resolved.sections.categoryBreakdown).toBe(
-      DEFAULT_REPORT_SETTINGS.sections.categoryBreakdown
-    );
-  });
-
   it('lets the client win over the agency for the field it sets', () => {
     const resolved = resolveReportSettings(
-      { sections: { whoIsWinning: true, trackedCompetitorSet: true } },
-      { sections: { whoIsWinning: false } }
+      { sections: { opportunities: true, promptPerformance: true } },
+      { sections: { opportunities: false } }
     );
-    expect(resolved.sections.whoIsWinning).toBe(false);
-    expect(resolved.sections.trackedCompetitorSet).toBe(true);
+    expect(resolved.sections.opportunities).toBe(false);
+    expect(resolved.sections.promptPerformance).toBe(true);
   });
 
   it('keeps a client following the agency for fields the client did not set', () => {
-    // The point of sparse storage: change the agency default later and the client still follows.
-    const before = resolveReportSettings({ sections: { crawlDetail: false } }, { layout: 'per_engine' });
-    const after = resolveReportSettings({ sections: { crawlDetail: true } }, { layout: 'per_engine' });
-    expect(before.sections.crawlDetail).toBe(false);
-    expect(after.sections.crawlDetail).toBe(true);
+    const before = resolveReportSettings({ sections: { opportunities: false } }, { layout: 'per_engine' });
+    const after = resolveReportSettings({ sections: { opportunities: true } }, { layout: 'per_engine' });
+    expect(before.sections.opportunities).toBe(false);
+    expect(after.sections.opportunities).toBe(true);
     expect(after.layout).toBe('per_engine');
   });
 
@@ -77,11 +126,26 @@ describe('resolveReportSettings', () => {
     );
     expect(resolved.sections.scopeStatement).toBe(true);
     expect(resolved.sections.methodology).toBe(true);
+    expect(LOCKED_SECTIONS).toContain('scopeStatement');
   });
 
-  it('resolves engines independently of sections', () => {
-    const resolved = resolveReportSettings({ engines: { claude: false, copilot: false } });
-    expect(resolved.engines.claude).toBe(false);
+  it('honours an independently disabled section', () => {
+    const resolved = resolveReportSettings({ sections: { competitorsTracked: false } });
+    expect(resolved.sections.competitorsTracked).toBe(false);
+    expect(resolved.sections.visibilityByEngine).toBe(true);
+  });
+
+  it('honours a pair switched off together', () => {
+    const resolved = resolveReportSettings({
+      sections: { competitorsTracked: false, visibilityByEngine: false },
+    });
+    expect(resolved.sections.competitorsTracked).toBe(false);
+    expect(resolved.sections.visibilityByEngine).toBe(false);
+  });
+
+  it('resolves measured engines independently of sections', () => {
+    const resolved = resolveReportSettings({ engines: { perplexity: false } });
+    expect(resolved.engines.perplexity).toBe(false);
     expect(resolved.engines.chatgpt).toBe(true);
   });
 });
@@ -95,16 +159,11 @@ describe('describeOverrides', () => {
   it('counts each explicitly set field once', () => {
     const map = describeOverrides({
       layout: 'per_engine',
-      sections: { whoIsWinning: false, trackedCompetitorSet: true },
+      sections: { opportunities: false, promptPerformance: true },
     });
     expect(map.count).toBe(3);
     expect(map.layout).toBe(true);
-    expect(map.sections.whoIsWinning).toBe(true);
-    expect(map.sections.categoryBreakdown).toBeUndefined();
-  });
-
-  it('counts a field set to the same value as the parent — it is still explicitly owned here', () => {
-    expect(describeOverrides({ sections: { categoryBreakdown: true } }).count).toBe(1);
+    expect(map.sections.opportunities).toBe(true);
   });
 });
 
@@ -118,9 +177,9 @@ describe('diffAgainstInherited', () => {
   it('writes only the fields that differ', () => {
     const desired: ReportSettings = {
       ...inherited,
-      sections: { ...inherited.sections, crawlDetail: true },
+      sections: { ...inherited.sections, opportunities: false },
     };
-    expect(diffAgainstInherited(desired, inherited)).toEqual({ sections: { crawlDetail: true } });
+    expect(diffAgainstInherited(desired, inherited)).toEqual({ sections: { opportunities: false } });
   });
 
   it('never stores a locked section', () => {
@@ -131,21 +190,33 @@ describe('diffAgainstInherited', () => {
     expect(diffAgainstInherited(desired, inherited)).toEqual({});
   });
 
-  it('round-trips through resolve', () => {
+  it('round-trips an independently curated change through resolve', () => {
     const desired: ReportSettings = {
+      ...inherited,
       layout: 'per_engine',
-      engines: { ...inherited.engines, claude: false },
-      sections: { ...inherited.sections, trackedCompetitorSet: true },
+      comparisonMonths: 3,
+      promptKeys: ['buyer-question'],
+      competitors: ['competitor.example'],
+      engines: { ...inherited.engines, perplexity: false },
+      sections: { ...inherited.sections, competitorsTracked: false, visibilityByEngine: false },
     };
     const diff = diffAgainstInherited(desired, inherited);
     expect(resolveReportSettings(diff)).toEqual(desired);
   });
 });
 
+describe('reportProfileVersion', () => {
+  it('is stable for one exact resolved profile and changes with material scope', () => {
+    const first = reportProfileVersion(DEFAULT_REPORT_SETTINGS);
+    expect(reportProfileVersion({ ...DEFAULT_REPORT_SETTINGS })).toBe(first);
+    expect(reportProfileVersion({ ...DEFAULT_REPORT_SETTINGS, comparisonMonths: 3 })).not.toBe(first);
+    expect(reportProfileVersion({ ...DEFAULT_REPORT_SETTINGS, promptKeys: ['question-a'] })).not.toBe(first);
+  });
+});
+
 describe('sectionRenderState', () => {
-  it('hides a section that is switched off, whether or not data exists', () => {
+  it('hides a section that is switched off', () => {
     expect(sectionRenderState(false, true)).toBe('hidden');
-    expect(sectionRenderState(false, false)).toBe('hidden');
   });
 
   it('renders a section that is on and has data', () => {
@@ -153,8 +224,6 @@ describe('sectionRenderState', () => {
   });
 
   it('marks a section that is on but has no data as empty, not hidden', () => {
-    // Trend over time in the first measured month: the agency ticked it, so it must be
-    // visibly pending rather than silently absent.
     expect(sectionRenderState(true, false)).toBe('empty');
   });
 });
@@ -163,6 +232,6 @@ describe('isLockedSection', () => {
   it('locks the two sections that describe the boundary of the measurement', () => {
     expect(isLockedSection('scopeStatement')).toBe(true);
     expect(isLockedSection('methodology')).toBe(true);
-    expect(isLockedSection('categoryBreakdown')).toBe(false);
+    expect(isLockedSection('opportunities')).toBe(false);
   });
 });

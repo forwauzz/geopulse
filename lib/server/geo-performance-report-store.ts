@@ -19,6 +19,7 @@ export type GpmReportStoreEnvLike = {
   readonly RESEND_API_KEY?: string;
   readonly RESEND_FROM_EMAIL?: string;
   readonly NEXT_PUBLIC_APP_URL?: string;
+  readonly GPM_REPORT_DELIVERY_ENABLED?: string;
 };
 
 export type GpmR2BucketLike = {

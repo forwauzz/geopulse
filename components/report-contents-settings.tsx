@@ -3,6 +3,8 @@
 import { useMemo, useState, useTransition } from 'react';
 import {
   DEFAULT_REPORT_SETTINGS,
+  PLANNED_SECTIONS,
+  SECTION_DESCRIPTORS,
   describeOverrides,
   diffAgainstInherited,
   isLockedSection,
@@ -10,60 +12,41 @@ import {
   type ReportEngineKey,
   type ReportSectionKey,
   type ReportSettings,
+  type SectionDescriptor,
 } from '@/lib/server/report-settings';
-import type { ReportPreviewPayload } from '@/lib/server/report-preview-payload';
+import type { AgencyReportSnapshotV2 } from '@/lib/server/agency-report-snapshot';
 import { ReportPreviewPage } from '@/components/report-preview-page';
 
-type SectionMeta = {
-  readonly key: ReportSectionKey;
-  readonly label: string;
-  readonly help: string;
-  readonly source: string;
-};
+/**
+ * Groups are derived from SECTION_DESCRIPTORS rather than hardcoded, so the checklist can never
+ * drift from what actually renders. Ordering follows the delivered artifacts.
+ */
+type SectionMeta = SectionDescriptor;
 
-/** Grouped for the checklist. Order here is the order of the report itself. */
+const pick = (...keys: readonly ReportSectionKey[]): readonly SectionMeta[] =>
+  keys.map((key) => SECTION_DESCRIPTORS.find((s) => s.key === key)!).filter(Boolean);
+
 const GROUPS: readonly { readonly title: string; readonly items: readonly SectionMeta[] }[] = [
   {
-    title: 'Site health',
-    items: [
-      { key: 'readinessScore', label: 'Overall readiness score and grade', help: 'The headline number, out of 100.', source: 'scans.score' },
-      { key: 'categoryBreakdown', label: 'Category breakdown', help: 'Readiness, extractability and trust, with weights. This is what explains a low visibility result.', source: 'categoryScores' },
-      { key: 'holdingScoreDown', label: "What's holding the score down", help: 'The failing checks, in plain language, ordered by impact.', source: 'highlightedIssues' },
-      { key: 'crawlDetail', label: 'Crawl and access detail', help: 'Robots status, pages fetched, render mode. Technical.', source: 'coverageSummary' },
-    ],
+    title: 'The shareable summary',
+    items: pick(
+      'headlineStats',
+      'executiveSummary',
+      'visibilityByEngine',
+      'trendOverTime',
+      'competitorsTracked',
+      'buyerQuestions',
+      'priorityActionPlan',
+      'measurementReceipts'
+    ),
   },
   {
-    title: 'AI answer visibility',
-    items: [
-      { key: 'combinedVisibility', label: 'Combined visibility', help: 'One figure across every included engine.', source: 'citation_rate' },
-      { key: 'perEngineBreakdown', label: 'Per-engine breakdown', help: 'Visibility on each engine separately.', source: '*_visibility_pct' },
-      { key: 'namedVsLinked', label: 'Named vs linked', help: 'Whether engines mention the business, and whether they cite the site as a source.', source: 'brand_mention / url_citation' },
-      { key: 'questionByQuestion', label: 'Question-by-question results', help: 'Every tracked question, cited or not, and who appeared instead.', source: 'prompts[]' },
-      { key: 'averagePosition', label: 'Average position when cited', help: 'Empty until the client has a citation to average.', source: 'rankPosition' },
-    ],
-  },
-  {
-    title: 'Competitive',
-    items: [
-      { key: 'whoIsWinning', label: 'Who is winning these answers', help: 'Ranked by how many tracked questions each domain wins.', source: 'competitors[]' },
-      { key: 'shareOfAnswers', label: 'Share of answers', help: "The client's share of all sources cited.", source: 'share_of_voice' },
-      { key: 'trackedCompetitorSet', label: 'Tracked competitive set', help: 'Names the competitors being measured against.', source: 'competitor_list' },
-    ],
-  },
-  {
-    title: 'Framing',
-    items: [
-      { key: 'executiveSummary', label: 'Executive summary', help: 'A written opening that states the finding.', source: 'narrative' },
-      { key: 'trendOverTime', label: 'Trend over time', help: 'Appears once there are two comparable periods.', source: 'period rollup' },
-      { key: 'whatWeAreDoingNext', label: "What we're doing next", help: 'The open actions, presented as the plan.', source: 'outcome actions' },
-    ],
+    title: 'The downloadable report',
+    items: pick('promptPerformance', 'opportunities', 'competitorCoCitations'),
   },
   {
     title: 'Always included',
-    items: [
-      { key: 'scopeStatement', label: 'Scope statement', help: 'Which engines, how many questions, tracked since when.', source: 'Always' },
-      { key: 'methodology', label: 'Methodology and definitions', help: 'How each figure is measured, and the session-variance caveat.', source: 'Always' },
-    ],
+    items: pick('scopeStatement', 'methodology'),
   },
 ];
 
@@ -71,8 +54,6 @@ const ENGINES: readonly { readonly key: ReportEngineKey; readonly label: string 
   { key: 'chatgpt', label: 'ChatGPT' },
   { key: 'google', label: 'Gemini' },
   { key: 'perplexity', label: 'Perplexity' },
-  { key: 'claude', label: 'Claude' },
-  { key: 'copilot', label: 'Copilot' },
 ];
 
 function Check({ on, locked }: { readonly on: boolean; readonly locked?: boolean }) {
@@ -102,18 +83,22 @@ export function ReportContentsSettings({
   agencyName,
   initialSettings,
   initialOverride,
+  inheritedSettings = DEFAULT_REPORT_SETTINGS,
   saveAction,
-  previewPayload,
+  previewSnapshot,
   brandName,
   brandColor,
+  saveLabel,
 }: {
   readonly agencyName: string;
   readonly initialSettings: ReportSettings;
   readonly initialOverride: PartialReportSettings;
+  readonly inheritedSettings?: ReportSettings;
   readonly saveAction: (override: PartialReportSettings) => Promise<{ ok: boolean; error?: string }>;
-  readonly previewPayload: ReportPreviewPayload | null;
+  readonly previewSnapshot: AgencyReportSnapshotV2 | null;
   readonly brandName: string;
   readonly brandColor: string;
+  readonly saveLabel?: string;
 }) {
   const [settings, setSettings] = useState<ReportSettings>(initialSettings);
   const [paneOpen, setPaneOpen] = useState(true);
@@ -128,12 +113,12 @@ export function ReportContentsSettings({
 
   // At agency level the level above is what ships.
   const draftOverride = useMemo(
-    () => diffAgainstInherited(settings, DEFAULT_REPORT_SETTINGS),
-    [settings]
+    () => diffAgainstInherited(settings, inheritedSettings),
+    [settings, inheritedSettings]
   );
   const savedOverride = useMemo(
-    () => diffAgainstInherited(savedSettings, DEFAULT_REPORT_SETTINGS),
-    [savedSettings]
+    () => diffAgainstInherited(savedSettings, inheritedSettings),
+    [savedSettings, inheritedSettings]
   );
   const initialCount = useMemo(() => describeOverrides(savedOverride).count, [savedOverride]);
   const dirty = useMemo(
@@ -144,15 +129,47 @@ export function ReportContentsSettings({
   function toggleSection(key: ReportSectionKey) {
     if (isLockedSection(key)) return;
     setSaved(null);
-    setSettings((prev) => ({
-      ...prev,
-      sections: { ...prev.sections, [key]: !prev.sections[key] },
-    }));
+    setSettings((prev) => {
+      const next = !prev.sections[key];
+      return { ...prev, sections: { ...prev.sections, [key]: next } };
+    });
   }
 
   function toggleEngine(key: ReportEngineKey) {
     setSaved(null);
-    setSettings((prev) => ({ ...prev, engines: { ...prev.engines, [key]: !prev.engines[key] } }));
+    setSettings((prev) => {
+      const enabledCount = Object.values(prev.engines).filter(Boolean).length;
+      if (prev.engines[key] && enabledCount === 1) return prev;
+      return { ...prev, engines: { ...prev.engines, [key]: !prev.engines[key] } };
+    });
+  }
+
+  function togglePrompt(queryKey: string) {
+    if (!previewSnapshot) return;
+    setSaved(null);
+    setSettings((prev) => {
+      const all = previewSnapshot.availableQuestions.map((question) => question.queryKey);
+      const current = prev.promptKeys.length > 0 ? [...prev.promptKeys] : all;
+      const next = current.includes(queryKey)
+        ? current.filter((key) => key !== queryKey)
+        : [...current, queryKey];
+      if (next.length === 0) return prev;
+      return { ...prev, promptKeys: next.length === all.length ? [] : next.sort() };
+    });
+  }
+
+  function toggleCompetitor(name: string) {
+    if (!previewSnapshot) return;
+    setSaved(null);
+    setSettings((prev) => {
+      const all = previewSnapshot.availableCompetitors.map((competitor) => competitor.name);
+      const current = prev.competitors.length > 0 ? [...prev.competitors] : all;
+      const next = current.includes(name)
+        ? current.filter((competitor) => competitor !== name)
+        : [...current, name];
+      if (next.length === 0) return prev;
+      return { ...prev, competitors: next.length === all.length ? [] : next.sort() };
+    });
   }
 
   function onSave() {
@@ -198,7 +215,7 @@ export function ReportContentsSettings({
           data-testid="save-button"
           className="min-h-[38px] rounded-lg bg-primary px-4 text-sm font-semibold text-on-primary disabled:opacity-40"
         >
-          {pending ? 'Saving…' : `Save ${agencyName} default`}
+          {pending ? 'Saving…' : (saveLabel ?? `Save ${agencyName} default`)}
         </button>
       </div>
 
@@ -206,32 +223,21 @@ export function ReportContentsSettings({
         {/* ---------------- checklist ---------------- */}
         <div className="space-y-4">
           <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Layout</p>
-            <h2 className="mt-2 font-headline text-lg font-semibold text-on-background">One report or one per engine?</h2>
-            <div className="mt-3 flex gap-2">
-              {(['combined', 'per_engine'] as const).map((value) => (
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Delivery contract</p>
+            <h2 className="mt-2 font-headline text-lg font-semibold text-on-background">One canonical client report</h2>
+            <p className="mt-2 text-[12.5px] leading-relaxed text-on-surface-variant">Dashboard, client share page, PDF and email all use one stored multi-engine snapshot. Missing engines are disclosed and omitted, never counted as zero.</p>
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              {([1, 3, 6, 12] as const).map((months) => (
                 <button
-                  key={value}
+                  key={months}
                   type="button"
                   onClick={() => {
                     setSaved(null);
-                    setSettings((p) => ({ ...p, layout: value }));
+                    setSettings((prev) => ({ ...prev, comparisonMonths: months }));
                   }}
-                  data-testid={`layout-${value}`}
-                  className={`flex-1 rounded-xl px-3 py-3 text-left ${
-                    settings.layout === value
-                      ? 'border-2 border-primary bg-surface-container-low'
-                      : 'border border-outline-variant/45 bg-surface-container-lowest'
-                  }`}
+                  className={`rounded-xl px-2 py-2.5 text-center text-xs font-bold ${settings.comparisonMonths === months ? 'bg-primary text-on-primary' : 'border border-outline-variant/45 text-on-background'}`}
                 >
-                  <span className="block text-[13px] font-semibold text-on-background">
-                    {value === 'combined' ? 'One combined report' : 'Separate per engine'}
-                  </span>
-                  <span className="mt-1 block text-[11.5px] leading-snug text-on-surface-variant">
-                    {value === 'combined'
-                      ? 'All engines in a single PDF, combined figure plus per-engine breakdown.'
-                      : 'One file per engine, per client, per month.'}
-                  </span>
+                  {months} mo
                 </button>
               ))}
             </div>
@@ -260,6 +266,34 @@ export function ReportContentsSettings({
           </section>
 
           <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Truthful curation</p>
+            <h2 className="mt-2 font-headline text-lg font-semibold text-on-background">Which evidence to present</h2>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-on-surface-variant">Lead with the work the agency is accountable for. Any selection is named in the scope statement and versioned with the report.</p>
+            {previewSnapshot ? (
+              <div className="mt-4 grid gap-5 md:grid-cols-2">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">Buyer questions</p>
+                  <div className="mt-2 max-h-64 overflow-y-auto rounded-xl border border-outline-variant/30 px-3">
+                    {previewSnapshot.availableQuestions.map((question) => {
+                      const on = settings.promptKeys.length === 0 || settings.promptKeys.includes(question.queryKey);
+                      return <button key={question.queryKey} type="button" onClick={() => togglePrompt(question.queryKey)} className="flex w-full items-start gap-2 border-t border-outline-variant/20 py-2.5 text-left first:border-t-0"><Check on={on} /><span className="text-[12px] font-semibold leading-snug text-on-background">{question.queryText}</span></button>;
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">Competitors</p>
+                  <div className="mt-2 rounded-xl border border-outline-variant/30 px-3">
+                    {previewSnapshot.availableCompetitors.length > 0 ? previewSnapshot.availableCompetitors.map((competitor) => {
+                      const on = settings.competitors.length === 0 || settings.competitors.includes(competitor.name);
+                      return <button key={competitor.name} type="button" onClick={() => toggleCompetitor(competitor.name)} className="flex w-full items-center gap-2 border-t border-outline-variant/20 py-2.5 text-left first:border-t-0"><Check on={on} /><span className="text-[12px] font-semibold text-on-background">{competitor.name}</span></button>;
+                    }) : <p className="py-3 text-xs text-on-surface-variant">No competing domain appeared in this snapshot.</p>}
+                  </div>
+                </div>
+              </div>
+            ) : <p className="mt-4 rounded-xl bg-surface-container-low p-4 text-xs text-on-surface-variant">A verified snapshot is required before evidence can be selected.</p>}
+          </section>
+
+          <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float">
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-on-surface-variant">Contents</p>
             <h2 className="mt-2 font-headline text-lg font-semibold text-on-background">What goes in the report</h2>
             <p className="mt-1 text-[12.5px] text-on-surface-variant">Every item is data GEO-Pulse already collects.</p>
@@ -285,17 +319,43 @@ export function ReportContentsSettings({
                     >
                       <Check on={settings.sections[item.key]} locked={locked} />
                       <span className="flex-1">
-                        <span className="block text-[13px] font-semibold leading-snug text-on-background">{item.label}</span>
-                        <span className="mt-0.5 block text-[11.5px] leading-snug text-on-surface-variant">{item.help}</span>
+                        <span className="block text-[13px] font-semibold leading-snug text-on-background">
+                          {item.label}
+                        </span>
+                        <span className="mt-0.5 block text-[11.5px] leading-snug text-on-surface-variant">
+                          {item.help}
+                          {item.conditional ? ' Only renders when the period produced this data.' : ''}
+                        </span>
                       </span>
-                      <span className="mt-0.5 shrink-0 rounded bg-surface-container-low px-1.5 py-0.5 text-[9.5px] font-semibold text-on-surface-variant">
-                        {item.source}
+                      <span className="mt-0.5 flex shrink-0 flex-col items-end gap-1">
+                        <span className="rounded bg-surface-container-low px-1.5 py-0.5 text-[9.5px] font-semibold text-on-surface-variant">
+                          {item.source}
+                        </span>
+                        <span className="text-[9px] font-semibold uppercase tracking-wide text-on-surface-variant/70">
+                          {item.surfaces.length === 2 ? 'both' : item.surfaces[0] === 'pdf' ? 'PDF' : 'summary'}
+                        </span>
                       </span>
                     </button>
                   );
                 })}
               </div>
             ))}
+
+            <div className="mt-6 rounded-xl border border-outline-variant/30 bg-surface-container-low p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-on-surface-variant">
+                Not available yet
+              </p>
+              <p className="mt-1.5 text-[12px] leading-snug text-on-surface-variant">
+                These are collected but not yet rendered in either artifact, so there is nothing to switch on.
+              </p>
+              <ul className="mt-2.5 space-y-1.5">
+                {PLANNED_SECTIONS.map((planned) => (
+                  <li key={planned.label} className="text-[11.5px] leading-snug text-on-surface-variant">
+                    <span className="font-semibold text-on-background/70">{planned.label}</span> — {planned.blockedBy}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </section>
         </div>
 
@@ -320,14 +380,14 @@ export function ReportContentsSettings({
 
               <div className="max-h-[70vh] overflow-y-auto bg-surface-container px-3 py-3" data-testid="preview-body">
                 <ReportPreviewPage
-                  payload={previewPayload}
+                  snapshot={previewSnapshot}
                   settings={settings}
                   brandName={brandName}
                   brandColor={brandColor}
                 />
                 <p className="mt-2.5 text-[10.5px] leading-snug text-on-surface-variant">
-                  {previewPayload
-                    ? `The page ${previewPayload.clientName} receives, using their last measured period. A section switched off is removed; a section on with no data yet shows why.`
+                  {previewSnapshot
+                    ? `The exact page ${previewSnapshot.clientName} receives, using their stored canonical snapshot. Draft content switches reflow this same renderer.`
                     : 'Nothing is generated to build this — it composes the last stored period.'}
                 </p>
               </div>

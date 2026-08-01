@@ -150,6 +150,9 @@ export default async function ClientScorecardPage({
             <p className="mt-1 text-on-surface-variant">{domain ?? 'Website not set'}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href={`/dashboard/clients/${client.id}/report-profile`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
+              <span className="material-symbols-outlined text-[18px]" aria-hidden>tune</span> Report profile
+            </Link>
             <Link href={`/dashboard/new-scan?agencyAccount=${account.id}&agencyClient=${client.id}&url=${encodeURIComponent(domain ? `https://${domain}` : '')}`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
               <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check again
             </Link>
