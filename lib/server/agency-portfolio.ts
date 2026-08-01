@@ -1,5 +1,6 @@
 import type { AgencyDashboardAccount, AgencyDashboardData } from './agency-dashboard-data';
 import { loadClientOutcomeEngine } from './client-outcome-engine';
+import { isReportQuarantined } from './report-quarantine';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -27,6 +28,7 @@ type ConfigRow = {
 type ReportRow = {
   readonly pdf_url: string | null;
   readonly generated_at: string;
+  readonly metadata: Record<string, unknown> | null;
 };
 
 async function leadingCompetitorForRun(args: {
@@ -130,14 +132,13 @@ export async function loadAgencyPortfolio(args: {
     let gpmReport: ReportRow | null = null;
     let leadingCompetitor: string | null = null;
     if (config?.id) {
-      const [{ data: report }, { data: group }] = await Promise.all([
+      const [{ data: reports }, { data: group }] = await Promise.all([
         args.supabase
           .from('gpm_reports')
-          .select('pdf_url,generated_at')
+          .select('pdf_url,generated_at,metadata')
           .eq('config_id', config.id)
           .order('generated_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
+          .limit(25),
         args.supabase
           .from('benchmark_run_groups')
           .select('id')
@@ -147,10 +148,12 @@ export async function loadAgencyPortfolio(args: {
           .limit(1)
           .maybeSingle(),
       ]);
+      const report = ((reports ?? []) as ReportRow[]).find((row) => !isReportQuarantined(row.metadata));
       gpmReport = report
         ? {
             pdf_url: typeof report.pdf_url === 'string' ? report.pdf_url : null,
             generated_at: String(report.generated_at),
+            metadata: report.metadata,
           }
         : null;
       if (group?.id) {

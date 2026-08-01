@@ -2,6 +2,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { resolveReportFilesBucket } from '@/lib/server/report-branding-settings';
 import { readAgencyReportSnapshot } from '@/lib/server/agency-report-snapshot';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { isReportQuarantined } from '@/lib/server/report-quarantine';
 
 export const runtime = 'nodejs';
 
@@ -31,7 +32,7 @@ export async function GET(
     .eq('platform', 'combined')
     .eq('report_payload_version', '2')
     .maybeSingle();
-  if (!report?.agency_client_id || !report.pdf_r2_key) {
+  if (!report?.agency_client_id || !report.pdf_r2_key || isReportQuarantined(report.metadata)) {
     return Response.json({ error: 'not_found' }, { status: 404 });
   }
   const { data: client } = await admin

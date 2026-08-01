@@ -14,6 +14,7 @@ import { storeAgencyReport } from './agency-report-store';
 import { agencySnapshotToGpmPayload, type GpmReportPlatform } from './agency-report-snapshot';
 import { sendGpmReportSlackSummary } from './geo-performance-slack';
 import { structuredError, structuredLog } from './structured-log';
+import { isReportQuarantined } from './report-quarantine';
 import {
   estimateGpmActivationCostUsd,
   estimateGpmPlatformCostUsd,
@@ -662,11 +663,13 @@ export async function runGpmScheduledSweep(args: {
         const existing = summary.platformResults.filter((result) => result.status === 'skipped_existing');
         const { data: reportProof } = await args.supabase
           .from('gpm_reports')
-          .select('id')
+          .select('id,metadata')
           .eq('config_id', config.id)
-          .limit(1);
+          .limit(100);
+        const hasEligibleReport = (reportProof ?? [])
+          .some((report: { metadata?: unknown }) => !isReportQuarantined(report.metadata));
         const baselineStatus = resolveActivationBaselineStatus({
-          hasReport: (reportProof ?? []).length > 0,
+          hasReport: hasEligibleReport,
           launched: launched.length,
           failed: failed.length,
           existing: existing.length,

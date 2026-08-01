@@ -7,6 +7,7 @@ import {
   type BrandSettingsView,
 } from './report-branding-settings';
 import { getTrackedPromptPanel, type TrackedPromptPanel } from './tracked-prompts';
+import { isReportQuarantined } from './report-quarantine';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -190,21 +191,23 @@ export async function listVisibilityReports(args: {
 }): Promise<VisibilityReportSummary[]> {
   let query = args.supabase
     .from('gpm_reports')
-    .select('id,platform,window_date,pdf_url,generated_at')
+    .select('id,platform,window_date,pdf_url,generated_at,metadata')
     .eq('config_id', args.configId);
   query = args.subject.kind === 'startup_workspace'
     ? query.eq('startup_workspace_id', args.subject.id)
     : query.eq('agency_account_id', args.agencyAccountId ?? '');
   const { data } = await query
     .order('generated_at', { ascending: false })
-    .limit(Math.min(Math.max(args.limit ?? 12, 1), 50));
+    .limit(100);
+  const limit = Math.min(Math.max(args.limit ?? 12, 1), 50);
   return ((data ?? []) as Array<{
     id: string;
     platform: string;
     window_date: string;
     pdf_url: string | null;
     generated_at: string;
-  }>).map((row) => ({
+    metadata: unknown;
+  }>).filter((row) => !isReportQuarantined(row.metadata)).slice(0, limit).map((row) => ({
     id: row.id,
     platform: row.platform,
     windowDate: row.window_date,
