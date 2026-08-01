@@ -21,6 +21,7 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
     section: 'Executive',
     items: [
       { href: '/admin/campaigns', label: 'Campaigns', icon: 'campaign' },
+      { href: '/admin/growth-calendar', label: 'Growth Calendar', icon: 'calendar_month' },
       { href: '/admin/agents', label: 'Chief of Staff & Agents', icon: 'assistant' },
     ],
   },
