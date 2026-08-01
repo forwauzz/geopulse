@@ -101,6 +101,19 @@ describe('closed-loop agent control', () => {
     expect(deferred).toEqual(['normal-1']);
   });
 
+  it('keeps measurement and governed campaign families ahead of unbounded gaps', () => {
+    const deferred = selectSeoFamilyIdsToDefer(
+      [
+        { id: 'generic', state: 'executing', severity: 'today', due_at: '2026-07-28T00:00:00.000Z' },
+        { id: 'governed', state: 'executing', severity: 'today', due_at: '2026-07-30T00:00:00.000Z', metadata: { closure_condition: 'Measure for 14 days.' } },
+        { id: 'measuring', state: 'verifying', severity: 'today', due_at: '2026-07-31T00:00:00.000Z' },
+      ],
+      [],
+      2,
+    );
+    expect(deferred).toEqual(['generic']);
+  });
+
   it('keeps dismissed work stopped while allowing deferred discoveries to re-enter WIP', () => {
     expect(shouldReactivateExistingLoop('discovered')).toBe(true);
     expect(shouldReactivateExistingLoop('dismissed')).toBe(false);

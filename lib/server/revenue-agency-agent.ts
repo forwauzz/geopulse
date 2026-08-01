@@ -183,7 +183,7 @@ export function chooseRevenueAgencyFocus(values: {
   activeProspects: number;
   completedScans: number;
   proofAssets: number;
-  convertedLeads: number;
+  paidSubscriptionsStarted: number;
   activeMonitoring: number;
 }): { focus: RevenueStage['key']; reason: string } {
   if (values.leads + values.activeProspects === 0) {
@@ -195,8 +195,8 @@ export function chooseRevenueAgencyFocus(values: {
   if (values.proofAssets === 0) {
     return { focus: 'prove', reason: 'Audit evidence exists, but none has been packaged into safe distribution assets yet.' };
   }
-  if (values.convertedLeads === 0) {
-    return { focus: 'convert', reason: 'The top of funnel is working, but no recent lead has crossed into a paid relationship.' };
+  if (values.paidSubscriptionsStarted === 0) {
+    return { focus: 'convert', reason: 'The top of funnel is working, but no recent lead has crossed into a recurring paid relationship.' };
   }
   if (values.activeMonitoring === 0) {
     return { focus: 'retain', reason: 'Conversions exist, but recurring monitoring has not become the retention layer yet.' };
@@ -283,8 +283,10 @@ export async function loadRevenueAgencySnapshot(
     leads,
     activeProspects,
     completedScans,
-    proofAssets,
-    convertedLeads,
+    // Published distribution is already proof in market even when the asset was
+    // created manually instead of by the social-proof agent.
+    proofAssets: proofAssets + publishedProof,
+    paidSubscriptionsStarted,
     activeMonitoring,
   });
 
@@ -313,9 +315,9 @@ export async function loadRevenueAgencySnapshot(
     {
       key: 'convert',
       label: 'Convert',
-      value: convertedLeads,
-      status: convertedLeads > 0 ? 'healthy' : leads + activeProspects > 0 ? 'attention' : 'waiting',
-      detail: `${convertedLeads} Stripe-backed paid relationships · ${checkoutStarts} checkout starts · ${outreachOpens}/${outreachSends} tracked email opens`,
+      value: paidSubscriptionsStarted,
+      status: paidSubscriptionsStarted > 0 ? 'healthy' : leads + activeProspects > 0 ? 'attention' : 'waiting',
+      detail: `${paidSubscriptionsStarted} recurring subscriptions started · ${paymentsCompleted} one-time payments · ${checkoutStarts} checkout starts · ${outreachOpens}/${outreachSends} tracked email opens`,
     },
     {
       key: 'retain',

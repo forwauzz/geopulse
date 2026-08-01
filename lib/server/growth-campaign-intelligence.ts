@@ -168,9 +168,14 @@ export function selectCampaignScopedOpportunities<T extends CampaignClassifiable
   const challengerAllocation = campaigns
     .filter((campaign) => campaign.role === 'challenger')
     .reduce((total, campaign) => total + campaign.allocation_percent, 0);
+  const proportionalChallengerCap = Math.floor(
+    boundedLimit * Math.min(challengerAllocation, 100) / 100,
+  );
   const challengerCap = Math.min(
     challenger.length,
-    Math.floor(boundedLimit * Math.min(challengerAllocation, 100) / 100),
+    boundedLimit >= 2 && challengerAllocation > 0
+      ? Math.max(1, proportionalChallengerCap)
+      : proportionalChallengerCap,
   );
   const primaryTarget = boundedLimit - challengerCap;
   return [

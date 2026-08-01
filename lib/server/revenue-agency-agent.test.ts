@@ -55,7 +55,7 @@ describe('Revenue Agency control plane', () => {
         activeProspects: 0,
         completedScans: 0,
         proofAssets: 0,
-        convertedLeads: 0,
+        paidSubscriptionsStarted: 0,
         activeMonitoring: 0,
       }).focus
     ).toBe('acquire');
@@ -65,7 +65,7 @@ describe('Revenue Agency control plane', () => {
         activeProspects: 2,
         completedScans: 3,
         proofAssets: 0,
-        convertedLeads: 0,
+        paidSubscriptionsStarted: 0,
         activeMonitoring: 0,
       }).focus
     ).toBe('prove');
@@ -75,9 +75,19 @@ describe('Revenue Agency control plane', () => {
         activeProspects: 2,
         completedScans: 3,
         proofAssets: 2,
-        convertedLeads: 1,
+        paidSubscriptionsStarted: 1,
         activeMonitoring: 0,
       }).focus
     ).toBe('retain');
+    expect(
+      chooseRevenueAgencyFocus({
+        leads: 4,
+        activeProspects: 2,
+        completedScans: 3,
+        proofAssets: 2,
+        paidSubscriptionsStarted: 0,
+        activeMonitoring: 0,
+      }).focus
+    ).toBe('convert');
   });
 });
