@@ -1,4 +1,5 @@
 import { readAgencyReportSnapshot, type AgencyReportSnapshotV2 } from './agency-report-snapshot';
+import { isReportQuarantined } from './report-quarantine';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -37,7 +38,7 @@ export async function loadLatestAgencyReport(args: {
     .maybeSingle();
   if (!config?.id) return null;
 
-  const { data: report } = await args.supabase
+  const { data: reports } = await args.supabase
     .from('gpm_reports')
     .select('id,agency_client_id,pdf_r2_key,generated_at,metadata')
     .eq('config_id', config.id)
@@ -45,8 +46,15 @@ export async function loadLatestAgencyReport(args: {
     .eq('platform', 'combined')
     .eq('report_payload_version', '2')
     .order('generated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(25);
+  const report = ((reports ?? []) as Array<{
+    id?: unknown;
+    agency_client_id?: unknown;
+    pdf_r2_key?: unknown;
+    generated_at?: unknown;
+    metadata?: unknown;
+  }>)
+    .find((row) => !isReportQuarantined(row.metadata));
   const metadata = report?.metadata && typeof report.metadata === 'object'
     ? report.metadata as Record<string, unknown>
     : null;

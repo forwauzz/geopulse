@@ -161,6 +161,16 @@ describe('visibility scorecard service', () => {
     const seeded = makeSupabase({
       gpm_reports: [
         {
+          id: 'r-quarantined',
+          config_id: 'config-1',
+          startup_workspace_id: 'ws-1',
+          platform: 'gemini',
+          window_date: '2026-07',
+          pdf_url: 'https://files.example/unsafe.pdf',
+          generated_at: '2026-07-22T00:00:00.000Z',
+          metadata: { quarantine_status: 'quarantined' },
+        },
+        {
           id: 'r-new',
           config_id: 'config-1',
           startup_workspace_id: 'ws-1',
@@ -194,6 +204,7 @@ describe('visibility scorecard service', () => {
       generatedAt: '2026-07-20T00:00:00.000Z',
     }]);
     expect(reports[0]).not.toHaveProperty('metadata');
+    expect(reports.map((report) => report.id)).not.toContain('r-quarantined');
   });
   it('fails closed for invalid and revoked public tokens', async () => {
     const active = makeSupabase({

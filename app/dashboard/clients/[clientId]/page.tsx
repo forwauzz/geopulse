@@ -12,6 +12,7 @@ import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
 import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
 import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
+import { isReportQuarantined } from '@/lib/server/report-quarantine';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,14 +118,17 @@ export default async function ClientScorecardPage({
         latestScan: latestScanDetail,
       })
     : null;
-  const { data: gpmReports } = configId
+  const { data: storedGpmReports } = configId
     ? await admin
         .from('gpm_reports')
         .select('id,pdf_url,generated_at,platform,metadata')
         .eq('config_id', configId)
         .order('generated_at', { ascending: false })
-        .limit(6)
+        .limit(24)
     : { data: null };
+  const gpmReports = (storedGpmReports ?? [])
+    .filter((report: { metadata: Record<string, unknown> | null }) => !isReportQuarantined(report.metadata))
+    .slice(0, 6);
   const engineEntries = (Object.entries(engines) as Array<[EngineKey, { citationRate: number }]>);
   const reportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
   const latestGpmReport = gpmReports?.[0] ?? null;

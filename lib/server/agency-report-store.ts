@@ -15,6 +15,7 @@ import { structuredError, structuredLog } from './structured-log';
 import { resolveReportBrand } from '../../workers/report/resolve-report-brand';
 import { sendAgencyReportEmail } from '../../workers/report/agency-report-email-delivery';
 import type { GpmR2BucketLike } from './geo-performance-report-store';
+import { isReportQuarantined } from './report-quarantine';
 
 export type AgencyReportStoreEnvLike = {
   readonly RESEND_API_KEY?: string;
@@ -182,6 +183,7 @@ export async function storeAgencyReport(args: {
   const { data: existing } = await existingQuery.maybeSingle();
   const secureReportUrl = shareUrl({ appUrl: args.env.NEXT_PUBLIC_APP_URL, client: profile.client });
   if (existing?.id) {
+    if (isReportQuarantined(existing.metadata)) throw new Error('agency_report_artifact_quarantined');
     const storedSnapshot = readAgencyReportSnapshot(existing.metadata?.['snapshot']);
     return {
       created: false,
@@ -203,7 +205,7 @@ export async function storeAgencyReport(args: {
     .order('generated_at', { ascending: false })
     .limit(24);
   const historicalSnapshots = Array.isArray(historicalRows)
-    ? historicalRows.flatMap((row) => {
+    ? historicalRows.filter((row) => !isReportQuarantined(row?.metadata)).flatMap((row) => {
       const parsed = readAgencyReportSnapshot(row?.metadata?.snapshot);
       return parsed ? [parsed] : [];
     })
