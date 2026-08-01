@@ -3,11 +3,13 @@ import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { buildAuditLlm } from './fix-agent-run';
 import { discoverCompetitorsLive } from './competitor-discovery-gemini';
 import { resolveDiscoveryMode, type BusinessProfile } from './competitor-discovery';
+import { resolveClientMarketContext } from './client-market-context';
 import { provisionCustomerVisibilityBaseline } from './customer-visibility-baseline';
 import { buildGpmEntitlementsMap } from './geo-performance-entitlements';
 import {
   buildActivationRunVersion,
   executeGpmClientRun,
+  resolveGpmEnabledPlatforms,
   resolveGpmPlatformModelMap,
   type GpmPlatform,
 } from './geo-performance-schedule';
@@ -35,6 +37,7 @@ type BaselineEnv = {
   readonly GPM_CHATGPT_MODEL_ID?: string;
   readonly GPM_GEMINI_MODEL_ID?: string;
   readonly GPM_PERPLEXITY_MODEL_ID?: string;
+  readonly GPM_ENABLED_PLATFORMS?: string;
   readonly GPM_MONTHLY_SPEND_CAP_USD?: string;
   readonly GPM_CLIENT_ACTIVATION_CAP_USD?: string;
   readonly COMPETITOR_DISCOVERY_MODE?: string;
@@ -211,9 +214,23 @@ export async function completeAgencyClientBaseline(args: {
     };
   }
 
-  // Keep the paced Gemini lane last so the single customer delivery is sent only after every
-  // provider has passed. A later repair can then reuse completed OpenAI-compatible lanes.
-  const platforms: GpmPlatform[] = ['chatgpt', 'perplexity', 'gemini'];
+  const { data: existingDomain } = await args.supabase
+    .from('benchmark_domains')
+    .select('id,vertical,subvertical,geo_region')
+    .eq('canonical_domain', domain)
+    .maybeSingle();
+  const { data: existingConfig } = existingDomain?.id
+    ? await args.supabase
+        .from('client_benchmark_configs')
+        .select('topic,location,competitor_list')
+        .eq('agency_account_id', args.agencyAccountId)
+        .eq('benchmark_domain_id', existingDomain.id)
+        .maybeSingle()
+    : { data: null };
+
+  // Honor the same provider control used by scheduled monitoring. This keeps a deliberately paused
+  // provider from turning client activation into a retry loop or an incomplete report.
+  const platforms: GpmPlatform[] = [...resolveGpmEnabledPlatforms(args.env.GPM_ENABLED_PLATFORMS)];
   const promptCount = 10;
   const estimatedSpendUsd = estimateGpmActivationCostUsd(platforms, promptCount);
   const policy = resolveGpmSpendPolicy(args.env);
@@ -232,31 +249,59 @@ export async function completeAgencyClientBaseline(args: {
     };
   }
 
+  const clientLocation = typeof client.metadata?.['location'] === 'string'
+    ? String(client.metadata['location'])
+    : null;
+  const existingLocation = typeof existingConfig?.location === 'string'
+    ? existingConfig.location
+    : typeof existingDomain?.geo_region === 'string'
+      ? existingDomain.geo_region
+      : null;
   const profile = clientProfile({
     vertical: client.vertical,
     subvertical: client.subvertical,
-    location: typeof client.metadata?.['location'] === 'string'
-      ? String(client.metadata['location'])
-      : null,
+    location: clientLocation || existingLocation,
   });
   const discovery = resolveDiscoveryMode(args.env) === 'gemini'
     ? await discoverCompetitorsLive(args.env, profile, domain)
     : { ok: false as const, reason: 'live_discovery_disabled' };
   const discoveredDomains = discovery.ok ? discovery.competitors.map((item) => item.domain) : [];
   const discoveredContext = discovery.ok ? discovery.context : null;
-  const resolvedCategory = discoveredContext?.category || client.subvertical || client.vertical;
-  const resolvedLocation = [
-    discoveredContext?.city || profile.city,
-    discoveredContext?.region || profile.region,
-  ].filter(Boolean).join(', ') || null;
+  const existingCompetitors = Array.isArray(existingConfig?.competitor_list)
+    ? existingConfig.competitor_list.filter((item: unknown): item is string => typeof item === 'string')
+    : [];
+  const market = resolveClientMarketContext({
+    clientLocation,
+    existingLocation,
+    clientCategory: client.subvertical || client.vertical,
+    existingCategory: existingConfig?.topic || existingDomain?.subvertical || existingDomain?.vertical,
+    existingCompetitors,
+    discoveryContext: discoveredContext,
+    discoveredCompetitors: discoveredDomains,
+  });
+  if (!market.ok) {
+    structuredLog('agency_client_baseline_market_blocked', {
+      agency_account_id: args.agencyAccountId,
+      client_id: args.clientId,
+      domain,
+      reason: market.reason,
+    }, 'warning');
+    return {
+      ok: false, configId: null, scanId: null, score: null,
+      competitorCount: existingCompetitors.length, promptCount, launchedPlatforms: [],
+      failedPlatforms: [], estimatedSpendUsd, monthSpendBeforeUsd,
+      monthlyCapUsd: policy.monthlyCapUsd, shareToken: null, reason: market.reason,
+    };
+  }
+  const acceptedDiscoveryContext = market.discoveryStatus === 'accepted' ? discoveredContext : null;
   const baseline = await provisionCustomerVisibilityBaseline(args.supabase, {
     agencyAccountId: args.agencyAccountId,
     domain,
     companyName: client.display_name || client.name,
     vertical: client.vertical,
-    subvertical: resolvedCategory,
-    location: resolvedLocation,
-    explicitCompetitors: discoveredDomains,
+    subvertical: market.category,
+    location: market.location,
+    explicitCompetitors: market.competitorDomains,
     reportEmail: args.reportEmail ?? null,
     source: 'agency_client_creation',
   });
@@ -289,16 +334,19 @@ export async function completeAgencyClientBaseline(args: {
   const metadata = {
     ...(config.metadata ?? {}),
     client_context: {
-      company: discoveredContext?.companyName || client.display_name || client.name,
-      category: resolvedCategory || profile.businessType,
-      services: discoveredContext?.services ?? [],
-      audience: discoveredContext?.audience ?? null,
-      city: discoveredContext?.city || profile.city,
-      region: discoveredContext?.region || profile.region,
+      company: acceptedDiscoveryContext?.companyName || client.display_name || client.name,
+      category: market.category || profile.businessType,
+      services: acceptedDiscoveryContext?.services ?? [],
+      audience: acceptedDiscoveryContext?.audience ?? null,
+      location: market.location,
+      city: acceptedDiscoveryContext?.city || profile.city,
+      region: acceptedDiscoveryContext?.region || profile.region,
     },
-    competitor_research_status: discovery.ok ? 'grounded' : 'fallback',
-    competitor_research_reason: discovery.ok ? null : discovery.reason,
-    competitor_research: discovery.ok
+    competitor_research_status: market.discoveryStatus === 'accepted'
+      ? 'grounded'
+      : market.discoveryStatus,
+    competitor_research_reason: market.discoveryReason ?? (discovery.ok ? null : discovery.reason),
+    competitor_research: market.discoveryStatus === 'accepted' && discovery.ok
       ? discovery.competitors.map((item) => ({
           name: item.name,
           domain: item.domain,
