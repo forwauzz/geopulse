@@ -1,6 +1,28 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createBenchmarkRepository } from './benchmark-repository';
 import type { GpmReportPayload, GpmPromptRow, GpmCompetitorRow } from './geo-performance-report-payload';
+import type { QueryCitationRow } from './benchmark-repository';
+
+function canonical(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase().replace(/^www\./, '');
+}
+
+export function selectTrackedCompetitorName(
+  citations: readonly Pick<QueryCitationRow, 'cited_domain' | 'rank_position' | 'metadata'>[],
+  measuredCanonicalDomain: string,
+): string | null {
+  const measured = canonical(measuredCanonicalDomain);
+  const candidates = citations
+    .filter((citation) => citation.metadata['is_competitor'] === true)
+    .filter((citation) => canonical(citation.cited_domain) !== measured)
+    .sort((a, b) => (a.rank_position ?? Number.MAX_SAFE_INTEGER) - (b.rank_position ?? Number.MAX_SAFE_INTEGER));
+  for (const citation of candidates) {
+    const configuredName = citation.metadata['competitor_name'];
+    if (typeof configuredName === 'string' && configuredName.trim()) return configuredName.trim();
+    if (citation.cited_domain?.trim()) return canonical(citation.cited_domain);
+  }
+  return null;
+}
 
 export async function buildGpmReportPayload(args: {
   readonly supabase: SupabaseClient<any, 'public', any>;
@@ -83,20 +105,12 @@ export async function buildGpmReportPayload(args: {
     const cited = clientCitation !== undefined;
     const rankPosition = clientCitation?.rank_position ?? null;
 
-    // Top non-client, non-competitor citation for this query
-    const topCompetitor = citations.find(
-      (c) =>
-        !c.metadata['is_competitor'] &&
-        c.cited_domain !== args.measuredCanonicalDomain &&
-        c.cited_domain
-    );
-
     prompts.push({
       queryKey: qInfo.key,
       queryText: qInfo.text,
       cited,
       rankPosition,
-      topCompetitorInQuery: topCompetitor?.cited_domain ?? null,
+      topCompetitorInQuery: selectTrackedCompetitorName(citations, args.measuredCanonicalDomain),
     });
   }
 

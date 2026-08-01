@@ -34,7 +34,8 @@ export type FreeVisibilityWorkspaceResult =
   | { readonly ok: true; readonly workspaceId: string; readonly baseline: VisibilityBaselineResult }
   | { readonly ok: false; readonly reason: string };
 
-const PROVISIONING_VERSION = 'customer-baseline-v2';
+const PROVISIONING_VERSION = 'customer-baseline-v3';
+const PROMPT_TEMPLATE_VERSION = 'local-market-v1';
 const DEFAULT_VERTICAL = 'business services';
 const DEFAULT_LOCATION = 'your market';
 
@@ -48,13 +49,13 @@ function unique(values: readonly string[]): string[] {
 }
 
 function promptContextVersion(category: string | null, location: string): string {
-  const value = `${category ?? DEFAULT_VERTICAL}|${location}`.trim().toLowerCase();
+  const value = `${PROMPT_TEMPLATE_VERSION}|${category ?? DEFAULT_VERTICAL}|${location}`.trim().toLowerCase();
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
     hash = Math.imul(hash, 16777619);
   }
-  return `v3-${(hash >>> 0).toString(36)}`;
+  return `v4-${(hash >>> 0).toString(36)}`;
 }
 
 export function buildBaselineBuyerPrompts(input: {
@@ -69,10 +70,10 @@ export function buildBaselineBuyerPrompts(input: {
     `Which ${category} provider should I choose in ${location}?`,
     `Compare the leading ${category} providers in ${location}.`,
     `Who is known for trustworthy ${category} services in ${location}?`,
-    `What should I look for when choosing a ${category} provider?`,
-    `Which ${category} providers have the strongest expertise and proof?`,
-    `What are the best alternatives when comparing ${category} providers?`,
-    `Which ${category} provider is best for a growing business?`,
+    `What should I look for when choosing a ${category} provider in ${location}?`,
+    `Which ${category} providers in ${location} have the strongest expertise and proof?`,
+    `What are the best ${category} alternatives in ${location}?`,
+    `Which ${category} providers in ${location} have the strongest customer reviews?`,
     `How much should I expect to pay for ${category} in ${location}?`,
     `Which ${category} provider is best for my specific needs in ${location}?`,
   ]);

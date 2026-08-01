@@ -14,6 +14,8 @@ describe('customer visibility baseline prompts', () => {
     expect(prompts.every((prompt) => prompt.endsWith('?') || prompt.endsWith('.'))).toBe(true);
     expect(prompts.join(' ')).toContain('medical clinic');
     expect(prompts.join(' ')).toContain('Montreal, Canada');
+    expect(prompts.every((prompt) => prompt.includes('Montreal, Canada'))).toBe(true);
+    expect(prompts.join(' ')).not.toContain('growing business');
   });
 
   it('falls back to useful generic prompts without inventing a market', () => {
