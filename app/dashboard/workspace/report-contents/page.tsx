@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { resolveReportSettings } from '@/lib/server/report-settings';
 import { getReportOverride } from '@/lib/server/report-settings-store';
-import { loadReportPreviewPayload } from '@/lib/server/report-preview-payload';
+import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { ReportContentsSettings } from '@/components/report-contents-settings';
@@ -75,8 +75,8 @@ export default async function ReportContentsPage() {
       ? createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY)
       : supabase;
 
-  const previewPayload = previewClient?.id
-    ? await loadReportPreviewPayload({ supabase: reader, agencyClientId: previewClient.id })
+  const previewReport = previewClient?.id
+    ? await loadLatestAgencyReport({ supabase: reader, agencyClientId: previewClient.id })
     : null;
 
   const brand = (account?.metadata as Record<string, unknown> | null)?.['brand'] as
@@ -106,7 +106,7 @@ export default async function ReportContentsPage() {
         initialSettings={settings}
         initialOverride={override}
         saveAction={saveAgencyReportSettings}
-        previewPayload={previewPayload}
+        previewSnapshot={previewReport?.snapshot ?? null}
         brandName={brandName}
         brandColor={brandColor}
       />

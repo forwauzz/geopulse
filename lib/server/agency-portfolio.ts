@@ -174,7 +174,7 @@ export async function loadAgencyPortfolio(args: {
       visibilityPct: outcome.visibilityPct,
       visibilityChange: outcome.deltaPct,
       leadingCompetitor: leadingCompetitor ?? config?.competitor_list?.[0] ?? null,
-      nextAction: outcome.actions.find((action) => action.status === 'pending')?.title
+      nextAction: outcome.actions.find((action) => action.status === 'pending')?.nextStep
         ?? (config ? 'Review the latest client report' : 'Start AI visibility tracking'),
       reportStatus: gpmReport || latestReport ? 'ready' : config ? 'scheduled' : 'not_started',
       reportUrl: gpmReport?.pdf_url ?? latestReport?.pdfUrl ?? null,

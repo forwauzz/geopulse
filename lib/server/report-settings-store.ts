@@ -86,6 +86,9 @@ export async function saveReportOverride(args: {
 
   const isEmpty =
     !args.override.layout &&
+    !args.override.comparisonMonths &&
+    !args.override.promptKeys &&
+    !args.override.competitors &&
     !args.override.engines &&
     !args.override.sections;
 
