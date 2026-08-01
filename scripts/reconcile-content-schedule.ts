@@ -3,9 +3,6 @@ import { CONTENT_SCHEDULE, validateContentSchedule, type ContentScheduleItem } f
 import { createDistributionEngineRepository } from '../lib/server/distribution-engine-repository';
 
 const APPLY = process.argv.includes('--apply');
-const TERMINAL_LOOP_STATES = new Set(['completed', 'dismissed']);
-const TERMINAL_JOB_STATES = new Set(['published', 'cancelled']);
-
 function postKind(item: ContentScheduleItem): 'single_image_post' | 'link_post' {
   return item.mediaUrl ? 'single_image_post' : 'link_post';
 }
@@ -28,7 +25,7 @@ async function reconcileAsset(
 ): Promise<{ id: string; status: string }> {
   const current = await repo.getAssetByAssetId(item.assetId);
   const linkedContentId = await contentRowId(db, item.contentId);
-  const keepStatus = current && ['scheduled', 'published'].includes(current.status) ? current.status : 'approved';
+  const keepStatus = current && ['scheduled', 'published', 'failed', 'archived'].includes(current.status) ? current.status : 'approved';
   const approvedAt = current?.approved_at ?? new Date().toISOString();
   const asset = await repo.upsertAsset({
     assetId: item.assetId,
@@ -94,14 +91,14 @@ async function reconcileLinkedInLoop(
     .eq('source_key', sourceKey)
     .maybeSingle();
   if (currentError) throw currentError;
-  if (current && TERMINAL_LOOP_STATES.has(String(current.state))) return `preserved ${current.state}`;
+  if (current) return `preserved ${current.state}`;
 
   const { error } = await db.from('agent_work_loops').upsert({
     source_type: 'manual_distribution',
     source_key: sourceKey,
     lane: 'distribution',
     owner: 'sofia',
-    state: current?.state ?? 'assigned',
+    state: 'assigned',
     severity: 'normal',
     title: item.title,
     detail: 'Scheduled LinkedIn company-page post. Manual fallback is required until LinkedIn developer access is connected.',
@@ -127,7 +124,7 @@ async function reconcileLinkedInLoop(
     },
   }, { onConflict: 'source_type,source_key' });
   if (error) throw error;
-  return current ? 'updated' : 'created';
+  return 'created';
 }
 
 async function reconcileInstagramJob(
@@ -142,33 +139,22 @@ async function reconcileInstagramJob(
   }
   const jobId = `scheduled:${item.assetId}`;
   const current = await repo.getJobByJobId(jobId);
-  if (current && TERMINAL_JOB_STATES.has(current.status)) return `preserved ${current.status}`;
-  if (current) {
-    const { error } = await db.from('distribution_jobs').update({
-      distribution_account_id: accounts[0]!.id,
-      publish_mode: 'scheduled',
-      scheduled_for: item.scheduledFor,
-      status: 'scheduled',
-      last_error: null,
-    }).eq('id', current.id);
-    if (error) throw error;
-  } else {
-    await repo.createJob({
-      jobId,
-      distributionAssetId,
-      distributionAccountId: accounts[0]!.id,
-      publishMode: 'scheduled',
-      scheduledFor: item.scheduledFor,
-      status: 'scheduled',
-    });
-  }
+  if (current) return `preserved ${current.status}`;
+  await repo.createJob({
+    jobId,
+    distributionAssetId,
+    distributionAccountId: accounts[0]!.id,
+    publishMode: 'scheduled',
+    scheduledFor: item.scheduledFor,
+    status: 'scheduled',
+  });
   const { error: assetError } = await db
     .from('distribution_assets')
     .update({ status: 'scheduled' })
     .eq('id', distributionAssetId)
     .neq('status', 'published');
   if (assetError) throw assetError;
-  return current ? 'updated' : 'created';
+  return 'created';
 }
 
 async function main(): Promise<void> {
