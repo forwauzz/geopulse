@@ -23,13 +23,25 @@ export type GrowthCalendarMedia = {
 
 export type GrowthCalendarActivity = {
   readonly id: string;
-  readonly sourceType: 'distribution' | 'content' | 'outreach' | 'sales' | 'work_loop' | 'experiment';
+  readonly sourceType: 'distribution' | 'content' | 'outreach' | 'sales' | 'work_loop' | 'experiment' | 'email_campaign';
   readonly sourceId: string;
   readonly displayState: GrowthCalendarDisplayState;
   readonly channel: GrowthCalendarChannel;
   readonly title: string;
   readonly startsAt: string;
   readonly status: string;
+  /**
+   * Plain-language state for the card. The four display states are deliberately coarse (live /
+   * next / needs help / stopped), which is not enough to tell a draft from a scheduled campaign
+   * from a stopped one — and the founder should not have to read an internal status code.
+   */
+  readonly statusLabel?: string;
+  /**
+   * The real sender for this card. Email cards used to render a hardcoded from-address, which
+   * would claim an authenticated identity that does not exist yet.
+   */
+  readonly senderLine?: string;
+  readonly recipientCount?: number | null;
   readonly owner: string;
   readonly summary: string | null;
   readonly previewTitle: string | null;
@@ -176,7 +188,7 @@ export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<Growth
   const warnings: string[] = [];
   const [campaignRows, interventionRows, contentRows, assetRows, mediaRows, jobRows, accountRows, prospectRows, sendRows, templateRows, replyRows, leadRows, loopRows] = await Promise.all([
     rows('Campaigns', supabase.from('growth_campaigns').select('id,name,role,vertical,status,allocation_percent,success_condition,stop_condition,metadata').order('role', { ascending: true }), warnings),
-    rows('Experiments', supabase.from('growth_campaign_interventions').select('id,campaign_id,name,channel,status,success_condition,stop_condition,started_at,ended_at,updated_at,metadata').order('updated_at', { ascending: false }).limit(100), warnings),
+    rows('Experiments', supabase.from('growth_campaign_interventions').select('id,campaign_id,intervention_key,name,channel,status,success_condition,stop_condition,started_at,ended_at,updated_at,metadata').order('updated_at', { ascending: false }).limit(100), warnings),
     rows('Content', supabase.from('content_items').select('id,content_id,title,status,content_type,draft_markdown,canonical_url,approved_at,published_at,created_at,updated_at,growth_campaign_id,growth_intervention_id,metadata').order('updated_at', { ascending: false }).limit(200), warnings),
     rows('Distribution assets', supabase.from('distribution_assets').select('id,asset_id,content_item_id,asset_type,provider_family,title,body_plaintext,caption_text,status,cta_url,approved_at,created_at,updated_at,growth_campaign_id,growth_intervention_id,metadata').order('updated_at', { ascending: false }).limit(200), warnings),
     rows('Media', supabase.from('distribution_asset_media').select('distribution_asset_id,media_kind,storage_url,alt_text,provider_ready_status,sort_order').order('sort_order', { ascending: true }).limit(500), warnings),
@@ -453,6 +465,98 @@ export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<Growth
       outcomeLabel: isManualDistribution ? 'Publishing route' : 'Loop state',
       outcomeValue: isManualDistribution ? 'Scheduled browser fallback' : titleCase(loop.state),
       detailHref: isManualDistribution ? '/dashboard/distribution' : '/admin/agents',
+    });
+  }
+
+  // Email campaign cards come from the `email_campaign_v1` payload rather than from prospect
+  // buckets: only the contract knows the exact locked text, sender, recipient count, and
+  // preparation state, and a card built from prospects alone cannot distinguish a draft from a
+  // stopped campaign.
+  for (const intervention of interventionRows) {
+    const campaignPayload = record(record(intervention.metadata)['email_campaign']);
+    const versions = record(campaignPayload['versions']);
+    const current = campaignPayload['current'];
+    const contract = record(versions[String(current)]);
+    if (Object.keys(contract).length === 0) continue;
+
+    const schedule = record(contract['schedule']);
+    const content = record(contract['content']);
+    const audience = record(contract['audience']);
+    const governance = record(contract['governance']);
+    const goal = record(contract['goal']);
+    const sender = record(contract['sender']);
+    const state = String(contract['state'] ?? 'draft');
+
+    const startsAt = text(schedule['startAt'])
+      ?? text(governance['scheduledAt'])
+      ?? text(intervention.updated_at);
+    if (!startsAt) continue;
+
+    const campaign = campaignById.get(String(intervention.campaign_id));
+    const statusLabel = state === 'draft' ? 'Draft'
+      : state === 'audience_ready' || state === 'content_ready' || state === 'qa_ready' ? 'In preparation'
+      : state === 'test_passed' ? 'Internal test passed'
+      : state === 'scheduled' ? 'Scheduled'
+      : state === 'running' ? 'Sending'
+      : state === 'evaluating' ? 'Evaluating'
+      : state === 'completed' ? 'Complete'
+      : state === 'stopped' ? 'Stopped'
+      : titleCase(state);
+
+    const displayState: GrowthCalendarDisplayState = state === 'stopped' ? 'stopped'
+      : state === 'running' || state === 'evaluating' || state === 'completed' ? 'live'
+      : state === 'scheduled' ? 'next'
+      : 'action';
+
+    const authenticated = Boolean(sender['authenticated']);
+    const recipientCount = typeof audience['recipientCount'] === 'number' ? audience['recipientCount'] : null;
+
+    activities.push({
+      id: `email-campaign:${String(intervention.id)}`,
+      sourceType: 'email_campaign',
+      sourceId: String(contract['interventionKey'] ?? intervention.intervention_key),
+      displayState,
+      channel: 'email',
+      title: String(intervention.name),
+      startsAt,
+      status: state,
+      statusLabel,
+      senderLine: authenticated
+        ? `${String(sender['displayName'] ?? 'GEO-Pulse')} (authenticated sender)`
+        : 'No authenticated GEO-Pulse sender configured',
+      recipientCount,
+      owner: titleCase(goal['owner'] ?? 'elena'),
+      summary: recipientCount === null
+        ? 'Audience not frozen yet'
+        : `${String(recipientCount)} frozen recipients · ${String(audience['segment'] ?? 'segment')}`,
+      previewTitle: text(content['subject']),
+      previewText: text(content['bodyTemplate']),
+      media: [],
+      destinationUrl: null,
+      campaignName: text(campaign?.name),
+      campaignRole: text(campaign?.role),
+      vertical: text(campaign?.vertical),
+      interventionName: String(intervention.name),
+      funnelStage: 'qualified outreach',
+      sourceContentTitle: null,
+      sourceContentUrl: null,
+      approvedAt: text(governance['scheduledAt']),
+      approvalLabel: governance['testAcceptedAt'] ? 'Internal test accepted for this exact version' : null,
+      nextAction: state === 'stopped'
+        ? 'Record the stop reason and what the next intervention changes'
+        : state === 'scheduled'
+          ? 'Wait for the scheduled send window'
+          : 'Complete the remaining preflight gates',
+      dueAt: text(schedule['startAt']),
+      attemptCount: 0,
+      maxAttempts: 3,
+      dependencies: authenticated ? [] : ['No authenticated GEO-Pulse sending identity'],
+      successCondition: text(goal['successCondition']) ?? text(campaign?.success_condition),
+      stopCondition: text(goal['stopCondition']) ?? text(campaign?.stop_condition),
+      outcomeLabel: 'Campaign state',
+      outcomeValue: text(governance['stopReason']) ?? statusLabel,
+      // Click-through opens the exact locked version, not a live re-render of an edited draft.
+      detailHref: `/admin/campaigns/email/${String(contract['interventionKey'] ?? intervention.intervention_key)}`,
     });
   }
 
