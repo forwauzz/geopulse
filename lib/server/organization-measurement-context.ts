@@ -71,6 +71,41 @@ function storedContext(metadata: unknown): OrganizationContext | null {
   return candidate as OrganizationContext;
 }
 
+/**
+ * Load a confirmed tenant context for baseline activation without importing the Next-only
+ * Organization Context repository into the shared Cloudflare Worker graph.
+ */
+export async function loadConfirmedOrganizationContextByHost(args: {
+  readonly supabase: SupabaseClient<any, 'public', any>;
+  readonly ownerType: OrganizationOwnerType;
+  readonly ownerId: string;
+  readonly canonicalDomain: string;
+}): Promise<OrganizationContext | null> {
+  const host = args.canonicalDomain.trim().toLowerCase().replace(/^www\./, '');
+  const { data: domain, error: domainError } = await args.supabase
+    .from('intelligence_domains')
+    .select('id')
+    .eq('normalized_host', host)
+    .maybeSingle();
+  if (domainError) throw domainError;
+  if (!domain?.id) return null;
+
+  const { data: owner, error: ownerError } = await args.supabase
+    .from('intelligence_domain_owners')
+    .select('owner_type,owner_id,metadata')
+    .eq('domain_id', String(domain.id))
+    .eq('owner_type', args.ownerType)
+    .eq('owner_id', args.ownerId)
+    .maybeSingle();
+  if (ownerError) throw ownerError;
+  const context = storedContext(owner?.metadata);
+  if (!context || context.status !== 'confirmed') return null;
+  if (context.owner.type !== args.ownerType || context.owner.id !== args.ownerId) return null;
+  if (context.organization.identityId !== String(domain.id)) return null;
+  if (context.organization.canonicalDomain.replace(/^www\./, '') !== host) return null;
+  return context;
+}
+
 /** Resolve the current context from the canonical intelligence plane, never from a stale config copy. */
 export async function loadActiveOrganizationMeasurementContext(args: {
   readonly supabase: SupabaseClient<any, 'public', any>;

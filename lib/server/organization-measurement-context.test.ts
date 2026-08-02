@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { loadActiveOrganizationMeasurementContext } from './organization-measurement-context';
+import {
+  loadActiveOrganizationMeasurementContext,
+  loadConfirmedOrganizationContextByHost,
+} from './organization-measurement-context';
 import {
   organizationContextContentHash,
   organizationContextSchema,
@@ -63,6 +66,28 @@ function supabase(
   };
 }
 
+function hostSupabase(context = confirmedContext()) {
+  return {
+    from(table: string) {
+      const chain: any = {
+        select: () => chain,
+        eq: () => chain,
+        maybeSingle: async () => table === 'intelligence_domains'
+          ? { data: { id: '11111111-1111-4111-8111-111111111111' }, error: null }
+          : {
+              data: {
+                owner_type: 'agency_client',
+                owner_id: '33333333-3333-4333-8333-333333333333',
+                metadata: { organization_context_snapshot: context },
+              },
+              error: null,
+            },
+      };
+      return chain;
+    },
+  };
+}
+
 describe('active organization measurement context loader', () => {
   it('uses the exact agency-client tenant owner instead of the broader agency account', async () => {
     const harness = supabase({ canonical_domain_id: '11111111-1111-4111-8111-111111111111', mapping_status: 'mapped' });
@@ -105,5 +130,31 @@ describe('active organization measurement context loader', () => {
       config: config(),
     });
     expect(result).toEqual({ status: 'blocked', reasons: ['organization_context_missing'] });
+  });
+});
+
+describe('confirmed organization context host loader', () => {
+  it('returns the exact confirmed tenant and host snapshot', async () => {
+    const context = await loadConfirmedOrganizationContextByHost({
+      supabase: hostSupabase() as never,
+      ownerType: 'agency_client',
+      ownerId: '33333333-3333-4333-8333-333333333333',
+      canonicalDomain: 'www.clinic.example',
+    });
+    expect(context?.contextVersion).toBe(confirmedContext().contextVersion);
+  });
+
+  it('fails closed when the stored snapshot is for another canonical host', async () => {
+    const context = confirmedContext();
+    const result = await loadConfirmedOrganizationContextByHost({
+      supabase: hostSupabase({
+        ...context,
+        organization: { ...context.organization, canonicalDomain: 'other.example' },
+      }) as never,
+      ownerType: 'agency_client',
+      ownerId: '33333333-3333-4333-8333-333333333333',
+      canonicalDomain: 'clinic.example',
+    });
+    expect(result).toBeNull();
   });
 });

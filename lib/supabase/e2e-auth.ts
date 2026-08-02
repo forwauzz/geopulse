@@ -613,6 +613,12 @@ function createE2EQueryBuilder(table: string) {
         subvertical: null,
         icp_tag: null,
         status: 'active',
+        metadata: {
+          report_quarantine_hold: {
+            status: 'held_onboarding_review',
+            reason: 'E2E activation fixture remains private.',
+          },
+        },
         created_at: now,
       },
     ],

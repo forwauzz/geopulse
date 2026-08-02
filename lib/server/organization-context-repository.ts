@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { IDENTITY_NORMALIZATION_VERSION } from '../intelligence/identity';
 import { canAccessEvidence } from '../intelligence/evidence';
 import {
   ORGANIZATION_CONTEXT_CONTRACT_VERSION,
@@ -350,6 +351,176 @@ export type OrganizationContextLookup =
   | { readonly status: 'unauthorized'; readonly reason: 'owner_scope_missing' | 'owner_shape_invalid' }
   | { readonly status: 'not_found'; readonly reason: 'domain_missing' | 'domain_retired' }
   | { readonly status: 'needs_review'; readonly reason: OrganizationContextProjectionFailure };
+
+export type ConfirmedOrganizationContextWrite = {
+  readonly ownerType: OrganizationOwnerType;
+  readonly ownerId: string;
+  readonly actorId: string;
+  readonly canonicalDomain: string;
+  readonly aliases?: readonly string[];
+  readonly displayName: string;
+  readonly category: string;
+  readonly services: readonly string[];
+  readonly buyer: string | null;
+  readonly marketScope: OrganizationContext['market']['scope'];
+  readonly countryCode: string;
+  readonly subdivisionCode: string | null;
+  readonly locality: string | null;
+  readonly serviceAreas: readonly string[];
+  readonly languages: readonly string[];
+  readonly timezone: string;
+  readonly approvedCompetitorDomains?: readonly string[];
+  readonly confirmedAt?: string;
+  readonly source?: string;
+};
+
+export function confirmedOrganizationContextMetadata(
+  input: ConfirmedOrganizationContextWrite,
+  confirmedAt: string,
+): Record<string, unknown> {
+  return {
+    displayName: input.displayName.trim(),
+    canonicalDomain: input.canonicalDomain.trim().toLowerCase().replace(/^www\./, ''),
+    category: input.category.trim(),
+    services: [...new Set(input.services.map((item) => item.trim()).filter(Boolean))].sort(),
+    buyer: input.buyer?.trim() || null,
+    marketScope: input.marketScope,
+    countryCode: input.countryCode.trim().toUpperCase(),
+    subdivisionCode: input.subdivisionCode?.trim().toUpperCase() || null,
+    locality: input.locality?.trim() || null,
+    serviceAreas: [...new Set(input.serviceAreas.map((item) => item.trim()).filter(Boolean))].sort(),
+    languages: [...new Set(input.languages.map((item) => item.trim()).filter(Boolean))].sort(),
+    timezone: input.timezone.trim(),
+    approvedCompetitorDomains: [...new Set((input.approvedCompetitorDomains ?? []).map((item) => item.trim().toLowerCase()).filter(Boolean))].sort(),
+    confirmation: {
+      actorType: 'user',
+      actorId: input.actorId,
+      confirmedAt,
+    },
+    versionReasonCodes: ['initial_projection', 'tenant_confirmation'],
+  };
+}
+
+/**
+ * Persist one auditable tenant confirmation into the existing identity plane, then project the
+ * canonical context back from storage. Retries update the same domain/owner rows and never create a
+ * second profile for the same tenant and domain.
+ */
+export async function persistConfirmedOrganizationContext(args: {
+  readonly supabase: SupabaseClient<any, 'public', any>;
+  readonly input: ConfirmedOrganizationContextWrite;
+  readonly now?: Date;
+}): Promise<OrganizationContext> {
+  const { input } = args;
+  const confirmedAt = (args.now ?? new Date(input.confirmedAt ?? Date.now())).toISOString();
+  const canonicalDomain = input.canonicalDomain.trim().toLowerCase().replace(/^www\./, '');
+  const organizationContext = confirmedOrganizationContextMetadata({ ...input, canonicalDomain }, confirmedAt);
+  const { data: existingDomain, error: existingDomainError } = await args.supabase
+    .from('intelligence_domains')
+    .select('id,metadata,vertical,subvertical')
+    .eq('normalized_host', canonicalDomain)
+    .maybeSingle();
+  if (existingDomainError) throw existingDomainError;
+
+  const domainMetadata = record(existingDomain?.metadata);
+  const domainPayload = {
+    normalized_host: canonicalDomain,
+    display_name: input.displayName.trim(),
+    vertical: existingDomain?.vertical ?? null,
+    subvertical: existingDomain?.subvertical ?? input.category.trim(),
+    geography: {
+      scope: input.marketScope,
+      countryCode: input.countryCode.trim().toUpperCase(),
+      subdivisionCode: input.subdivisionCode?.trim().toUpperCase() || null,
+      locality: input.locality?.trim() || null,
+      serviceAreas: [...input.serviceAreas],
+      languages: [...input.languages],
+      timezone: input.timezone.trim(),
+    },
+    review_state: 'verified',
+    normalization_version: IDENTITY_NORMALIZATION_VERSION,
+    // Tenant confirmation belongs on the exact owner row below. Keep the global identity metadata
+    // free of user ids, approved competitors, and other tenant-private context.
+    metadata: domainMetadata,
+  };
+  const { data: domain, error: domainError } = await args.supabase
+    .from('intelligence_domains')
+    .upsert(existingDomain?.id ? { ...domainPayload, id: existingDomain.id } : domainPayload, {
+      onConflict: 'normalized_host',
+    })
+    .select('id')
+    .single();
+  if (domainError || !domain?.id) throw domainError ?? new Error('organization_identity_write_failed');
+
+  const aliases = [...new Set([canonicalDomain, ...(input.aliases ?? [])]
+    .map((host) => host.trim().toLowerCase().replace(/^www\./, ''))
+    .filter(Boolean))];
+  const { error: aliasError } = await args.supabase.from('intelligence_domain_aliases').upsert(
+    aliases.map((host) => ({
+      domain_id: domain.id,
+      alias_host: host,
+      relationship: host === canonicalDomain ? 'canonical' : 'observed_alias',
+      review_state: 'verified',
+      observed_from: input.source ?? 'value_first_onboarding',
+      normalization_version: IDENTITY_NORMALIZATION_VERSION,
+      metadata: { confirmed_at: confirmedAt },
+    })),
+    { onConflict: 'domain_id,alias_host' },
+  );
+  if (aliasError) throw aliasError;
+
+  const { data: existingOwner, error: existingOwnerError } = await args.supabase
+    .from('intelligence_domain_owners')
+    .select('id,metadata')
+    .eq('domain_id', domain.id)
+    .eq('owner_type', input.ownerType)
+    .eq('owner_id', input.ownerId)
+    .maybeSingle();
+  if (existingOwnerError) throw existingOwnerError;
+  const ownerMetadata = record(existingOwner?.metadata);
+  const ownerPayload = {
+    domain_id: domain.id,
+    owner_type: input.ownerType,
+    owner_id: input.ownerId,
+    visibility: 'tenant',
+    metadata: {
+      ...ownerMetadata,
+      organization_context: {
+        ...record(ownerMetadata['organization_context']),
+        ...organizationContext,
+      },
+      onboarding_source: input.source ?? 'value_first_onboarding',
+      onboarding_confirmed_at: confirmedAt,
+    },
+  };
+  const { data: owner, error: ownerError } = await args.supabase
+    .from('intelligence_domain_owners')
+    .upsert(existingOwner?.id ? { ...ownerPayload, id: existingOwner.id } : ownerPayload, {
+      onConflict: 'domain_id,owner_type,owner_id',
+    })
+    .select('id')
+    .single();
+  if (ownerError || !owner?.id) throw ownerError ?? new Error('organization_owner_write_failed');
+
+  const lookup = await createOrganizationContextRepository(args.supabase).getByOwnerAndDomain({
+    ownerType: input.ownerType,
+    ownerId: input.ownerId,
+    domainId: String(domain.id),
+  });
+  if (lookup.status !== 'ready' || lookup.context.status !== 'confirmed') {
+    throw new Error(`organization_context_projection_${lookup.status === 'ready' ? lookup.context.status : lookup.reason}`);
+  }
+  const nextOwnerMetadata = {
+    ...ownerPayload.metadata,
+    organization_context_snapshot: lookup.context,
+  };
+  const { error: snapshotError } = await args.supabase
+    .from('intelligence_domain_owners')
+    .update({ metadata: nextOwnerMetadata })
+    .eq('id', owner.id);
+  if (snapshotError) throw snapshotError;
+  return lookup.context;
+}
 
 export function createOrganizationContextRepository(supabase: SupabaseClient<any, 'public', any>) {
   return {

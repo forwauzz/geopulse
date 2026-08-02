@@ -31,6 +31,19 @@ type NavItem = {
   readonly highlight?: boolean;
 };
 
+const NAV_GLYPHS: Readonly<Record<string, string>> = {
+  home: '⌂',
+  description: '▤',
+  cable: '↔',
+  credit_card: '$',
+  settings: '⚙',
+  article: '¶',
+  groups: '◉',
+  monitoring: '⌁',
+  auto_awesome: '✦',
+  smart_toy: '↻',
+};
+
 function matchPath(pathname: string, href: string, exact?: boolean): boolean {
   if (exact) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -73,8 +86,8 @@ function NavItem({
       title={item.label}
       className={`flex items-center gap-3 rounded-xl py-2 text-sm transition-colors ${compact ? 'lg:justify-center lg:gap-0 lg:px-2' : 'px-3'} ${itemClass(isActive, item.highlight, compact)}`}
     >
-      <span className="material-symbols-outlined text-[18px] shrink-0" aria-hidden>
-        {item.icon}
+      <span className="flex size-[18px] shrink-0 items-center justify-center text-sm font-semibold" aria-hidden>
+        {NAV_GLYPHS[item.icon] ?? '•'}
       </span>
       <span className={compact ? 'lg:hidden' : ''}>{item.label}</span>
     </Link>
@@ -197,9 +210,7 @@ function NavBlocks({
                 compact ? 'lg:justify-center lg:px-2 lg:gap-0' : 'px-3'
               } ${pathname.startsWith('/admin/geo-performance') ? 'bg-surface-container text-on-surface font-semibold' : ''}`}
             >
-              <span className="material-symbols-outlined shrink-0 text-[18px]" aria-hidden>
-                track_changes
-              </span>
+              <span className="flex size-[18px] shrink-0 items-center justify-center text-sm font-semibold" aria-hidden>◎</span>
               <span className={compact ? 'lg:hidden' : ''}>GEO Performance</span>
             </Link>
             <Link
@@ -211,16 +222,9 @@ function NavBlocks({
                 compact ? 'lg:justify-center lg:px-2 lg:gap-0' : 'px-3'
               } ${pathname === '/admin' ? 'bg-surface-container' : ''}`}
             >
-              <span className="material-symbols-outlined shrink-0 text-[18px]" aria-hidden>
-                shield
-              </span>
+              <span className="flex size-[18px] shrink-0 items-center justify-center text-sm font-semibold" aria-hidden>◆</span>
               <span className={compact ? 'lg:hidden' : ''}>Admin Console</span>
-              <span
-                className={`material-symbols-outlined ml-auto text-[14px] opacity-50 ${compact ? 'lg:hidden' : ''}`}
-                aria-hidden
-              >
-                arrow_forward
-              </span>
+              <span className={`ml-auto text-sm opacity-50 ${compact ? 'lg:hidden' : ''}`} aria-hidden>→</span>
             </Link>
           </div>
         ) : null}
@@ -246,9 +250,7 @@ function NavBlocks({
               compact ? 'lg:flex lg:justify-center lg:px-2 lg:py-2' : ''
             }`}
           >
-            <span className={`material-symbols-outlined hidden text-[20px] ${compact ? 'lg:inline' : ''}`} aria-hidden>
-              logout
-            </span>
+            <span className={`hidden text-lg ${compact ? 'lg:inline' : ''}`} aria-hidden>↪</span>
             <span className={compact ? 'lg:sr-only' : ''}>Sign out</span>
           </button>
         </form>
@@ -300,7 +302,7 @@ export function DashboardSidebar({
             }
             aria-hidden
           >
-            <span className="material-symbols-outlined text-[24px]">monitoring</span>
+            <span className="text-xl">⌁</span>
           </span>
           <GeoPulseLogo size="md" className={desktopCollapsed ? 'lg:hidden' : undefined} />
           <span className="sr-only">GEO-Pulse</span>
@@ -315,9 +317,7 @@ export function DashboardSidebar({
               aria-expanded={!desktopCollapsed}
               aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
-              <span className="material-symbols-outlined text-[22px]" aria-hidden>
-                {desktopCollapsed ? 'chevron_right' : 'chevron_left'}
-              </span>
+              <span className="text-xl" aria-hidden>{desktopCollapsed ? '›' : '‹'}</span>
             </button>
           ) : null}
           <button
@@ -328,9 +328,7 @@ export function DashboardSidebar({
             aria-expanded={mobileOpen}
             aria-controls="mobile-nav"
           >
-            <span className="material-symbols-outlined text-[24px]" aria-hidden>
-              {mobileOpen ? 'close' : 'menu'}
-            </span>
+            <span className="text-2xl leading-none" aria-hidden>{mobileOpen ? '×' : '☰'}</span>
           </button>
         </div>
       </div>

@@ -14,6 +14,8 @@ import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
 import { isClientReportSharingHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
 import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
+import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
+import { OnboardingFirstValueReveal } from '@/components/onboarding-first-value-reveal';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,11 +31,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -183,12 +185,15 @@ export default async function ClientScorecardPage({
   const latestReportEmailStatus = String(latestReportMetadata['email_status'] ?? 'generated');
   const latestReportHeld = reportSharingHeld || latestReportEmailStatus.startsWith('held_')
     || latestReportMetadata['delivery_blocked'] === true;
+  const activationReport = sp.activation === '1'
+    ? await loadLatestAgencyReport({ supabase: admin, agencyClientId: client.id })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 py-4">
       <header>
         <Link href="/dashboard/clients" className="inline-flex items-center gap-1 text-sm text-on-surface-variant hover:text-on-background">
-          <span className="material-symbols-outlined text-[17px]" aria-hidden>arrow_back</span> Clients
+          <span aria-hidden>←</span> Clients
         </Link>
         <div className="mt-5 flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -198,10 +203,10 @@ export default async function ClientScorecardPage({
           </div>
           <div className="flex flex-wrap gap-2">
             <Link href={`/dashboard/clients/${client.id}/report-profile`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
-              <span className="material-symbols-outlined text-[18px]" aria-hidden>tune</span> Report profile
+              Report profile
             </Link>
             <Link href={`/dashboard/new-scan?agencyAccount=${account.id}&agencyClient=${client.id}&url=${encodeURIComponent(domain ? `https://${domain}` : '')}`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
-              <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check again
+              Check again
             </Link>
             {publicSummaryUrl ? <Link href={publicSummaryUrl} target="_blank" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"><span className="material-symbols-outlined text-[18px]" aria-hidden>share</span> Open client scorecard</Link> : null}
             {!shareToken && !reportSharingHeld ? (
@@ -229,7 +234,19 @@ export default async function ClientScorecardPage({
             Client sharing is held for review. Nothing here can be opened publicly or emailed until the review is released.
           </div>
         ) : null}
-        <div className="mt-4 rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-5 shadow-float">
+        {sp.activation === '1' ? (
+          <div className="mt-4">
+            <OnboardingFirstValueReveal
+              clientId={client.id}
+              agencyAccountId={account.id}
+              clientName={client.name}
+              baselineReady={baselineStatus === 'closed' || baselineStatus === 'measured'}
+              reportReady={Boolean(activationReport?.snapshot)}
+            />
+          </div>
+        ) : null}
+        {!(sp.activation === '1' && activationReport?.snapshot) ? (
+        <div id="first-baseline" className={`mt-4 scroll-mt-6 rounded-2xl bg-surface-container-lowest p-5 shadow-float ${sp.activation === '1' ? 'border-2 border-primary/35' : 'border border-outline-variant/15'}`}>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Automatic customer baseline</p>
@@ -253,7 +270,7 @@ export default async function ClientScorecardPage({
               <PendingSubmitButton
                 idleLabel={baselineStatus === 'closed' || baselineStatus === 'measured' ? 'Verify baseline' : 'Complete baseline'}
                 pendingLabel="Researching and measuring…"
-                className="inline-flex items-center gap-2 rounded-xl bg-on-background px-4 py-2.5 text-sm font-semibold text-background"
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${sp.activation === '1' ? 'bg-primary text-on-primary' : 'bg-on-background text-background'}`}
               />
             </form>
           </div>
@@ -265,6 +282,7 @@ export default async function ClientScorecardPage({
             </p>
           ) : null}
         </div>
+        ) : null}
       </header>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_2fr]">

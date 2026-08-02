@@ -43,8 +43,7 @@ export default async function ClientsPage({
           href={`/dashboard/clients?agencyAccount=${account.id}&manage=1`}
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"
         >
-          <span className="material-symbols-outlined text-[18px]" aria-hidden>add</span>
-          Add client
+          <span aria-hidden>+</span> Add client
         </Link>
       </header>
 
@@ -65,7 +64,7 @@ export default async function ClientsPage({
               <span><span className="block font-semibold text-on-background">{client.name}</span><span className="mt-1 block text-sm text-on-surface-variant">{client.canonicalDomain ?? 'Website not set'}</span></span>
               <span className="text-xl font-bold text-on-background">{scan?.score ?? '—'}{scan?.score !== null && scan?.score !== undefined ? <span className="text-xs font-normal text-on-surface-variant">/100</span> : null}</span>
               <span className="text-sm text-on-surface-variant">{scan ? new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(scan.createdAt)) : 'Not checked'}</span>
-              <span className="material-symbols-outlined text-on-surface-variant" aria-hidden>chevron_right</span>
+              <span className="text-xl text-on-surface-variant" aria-hidden>›</span>
             </Link>
           );
         })}

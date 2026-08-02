@@ -12,6 +12,13 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
 import { getAutonomousEditorialEnv, getPaymentApiEnv } from '@/lib/server/cf-env';
+import {
+  confirmOrganizationOnboarding,
+  type ValueFirstOnboardingActionState,
+} from '@/lib/intelligence/value-first-onboarding';
+import { persistConfirmedOrganizationContext } from '@/lib/server/organization-context-repository';
+import { resolveValueFirstOnboardingProposal } from '@/lib/server/value-first-onboarding';
+import { recordActivationEvent } from '@/lib/server/activation-events';
 
 export async function signOut(): Promise<void> {
   const supabase = await createSupabaseServerClient();
@@ -92,12 +99,18 @@ export async function provisionMyWorkspaceForSubscription(formData: FormData): P
 
 const agencyClientSchema = z.object({
   agencyAccountId: z.string().uuid('Choose a valid agency account.'),
-  clientKey: z.string().max(80, 'Client key is too long.').optional(),
+  intent: z.literal('agency'),
   name: z.string().min(1, 'Enter a client name.').max(120, 'Client name is too long.'),
-  primaryDomain: z.string().min(1, 'Enter a primary domain.').max(160, 'Primary domain is too long.'),
-  vertical: z.string().max(80, 'Vertical is too long.').optional(),
-  subvertical: z.string().max(80, 'Subvertical is too long.').optional(),
-  icpTag: z.string().max(80, 'ICP tag is too long.').optional(),
+  website: z.string().min(1, 'Enter a primary domain.').max(200, 'Website is too long.'),
+  confirmed: z.literal('1').optional(),
+  displayName: z.string().trim().max(120).optional(),
+  category: z.string().trim().max(120).optional(),
+  countryCode: z.string().trim().max(80).optional(),
+  subdivisionCode: z.string().trim().max(8).optional(),
+  locality: z.string().trim().max(120).optional(),
+  marketScope: z.enum(['local', 'regional', 'national', 'online', 'global']).optional(),
+  languages: z.string().trim().max(160).optional(),
+  timezone: z.string().trim().max(80).optional(),
 });
 
 const agencyClientDomainSchema = z.object({
@@ -210,82 +223,171 @@ async function loadAgencyMemberActionContext(agencyAccountId: string): Promise<
 }
 
 export async function createAgencyClientFromDashboard(
-  _prev: AgencyDashboardActionState | null,
+  _prev: ValueFirstOnboardingActionState | null,
   formData: FormData
-): Promise<AgencyDashboardActionState> {
+): Promise<ValueFirstOnboardingActionState> {
   const parsed = agencyClientSchema.safeParse({
     agencyAccountId: normalizeText(formData.get('agencyAccountId')),
-    clientKey: normalizeText(formData.get('clientKey')),
+    intent: normalizeText(formData.get('intent')),
     name: normalizeText(formData.get('name')),
-    primaryDomain: normalizeText(formData.get('primaryDomain')),
-    vertical: normalizeText(formData.get('vertical')),
-    subvertical: normalizeText(formData.get('subvertical')),
-    icpTag: normalizeText(formData.get('icpTag')),
+    website: normalizeText(formData.get('website')),
+    confirmed: normalizeText(formData.get('confirmed')),
+    displayName: normalizeText(formData.get('displayName')),
+    category: normalizeText(formData.get('category')),
+    countryCode: normalizeText(formData.get('countryCode')),
+    subdivisionCode: normalizeText(formData.get('subdivisionCode')),
+    locality: normalizeText(formData.get('locality')),
+    marketScope: normalizeText(formData.get('marketScope')),
+    languages: normalizeText(formData.get('languages')),
+    timezone: normalizeText(formData.get('timezone')),
   });
 
   if (!parsed.success) {
-    const errors = parsed.error.flatten().fieldErrors;
     return {
-      ok: false,
-      message:
-        errors['agencyAccountId']?.[0] ??
-        errors['clientKey']?.[0] ??
-        errors['name']?.[0] ??
-        errors['primaryDomain']?.[0] ??
-        errors['vertical']?.[0] ??
-        errors['subvertical']?.[0] ??
-        errors['icpTag']?.[0] ??
-        'Check the client values.',
+      status: 'error',
+      message: 'Enter the client name and public website to continue.',
     };
   }
 
   const context = await loadAgencyMemberActionContext(parsed.data.agencyAccountId);
-  if (!context.ok) return context;
-
-  const primaryDomain = normalizeDomainHost(parsed.data.primaryDomain);
-  const siteUrl = normalizeSiteUrl(parsed.data.primaryDomain);
-
-  const { data: client, error: clientError } = await context.adminDb
+  if (!context.ok) return { status: 'error', message: context.message };
+  const detected = await resolveValueFirstOnboardingProposal({
+    intent: 'agency',
+    name: parsed.data.name,
+    website: parsed.data.website,
+  });
+  if (!detected.ok) {
+    return {
+      status: 'error',
+      message: detected.message,
+      draft: { intent: 'agency', name: parsed.data.name, website: parsed.data.website },
+    };
+  }
+  if (parsed.data.confirmed !== '1') {
+    return {
+      status: 'needs_confirmation',
+      proposal: detected.proposal,
+      message: 'Confirm the detected client and market.',
+    };
+  }
+  const confirmation = confirmOrganizationOnboarding(detected.proposal, parsed.data);
+  if (!confirmation.ok) {
+    return {
+      status: 'needs_confirmation',
+      proposal: { ...detected.proposal, missingFields: confirmation.missingFields },
+      message: 'Answer the remaining question before the client baseline is built.',
+    };
+  }
+  const confirmed = confirmation.value;
+  const primaryDomain = normalizeDomainHost(confirmed.canonicalDomain);
+  const siteUrl = normalizeSiteUrl(confirmed.submittedWebsite);
+  const now = new Date().toISOString();
+  const { data: existingClient, error: existingClientError } = await context.adminDb
     .from('agency_clients')
-    .insert({
-      agency_account_id: parsed.data.agencyAccountId,
-      client_key: parsed.data.clientKey || clientKeyFromName(parsed.data.name),
-      name: parsed.data.name,
-      display_name: parsed.data.name,
-      website_domain: primaryDomain,
-      canonical_domain: primaryDomain,
-      status: 'active',
-      vertical: parsed.data.vertical ?? null,
-      subvertical: parsed.data.subvertical ?? null,
-      icp_tag: parsed.data.icpTag ?? null,
-      metadata: { source: 'agency_dashboard' },
-    })
-    .select('id')
-    .single();
-
+    .select('id,metadata,vertical,subvertical')
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .eq('canonical_domain', primaryDomain)
+    .maybeSingle();
+  if (existingClientError) return { status: 'error', message: existingClientError.message };
+  const existingMetadata = existingClient?.metadata && typeof existingClient.metadata === 'object'
+    ? existingClient.metadata as Record<string, unknown>
+    : {};
+  const clientPayload = {
+    agency_account_id: parsed.data.agencyAccountId,
+    name: confirmed.displayName,
+    display_name: confirmed.displayName,
+    website_domain: primaryDomain,
+    canonical_domain: primaryDomain,
+    status: 'active',
+    vertical: existingClient?.vertical ?? confirmed.category,
+    subvertical: existingClient?.subvertical ?? null,
+    metadata: {
+      ...existingMetadata,
+      source: 'value_first_onboarding',
+      location: confirmed.locality ?? confirmed.serviceAreas[0] ?? confirmed.countryCode,
+      report_quarantine_hold: existingMetadata['report_quarantine_hold'] ?? {
+        status: 'held_onboarding_review',
+        reason: 'First client artifact stays private until the agency explicitly releases it.',
+        held_at: now,
+        held_by_user_id: context.userId,
+      },
+    },
+  };
+  const { data: client, error: clientError } = existingClient?.id
+    ? await context.adminDb
+        .from('agency_clients')
+        .update(clientPayload)
+        .eq('id', existingClient.id)
+        .select('id')
+        .single()
+    : await context.adminDb
+        .from('agency_clients')
+        .insert({ ...clientPayload, client_key: clientKeyFromName(confirmed.displayName) })
+        .select('id')
+        .single();
   if (clientError || !client?.id) {
-    return { ok: false, message: clientError?.message ?? 'Could not create agency client.' };
+    return { status: 'error', message: clientError?.message ?? 'Could not create the client safely.' };
   }
 
-  const { error: domainError } = await context.adminDb.from('agency_client_domains').insert({
-    agency_client_id: client.id,
-    domain: primaryDomain,
-    canonical_domain: primaryDomain,
-    site_url: siteUrl,
-    is_primary: true,
-    metadata: { source: 'agency_dashboard' },
-  });
+  const { data: existingDomain, error: existingDomainError } = await context.adminDb
+    .from('agency_client_domains')
+    .select('id')
+    .eq('agency_client_id', client.id)
+    .eq('canonical_domain', primaryDomain)
+    .maybeSingle();
+  if (existingDomainError) return { status: 'error', message: existingDomainError.message };
+  if (!existingDomain?.id) {
+    const { error: domainError } = await context.adminDb.from('agency_client_domains').insert({
+      agency_client_id: client.id,
+      domain: primaryDomain,
+      canonical_domain: primaryDomain,
+      site_url: siteUrl,
+      is_primary: true,
+      metadata: { source: 'value_first_onboarding' },
+    });
+    if (domainError) return { status: 'error', message: domainError.message };
+  }
 
-  if (domainError) {
-    return { ok: false, message: domainError.message };
+  let organizationContext: Awaited<ReturnType<typeof persistConfirmedOrganizationContext>>;
+  try {
+    organizationContext = await persistConfirmedOrganizationContext({
+      supabase: context.adminDb,
+      input: {
+        ownerType: 'agency_client',
+        ownerId: String(client.id),
+        actorId: context.userId,
+        canonicalDomain: primaryDomain,
+        displayName: confirmed.displayName,
+        category: confirmed.category,
+        services: confirmed.services,
+        buyer: confirmed.buyer,
+        marketScope: confirmed.marketScope,
+        countryCode: confirmed.countryCode,
+        subdivisionCode: confirmed.subdivisionCode,
+        locality: confirmed.locality,
+        serviceAreas: confirmed.serviceAreas,
+        languages: confirmed.languages,
+        timezone: confirmed.timezone,
+        approvedCompetitorDomains: [],
+        source: 'agency_client_value_first_onboarding',
+      },
+    });
+  } catch {
+    return {
+      status: 'error',
+      message: 'The client is saved, but its market confirmation could not be applied yet. Try again to resume safely.',
+      draft: { intent: 'agency', name: confirmed.displayName, website: confirmed.submittedWebsite },
+    };
   }
 
   const baseline = await provisionCustomerVisibilityBaseline(context.adminDb, {
     agencyAccountId: parsed.data.agencyAccountId,
     domain: primaryDomain,
-    companyName: parsed.data.name,
-    vertical: parsed.data.vertical,
-    subvertical: parsed.data.subvertical,
+    companyName: confirmed.displayName,
+    vertical: confirmed.category,
+    subvertical: existingClient?.subvertical ?? null,
+    location: confirmed.locality ?? confirmed.serviceAreas[0] ?? confirmed.countryCode,
+    organizationContext,
     source: 'agency_client_creation',
   });
   let completedBaseline: Awaited<ReturnType<typeof completeAgencyClientBaseline>> | null = null;
@@ -318,18 +420,24 @@ export async function createAgencyClientFromDashboard(
       completedBaseline = null;
     }
   }
+  await recordActivationEvent({
+    supabase: context.adminDb,
+    eventName: 'agency_client_activation_started',
+    userId: context.userId,
+    ownerId: String(client.id),
+    canonicalDomain: primaryDomain,
+    contextVersion: organizationContext.contextVersion,
+  });
 
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/clients');
   revalidatePath('/dashboard/visibility');
-  return {
-    ok: true,
-    message: completedBaseline?.ok
-      ? `Client created. ${completedBaseline.promptCount} questions, ${completedBaseline.competitorCount} competitors, and ${completedBaseline.launchedPlatforms.length} AI engines are measured.`
-      : baseline.ok
-      ? `Client created. ${baseline.promptCount} baseline questions are queued; open the client to complete or retry the live measurement.`
-      : 'Client created. Baseline setup will retry automatically.',
-  };
+  const query = new URLSearchParams({
+    agencyAccount: parsed.data.agencyAccountId,
+    activation: '1',
+    baseline: completedBaseline?.ok ? 'complete' : completedBaseline?.reason ?? (baseline.ok ? 'queued' : baseline.reason),
+  });
+  redirect(`/dashboard/clients/${client.id}?${query.toString()}`);
 }
 
 export async function addAgencyClientDomainFromDashboard(
