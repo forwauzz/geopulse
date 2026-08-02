@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { loadWranglerBuildVars } = require("./wrangler-build-vars.cjs");
 
 const projectRoot = process.cwd();
 const outputDir = path.join(projectRoot, ".open-next");
@@ -39,6 +40,8 @@ if (process.env["GEOPULSE_SKIP_OPENNEXT_BUILD"] === "1") {
   console.log("[opennext-build] Reusing the existing OpenNext artifact for upload.");
   process.exit(0);
 }
+
+const wranglerBuildVars = loadWranglerBuildVars(projectRoot);
 
 function removeIfExists(targetPath) {
   if (!fs.existsSync(targetPath)) {
@@ -128,6 +131,12 @@ const cliPath = path.join(
 const result = spawnSync(process.execPath, [cliPath, "build"], {
   stdio: "inherit",
   cwd: projectRoot,
+  env: {
+    ...wranglerBuildVars,
+    ...process.env,
+    // Static generation may read scalar vars, but must not start runtime binding/proxy sessions.
+    GEOPULSE_STATIC_BUILD: "1",
+  },
 });
 
 if (result.error) {

@@ -13,7 +13,10 @@ import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
 // scripts/wrangler-config-for-ci.mjs. Nothing in the e2e suite touches the AI path.
 const ciWranglerConfig = 'wrangler.ci.jsonc';
 const useCiConfig = Boolean(process.env['CI']) && existsSync(ciWranglerConfig);
-void initOpenNextCloudflareForDev(useCiConfig ? { configPath: ciWranglerConfig } : undefined);
+const useStaticBuildVars = process.env['GEOPULSE_STATIC_BUILD'] === '1';
+if (!useStaticBuildVars) {
+  void initOpenNextCloudflareForDev(useCiConfig ? { configPath: ciWranglerConfig } : undefined);
+}
 
 /** Next.js `next dev` (Fast Refresh) requires eval; strict CSP breaks the app + Turnstile. Production build omits unsafe-eval. */
 const isDev = process.env['NODE_ENV'] === 'development';
