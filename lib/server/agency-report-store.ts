@@ -144,6 +144,9 @@ export async function storeAgencyReport(args: {
     measuredCanonicalDomain: args.measuredCanonicalDomain,
   })));
   const reportedAt = payloads.map((payload) => payload.reportedAt).sort().at(-1);
+  const enabledPlatforms = args.config.platforms_enabled.filter(
+    (platform): platform is GpmReportPlatform => platform === 'chatgpt' || platform === 'gemini' || platform === 'perplexity'
+  );
   const baseSnapshot = buildAgencyReportSnapshot({
     configId: args.config.id,
     clientName: profile.client?.display_name || profile.client?.name,
@@ -155,6 +158,7 @@ export async function storeAgencyReport(args: {
     payloads,
     sourceRunGroupIds: Object.fromEntries(args.platformRuns.map((run) => [run.platform, run.runGroupId])),
     settings: profile.settings,
+    enabledPlatforms,
   });
   const brandResolution = await resolveReportBrand({
     supabase: args.supabase as any,
