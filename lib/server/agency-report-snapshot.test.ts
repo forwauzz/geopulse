@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { applyReportSettingsToSnapshot, attachComparableAgencyReportHistory, buildAgencyReportSnapshot } from './agency-report-snapshot';
 import type { GpmReportPayload } from './geo-performance-report-payload';
 import { DEFAULT_REPORT_SETTINGS } from './report-settings';
+import { agencyReportMeasurementContext } from './testing/agency-report-fixtures';
 
 function payload(platform: 'chatgpt' | 'gemini' | 'perplexity', citations: readonly boolean[]): GpmReportPayload {
   return {
@@ -43,6 +44,7 @@ describe('buildAgencyReportSnapshot', () => {
       payloads: [payload('chatgpt', [true, false]), payload('gemini', [true, true])],
       sourceRunGroupIds: { chatgpt: 'run-chatgpt', gemini: 'run-gemini' },
       settings: DEFAULT_REPORT_SETTINGS,
+      measurementContext: agencyReportMeasurementContext(),
     });
 
     expect(snapshot.version).toBe('2');
@@ -70,6 +72,7 @@ describe('buildAgencyReportSnapshot', () => {
       payloads: [payload('chatgpt', [true, false]), payload('gemini', [true, true])],
       sourceRunGroupIds: { chatgpt: 'run-chatgpt', gemini: 'run-gemini' },
       settings,
+      measurementContext: agencyReportMeasurementContext(),
     });
 
     expect(snapshot.questions.map((question) => question.queryKey)).toEqual(['q2']);
@@ -84,6 +87,7 @@ describe('buildAgencyReportSnapshot', () => {
       configId: 'config-1', domain: 'example.com', topic: 'private healthcare', location: 'Toronto',
       windowDate: '2026-08', payloads: [payload('gemini', [false, false])],
       sourceRunGroupIds: { gemini: 'run-gemini' }, settings: DEFAULT_REPORT_SETTINGS,
+      measurementContext: agencyReportMeasurementContext(),
     });
 
     expect(snapshot.scope.disclosure).toContain('across 1 AI assistant.');
@@ -98,6 +102,7 @@ describe('buildAgencyReportSnapshot', () => {
       sourceRunGroupIds: { gemini: 'run-gemini', perplexity: 'run-perplexity' },
       settings: DEFAULT_REPORT_SETTINGS,
       enabledPlatforms: ['gemini', 'perplexity'],
+      measurementContext: agencyReportMeasurementContext(),
     });
 
     expect(snapshot.configuredEngines).toEqual(['gemini', 'perplexity']);
@@ -118,6 +123,7 @@ describe('buildAgencyReportSnapshot', () => {
         promptKeys: ['q1'],
         engines: { ...DEFAULT_REPORT_SETTINGS.engines, google: false },
       },
+      measurementContext: agencyReportMeasurementContext(),
     });
     expect(curated.questions).toHaveLength(1);
     expect(curated.engines.map((engine) => engine.key)).toEqual(['chatgpt']);
@@ -139,21 +145,34 @@ describe('buildAgencyReportSnapshot', () => {
       payloads: [payload('chatgpt', [true, false])],
       sourceRunGroupIds: { chatgpt: 'run-chatgpt' },
       settings: DEFAULT_REPORT_SETTINGS,
+      measurementContext: agencyReportMeasurementContext(),
     })).toThrow('report_snapshot_window_mismatch');
+  });
+
+  it('fails closed when a UK payload is projected into a Canadian report shell', () => {
+    expect(() => buildAgencyReportSnapshot({
+      configId: 'config-1', domain: 'example.com', topic: 'private healthcare', location: 'Montreal, Quebec',
+      windowDate: '2026-08',
+      payloads: [{ ...payload('gemini', [false, false]), location: 'London, United Kingdom' }],
+      sourceRunGroupIds: { gemini: 'run-uk' }, settings: DEFAULT_REPORT_SETTINGS,
+      measurementContext: agencyReportMeasurementContext(),
+    })).toThrow('report_snapshot_location_mismatch');
   });
 });
 
 describe('attachComparableAgencyReportHistory', () => {
   it('keeps only in-window snapshots produced by the same report profile', () => {
     const current = buildAgencyReportSnapshot({
-      configId: 'config-1', clientName: 'Clinic Co', domain: 'example.com', topic: 'care', location: 'Toronto',
+      configId: 'config-1', clientName: 'Clinic Co', domain: 'example.com', topic: 'private healthcare', location: 'Toronto',
       windowDate: '2026-08', reportedAt: '2026-08-01T12:00:00.000Z', payloads: [payload('chatgpt', [true, false])],
       sourceRunGroupIds: { chatgpt: 'run-current' }, settings: { ...DEFAULT_REPORT_SETTINGS, comparisonMonths: 3 },
+      measurementContext: agencyReportMeasurementContext(),
     });
     const prior = buildAgencyReportSnapshot({
-      configId: 'config-1', clientName: 'Clinic Co', domain: 'example.com', topic: 'care', location: 'Toronto',
-      windowDate: '2026-07', reportedAt: '2026-07-01T12:00:00.000Z', payloads: [{ ...payload('chatgpt', [true]), windowDate: '2026-07' }],
+      configId: 'config-1', clientName: 'Clinic Co', domain: 'example.com', topic: 'private healthcare', location: 'Toronto',
+      windowDate: '2026-07', reportedAt: '2026-07-01T12:00:00.000Z', payloads: [{ ...payload('chatgpt', [true, false]), windowDate: '2026-07' }],
       sourceRunGroupIds: { chatgpt: 'run-prior' }, settings: { ...DEFAULT_REPORT_SETTINGS, comparisonMonths: 3 },
+      measurementContext: agencyReportMeasurementContext(),
     });
     const incompatible = { ...prior, windowDate: '2026-06', profileVersion: 'different-profile' };
     const result = attachComparableAgencyReportHistory(current, [prior, incompatible]);

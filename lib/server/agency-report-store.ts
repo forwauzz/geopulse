@@ -20,6 +20,11 @@ import {
   AGENCY_REPORT_PROVIDER_QUALITY_VERSION,
   loadAgencyReportProviderQuality,
 } from './agency-report-provider-quality';
+import {
+  appendAgencyReportCandidateQuarantine,
+  loadAgencyReportContextGate,
+} from './agency-report-context-gate';
+import { evaluateStoredAgencyReportIntegrity } from '../intelligence/agency-report-integrity';
 
 export type AgencyReportStoreEnvLike = {
   readonly RESEND_API_KEY?: string;
@@ -65,12 +70,13 @@ export function buildAgencyReportArtifactVersion(args: {
   readonly profileVersion: string;
   readonly brandVersion: string;
   readonly platformRuns: readonly AgencyReportPlatformRun[];
+  readonly integrityFingerprint: string;
 }): string {
   const sources = [...args.platformRuns]
     .sort((a, b) => a.platform.localeCompare(b.platform))
     .map((run) => `${run.platform}:${run.runGroupId}`)
     .join('|');
-  return `${args.profileVersion}-${shortFingerprint(`${sources}|brand:${args.brandVersion}|quality:${AGENCY_REPORT_PROVIDER_QUALITY_VERSION}`)}`;
+  return `${args.profileVersion}-${shortFingerprint(`${sources}|brand:${args.brandVersion}|quality:${AGENCY_REPORT_PROVIDER_QUALITY_VERSION}|integrity:${args.integrityFingerprint}`)}`;
 }
 
 async function loadProfile(args: {
@@ -148,7 +154,27 @@ export async function storeAgencyReport(args: {
       && quality.status === 'measured'
     )
   );
-  if (measuredPlatformRuns.length === 0) throw new Error('agency_report_has_no_quality_valid_platform_runs');
+  const contextGate = await loadAgencyReportContextGate({
+    supabase: args.supabase,
+    config: args.config,
+    platformRuns: args.platformRuns,
+    providerQuality,
+    windowDate: args.windowDate,
+    measuredCanonicalDomain: args.measuredCanonicalDomain,
+  });
+  if (contextGate.status === 'quarantined' || measuredPlatformRuns.length === 0) {
+    const reasons = contextGate.status === 'quarantined'
+      ? contextGate.reasons
+      : ['provider_quality_invalid'];
+    await appendAgencyReportCandidateQuarantine({
+      supabase: args.supabase,
+      configId: args.config.id,
+      windowDate: args.windowDate,
+      platformRuns: args.platformRuns,
+      reasons,
+    });
+    throw new Error(`agency_report_candidate_quarantined:${reasons.join(',')}`);
+  }
   const payloads = await Promise.all(measuredPlatformRuns.map((run) => buildGpmReportPayload({
     supabase: args.supabase,
     runGroupId: run.runGroupId,
@@ -176,6 +202,31 @@ export async function storeAgencyReport(args: {
     sourceRunGroupIds: Object.fromEntries(measuredPlatformRuns.map((run) => [run.platform, run.runGroupId])),
     settings: profile.settings,
     enabledPlatforms,
+    measurementContext: {
+      organizationIdentityId: contextGate.binding.organizationIdentityId,
+      contextId: contextGate.binding.contextId,
+      contextVersion: contextGate.binding.contextVersion,
+      contextHash: contextGate.binding.contextHash,
+      ownerType: contextGate.context.owner.type,
+      ownerId: contextGate.context.owner.id,
+      clientId: profile.client?.id ?? null,
+      businessName: contextGate.context.organization.displayName,
+      category: contextGate.binding.category,
+      market: {
+        scope: contextGate.binding.marketScope,
+        countryCode: contextGate.binding.countryCode,
+        subdivisionCode: contextGate.binding.subdivisionCode,
+        locality: contextGate.binding.locality,
+        serviceAreas: contextGate.binding.serviceAreas,
+        languages: contextGate.binding.languages,
+        timezone: contextGate.binding.timezone,
+      },
+      querySetId: contextGate.querySet.id,
+      querySetVersion: contextGate.querySet.version,
+      competitorCohortVersion: contextGate.binding.competitorCohortVersion,
+      competitorDomains: contextGate.binding.trackedCompetitorDomains,
+      providerQualityVersion: AGENCY_REPORT_PROVIDER_QUALITY_VERSION,
+    },
   });
   const brandResolution = await resolveReportBrand({
     supabase: args.supabase as any,
@@ -191,6 +242,7 @@ export async function storeAgencyReport(args: {
     profileVersion: baseSnapshot.profileVersion,
     brandVersion,
     platformRuns: measuredPlatformRuns,
+    integrityFingerprint: baseSnapshot.integrity.fingerprint,
   });
   const storedWindowKey = `${args.windowDate}@${artifactVersion}`;
 
@@ -206,6 +258,22 @@ export async function storeAgencyReport(args: {
   if (existing?.id) {
     if (isReportQuarantined(existing.metadata)) throw new Error('agency_report_artifact_quarantined');
     const storedSnapshot = readAgencyReportSnapshot(existing.metadata?.['snapshot']);
+    const storedIntegrity = evaluateStoredAgencyReportIntegrity({
+      integrity: existing.metadata?.['integrity'],
+      snapshot: storedSnapshot ?? undefined,
+      expected: {
+        configId: args.config.id,
+        clientId: profile.client?.id ?? null,
+        canonicalDomain: args.measuredCanonicalDomain,
+        ownerType: contextGate.context.owner.type,
+        ownerId: contextGate.context.owner.id,
+        querySetId: contextGate.querySet.id,
+        contextVersion: contextGate.binding.contextVersion,
+        querySetVersion: contextGate.binding.querySetVersion,
+        competitorCohortVersion: contextGate.binding.competitorCohortVersion,
+      },
+    });
+    if (!storedSnapshot || !storedIntegrity.compatible) throw new Error('agency_report_artifact_quarantined');
     return {
       created: false,
       reportId: String(existing.id),
@@ -251,6 +319,7 @@ export async function storeAgencyReport(args: {
     cadence_window: args.windowDate,
     profile_version: snapshot.profileVersion,
     source_run_group_ids: Object.fromEntries(measuredPlatformRuns.map((run) => [run.platform, run.runGroupId])),
+    integrity: snapshot.integrity,
     provider_quality_version: AGENCY_REPORT_PROVIDER_QUALITY_VERSION,
     provider_quality: providerQuality,
     snapshot,

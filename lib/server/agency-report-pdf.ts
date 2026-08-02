@@ -41,6 +41,19 @@ function periodLabel(windowDate: string): string {
   return week ? `Week ${String(Number(week[2]))}, ${week[1]}` : windowDate;
 }
 
+function reportMarketLabel(snapshot: AgencyReportSnapshotV2): string {
+  const market = snapshot.integrity.market;
+  const country = new Intl.DisplayNames(['en'], { type: 'region' }).of(market.countryCode) ?? market.countryCode;
+  return [market.locality, ...market.serviceAreas, country]
+    .filter((value): value is string => Boolean(value))
+    .filter((value, index, values) => values.indexOf(value) === index)
+    .join(', ');
+}
+
+function engineLabel(value: string): string {
+  return value === 'chatgpt' ? 'ChatGPT' : value === 'gemini' ? 'Google Gemini' : value === 'perplexity' ? 'Perplexity' : value;
+}
+
 function safeText(value: string): string {
   return value.replace(/[\u2018\u2019]/g, "'").replace(/[\u201c\u201d]/g, '"').replace(/[\u2013\u2014]/g, '-');
 }
@@ -292,11 +305,17 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
     y -= 20;
   }
   if (snapshot.settings.sections.scopeStatement) {
-    overview.drawRectangle({ x: MARGIN, y: y - 112, width: PAGE.width - MARGIN * 2, height: 102, color: PAPER });
+    overview.drawRectangle({ x: MARGIN, y: y - 138, width: PAGE.width - MARGIN * 2, height: 128, color: PAPER });
     overview.drawText('MEASUREMENT SCOPE', { x: MARGIN + 16, y: y - 34, size: 8, font: fonts.bold, color: MUTED });
-    drawWrapped(overview, reportScopeDisclosure(snapshot), { x: MARGIN + 16, y: y - 57, width: PAGE.width - MARGIN * 2 - 32, font: fonts.bold, size: 11, lineHeight: 15, maxLines: 3 });
-    overview.drawText(`Comparison horizon: ${String(snapshot.comparisonMonths)} months | Captured ${new Date(snapshot.reportedAt).toISOString().slice(0, 10)}`, {
-      x: MARGIN + 16, y: y - 94, size: 8, font: fonts.regular, color: MUTED,
+    drawWrapped(overview, reportScopeDisclosure(snapshot), { x: MARGIN + 16, y: y - 55, width: PAGE.width - MARGIN * 2 - 32, font: fonts.bold, size: 10, lineHeight: 13, maxLines: 2 });
+    overview.drawText(`Business: ${safeText(snapshot.integrity.businessName)} | Market: ${safeText(reportMarketLabel(snapshot))} (${safeText(snapshot.integrity.market.scope)}) | Languages: ${safeText(snapshot.integrity.market.languages.join(', '))}`, {
+      x: MARGIN + 16, y: y - 87, size: 7.6, font: fonts.regular, color: MUTED, maxWidth: PAGE.width - MARGIN * 2 - 32,
+    });
+    overview.drawText(`Period: ${periodLabel(snapshot.windowDate)} | Prompts: ${String(snapshot.integrity.selectedPromptKeys.length)}/${String(snapshot.integrity.availablePromptKeys.length)} | Engines: ${safeText(snapshot.integrity.measuredEngines.map(engineLabel).join(', '))}`, {
+      x: MARGIN + 16, y: y - 105, size: 7.6, font: fonts.regular, color: MUTED, maxWidth: PAGE.width - MARGIN * 2 - 32,
+    });
+    overview.drawText(`Approved comparison set: ${safeText(snapshot.integrity.competitorDomains.join(', ') || 'none configured')} | Captured ${new Date(snapshot.reportedAt).toISOString().slice(0, 10)}`, {
+      x: MARGIN + 16, y: y - 123, size: 7.6, font: fonts.regular, color: MUTED, maxWidth: PAGE.width - MARGIN * 2 - 32,
     });
   }
   drawFooter(overview, fonts, brand, 2);
@@ -402,6 +421,8 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
     const notes = [
       ['Visibility', 'The share of completed, selected answer evaluations in which the measured domain was cited. The combined figure is recalculated from this report\'s exact engine and prompt scope.'],
       ['Selection', reportScopeDisclosure(snapshot)],
+      ['Identity and market', `${snapshot.integrity.businessName} (${snapshot.integrity.canonicalDomain}) was measured for ${reportMarketLabel(snapshot)} in ${snapshot.integrity.market.languages.join(', ')}.`],
+      ['Competitor scope', snapshot.integrity.competitorDomains.length > 0 ? `Only these approved comparison businesses were tracked: ${naturalList(snapshot.integrity.competitorDomains)}.` : 'No comparison businesses were configured for this measurement.'],
       ['Unavailable assistants', unavailableLabels.length > 0 ? `${naturalList(unavailableLabels)} ${unavailableLabels.length === 1 ? 'was' : 'were'} omitted because ${unavailableLabels.length === 1 ? 'its measurement did' : 'their measurements did'} not pass the report quality gate; ${unavailableLabels.length === 1 ? 'it was' : 'they were'} not scored as zero.` : 'Every selected assistant passed the report quality gate with a complete measurement.'],
       ['Variance', 'AI answers can vary by session and over time. This artifact is a dated measurement, not a guarantee of future placement.'],
       ['Reproducibility', `Report profile ${snapshot.profileVersion}. Source runs remain attached to the stored snapshot for audit and regeneration.`],

@@ -34,6 +34,27 @@ vi.mock('../../workers/report/resolve-report-brand', () => ({
 vi.mock('../../workers/report/agency-report-email-delivery', () => ({
   sendAgencyReportEmail: vi.fn(async () => ({ ok: true })),
 }));
+vi.mock('./agency-report-context-gate', () => ({
+  appendAgencyReportCandidateQuarantine: vi.fn(async () => undefined),
+  loadAgencyReportContextGate: vi.fn(async () => ({
+    status: 'compatible',
+    context: {
+      owner: { type: 'agency_account', id: 'agency-1' },
+      organization: { displayName: 'Clinic Co' },
+    },
+    binding: {
+      organizationIdentityId: '11111111-1111-4111-8111-111111111111',
+      contextId: 'context-test', contextVersion: 'ocv1-test', contextHash: 'fnv1a32:deadbeef',
+      canonicalDomain: 'clinic.example', category: 'private healthcare clinic',
+      marketScope: 'local', countryCode: 'CA', subdivisionCode: 'CA-QC', locality: 'Montreal',
+      serviceAreas: ['Montreal West Island'], languages: ['en-CA', 'fr-CA'], timezone: 'America/Toronto',
+      querySetVersion: 'oqs1-deadbeef-g1', competitorCohortVersion: 'occ1-deadbeef',
+      trackedCompetitorDomains: [],
+    },
+    querySet: { id: 'set-1', version: 'oqs1-deadbeef-g1', metadata: {} },
+    sourceRuns: [],
+  })),
+}));
 
 import { storeAgencyReport } from './agency-report-store';
 import { sendAgencyReportEmail } from '../../workers/report/agency-report-email-delivery';
@@ -56,7 +77,7 @@ describe('storeAgencyReport', () => {
 
   it('stores one private, idempotent combined snapshot and honors a client review hold', async () => {
     const inserted: Record<string, unknown>[] = [];
-    const gpmRows: Array<{ id: string; pdf_r2_key: string | null; window_date: string }> = [];
+    const gpmRows: Array<{ id: string; pdf_r2_key: string | null; window_date: string; metadata: Record<string, unknown> }> = [];
     const updated: Record<string, unknown>[] = [];
     const supabase = {
       from(table: string) {
@@ -109,7 +130,10 @@ describe('storeAgencyReport', () => {
           },
           insert(row: Record<string, unknown>) {
             inserted.push(row);
-            gpmRows.push({ id: 'report-1', pdf_r2_key: String(row['pdf_r2_key']), window_date: String(row['window_date']) });
+            gpmRows.push({
+              id: 'report-1', pdf_r2_key: String(row['pdf_r2_key']), window_date: String(row['window_date']),
+              metadata: row['metadata'] as Record<string, unknown>,
+            });
             return { select: () => ({ single: async () => ({ data: { id: 'report-1' }, error: null }) }) };
           },
           update(row: Record<string, unknown>) {
@@ -163,6 +187,14 @@ describe('storeAgencyReport', () => {
       delivery_blocked: true,
       delivery_block_reason: 'client_report_sharing_held',
       delivery_url_kind: 'revocable_client_summary',
+      integrity: {
+        version: 'agency-report-integrity-v1',
+        configId: 'config-1',
+        contextVersion: 'ocv1-test',
+        querySetId: 'set-1',
+        competitorCohortVersion: 'occ1-deadbeef',
+        denominator: { questions: 2, evaluations: 4, citedEvaluations: 3 },
+      },
       snapshot: {
         version: '2',
         clientName: 'Clinic Co',

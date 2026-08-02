@@ -20,6 +20,18 @@ function period(value: string): string {
     .format(new Date(`${month[1]}-${month[2]}-01T00:00:00.000Z`));
 }
 
+function marketLabel(snapshot: AgencyReportSnapshotV2): string {
+  const market = snapshot.integrity.market;
+  const country = new Intl.DisplayNames(['en'], { type: 'region' }).of(market.countryCode) ?? market.countryCode;
+  return [market.locality, ...market.serviceAreas, country]
+    .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index)
+    .join(', ');
+}
+
+function engineLabel(value: string): string {
+  return value === 'chatgpt' ? 'ChatGPT' : value === 'gemini' ? 'Google Gemini' : value === 'perplexity' ? 'Perplexity' : value;
+}
+
 function Section({ eyebrow, title, children, id }: {
   readonly eyebrow: string;
   readonly title: string;
@@ -144,6 +156,12 @@ export function AgencyReportView({
             <div className="col-span-2 rounded-2xl border border-[#172033]/10 p-5">
               <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#687083]">Measurement scope</p>
               <p className="mt-3 text-sm font-semibold leading-relaxed text-[#344054]">{snapshot.scope.disclosure}</p>
+              <dl className="mt-4 grid gap-3 border-t border-[#172033]/10 pt-4 text-xs text-[#596174] sm:grid-cols-2">
+                <div><dt className="font-bold text-[#20283a]">Business & market</dt><dd className="mt-1">{snapshot.integrity.businessName} · {marketLabel(snapshot)} · {snapshot.integrity.market.languages.join(', ')}</dd></div>
+                <div><dt className="font-bold text-[#20283a]">Period & denominator</dt><dd className="mt-1">{period(snapshot.integrity.period)} · {snapshot.integrity.selectedPromptKeys.length} prompts · {snapshot.integrity.denominator.evaluations} completed answers</dd></div>
+                <div><dt className="font-bold text-[#20283a]">Measured assistants</dt><dd className="mt-1">{snapshot.integrity.measuredEngines.map(engineLabel).join(', ')}</dd></div>
+                <div><dt className="font-bold text-[#20283a]">Approved competitors</dt><dd className="mt-1">{snapshot.integrity.competitorDomains.join(', ') || 'None configured'}</dd></div>
+              </dl>
             </div>
           </div>
         </div>

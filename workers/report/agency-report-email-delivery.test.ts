@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildAgencyReportEmailHtml } from './agency-report-email-delivery';
 import { buildAgencyReportSnapshot } from '@/lib/server/agency-report-snapshot';
 import { DEFAULT_REPORT_SETTINGS } from '@/lib/server/report-settings';
+import { agencyReportMeasurementContext } from '@/lib/server/testing/agency-report-fixtures';
 
 describe('agency report email', () => {
   it('uses the canonical combined snapshot and never exposes model identifiers', () => {
@@ -16,6 +17,7 @@ describe('agency report email', () => {
         competitors: [], opportunities: [],
       }],
       sourceRunGroupIds: { chatgpt: 'run-1' }, settings: DEFAULT_REPORT_SETTINGS,
+      measurementContext: agencyReportMeasurementContext(),
     });
     const html = buildAgencyReportEmailHtml({ snapshot, secureReportUrl: 'https://example.test/secure' });
     expect(html).toContain('100%');
