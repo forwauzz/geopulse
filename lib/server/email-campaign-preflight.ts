@@ -351,7 +351,9 @@ export async function runCampaignPreflight(args: {
 
   let evidence: AudienceEvidence;
   try {
-    evidence = await loadAudienceEvidence(args.supabase);
+    // Scoped to this intervention: a campaign's own prospects and enrollments are not a conflict,
+    // or a retry after a partial schedule could never complete.
+    evidence = await loadAudienceEvidence(args.supabase, { excludeInterventionId: args.contract.interventionId });
   } catch {
     // Fail closed: an unreadable suppression ledger is not an empty one.
     gates.push(
