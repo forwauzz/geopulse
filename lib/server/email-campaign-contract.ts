@@ -482,8 +482,16 @@ export function applyContractEdit(
 
   const candidate = merged(contract, edit, nowIso);
   if (versionChecksum(candidate) === versionChecksum(contract)) {
-    // Bookkeeping only (a stop reason, a results note) — no new version needed.
-    return { contract: { ...candidate, state: contract.state }, newVersion: false };
+    // Nothing a recipient would experience changed. This is either bookkeeping (a stop reason, a
+    // preflight result) or a forward lifecycle move — scheduled → running → evaluating →
+    // completed/stopped. Both are legitimate on a locked version. What is NOT legitimate is
+    // dropping back into an editable state, which would let a scheduled version be reopened and
+    // rewritten in place.
+    const requested = edit.state ?? contract.state;
+    return {
+      contract: { ...candidate, state: LOCKED_STATES.has(requested) ? requested : contract.state },
+      newVersion: false,
+    };
   }
 
   return {

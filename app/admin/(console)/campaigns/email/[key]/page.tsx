@@ -3,7 +3,13 @@ import { notFound } from 'next/navigation';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { loadEmailCampaignDetail } from '@/lib/server/email-campaign-console';
 import type { SectionState, SectionStatus } from '@/lib/server/email-campaign-contract';
-import { freezeEmailCampaignAudienceAction, saveEmailCampaignDraftAction } from '../actions';
+import {
+  freezeEmailCampaignAudienceAction,
+  saveEmailCampaignDraftAction,
+  scheduleEmailCampaignAction,
+  sendInternalTestAction,
+  stopEmailCampaignAction,
+} from '../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -255,28 +261,104 @@ export default async function EmailCampaignDetailPage({
           <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">
             Save draft
           </button>
-          <button
-            type="button"
-            disabled
-            title="Internal test delivery arrives with the scheduling preflight (ECP-3)."
-            className="rounded-xl border border-outline-variant/30 px-5 py-2.5 text-sm font-bold text-on-surface-variant opacity-60"
-          >
-            Preview &amp; test
-          </button>
-          <button
-            type="button"
-            disabled
-            title={
-              detail.readyToSchedule
-                ? 'Scheduling arrives with the preflight gate (ECP-3).'
-                : 'Every section above must be complete before scheduling.'
-            }
-            className="rounded-xl border border-outline-variant/30 px-5 py-2.5 text-sm font-bold text-on-surface-variant opacity-60"
-          >
-            Schedule
-          </button>
         </div>
       </form>
+
+      <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-headline text-lg font-bold text-on-background">Preflight</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">
+              Every gate must pass before this campaign can be scheduled. Checked against version{' '}
+              <code className="text-xs">{detail.preflight.versionChecksum}</code>.
+            </p>
+          </div>
+          <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${detail.preflight.ok ? SECTION_STYLE.complete : SECTION_STYLE.needs_attention}`}>
+            {detail.preflight.ok ? 'All gates pass' : `${detail.preflight.failures.length} failing`}
+          </span>
+        </div>
+        <ul className="mt-4 space-y-2">
+          {detail.preflight.gates.map((item) => (
+            <li key={item.key} className="flex items-start gap-3 rounded-xl bg-surface-container-low px-4 py-3">
+              <span
+                className={`material-symbols-outlined text-[18px] ${item.ok ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}
+                aria-hidden
+              >
+                {item.ok ? 'check_circle' : 'cancel'}
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-on-background">{item.key.replaceAll('_', ' ')}</p>
+                <p className="mt-0.5 text-xs leading-5 text-on-surface-variant">{item.detail}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-5 flex flex-wrap items-end gap-3">
+          <form action={sendInternalTestAction} className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="interventionKey" value={contract.interventionKey} />
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Internal test recipient</span>
+              <select
+                name="recipient"
+                disabled={detail.testRecipients.length === 0 || !sender.authenticated}
+                className="mt-1 rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm text-on-background disabled:opacity-60"
+              >
+                {detail.testRecipients.map((recipient) => (
+                  <option key={recipient} value={recipient}>{recipient}</option>
+                ))}
+                {detail.testRecipients.length === 0 ? <option value="">No allowlist configured</option> : null}
+              </select>
+            </label>
+            <button
+              type="submit"
+              disabled={detail.testRecipients.length === 0 || !sender.authenticated}
+              className="rounded-xl border border-outline-variant/30 px-5 py-2.5 text-sm font-bold text-on-background disabled:opacity-60"
+            >
+              Send internal test
+            </button>
+          </form>
+
+          <form action={scheduleEmailCampaignAction}>
+            <input type="hidden" name="interventionKey" value={contract.interventionKey} />
+            <button
+              type="submit"
+              disabled={!detail.preflight.ok || detail.locked}
+              title={
+                detail.locked
+                  ? 'This version is already scheduled. Edit it to create a new version.'
+                  : detail.preflight.ok
+                    ? 'Schedule this exact version.'
+                    : detail.preflight.failures.join(' · ')
+              }
+              className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary disabled:opacity-50"
+            >
+              Schedule
+            </button>
+          </form>
+
+          {contract.governance.scheduledAt && contract.state !== 'stopped' ? (
+            <form action={stopEmailCampaignAction} className="flex flex-wrap items-end gap-2">
+              <input type="hidden" name="interventionKey" value={contract.interventionKey} />
+              <Field label="Stop reason" name="reason" defaultValue="operator stopped the campaign" />
+              <button type="submit" className="rounded-xl border border-red-500/40 px-5 py-2.5 text-sm font-bold text-red-700 dark:text-red-300">
+                Stop campaign
+              </button>
+            </form>
+          ) : null}
+        </div>
+
+        <p className="mt-4 text-xs leading-5 text-on-surface-variant">
+          An internal test goes only to the configured allowlist, is excluded from every campaign and revenue metric,
+          and never enrols a prospect. Scheduling writes enrollments and staggered prospect rows — it does not send;
+          the existing hourly outreach sweep delivers each step at its own time.
+        </p>
+        {contract.governance.stopReason ? (
+          <p className="mt-3 rounded-xl bg-red-500/10 px-4 py-3 text-sm font-medium text-red-700 dark:text-red-300">
+            Stopped: {contract.governance.stopReason}
+          </p>
+        ) : null}
+      </section>
 
       <Section status={section('audience')}>
         <p className="text-sm text-on-surface-variant">

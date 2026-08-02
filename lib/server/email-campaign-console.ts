@@ -17,6 +17,7 @@ import {
 import { loadEmailCampaign, listEmailCampaigns, type EmailCampaignRecord } from './email-campaign-store';
 import { resolveCampaignSender, resolveTestRecipients, type SenderEnvLike, type SenderResolution } from './email-campaign-sender';
 import { renderCampaignPreview, type CampaignPreview, type PreviewContact } from './email-campaign-preview';
+import { runCampaignPreflight, type PreflightResult } from './email-campaign-preflight';
 
 export interface EmailCampaignListItem {
   readonly interventionKey: string;
@@ -44,6 +45,7 @@ export interface EmailCampaignDetail {
   readonly previewContacts: readonly PreviewContact[];
   readonly preview: CampaignPreview | null;
   readonly audienceSample: readonly { readonly position: number; readonly email: string; readonly name: string | null; readonly company: string | null }[];
+  readonly preflight: PreflightResult;
   readonly warnings: readonly string[];
 }
 
@@ -176,10 +178,20 @@ export async function loadEmailCampaignDetail(args: {
     }));
   }
 
+  // The live gate state, not the last stored result: an operator looking at this page needs to
+  // know whether it would pass NOW, after whatever changed in the ledgers since the last check.
+  const { result: preflight } = await runCampaignPreflight({
+    supabase: args.supabase,
+    env: args.env,
+    contract,
+    nowMs: Date.now(),
+  });
+
   return {
     record,
     contract,
     sender,
+    preflight,
     sections: deriveSectionStates(contract),
     readyToSchedule: isReadyToSchedule(contract),
     locked: isLocked(contract),
