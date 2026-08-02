@@ -1,0 +1,29 @@
+{
+  "contractVersion": "organization-capability-v1",
+  "cases": [
+    {
+      "id": "golden_exact_tenant_read",
+      "expected": "ready"
+    },
+    {
+      "id": "golden_generation_without_delivery",
+      "expected": "ready_not_delivered"
+    },
+    {
+      "id": "adversarial_cross_client_scope",
+      "expected": "tenant_scope_violation"
+    },
+    {
+      "id": "adversarial_incompatible_measurement",
+      "expected": "incompatible_measurement"
+    },
+    {
+      "id": "adversarial_unsupported_claim",
+      "expected": "invalid_request"
+    },
+    {
+      "id": "adversarial_delivery_escalation",
+      "expected": "invalid_request"
+    }
+  ]
+}
