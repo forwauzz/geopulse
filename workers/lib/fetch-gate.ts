@@ -13,6 +13,8 @@ export type FetchGateTextResult =
       ok: true;
       text: string;
       finalUrl: string;
+      /** Every validated URL visited, including the requested and final URL. */
+      redirectChain: readonly string[];
       status: number;
       contentType: string | null;
       /** Lower-cased response headers — needed by header-based checks (e.g. security headers). */
@@ -136,6 +138,7 @@ export async function fetchGateText(
         ok: true,
         text,
         finalUrl: rawUrl,
+        redirectChain: [rawUrl],
         status: res.status,
         contentType: ctype,
         headers: toHeaderMap(res.headers),
@@ -151,6 +154,7 @@ export async function fetchGateText(
   if (!v.ok) return { ok: false, reason: v.reason };
 
   let currentUrl = v.safeUrl;
+  const redirectChain = [currentUrl];
   let redirectCount = 0;
 
   while (redirectCount <= ENGINE_FETCH_MAX_REDIRECTS) {
@@ -178,6 +182,7 @@ export async function fetchGateText(
       const next = await validateEngineRedirect(loc, currentUrl, redirectCount);
       if (!next.ok) return { ok: false, reason: next.reason };
       currentUrl = next.safeUrl;
+      redirectChain.push(currentUrl);
       redirectCount += 1;
       continue;
     }
@@ -212,6 +217,7 @@ export async function fetchGateText(
       ok: true,
       text,
       finalUrl: currentUrl,
+      redirectChain,
       status: res.status,
       contentType: ctype,
       headers: toHeaderMap(res.headers),
@@ -360,7 +366,7 @@ export async function fetchGateBytes(
  * HTML page fetch (same caps as legacy `fetch-page.ts` for free tier).
  */
 export async function fetchHtmlPage(rawUrl: string): Promise<
-  | { ok: true; html: string; finalUrl: string; headers: Record<string, string> }
+  | { ok: true; html: string; finalUrl: string; redirectChain: readonly string[]; headers: Record<string, string> }
   | { ok: false; reason: string; status?: number; headers?: Record<string, string> }
 > {
   const r = await fetchGateText(rawUrl, {
@@ -370,5 +376,5 @@ export async function fetchHtmlPage(rawUrl: string): Promise<
     requireContentTypes: ['text/html', 'application/xhtml'],
   });
   if (!r.ok) return r;
-  return { ok: true, html: r.text, finalUrl: r.finalUrl, headers: r.headers };
+  return { ok: true, html: r.text, finalUrl: r.finalUrl, redirectChain: r.redirectChain, headers: r.headers };
 }

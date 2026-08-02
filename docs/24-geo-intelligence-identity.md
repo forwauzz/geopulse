@@ -137,3 +137,26 @@ market, services, buyer, language, aliases, competitors, and conflict state.
 The Zod contract and matching portable JSON Schema live in
 `lib/intelligence/organization-context.ts`. The tenant-scoped projection lives
 in `lib/server/organization-context-repository.ts`.
+
+## Exact-domain resolver
+
+`organization-resolver-v1` is the read-only detection layer in front of
+Organization Context. It uses the existing SSRF-gated fetch path, records every
+validated redirect hop, and extracts canonical identity, schema.org business
+facts, addresses, service areas, services, public contact signals, languages,
+and explicit market-scope signals from the exact official site before any
+search or model enrichment.
+
+Cross-domain redirects require an already verified alias. Missing structured
+location stays `needs_review`; cross-country, canonical-domain, category, and
+same-name identity disagreements stay `conflicted`. A confirmed tenant context
+is never mutated by the resolver. Search/model adapters receive the exact-site
+evidence IDs in their request, and parsed context or competitor suggestions are
+accepted only when their evidence is recoverable and their identity and market
+remain compatible.
+
+The safe shadow command performs no writes:
+
+```bash
+npm run intelligence:organization:resolve -- --url=https://example.com --aliases=example.ca
+```
