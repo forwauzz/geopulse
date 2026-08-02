@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { createServiceRoleClient } from '../lib/supabase/service-role';
+import { resolveDatabaseTarget } from '../lib/server/database-target';
 import {
   applyContactIntake,
   loadExistingContacts,
@@ -24,6 +25,8 @@ import {
 } from '../lib/server/agency-contact-intake';
 
 const APPLY_CONFIRMATION = '--confirm=ECP-1';
+const ALLOW_PRODUCTION = '--allow-production';
+
 
 const BUNDLE_FILES: ReadonlyArray<{ file: string; sourceClass: ContactSourceClass }> = [
   { file: '1-VERIFIED-published-327.csv', sourceClass: 'verified_published' },
@@ -92,6 +95,17 @@ async function main(): Promise<void> {
   const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
   const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
   if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+
+  const target = resolveDatabaseTarget(url);
+  if (apply && !target.isLocal && !hasFlag(ALLOW_PRODUCTION)) {
+    throw new Error(
+      `refusing to --apply against non-local database ${target.host}. `
+      + `VCI-8 holds production contact writes until QA; pass ${ALLOW_PRODUCTION} to override deliberately.`,
+    );
+  }
+  // Printed before any write, so the operator sees which database they are about to change.
+  console.error(`[intake] target ${target.host} (${target.isLocal ? 'local' : 'REMOTE'}) · mode ${apply ? 'APPLY' : 'dry run'}`);
+
   const supabase = createServiceRoleClient(url, key);
   const [existing, suppression] = await Promise.all([
     loadExistingContacts(supabase),
