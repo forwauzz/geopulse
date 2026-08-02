@@ -10,6 +10,7 @@ import {
 import { buildAgencyReportSnapshot } from './agency-report-snapshot';
 import type { GpmReportPayload } from './geo-performance-report-payload';
 import { DEFAULT_REPORT_SETTINGS } from './report-settings';
+import { agencyReportMeasurementContext } from './testing/agency-report-fixtures';
 
 const payload: GpmReportPayload = {
   configId: 'config-1', domain: 'example.com', topic: 'clinic marketing', location: 'Toronto',
@@ -27,6 +28,7 @@ const snapshot = buildAgencyReportSnapshot({
   configId: 'config-1', clientName: 'Example Clinic', domain: 'example.com', topic: 'clinic marketing',
   location: 'Toronto', windowDate: '2026-08', reportedAt: '2026-08-01T12:00:00.000Z',
   payloads: [payload], sourceRunGroupIds: { chatgpt: 'run-1' }, settings: DEFAULT_REPORT_SETTINGS,
+  measurementContext: agencyReportMeasurementContext(),
 });
 
 const zeroPayload: GpmReportPayload = {
@@ -47,6 +49,7 @@ const zeroSnapshot = buildAgencyReportSnapshot({
   configId: 'config-zero', clientName: 'Example Clinic', domain: 'example.com', topic: 'clinic marketing',
   location: 'Toronto', windowDate: '2026-08', reportedAt: '2026-08-01T12:00:00.000Z',
   payloads: [zeroPayload], sourceRunGroupIds: { chatgpt: 'run-zero' }, settings: DEFAULT_REPORT_SETTINGS,
+  measurementContext: agencyReportMeasurementContext(),
 });
 
 describe('agency report artifact', () => {

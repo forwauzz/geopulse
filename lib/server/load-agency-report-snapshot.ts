@@ -1,5 +1,6 @@
 import { readAgencyReportSnapshot, type AgencyReportSnapshotV2 } from './agency-report-snapshot';
 import { isReportQuarantined } from './report-quarantine';
+import { evaluateStoredAgencyReportIntegrity } from '../intelligence/agency-report-integrity';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -32,11 +33,23 @@ export async function loadLatestAgencyReport(args: {
 
   const { data: config } = await args.supabase
     .from('client_benchmark_configs')
-    .select('id,query_set_id')
+    .select('id,query_set_id,startup_workspace_id,agency_account_id,metadata')
     .eq('agency_account_id', client.agency_account_id)
     .eq('benchmark_domain_id', domain.id)
     .maybeSingle();
-  if (!config?.id || !config.query_set_id) return null;
+  const contextVersion = typeof config?.metadata?.['organization_context_version'] === 'string'
+    ? String(config.metadata['organization_context_version'])
+    : null;
+  const querySetVersion = typeof config?.metadata?.['query_set_version'] === 'string'
+    ? String(config.metadata['query_set_version'])
+    : null;
+  const competitorCohortVersion = typeof config?.metadata?.['competitor_cohort_version'] === 'string'
+    ? String(config.metadata['competitor_cohort_version'])
+    : null;
+  const agencyClientOwnerId = typeof config?.metadata?.['agency_client_id'] === 'string'
+    ? String(config.metadata['agency_client_id'])
+    : null;
+  if (!config?.id || !config.query_set_id || !contextVersion || !querySetVersion || !competitorCohortVersion) return null;
 
   const { data: activeGroups } = await args.supabase
     .from('benchmark_run_groups')
@@ -44,6 +57,7 @@ export async function loadLatestAgencyReport(args: {
     .eq('query_set_id', config.query_set_id)
     .eq('agency_account_id', client.agency_account_id)
     .eq('metadata->>domain_id', domain.id)
+    .eq('metadata->>organization_context_version', contextVersion)
     .order('started_at', { ascending: false })
     .limit(80);
   const activeGroupIds = ((activeGroups ?? []) as Array<{ id: string }>).map((row) => row.id);
@@ -59,18 +73,48 @@ export async function loadLatestAgencyReport(args: {
     .in('run_group_id', activeGroupIds)
     .order('generated_at', { ascending: false })
     .limit(25);
-  const report = ((reports ?? []) as Array<{
+  const candidates = ((reports ?? []) as Array<{
     id?: unknown;
     agency_client_id?: unknown;
     pdf_r2_key?: unknown;
     generated_at?: unknown;
     metadata?: unknown;
-  }>)
-    .find((row) => !isReportQuarantined(row.metadata));
-  const metadata = report?.metadata && typeof report.metadata === 'object'
-    ? report.metadata as Record<string, unknown>
-    : null;
-  const snapshot = readAgencyReportSnapshot(metadata?.['snapshot']);
+  }>);
+  let report: typeof candidates[number] | null = null;
+  let snapshot: AgencyReportSnapshotV2 | null = null;
+  for (const candidate of candidates) {
+    if (isReportQuarantined(candidate.metadata)) continue;
+    const metadata = candidate.metadata && typeof candidate.metadata === 'object'
+      ? candidate.metadata as Record<string, unknown>
+      : null;
+    const parsed = readAgencyReportSnapshot(metadata?.['snapshot']);
+    if (!parsed) continue;
+    const allSourcesCurrent = Object.values(parsed.integrity.sourceRunGroupIds)
+      .every((runGroupId) => activeGroupIds.includes(runGroupId));
+    const decision = evaluateStoredAgencyReportIntegrity({
+      integrity: metadata?.['integrity'],
+      snapshot: parsed,
+      expected: {
+        configId: String(config.id),
+        clientId: args.agencyClientId,
+        canonicalDomain: canonical,
+        ownerType: agencyClientOwnerId
+          ? 'agency_client'
+          : typeof config.startup_workspace_id === 'string' ? 'startup_workspace' : 'agency_account',
+        ownerId: agencyClientOwnerId
+          ?? (typeof config.startup_workspace_id === 'string' ? config.startup_workspace_id : null)
+          ?? (typeof config.agency_account_id === 'string' ? config.agency_account_id : null),
+        querySetId: String(config.query_set_id),
+        contextVersion,
+        querySetVersion,
+        competitorCohortVersion,
+      },
+    });
+    if (!decision.compatible || !allSourcesCurrent) continue;
+    report = candidate;
+    snapshot = parsed;
+    break;
+  }
   if (!report?.id || !snapshot) return null;
   return {
     reportId: String(report.id),

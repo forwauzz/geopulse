@@ -4,6 +4,12 @@ import {
   type ReportEngineKey,
   type ReportSettings,
 } from './report-settings';
+import {
+  buildAgencyReportIntegrityRecord,
+  evaluateStoredAgencyReportIntegrity,
+  type AgencyReportIntegrityRecord,
+} from '../intelligence/agency-report-integrity';
+import type { OrganizationOwnerType } from '../intelligence/organization-context';
 
 export type GpmReportPlatform = 'chatgpt' | 'gemini' | 'perplexity';
 
@@ -77,6 +83,26 @@ export type AgencyReportSnapshotV2 = {
     readonly availableCompetitorCount: number;
     readonly disclosure: string;
   };
+  /** Immutable source scope used by the PDF, web preview, download, and history comparison. */
+  readonly integrity: AgencyReportIntegrityRecord;
+};
+
+export type AgencyReportMeasurementContextInput = {
+  readonly organizationIdentityId: string;
+  readonly contextId: string;
+  readonly contextVersion: string;
+  readonly contextHash: string;
+  readonly ownerType: OrganizationOwnerType;
+  readonly ownerId: string | null;
+  readonly clientId: string | null;
+  readonly businessName: string;
+  readonly category: string;
+  readonly market: AgencyReportIntegrityRecord['market'];
+  readonly querySetId: string;
+  readonly querySetVersion: string;
+  readonly competitorCohortVersion: string;
+  readonly competitorDomains: readonly string[];
+  readonly providerQualityVersion: string;
 };
 
 const PLATFORM_ORDER: readonly GpmReportPlatform[] = ['chatgpt', 'gemini', 'perplexity'];
@@ -102,10 +128,14 @@ function canonical(value: string): string {
 function assertCompatible(payload: GpmReportPayload, args: {
   readonly configId: string;
   readonly domain: string;
+  readonly topic: string;
+  readonly location: string;
   readonly windowDate: string;
 }): void {
   if (payload.configId !== args.configId) throw new Error('report_snapshot_config_mismatch');
   if (canonical(payload.domain) !== canonical(args.domain)) throw new Error('report_snapshot_domain_mismatch');
+  if (payload.topic.trim() !== args.topic.trim()) throw new Error('report_snapshot_topic_mismatch');
+  if (payload.location.trim() !== args.location.trim()) throw new Error('report_snapshot_location_mismatch');
   if (payload.windowDate !== args.windowDate) throw new Error('report_snapshot_window_mismatch');
   if (!isPlatform(payload.platform)) throw new Error('report_snapshot_platform_unsupported');
 }
@@ -127,6 +157,7 @@ export function buildAgencyReportSnapshot(args: {
   readonly sourceRunGroupIds: Readonly<Partial<Record<GpmReportPlatform, string>>>;
   readonly settings: ReportSettings;
   readonly enabledPlatforms?: readonly GpmReportPlatform[];
+  readonly measurementContext: AgencyReportMeasurementContextInput;
 }): AgencyReportSnapshotV2 {
   const byPlatform = new Map<GpmReportPlatform, GpmReportPayload>();
   for (const payload of args.payloads) {
@@ -230,16 +261,36 @@ export function buildAgencyReportSnapshot(args: {
     : `Full measured scope: ${String(includedPromptKeys.length)} buyer questions across ${String(includedPlatforms.length)} ${assistantLabel}.`;
   const reportedAt = args.reportedAt ?? new Date().toISOString();
 
+  const profileVersion = reportProfileVersion({
+    ...args.settings,
+    engines: {
+      chatgpt: enabledPlatforms.includes('chatgpt'),
+      google: enabledPlatforms.includes('gemini'),
+      perplexity: enabledPlatforms.includes('perplexity'),
+    },
+  });
+  const integrity = buildAgencyReportIntegrityRecord({
+    ...args.measurementContext,
+    configId: args.configId,
+    canonicalDomain: args.domain,
+    period: args.windowDate,
+    availablePromptKeys,
+    selectedPromptKeys: includedPromptKeys,
+    configuredEngines: configuredPlatforms,
+    measuredEngines: includedPlatforms,
+    unavailableEngines: enabledPlatforms.filter((platform) => !includedPlatforms.includes(platform)),
+    sourceRunGroupIds: Object.fromEntries(includedPlatforms.map((platform) => [platform, args.sourceRunGroupIds[platform]!])),
+    settingsProfileVersion: profileVersion,
+    denominator: {
+      questions: questions.length,
+      evaluations: evaluationsTracked,
+      citedEvaluations: evaluationsCited,
+    },
+  });
+
   return {
     version: '2',
-    profileVersion: reportProfileVersion({
-      ...args.settings,
-      engines: {
-        chatgpt: enabledPlatforms.includes('chatgpt'),
-        google: enabledPlatforms.includes('gemini'),
-        perplexity: enabledPlatforms.includes('perplexity'),
-      },
-    }),
+    profileVersion,
     configId: args.configId,
     clientName: args.clientName?.trim() || args.domain,
     domain: canonical(args.domain),
@@ -281,6 +332,7 @@ export function buildAgencyReportSnapshot(args: {
       availableCompetitorCount: availableCompetitors.length,
       disclosure,
     },
+    integrity,
   };
 }
 
@@ -308,6 +360,11 @@ export function attachComparableAgencyReportHistory(
       && candidate.configId === snapshot.configId
       && canonical(candidate.domain) === canonical(snapshot.domain)
       && candidate.profileVersion === snapshot.profileVersion
+      && candidate.integrity.contextVersion === snapshot.integrity.contextVersion
+      && candidate.integrity.querySetVersion === snapshot.integrity.querySetVersion
+      && candidate.integrity.competitorCohortVersion === snapshot.integrity.competitorCohortVersion
+      && JSON.stringify(candidate.integrity.selectedPromptKeys) === JSON.stringify(snapshot.integrity.selectedPromptKeys)
+      && JSON.stringify(candidate.integrity.measuredEngines) === JSON.stringify(snapshot.integrity.measuredEngines)
       && candidateMonth !== null
       && candidateMonth >= earliestMonth
       && candidateMonth <= currentMonth;
@@ -393,8 +450,13 @@ export function readAgencyReportSnapshot(value: unknown): AgencyReportSnapshotV2
     || typeof row['settings'] !== 'object'
     || !row['scope']
     || typeof row['scope'] !== 'object'
+    || !row['integrity']
+    || typeof row['integrity'] !== 'object'
   ) return null;
-  return value as AgencyReportSnapshotV2;
+  const snapshot = value as AgencyReportSnapshotV2;
+  return evaluateStoredAgencyReportIntegrity({ integrity: snapshot.integrity, snapshot }).compatible
+    ? snapshot
+    : null;
 }
 
 /** Recompute a draft preview from the stored evidence when an agency changes its presentation scope. */
@@ -436,6 +498,23 @@ export function applyReportSettingsToSnapshot(
     settings,
     enabledPlatforms: snapshot.configuredEngines
       ?? [...new Set([...snapshot.availableEngines.map((engine) => engine.key), ...snapshot.unavailableEngines])],
+    measurementContext: {
+      organizationIdentityId: snapshot.integrity.organizationIdentityId,
+      contextId: snapshot.integrity.contextId,
+      contextVersion: snapshot.integrity.contextVersion,
+      contextHash: snapshot.integrity.contextHash,
+      ownerType: snapshot.integrity.ownerType,
+      ownerId: snapshot.integrity.ownerId,
+      clientId: snapshot.integrity.clientId,
+      businessName: snapshot.integrity.businessName,
+      category: snapshot.integrity.category,
+      market: snapshot.integrity.market,
+      querySetId: snapshot.integrity.querySetId,
+      querySetVersion: snapshot.integrity.querySetVersion,
+      competitorCohortVersion: snapshot.integrity.competitorCohortVersion,
+      competitorDomains: snapshot.integrity.competitorDomains,
+      providerQualityVersion: snapshot.integrity.providerQualityVersion,
+    },
   });
   return rebuilt.profileVersion === snapshot.profileVersion
     ? { ...rebuilt, trend: snapshot.trend }
