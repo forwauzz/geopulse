@@ -218,9 +218,10 @@ export function buildAgencyReportSnapshot(args: {
   const isCurated = args.settings.promptKeys.length > 0
     || args.settings.competitors.length > 0
     || enabledPlatforms.length < PLATFORM_ORDER.length;
+  const assistantLabel = includedPlatforms.length === 1 ? 'AI assistant' : 'AI assistants';
   const disclosure = isCurated
-    ? `Curated scope: ${String(includedPromptKeys.length)} of ${String(availablePromptKeys.length)} measured buyer questions, ${String(includedPlatforms.length)} AI assistants, and ${String(competitors.length)} selected competitors.`
-    : `Full measured scope: ${String(includedPromptKeys.length)} buyer questions across ${String(includedPlatforms.length)} AI assistants.`;
+    ? `Curated scope: ${String(includedPromptKeys.length)} of ${String(availablePromptKeys.length)} measured buyer questions, ${String(includedPlatforms.length)} ${assistantLabel}, and ${String(competitors.length)} selected competitors.`
+    : `Full measured scope: ${String(includedPromptKeys.length)} buyer questions across ${String(includedPlatforms.length)} ${assistantLabel}.`;
   const reportedAt = args.reportedAt ?? new Date().toISOString();
 
   return {

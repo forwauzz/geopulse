@@ -79,6 +79,17 @@ describe('buildAgencyReportSnapshot', () => {
     expect(snapshot.competitors[0]).toMatchObject({ name: 'competitor.example', appearedInsteadCount: 1 });
   });
 
+  it('uses a singular assistant label for a one-provider review artifact', () => {
+    const snapshot = buildAgencyReportSnapshot({
+      configId: 'config-1', domain: 'example.com', topic: 'private healthcare', location: 'Toronto',
+      windowDate: '2026-08', payloads: [payload('gemini', [false, false])],
+      sourceRunGroupIds: { gemini: 'run-gemini' }, settings: DEFAULT_REPORT_SETTINGS,
+    });
+
+    expect(snapshot.scope.disclosure).toContain('across 1 AI assistant.');
+    expect(snapshot.scope.disclosure).not.toContain('1 AI assistants');
+  });
+
   it('retains complete measured evidence so a prior engine or question selection can be reversed', () => {
     const curated = buildAgencyReportSnapshot({
       configId: 'config-1', domain: 'example.com', topic: 'private healthcare', location: 'Toronto',

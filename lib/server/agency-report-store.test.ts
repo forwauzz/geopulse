@@ -54,7 +54,7 @@ function query<T>(value: () => T) {
 describe('storeAgencyReport', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('stores one private, idempotent combined snapshot and holds delivery while verification is off', async () => {
+  it('stores one private, idempotent combined snapshot and honors a client review hold', async () => {
     const inserted: Record<string, unknown>[] = [];
     const gpmRows: Array<{ id: string; pdf_r2_key: string | null; window_date: string }> = [];
     const updated: Record<string, unknown>[] = [];
@@ -66,7 +66,11 @@ describe('storeAgencyReport', () => {
         if (table === 'agency_clients') {
           return { select: () => query(() => ({
             id: 'client-1', name: 'Clinic Co', display_name: null,
-            metadata: { client_summary_share_token: 'share-secret', report: { promptKeys: ['q1', 'q2'] } },
+            metadata: {
+              client_summary_share_token: 'share-secret',
+              report: { promptKeys: ['q1', 'q2'] },
+              report_quarantine_hold: { status: 'held_pending_independent_review', issue: 326 },
+            },
           })) };
         }
         expect(table).toBe('gpm_reports');
@@ -108,7 +112,7 @@ describe('storeAgencyReport', () => {
         { platform: 'gemini' as const, runGroupId: 'run-b' },
       ],
       windowDate: '2026-08', measuredCanonicalDomain: 'clinic.example', bucket,
-      env: { NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com', GPM_REPORT_DELIVERY_ENABLED: 'false' },
+      env: { NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com', GPM_REPORT_DELIVERY_ENABLED: 'true' },
     };
 
     const first = await storeAgencyReport(input);
@@ -123,7 +127,9 @@ describe('storeAgencyReport', () => {
       platform: 'combined', pdf_url: null, report_payload_version: '2', agency_client_id: 'client-1',
     });
     expect(inserted[0]?.['metadata']).toMatchObject({
-      artifact_kind: 'agency_report_v2', email_status: 'held_delivery_disabled',
+      artifact_kind: 'agency_report_v2', email_status: 'held_client_review',
+      delivery_blocked: true,
+      delivery_block_reason: 'client_report_sharing_held',
       delivery_url_kind: 'revocable_client_summary',
       snapshot: { version: '2', clientName: 'Clinic Co', engines: [{ key: 'chatgpt' }, { key: 'gemini' }] },
     });

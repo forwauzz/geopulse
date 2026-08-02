@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildAgencyReportPdf, buildAgencyExecutiveSummary } from './agency-report-pdf';
+import { PDFDocument } from 'pdf-lib';
+import {
+  buildAgencyExecutiveSummary,
+  buildAgencyOpportunityAction,
+  buildAgencyReportCoverHeadline,
+  buildAgencyReportOverviewTitle,
+  buildAgencyReportPdf,
+} from './agency-report-pdf';
 import { buildAgencyReportSnapshot } from './agency-report-snapshot';
 import type { GpmReportPayload } from './geo-performance-report-payload';
 import { DEFAULT_REPORT_SETTINGS } from './report-settings';
@@ -22,6 +29,26 @@ const snapshot = buildAgencyReportSnapshot({
   payloads: [payload], sourceRunGroupIds: { chatgpt: 'run-1' }, settings: DEFAULT_REPORT_SETTINGS,
 });
 
+const zeroPayload: GpmReportPayload = {
+  ...payload,
+  configId: 'config-zero',
+  citationRate: 0,
+  shareOfVoice: 0,
+  visibilityPct: 0,
+  prompts: payload.prompts.map((prompt) => ({
+    ...prompt,
+    cited: false,
+    rankPosition: null,
+    topCompetitorInQuery: 'other.example',
+  })),
+};
+
+const zeroSnapshot = buildAgencyReportSnapshot({
+  configId: 'config-zero', clientName: 'Example Clinic', domain: 'example.com', topic: 'clinic marketing',
+  location: 'Toronto', windowDate: '2026-08', reportedAt: '2026-08-01T12:00:00.000Z',
+  payloads: [zeroPayload], sourceRunGroupIds: { chatgpt: 'run-zero' }, settings: DEFAULT_REPORT_SETTINGS,
+});
+
 describe('agency report artifact', () => {
   it('builds a wins-led executive readout from the exact snapshot', () => {
     const summary = buildAgencyExecutiveSummary(snapshot);
@@ -35,5 +62,38 @@ describe('agency report artifact', () => {
     const pdf = await buildAgencyReportPdf(snapshot);
     expect(String.fromCharCode(...pdf.slice(0, 4))).toBe('%PDF');
     expect(pdf.byteLength).toBeGreaterThan(5_000);
+  });
+
+  it('frames a zero-citation first measurement as a truthful baseline, not a win', () => {
+    expect(buildAgencyReportCoverHeadline(zeroSnapshot)).toMatchObject({
+      eyebrow: 'THE STARTING POINT',
+      metric: 'Baseline',
+      isBaseline: true,
+    });
+    expect(buildAgencyReportOverviewTitle(zeroSnapshot)).toBe('Your measured starting point');
+    expect(buildAgencyExecutiveSummary(zeroSnapshot)).toContain('transparent starting point');
+    expect(buildAgencyExecutiveSummary(zeroSnapshot)).toContain('No citation was recorded');
+  });
+
+  it('turns measured opportunity questions into bounded, verifiable agency actions', () => {
+    const decisionQuestion = zeroSnapshot.opportunities[0];
+    expect(decisionQuestion).toBeDefined();
+    expect(buildAgencyOpportunityAction(decisionQuestion!, zeroSnapshot.location)).toContain('decision-ready page');
+    expect(buildAgencyOpportunityAction(decisionQuestion!, zeroSnapshot.location)).toContain('Toronto');
+  });
+
+  it('turns clinic-service questions into specific, safety-bounded actions', () => {
+    const pediatric = {
+      ...zeroSnapshot.opportunities[0]!,
+      queryText: "Where can I get prompt private pediatric urgent care in Montreal's West Island?",
+    };
+    expect(buildAgencyOpportunityAction(pediatric, zeroSnapshot.location)).toContain('age range');
+    expect(buildAgencyOpportunityAction(pediatric, zeroSnapshot.location)).toContain('emergency care');
+  });
+
+  it('does not create an almost-empty trend page until two comparable periods exist', async () => {
+    const pdf = await buildAgencyReportPdf(zeroSnapshot);
+    const document = await PDFDocument.load(pdf);
+    expect(document.getPageCount()).toBe(5);
   });
 });
