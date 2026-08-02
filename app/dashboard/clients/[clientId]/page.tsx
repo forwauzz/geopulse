@@ -104,7 +104,14 @@ export default async function ClientScorecardPage({
     querySetId = typeof config?.query_set_id === 'string' ? config.query_set_id : null;
   }
   const measurementScope: ClientMeasurementScope | undefined = querySetId
-    ? { querySetId, agencyAccountId: account.id, enabledPlatforms: platformsEnabled }
+    ? {
+        querySetId,
+        contextVersion: typeof configMetadata['organization_context_version'] === 'string'
+          ? String(configMetadata['organization_context_version'])
+          : `unbound-context:${querySetId}`,
+        agencyAccountId: account.id,
+        enabledPlatforms: platformsEnabled,
+      }
     : undefined;
   const [engines, prompts, evidence] = domain && measurementScope
     ? await Promise.all([

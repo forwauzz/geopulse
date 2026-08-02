@@ -164,6 +164,18 @@ function pickEnvString(e: Record<string, unknown>, key: string): string {
 }
 
 /**
+ * Cloudflare's production build injects Wrangler scalar vars into process.env. Runtime bindings
+ * are intentionally unavailable there: opening them during parallel SSG starts repeated Wrangler
+ * proxy/watch sessions and can deadlock esbuild. Throwing inside the existing guarded readers makes
+ * them use their process.env fallbacks while leaving local development and Worker runtime unchanged.
+ */
+function requireRuntimeCloudflareContext(): void {
+  if (process.env['GEOPULSE_STATIC_BUILD'] === '1') {
+    throw new Error('cloudflare_runtime_bindings_unavailable_during_static_build');
+  }
+}
+
+/**
  * OpenNext: `getCloudflareContext({ async: true })` may use the Node path and omit **Queue** bindings.
  * Sync `getCloudflareContext({ async: false })` reads the Worker global and often has the full `env` (incl. `SCAN_QUEUE`).
  */
@@ -269,6 +281,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
 
 export async function getScanApiEnv(): Promise<ScanApiEnv> {
   try {
+    requireRuntimeCloudflareContext();
     const { env } = await getCloudflareContext({ async: true });
     registerSelfAuditFetch(env as unknown as Record<string, unknown>);
     return readEnvRecord(env as unknown as Record<string, unknown>);
@@ -339,6 +352,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
 
 export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
   try {
+    requireRuntimeCloudflareContext();
     const { env } = await getCloudflareContext({ async: true });
     const e = env as unknown as Record<string, unknown>;
     registerSelfAuditFetch(e);
@@ -466,6 +480,7 @@ export async function getAiBinding(): Promise<
   { run: (model: string, input: Record<string, unknown>) => Promise<unknown> } | undefined
 > {
   try {
+    requireRuntimeCloudflareContext();
     const { env } = await getCloudflareContext({ async: true });
     const ai = (env as unknown as Record<string, unknown>)['AI'];
     return ai && typeof (ai as { run?: unknown }).run === 'function'
@@ -479,6 +494,7 @@ export async function getAiBinding(): Promise<
 /** Bindings needed by the Worker-backed autonomous editorial pipeline. */
 export async function getAutonomousEditorialEnv(): Promise<AutonomousEditorialEnv> {
   try {
+    requireRuntimeCloudflareContext();
     const { env } = await getCloudflareContext({ async: true });
     const e = env as unknown as Record<string, unknown>;
     const ai = e['AI'];
@@ -508,6 +524,7 @@ export async function getAutonomousEditorialEnv(): Promise<AutonomousEditorialEn
 /** Bindings used by Sofia's grounded research and Jordan's original social-card renderer. */
 export async function getSocialProductionEnv(): Promise<SocialProductionEnv> {
   try {
+    requireRuntimeCloudflareContext();
     const { env } = await getCloudflareContext({ async: true });
     const e = env as unknown as Record<string, unknown>;
     const browser = e['BROWSER'];
@@ -558,6 +575,7 @@ export function getClientIp(request: Request): string {
  */
 export async function getCfWebAnalyticsToken(): Promise<string> {
   try {
+    requireRuntimeCloudflareContext();
     const { env } = await getCloudflareContext({ async: true });
     const v = (env as unknown as Record<string, unknown>)['NEXT_PUBLIC_CF_BEACON_TOKEN'];
     return typeof v === 'string' ? v.trim() : '';

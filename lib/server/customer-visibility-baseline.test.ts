@@ -24,6 +24,16 @@ describe('customer visibility baseline prompts', () => {
     expect(prompts[0]).toContain('business services');
     expect(prompts[0]).toContain('your market');
   });
+
+  it('uses the confirmed buyer languages in the bounded prompt set', () => {
+    const prompts = buildBaselineBuyerPrompts({
+      subvertical: 'private medical clinic',
+      location: 'Pointe-Claire, Quebec, Canada',
+      languages: ['en-CA', 'fr-CA'],
+    });
+    expect(prompts).toHaveLength(10);
+    expect(prompts.join(' ')).toContain('English and French');
+  });
 });
 
 describe('approved customer query-set preservation', () => {

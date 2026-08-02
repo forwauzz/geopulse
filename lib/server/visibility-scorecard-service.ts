@@ -306,15 +306,21 @@ export async function loadVisibilityScorecard(args: {
   const latestScan = scanRows[0] ?? null;
   const previousScan = scanRows[1] ?? null;
   const configMetadata = objectRecord(config?.metadata);
+  const activeContextVersion = typeof configMetadata['organization_context_version'] === 'string'
+    ? String(configMetadata['organization_context_version'])
+    : `unbound-context:${String(config?.id ?? 'missing')}`;
+  const contextBound = typeof configMetadata['organization_context_version'] === 'string';
   const measurementScope: ClientMeasurementScope | undefined = typeof config?.query_set_id === 'string'
     ? args.subject.kind === 'startup_workspace'
       ? {
           querySetId: config.query_set_id,
+          contextVersion: activeContextVersion,
           startupWorkspaceId: args.subject.id,
           enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
         }
       : {
           querySetId: config.query_set_id,
+          contextVersion: activeContextVersion,
           agencyAccountId: agencyAccountId!,
           enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
         }
@@ -368,7 +374,7 @@ export async function loadVisibilityScorecard(args: {
     outcome,
     prompts,
     evidence,
-    competitors: Array.isArray(config?.competitor_list) ? config.competitor_list : [],
+    competitors: contextBound && Array.isArray(config?.competitor_list) ? config.competitor_list : [],
     reports,
     preparedAt,
   };

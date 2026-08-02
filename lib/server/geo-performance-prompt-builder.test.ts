@@ -14,6 +14,25 @@ describe('buildGpmQueryPrompt', () => {
     expect(prompt).toContain('Vancouver');
   });
 
+  it('makes structured geography and buyer languages explicit', () => {
+    const prompt = buildGpmQueryPrompt({
+      topic: 'Private medical clinic',
+      location: 'Pointe-Claire',
+      promptCount: 10,
+      canonicalDomain: 'clinic.example',
+      marketScope: 'local',
+      countryCode: 'CA',
+      subdivisionCode: 'CA-QC',
+      serviceAreas: ['West Island'],
+      languages: ['en-CA', 'fr-CA'],
+      buyer: 'local patients',
+    });
+    expect(prompt).toContain('Country code: CA');
+    expect(prompt).toContain('Subdivision code: CA-QC');
+    expect(prompt).toContain('Buyer languages: en-CA, fr-CA');
+    expect(prompt).toContain('do not substitute a different country or region');
+  });
+
   it('includes brand name when provided', () => {
     const prompt = buildGpmQueryPrompt({
       topic: 'Physiotherapy',

@@ -118,6 +118,9 @@ export async function loadCustomerVisibilityView(args: {
   const measurementScope: ClientMeasurementScope | undefined = typeof config?.query_set_id === 'string'
     ? {
         querySetId: config.query_set_id,
+        contextVersion: typeof metadata?.['organization_context_version'] === 'string'
+          ? String(metadata['organization_context_version'])
+          : `unbound-context:${String(config.query_set_id)}`,
         startupWorkspaceId: workspace.id,
         enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
       }

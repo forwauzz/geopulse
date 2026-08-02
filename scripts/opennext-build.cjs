@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { loadWranglerBuildVars } = require("./wrangler-build-vars.cjs");
 
 const projectRoot = process.cwd();
 const outputDir = path.join(projectRoot, ".open-next");
@@ -19,6 +20,28 @@ const outputDir = path.join(projectRoot, ".open-next");
 if (process.env["GEOPULSE_BUILD_TYPEGEN"] === "1") {
   process.exit(0);
 }
+
+/**
+ * Cloudflare Git builds already run `npm run build:worker` as their build command. Wrangler then
+ * invokes this config hook again during `versions upload`, which needlessly rebuilds Next/OpenNext
+ * and can deadlock esbuild's parallel static-page workers. The deploy command sets this explicit
+ * flag to reuse the artifact produced moments earlier. Fail closed if that artifact is absent so a
+ * misconfigured or local deploy can never upload stale/missing output silently.
+ */
+if (process.env["GEOPULSE_SKIP_OPENNEXT_BUILD"] === "1") {
+  const builtWorker = path.join(outputDir, "worker.js");
+  if (!fs.existsSync(builtWorker)) {
+    console.error(
+      "[opennext-build] GEOPULSE_SKIP_OPENNEXT_BUILD=1 but .open-next/worker.js is missing. " +
+        "Run `npm run build:worker` before the upload."
+    );
+    process.exit(1);
+  }
+  console.log("[opennext-build] Reusing the existing OpenNext artifact for upload.");
+  process.exit(0);
+}
+
+const wranglerBuildVars = loadWranglerBuildVars(projectRoot);
 
 function removeIfExists(targetPath) {
   if (!fs.existsSync(targetPath)) {
@@ -108,6 +131,12 @@ const cliPath = path.join(
 const result = spawnSync(process.execPath, [cliPath, "build"], {
   stdio: "inherit",
   cwd: projectRoot,
+  env: {
+    ...wranglerBuildVars,
+    ...process.env,
+    // Static generation may read scalar vars, but must not start runtime binding/proxy sessions.
+    GEOPULSE_STATIC_BUILD: "1",
+  },
 });
 
 if (result.error) {
