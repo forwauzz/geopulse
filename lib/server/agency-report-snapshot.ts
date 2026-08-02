@@ -55,6 +55,8 @@ export type AgencyReportSnapshotV2 = {
   readonly questionsCited: number;
   readonly evaluationsTracked: number;
   readonly evaluationsCited: number;
+  /** Providers configured for this customer's measurement lane, before report-level curation. */
+  readonly configuredEngines?: readonly GpmReportPlatform[];
   readonly availableEngines: readonly AgencyReportEngine[];
   readonly engines: readonly AgencyReportEngine[];
   readonly unavailableEngines: readonly GpmReportPlatform[];
@@ -124,6 +126,7 @@ export function buildAgencyReportSnapshot(args: {
   readonly payloads: readonly GpmReportPayload[];
   readonly sourceRunGroupIds: Readonly<Partial<Record<GpmReportPlatform, string>>>;
   readonly settings: ReportSettings;
+  readonly enabledPlatforms?: readonly GpmReportPlatform[];
 }): AgencyReportSnapshotV2 {
   const byPlatform = new Map<GpmReportPlatform, GpmReportPayload>();
   for (const payload of args.payloads) {
@@ -133,7 +136,10 @@ export function buildAgencyReportSnapshot(args: {
     byPlatform.set(platform, payload);
   }
 
-  const enabledPlatforms = PLATFORM_ORDER.filter(
+  const configuredPlatforms = PLATFORM_ORDER.filter(
+    (platform) => !args.enabledPlatforms || args.enabledPlatforms.includes(platform)
+  );
+  const enabledPlatforms = configuredPlatforms.filter(
     (platform) => args.settings.engines[engineSettingKey(platform)]
   );
   const measuredPlatforms = PLATFORM_ORDER.filter(
@@ -217,7 +223,7 @@ export function buildAgencyReportSnapshot(args: {
 
   const isCurated = args.settings.promptKeys.length > 0
     || args.settings.competitors.length > 0
-    || enabledPlatforms.length < PLATFORM_ORDER.length;
+    || enabledPlatforms.length < configuredPlatforms.length;
   const assistantLabel = includedPlatforms.length === 1 ? 'AI assistant' : 'AI assistants';
   const disclosure = isCurated
     ? `Curated scope: ${String(includedPromptKeys.length)} of ${String(availablePromptKeys.length)} measured buyer questions, ${String(includedPlatforms.length)} ${assistantLabel}, and ${String(competitors.length)} selected competitors.`
@@ -226,7 +232,14 @@ export function buildAgencyReportSnapshot(args: {
 
   return {
     version: '2',
-    profileVersion: reportProfileVersion(args.settings),
+    profileVersion: reportProfileVersion({
+      ...args.settings,
+      engines: {
+        chatgpt: enabledPlatforms.includes('chatgpt'),
+        google: enabledPlatforms.includes('gemini'),
+        perplexity: enabledPlatforms.includes('perplexity'),
+      },
+    }),
     configId: args.configId,
     clientName: args.clientName?.trim() || args.domain,
     domain: canonical(args.domain),
@@ -240,6 +253,7 @@ export function buildAgencyReportSnapshot(args: {
     questionsCited: questions.filter((question) => question.citedByEngines > 0).length,
     evaluationsTracked,
     evaluationsCited,
+    configuredEngines: configuredPlatforms,
     availableEngines,
     engines,
     unavailableEngines: enabledPlatforms.filter((platform) => !includedPlatforms.includes(platform)),
@@ -420,6 +434,8 @@ export function applyReportSettingsToSnapshot(
     payloads,
     sourceRunGroupIds: Object.fromEntries(snapshot.availableEngines.map((engine) => [engine.key, engine.sourceRunGroupId])),
     settings,
+    enabledPlatforms: snapshot.configuredEngines
+      ?? [...new Set([...snapshot.availableEngines.map((engine) => engine.key), ...snapshot.unavailableEngines])],
   });
   return rebuilt.profileVersion === snapshot.profileVersion
     ? { ...rebuilt, trend: snapshot.trend }

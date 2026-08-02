@@ -3,7 +3,7 @@ import { applyReportSettingsToSnapshot, attachComparableAgencyReportHistory, bui
 import type { GpmReportPayload } from './geo-performance-report-payload';
 import { DEFAULT_REPORT_SETTINGS } from './report-settings';
 
-function payload(platform: 'chatgpt' | 'gemini', citations: readonly boolean[]): GpmReportPayload {
+function payload(platform: 'chatgpt' | 'gemini' | 'perplexity', citations: readonly boolean[]): GpmReportPayload {
   return {
     configId: 'config-1',
     domain: 'Example.com',
@@ -88,6 +88,23 @@ describe('buildAgencyReportSnapshot', () => {
 
     expect(snapshot.scope.disclosure).toContain('across 1 AI assistant.');
     expect(snapshot.scope.disclosure).not.toContain('1 AI assistants');
+  });
+
+  it('does not call a provider unavailable when it is disabled for the customer', () => {
+    const snapshot = buildAgencyReportSnapshot({
+      configId: 'config-1', domain: 'example.com', topic: 'private healthcare', location: 'Toronto',
+      windowDate: '2026-08',
+      payloads: [payload('gemini', [false, false]), payload('perplexity', [true, false])],
+      sourceRunGroupIds: { gemini: 'run-gemini', perplexity: 'run-perplexity' },
+      settings: DEFAULT_REPORT_SETTINGS,
+      enabledPlatforms: ['gemini', 'perplexity'],
+    });
+
+    expect(snapshot.configuredEngines).toEqual(['gemini', 'perplexity']);
+    expect(snapshot.engines.map((engine) => engine.key)).toEqual(['gemini', 'perplexity']);
+    expect(snapshot.unavailableEngines).toEqual([]);
+    expect(snapshot.scope.isCurated).toBe(false);
+    expect(snapshot.scope.disclosure).toContain('Full measured scope');
   });
 
   it('retains complete measured evidence so a prior engine or question selection can be reversed', () => {

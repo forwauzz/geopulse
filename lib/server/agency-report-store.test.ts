@@ -131,7 +131,13 @@ describe('storeAgencyReport', () => {
       delivery_blocked: true,
       delivery_block_reason: 'client_report_sharing_held',
       delivery_url_kind: 'revocable_client_summary',
-      snapshot: { version: '2', clientName: 'Clinic Co', engines: [{ key: 'chatgpt' }, { key: 'gemini' }] },
+      snapshot: {
+        version: '2',
+        clientName: 'Clinic Co',
+        configuredEngines: ['chatgpt', 'gemini'],
+        engines: [{ key: 'chatgpt' }, { key: 'gemini' }],
+        unavailableEngines: [],
+      },
     });
     expect(first.secureReportUrl).toContain('/client-summary/client-1?share=share-secret');
     expect(sendAgencyReportEmail).not.toHaveBeenCalled();

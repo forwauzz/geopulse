@@ -167,6 +167,9 @@ export default async function ClientScorecardPage({
   const enabledPlatformLabels = platformsEnabled
     .map((platform) => ENGINE_LABEL[platform as EngineKey] ?? platform)
     .join(', ');
+  const enabledPlatformProgressLabel = platformsEnabled
+    .map((platform) => ENGINE_LABEL[platform as EngineKey] ?? platform)
+    .join(' + ');
   const latestReportMetadata = latestGpmReport?.metadata && typeof latestGpmReport.metadata === 'object'
     ? latestGpmReport.metadata as Record<string, unknown>
     : {};
@@ -332,7 +335,7 @@ export default async function ClientScorecardPage({
               <input type="hidden" name="configId" value={configId} />
               <PendingSubmitButton
                 idleLabel="Check visibility now"
-                pendingLabel="Checking ChatGPT + Gemini…"
+                pendingLabel={enabledPlatformProgressLabel ? `Checking ${enabledPlatformProgressLabel}…` : 'Checking visibility…'}
                 className="inline-flex items-center gap-2 rounded-xl bg-on-background px-4 py-2.5 text-sm font-semibold text-background"
               />
               {sp.visibility ? (
