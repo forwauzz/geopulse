@@ -150,9 +150,9 @@ describe('loadEngineCitationMetrics', () => {
     const seed: Record<string, Row[]> = {
       benchmark_domains: [{ id: 'sano-domain', canonical_domain: 'sanomedsolutions.com' }],
       benchmark_run_groups: [
-        { id: 'gemini-current', query_set_id: 'verified-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', status: 'completed', started_at: '2026-08-02' },
-        { id: 'perplexity-current', query_set_id: 'verified-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', status: 'completed', started_at: '2026-08-02' },
-        { id: 'chatgpt-old', query_set_id: 'uk-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', status: 'completed', started_at: '2026-08-01' },
+        { id: 'gemini-current', query_set_id: 'verified-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', 'metadata->>organization_context_version': 'ocv1-safe', status: 'completed', started_at: '2026-08-02' },
+        { id: 'perplexity-current', query_set_id: 'verified-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', 'metadata->>organization_context_version': 'ocv1-safe', status: 'completed', started_at: '2026-08-02' },
+        { id: 'chatgpt-old', query_set_id: 'uk-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', 'metadata->>organization_context_version': 'ocv1-old', status: 'completed', started_at: '2026-08-01' },
       ],
       benchmark_domain_metrics: [
         { run_group_id: 'gemini-current', domain_id: 'sano-domain', model_id: 'gemini-3.5-flash-lite', citation_rate: 0, metrics: { run_mode: 'blind_discovery' }, computed_at: '2026-08-02' },
@@ -181,6 +181,7 @@ describe('loadEngineCitationMetrics', () => {
       domain: 'sanomedsolutions.com',
       measurementScope: {
         querySetId: 'verified-set',
+        contextVersion: 'ocv1-safe',
         agencyAccountId: 'lifter',
         enabledPlatforms: ['gemini', 'perplexity'],
       },

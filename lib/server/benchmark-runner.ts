@@ -20,6 +20,7 @@ import {
   type BenchmarkRunnerInput,
 } from './benchmark-runner-contract';
 import { structuredLog } from './structured-log';
+import { classifyOrganizationReference } from '../intelligence/organization-measurement-context';
 
 type BenchmarkRunnerResult = {
   readonly runGroupId: string;
@@ -166,6 +167,10 @@ export async function runBenchmarkGroupSkeleton(
   ).length;
 
   const queryRunIdByQueryId = new Map(queryRuns.map((row) => [row.query_id, row.id] as const));
+  const trackedCompetitors = Array.isArray(input.runMetadata?.['tracked_competitor_domains'])
+    ? input.runMetadata['tracked_competitor_domains']
+        .filter((value): value is string => typeof value === 'string')
+    : [];
   const citationRows = executionResults.flatMap(({ query, execution }) => {
     if (execution.status !== 'completed' || !execution.responseText) return [];
     const responseText = execution.responseText;
@@ -180,6 +185,12 @@ export async function runBenchmarkGroupSkeleton(
         groundingContext,
         groundingMatch,
       });
+      const referenceRole = classifyOrganizationReference({
+        citedDomain: citation.citedDomain,
+        citationType: citation.citationType,
+        measuredCanonicalDomain: domain.canonical_domain,
+        trackedCompetitorDomains: trackedCompetitors,
+      });
 
       return {
         queryRunId,
@@ -193,6 +204,8 @@ export async function runBenchmarkGroupSkeleton(
         confidence: citation.confidence,
         metadata: {
           ...(citation.metadata ?? {}),
+          organization_reference_role: referenceRole,
+          competitor_cohort_version: input.runMetadata?.['competitor_cohort_version'] ?? null,
           grounding_provenance:
             groundingMatch === null
               ? {

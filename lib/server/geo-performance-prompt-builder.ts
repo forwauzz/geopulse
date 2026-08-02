@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { seedBenchmarkQuerySet } from './benchmark-query-set-seed';
 import { structuredLog } from './structured-log';
+import {
+  deriveOrganizationMeasurementBinding,
+  organizationMeasurementMetadata,
+} from '../intelligence/organization-measurement-context';
+import type { OrganizationContext } from '../intelligence/organization-context';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,6 +23,13 @@ export type GpmPromptBuilderInput = {
   readonly location: string;
   readonly brandName?: string | null;
   readonly promptCount: number;
+  readonly canonicalDomain?: string | null;
+  readonly marketScope?: string | null;
+  readonly countryCode?: string | null;
+  readonly subdivisionCode?: string | null;
+  readonly serviceAreas?: readonly string[];
+  readonly languages?: readonly string[];
+  readonly buyer?: string | null;
 };
 
 export type GpmPromptBuilderEnvLike = {
@@ -37,12 +49,22 @@ export function buildGpmQueryPrompt(input: GpmPromptBuilderInput): string {
   const brandLine = brandName
     ? `The measured brand is "${brandName}". Include 1–2 branded queries that include this name.`
     : 'No brand name is specified — skip branded queries.';
+  const structuredMarket = [
+    input.marketScope ? `Market scope: ${input.marketScope}` : null,
+    input.countryCode ? `Country code: ${input.countryCode}` : null,
+    input.subdivisionCode ? `Subdivision code: ${input.subdivisionCode}` : null,
+    input.serviceAreas?.length ? `Service areas: ${input.serviceAreas.join(', ')}` : null,
+    input.languages?.length ? `Buyer languages: ${input.languages.join(', ')}` : null,
+    input.buyer ? `Buyer: ${input.buyer}` : null,
+    input.canonicalDomain ? `Measured canonical domain: ${input.canonicalDomain}` : null,
+  ].filter(Boolean).join('\n');
 
   return `You are helping build an AI search visibility benchmark for a GEO Performance Monitoring report.
 
 Topic: ${topic}
 Location: ${location}
 ${brandLine}
+${structuredMarket}
 
 Generate exactly ${clampedCount} search queries that a person might ask ChatGPT, Gemini, or Perplexity to find ${topic} services in ${location}.
 
@@ -59,6 +81,7 @@ Rules:
 3. intentType must be: "direct" (high_intent, branded), "discovery" (informational, local), or "comparative" (comparative).
 4. No duplicate queries or keys.
 5. Queries must be realistic — something a real person would type.
+6. Keep every query inside the structured market. Use the listed buyer languages and local terminology; do not substitute a different country or region.
 
 Respond with valid JSON only. No explanation, no markdown fences. Format:
 {
@@ -202,36 +225,56 @@ export async function generateAndSeedGpmQuerySet(args: {
   readonly brandName?: string | null;
   readonly promptCount: number;
   readonly env: GpmPromptBuilderEnvLike;
+  readonly organizationContext?: OrganizationContext;
 }): Promise<{ querySetId: string; queryCount: number; querySetName: string }> {
+  const derived = args.organizationContext
+    ? deriveOrganizationMeasurementBinding(args.organizationContext)
+    : null;
+  if (derived && !derived.ok) {
+    throw new Error(`organization_context_not_measurement_ready:${derived.reasons.join(',')}`);
+  }
+  const binding = derived?.ok ? derived.binding : null;
+  const topic = binding?.category ?? args.topic;
+  const location = binding
+    ? binding.locality || binding.serviceAreas[0] || binding.countryCode
+    : args.location;
   const queries = await generateGpmPrompts(
     {
-      topic: args.topic,
-      location: args.location,
-      brandName: args.brandName,
+      topic,
+      location,
+      brandName: args.organizationContext?.organization.displayName ?? args.brandName,
       promptCount: args.promptCount,
+      canonicalDomain: binding?.canonicalDomain,
+      marketScope: binding?.marketScope,
+      countryCode: binding?.countryCode,
+      subdivisionCode: binding?.subdivisionCode,
+      serviceAreas: binding?.serviceAreas,
+      languages: binding?.languages,
+      buyer: binding?.buyer,
     },
     args.env
   );
 
-  const querySetName = `GPM: ${args.topic} — ${args.location}`;
-  const querySetVersion = new Date().toISOString().slice(0, 10);
+  const querySetName = `GPM: ${topic} — ${location}`;
+  const querySetVersion = binding?.querySetVersion ?? new Date().toISOString().slice(0, 10);
 
   const result = await seedBenchmarkQuerySet(args.supabase, {
     name: querySetName,
     version: querySetVersion,
-    description: `Auto-generated GEO Performance Monitoring prompt set for ${args.topic} in ${args.location}.`,
+    description: `Auto-generated GEO Performance Monitoring prompt set for ${topic} in ${location}.`,
     status: 'active',
     metadata: {
       gpm_generated: true,
-      topic: args.topic,
-      location: args.location,
+      topic,
+      location,
       brand_name: args.brandName ?? null,
+      ...(binding ? organizationMeasurementMetadata(binding) : {}),
     },
     queries: queries.map((q) => ({
       queryKey: q.queryKey,
       queryText: q.queryText,
       intentType: q.intentType,
-      topic: args.topic,
+      topic,
       weight: 1,
       metadata: { category: q.category },
     })),

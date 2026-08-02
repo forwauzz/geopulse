@@ -133,6 +133,9 @@ export async function loadAgencyPortfolio(args: {
       latestScan: scanDetail,
       measurementScope: config ? {
         querySetId: config.query_set_id,
+        contextVersion: typeof config.metadata?.['organization_context_version'] === 'string'
+          ? String(config.metadata['organization_context_version'])
+          : `unbound-context:${config.query_set_id}`,
         agencyAccountId: args.account.id,
         enabledPlatforms: config.platforms_enabled,
       } : undefined,

@@ -150,7 +150,7 @@ export default async function DashboardHomePage({
     const { data: config } = benchmarkDomain?.id
       ? await admin
           .from('client_benchmark_configs')
-          .select('query_set_id,platforms_enabled')
+          .select('query_set_id,platforms_enabled,metadata')
           .eq('startup_workspace_id', startupWorkspaceId)
           .eq('benchmark_domain_id', benchmarkDomain.id)
           .maybeSingle()
@@ -158,6 +158,9 @@ export default async function DashboardHomePage({
     if (typeof config?.query_set_id === 'string') {
       measurementScope = {
         querySetId: config.query_set_id,
+        contextVersion: typeof config.metadata?.['organization_context_version'] === 'string'
+          ? String(config.metadata['organization_context_version'])
+          : `unbound-context:${String(config.query_set_id)}`,
         startupWorkspaceId,
         enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
       };

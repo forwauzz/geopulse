@@ -1,6 +1,11 @@
 import { canonicalizeDomain } from './dashboard-citation-metrics';
 import { structuredError, structuredLog } from './structured-log';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
+import {
+  deriveOrganizationMeasurementBinding,
+  organizationMeasurementMetadata,
+} from '@/lib/intelligence/organization-measurement-context';
+import type { OrganizationContext } from '@/lib/intelligence/organization-context';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -18,6 +23,8 @@ export type VisibilityBaselineInput = VisibilityBaselineOwner & {
   readonly reportEmail?: string | null;
   /** A previously confirmed query set may be retained only after its own provenance is verified. */
   readonly approvedQuerySetId?: string | null;
+  /** Confirmed canonical context. Without it configuration may be staged, but measurement fails closed. */
+  readonly organizationContext?: OrganizationContext;
   readonly source: 'startup_onboarding' | 'agency_client_creation' | 'backfill';
 };
 
@@ -46,6 +53,8 @@ export function isApprovedCustomerQuerySet(args: {
   readonly status: unknown;
   readonly canonicalDomain: string;
   readonly promptCount: number;
+  readonly expectedContextVersion?: string;
+  readonly expectedQuerySetVersion?: string;
 }): boolean {
   const metadata = args.metadata && typeof args.metadata === 'object'
     ? args.metadata as Record<string, unknown>
@@ -57,6 +66,8 @@ export function isApprovedCustomerQuerySet(args: {
     && metadata['canonical_domain'] === args.canonicalDomain
     && args.promptCount === 10
     && metadata['approved_for_measurement'] === true
+    && (!args.expectedContextVersion || metadata['organization_context_version'] === args.expectedContextVersion)
+    && (!args.expectedQuerySetVersion || metadata['query_set_version'] === args.expectedQuerySetVersion)
     && Boolean(verifiedAt);
 }
 
@@ -83,9 +94,20 @@ export function buildBaselineBuyerPrompts(input: {
   readonly vertical?: string | null;
   readonly subvertical?: string | null;
   readonly location?: string | null;
+  readonly languages?: readonly string[];
 }): readonly string[] {
   const category = cleanPhrase(input.subvertical, cleanPhrase(input.vertical, DEFAULT_VERTICAL));
   const location = cleanPhrase(input.location, DEFAULT_LOCATION);
+  const languageLabels = unique((input.languages ?? []).map((language) => {
+    const code = language.toLowerCase().split('-')[0];
+    if (code === 'en') return 'English';
+    if (code === 'fr') return 'French';
+    if (code === 'es') return 'Spanish';
+    return language;
+  }));
+  const languageQuestion = languageLabels.length > 0
+    ? `Which ${category} providers in ${location} serve customers in ${languageLabels.join(' and ')}?`
+    : `Which ${category} providers in ${location} have the strongest customer reviews?`;
   return unique([
     `What are the best ${category} providers in ${location}?`,
     `Which ${category} provider should I choose in ${location}?`,
@@ -94,7 +116,7 @@ export function buildBaselineBuyerPrompts(input: {
     `What should I look for when choosing a ${category} provider in ${location}?`,
     `Which ${category} providers in ${location} have the strongest expertise and proof?`,
     `What are the best ${category} alternatives in ${location}?`,
-    `Which ${category} providers in ${location} have the strongest customer reviews?`,
+    languageQuestion,
     `How much should I expect to pay for ${category} in ${location}?`,
     `Which ${category} provider is best for my specific needs in ${location}?`,
   ]);
@@ -157,6 +179,16 @@ export async function provisionCustomerVisibilityBaseline(
 ): Promise<VisibilityBaselineResult> {
   const canonicalDomain = canonicalizeDomain(input.domain);
   if (!canonicalDomain) return { ok: false, reason: 'invalid_domain' };
+  const measurement = input.organizationContext
+    ? deriveOrganizationMeasurementBinding(input.organizationContext)
+    : null;
+  if (measurement && !measurement.ok) {
+    return { ok: false, reason: measurement.reasons.join(',') };
+  }
+  const binding = measurement?.ok ? measurement.binding : null;
+  if (binding && binding.canonicalDomain !== canonicalDomain) {
+    return { ok: false, reason: 'organization_context_domain_mismatch' };
+  }
   const now = new Date().toISOString();
 
   try {
@@ -184,14 +216,21 @@ export async function provisionCustomerVisibilityBaseline(
       .maybeSingle();
 
     const vertical = input.vertical?.trim() || existingDomain?.vertical || null;
-    const subvertical = input.subvertical?.trim() || existingDomain?.subvertical || null;
-    const location = input.location?.trim() || existingDomain?.geo_region || DEFAULT_LOCATION;
+    const subvertical = binding?.category || input.subvertical?.trim() || existingDomain?.subvertical || null;
+    const location = binding
+      ? binding.locality || binding.serviceAreas[0] || binding.countryCode
+      : input.location?.trim() || existingDomain?.geo_region || DEFAULT_LOCATION;
     const companyName =
       input.companyName?.trim() ||
       existingDomain?.display_name ||
       canonicalDomain.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
-    let prompts = [...buildBaselineBuyerPrompts({ vertical, subvertical, location })];
-    const contextVersion = promptContextVersion(subvertical || vertical, location);
+    let prompts = [...buildBaselineBuyerPrompts({
+      vertical,
+      subvertical,
+      location,
+      languages: binding?.languages,
+    })];
+    const querySetVersion = binding?.querySetVersion ?? promptContextVersion(subvertical || vertical, location);
 
     let querySet: { id: string } | null = null;
     let preservedApprovedQuerySet = false;
@@ -215,6 +254,8 @@ export async function provisionCustomerVisibilityBaseline(
         status: approvedSet.status,
         canonicalDomain,
         promptCount: approvedPromptRows.length,
+        expectedContextVersion: binding?.contextVersion,
+        expectedQuerySetVersion: binding?.querySetVersion,
       })) {
         querySet = { id: String(approvedSet.id) };
         prompts = approvedPromptRows.map((row) => row.query_text);
@@ -228,7 +269,7 @@ export async function provisionCustomerVisibilityBaseline(
         .upsert(
           {
             name: `client-prompts-${canonicalDomain}`,
-            version: contextVersion,
+            version: querySetVersion,
             vertical,
             description: `Automatically provisioned buyer questions for ${canonicalDomain}.`,
             status: 'active',
@@ -240,6 +281,7 @@ export async function provisionCustomerVisibilityBaseline(
                 ? 'deterministic_company_context_plus_intelligence'
                 : 'deterministic_company_context',
               intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
+              ...(binding ? organizationMeasurementMetadata(binding) : {}),
               updated_at: now,
             },
           },
@@ -306,7 +348,7 @@ export async function provisionCustomerVisibilityBaseline(
     );
     if (promptError) return { ok: false, reason: promptError.message };
 
-    const competitors = await suggestCompetitors({
+    const competitors = binding?.trackedCompetitorDomains ?? await suggestCompetitors({
       supabase,
       canonicalDomain,
       vertical,
@@ -347,10 +389,19 @@ export async function provisionCustomerVisibilityBaseline(
         intelligence_status: intelligence.status,
         intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
         intelligence_limitations: intelligence.limitations,
-        baseline_status: existingMetadata['baseline_status'] === 'measured' ? 'measured' : 'queued',
+        baseline_status: existingMetadata['baseline_status'] === 'measured'
+          && (!binding || existingMetadata['organization_context_version'] === binding.contextVersion)
+          ? 'measured'
+          : 'queued',
         baseline_requested_at: existingMetadata['baseline_requested_at'] ?? now,
         provisioning_version: PROVISIONING_VERSION,
-        prompt_context_version: querySet.id,
+        prompt_context_version: binding?.contextVersion ?? querySet.id,
+        ...(binding ? organizationMeasurementMetadata(binding) : {}),
+        baseline_required_reason: binding
+          && existingMetadata['organization_context_version']
+          && existingMetadata['organization_context_version'] !== binding.contextVersion
+          ? 'organization_context_changed'
+          : null,
         updated_at: now,
       },
       updated_at: now,

@@ -160,3 +160,25 @@ The safe shadow command performs no writes:
 ```bash
 npm run intelligence:organization:resolve -- --url=https://example.com --aliases=example.ca
 ```
+
+## Context-bound measurement
+
+`organization-measurement-v1` is the compatibility boundary between a
+confirmed Organization Context and the existing benchmark system. It reuses
+query-set, config, run-group, citation, and metric metadata; it does not add a
+parallel service or rewrite historical rows.
+
+The query-set version (`oqs1-…`) and approved competitor-cohort version
+(`occ1-…`) derive deterministically from the active context hash. Query inputs
+carry structured market scope, ISO country/subdivision, service areas, buyer,
+and language tags. Every customer run reloads the canonical tenant-scoped
+context, requires `confirmed` status, and compares the config and query-set
+snapshots before provider work or report assembly begins.
+
+A material context edit leaves prior runs intact but gives them a different
+context version. Current score reads filter run groups by query set, exact
+tenant, and active context version; an unbound or stale config therefore shows
+no current measurement and requires a fresh baseline. Citation metadata keeps
+the measured organization, tracked competitors, other brand mentions, and
+ordinary sources as separate roles. Observed citations never mutate the
+approved competitor list.

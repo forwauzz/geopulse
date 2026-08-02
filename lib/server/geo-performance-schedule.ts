@@ -16,6 +16,13 @@ import { sendGpmReportSlackSummary } from './geo-performance-slack';
 import { structuredError, structuredLog } from './structured-log';
 import { isReportQuarantined } from './report-quarantine';
 import {
+  deriveOrganizationMeasurementBinding,
+  evaluateOrganizationMeasurementCompatibility,
+  organizationMeasurementMetadata,
+} from '../intelligence/organization-measurement-context';
+import type { OrganizationContext } from '../intelligence/organization-context';
+import { loadActiveOrganizationMeasurementContext } from './organization-measurement-context';
+import {
   estimateGpmActivationCostUsd,
   estimateGpmPlatformCostUsd,
   isGpmSpendAllowed,
@@ -75,6 +82,9 @@ export type GpmRunSummary = {
   readonly windowDate: string;
   readonly entitlementBlocked: boolean;
   readonly skippedMissingConfig: boolean;
+  readonly contextBlocked: boolean;
+  readonly contextBlockReasons: readonly string[];
+  readonly baselineRequired: boolean;
   readonly platformResults: readonly {
     readonly platform: string;
     readonly status: 'launched' | 'skipped_existing' | 'failed';
@@ -166,6 +176,7 @@ async function persistCompetitorCitations(args: {
   readonly runGroupId: string;
   readonly config: ClientBenchmarkConfigRow;
   readonly measuredCanonicalDomain: string;
+  readonly competitorCohortVersion: string;
 }): Promise<number> {
   if (args.config.competitor_list.length === 0) return 0;
 
@@ -199,7 +210,11 @@ async function persistCompetitorCitations(args: {
         rankPosition: c.rankPosition,
         citationType: c.citationType,
         confidence: c.confidence,
-        metadata: c.metadata ?? {},
+        metadata: {
+          ...(c.metadata ?? {}),
+          organization_reference_role: 'tracked_competitor',
+          competitor_cohort_version: args.competitorCohortVersion,
+        },
       }))
     );
     insertedCount += competitorCitations.length;
@@ -222,6 +237,8 @@ export async function executeGpmClientRun(args: {
   readonly reportBucket?: GpmR2BucketLike;
   /** Unique suffix for a customer-requested recheck inside the normal cadence window. */
   readonly runVersion?: string;
+  /** Test/controlled-call override; normal execution reloads the active canonical context. */
+  readonly organizationContext?: OrganizationContext;
 }): Promise<GpmRunSummary> {
   const now = args.now ?? new Date();
   const cadence = args.config.cadence;
@@ -239,6 +256,65 @@ export async function executeGpmClientRun(args: {
       windowDate,
       entitlementBlocked: false,
       skippedMissingConfig: true,
+      contextBlocked: false,
+      contextBlockReasons: [],
+      baselineRequired: false,
+      platformResults: [],
+    };
+  }
+
+  const activeContext = args.organizationContext
+    ? (() => {
+        const derived = deriveOrganizationMeasurementBinding(args.organizationContext!);
+        return derived.ok
+          ? { status: 'ready' as const, context: args.organizationContext!, binding: derived.binding }
+          : { status: 'blocked' as const, reasons: derived.reasons };
+      })()
+    : await loadActiveOrganizationMeasurementContext({
+        supabase: args.supabase,
+        config: args.config,
+      });
+  if (activeContext.status === 'blocked') {
+    structuredLog('gpm_client_run_blocked_organization_context', {
+      config_id: args.config.id,
+      window_date: windowDate,
+      reasons: activeContext.reasons.join(','),
+    }, 'warning');
+    return {
+      configId: args.config.id,
+      windowDate,
+      entitlementBlocked: false,
+      skippedMissingConfig: false,
+      contextBlocked: true,
+      contextBlockReasons: activeContext.reasons,
+      baselineRequired: false,
+      platformResults: [],
+    };
+  }
+
+  const querySet = await repo.getQuerySetById(args.config.query_set_id);
+  const contextCompatibility = evaluateOrganizationMeasurementCompatibility({
+    binding: activeContext.binding,
+    configMetadata: args.config.metadata,
+    querySet,
+    competitorList: args.config.competitor_list,
+  });
+  if (!contextCompatibility.compatible) {
+    structuredLog('gpm_client_run_blocked_context_mismatch', {
+      config_id: args.config.id,
+      window_date: windowDate,
+      active_context_version: activeContext.binding.contextVersion,
+      reasons: contextCompatibility.reasons.join(','),
+      baseline_required: contextCompatibility.baselineRequired,
+    }, 'warning');
+    return {
+      configId: args.config.id,
+      windowDate,
+      entitlementBlocked: false,
+      skippedMissingConfig: false,
+      contextBlocked: true,
+      contextBlockReasons: contextCompatibility.reasons,
+      baselineRequired: contextCompatibility.baselineRequired,
       platformResults: [],
     };
   }
@@ -261,6 +337,9 @@ export async function executeGpmClientRun(args: {
       windowDate,
       entitlementBlocked: true,
       skippedMissingConfig: false,
+      contextBlocked: false,
+      contextBlockReasons: [],
+      baselineRequired: false,
       platformResults: [],
     };
   }
@@ -287,9 +366,10 @@ export async function executeGpmClientRun(args: {
       continue;
     }
 
+    const contextRunKey = `${buildGpmRunKey(args.config.id, platform, windowDate)}:context:${activeContext.binding.contextVersion}`;
     const baseRunKey = args.runVersion
-      ? `${buildGpmRunKey(args.config.id, platform, windowDate)}:recheck:${args.runVersion}`
-      : buildGpmRunKey(args.config.id, platform, windowDate);
+      ? `${contextRunKey}:recheck:${args.runVersion}`
+      : contextRunKey;
     let runKey = baseRunKey;
     let completedExisting: Awaited<ReturnType<typeof repo.getRunGroupByScheduleKey>> = null;
     let retryExhausted = false;
@@ -344,6 +424,7 @@ export async function executeGpmClientRun(args: {
           startupWorkspaceId: args.config.startup_workspace_id ?? undefined,
           agencyAccountId: args.config.agency_account_id ?? undefined,
           runMetadata: {
+            ...organizationMeasurementMetadata(activeContext.binding),
             gpm_config_id: args.config.id,
             gpm_platform: platform,
             gpm_cadence: cadence,
@@ -371,6 +452,7 @@ export async function executeGpmClientRun(args: {
         runGroupId: result.runGroupId,
         config: args.config,
         measuredCanonicalDomain: domain.canonical_domain,
+        competitorCohortVersion: activeContext.binding.competitorCohortVersion,
       });
 
       structuredLog('gpm_client_run_launched', {
@@ -460,6 +542,9 @@ export async function executeGpmClientRun(args: {
     windowDate,
     entitlementBlocked: false,
     skippedMissingConfig: false,
+    contextBlocked: false,
+    contextBlockReasons: [],
+    baselineRequired: false,
     platformResults,
   };
 }
@@ -657,6 +742,26 @@ export async function runGpmScheduledSweep(args: {
         monthSpendUsd +
         summary.platformResults.reduce((sum, result) => sum + result.estimatedCostUsd, 0)
       ) * 10000) / 10000;
+      if (summary.contextBlocked) {
+        blockedConfigs += 1;
+        if (summary.baselineRequired) {
+          await args.supabase
+            .from('client_benchmark_configs')
+            .update({
+              metadata: {
+                ...configMetadata,
+                baseline_status: 'queued',
+                baseline_completed_at: null,
+                baseline_required_reason: 'organization_context_changed',
+                context_block_reasons: summary.contextBlockReasons,
+                updated_at: now.toISOString(),
+              },
+              updated_at: now.toISOString(),
+            })
+            .eq('id', config.id);
+        }
+        continue;
+      }
       if (activationBaselineQueued && !summary.entitlementBlocked && !summary.skippedMissingConfig) {
         const launched = summary.platformResults.filter((result) => result.status === 'launched');
         const failed = summary.platformResults.filter((result) => result.status === 'failed');

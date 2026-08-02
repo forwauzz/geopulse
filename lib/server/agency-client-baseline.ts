@@ -337,6 +337,7 @@ export async function completeAgencyClientBaseline(args: {
 
   const metadata = {
     ...(config.metadata ?? {}),
+    agency_client_id: args.clientId,
     client_context: {
       company: acceptedDiscoveryContext?.companyName || client.display_name || client.name,
       category: market.category || profile.businessType,
