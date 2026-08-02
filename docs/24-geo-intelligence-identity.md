@@ -187,3 +187,8 @@ no current measurement and requires a fresh baseline. Citation metadata keeps
 the measured organization, tracked competitors, other brand mentions, and
 ordinary sources as separate roles. Observed citations never mutate the
 approved competitor list.
+
+Cloudflare Git builds run `npm run build:worker` once, then upload that exact
+artifact with `GEOPULSE_SKIP_OPENNEXT_BUILD=1 npx wrangler versions upload`.
+The guarded upload mode refuses to proceed when `.open-next/worker.js` is
+missing, preventing both duplicate OpenNext builds and stale/missing uploads.
