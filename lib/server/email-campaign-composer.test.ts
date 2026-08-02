@@ -50,6 +50,10 @@ function contract(body = 'Hi {{name}},\n\nReply with one client domain: {{walkth
       previewText: 'One client domain is enough.',
       bodyFormat: 'text',
       bodyTemplate: body,
+      followUpSteps: [
+        { subject: 'Re: follow-up', previewText: 'Still happy to run one.', bodyTemplate: 'Hi {{name}}, following up once.' },
+        { subject: 'Closing the loop', previewText: 'Last note.', bodyTemplate: 'Hi {{name}}, last note on this.' },
+      ],
     },
     tracking: { tags: [], utmSource: 'outreach', utmMedium: 'email', utmCampaign: 'agency-reporting-montreal-v1', utmContent: 'agency-reporting', utmTerm: null },
     schedule: { timezone: 'America/Toronto', sendWindowStartHour: 9, sendWindowEndHour: 17, startAt: null, spacingMinutes: 60, dailyCap: 25, maxSequenceSteps: 3, sequenceDelaysDays: [0, 4, 10] },

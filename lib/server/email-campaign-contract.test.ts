@@ -45,6 +45,11 @@ function draft(overrides: Partial<EmailCampaignV1> = {}): EmailCampaignV1 {
       previewText: 'One client domain is enough to see it.',
       bodyFormat: 'text',
       bodyTemplate: 'Hi {{name}},\n\nWe build AI visibility baselines agencies can share with a client.\n\nReply with one client domain and I will send the baseline: {{walkthrough_url}}',
+      // Three declared steps require three approved messages — see the sequence-length rule.
+      followUpSteps: [
+        { subject: 'Re: a baseline for one of your clients', previewText: 'Still happy to run one.', bodyTemplate: 'Hi {{name}},\n\nFollowing up once: {{walkthrough_url}}' },
+        { subject: 'Closing the loop', previewText: 'Last note.', bodyTemplate: 'Hi {{name}},\n\nLast note on this.' },
+      ],
     },
     tracking: {
       tags: ['vci-8', 'email'],
@@ -130,15 +135,36 @@ describe('validation', () => {
     });
     expect(issues).toContainEqual({
       section: 'content',
-      field: '{{first_name}}',
+      field: 'step 1 {{first_name}}',
       message: 'unknown merge field — it would ship literally to the recipient',
     });
+  });
+
+  it('flags an unknown merge field in a follow-up step too, naming the step', () => {
+    const contract = draft();
+    const issues = validateEmailCampaignV1({
+      ...contract,
+      content: {
+        ...contract.content,
+        followUpSteps: [
+          { subject: 'Re:', previewText: 'p', bodyTemplate: 'Hi {{first_name}}' },
+          contract.content.followUpSteps[1]!,
+        ],
+      },
+    });
+    expect(issues.some((issue) => issue.field === 'step 2 {{first_name}}')).toBe(true);
+  });
+
+  it('requires the bounded sequence to have every step written', () => {
+    const contract = draft();
+    const issues = validateEmailCampaignV1({ ...contract, content: { ...contract.content, followUpSteps: [] } });
+    expect(issues.some((issue) => issue.message.includes('3 steps are declared but 1 message(s) are approved'))).toBe(true);
   });
 
   it('rejects insecure links and missing UTM values', () => {
     const contract = draft();
     expect(validateEmailCampaignV1({ ...contract, content: { ...contract.content, bodyTemplate: 'See http://example.com' } })
-      .some((issue) => issue.field === 'links')).toBe(true);
+      .some((issue) => issue.field === 'step 1 links')).toBe(true);
     expect(validateEmailCampaignV1({ ...contract, tracking: { ...contract.tracking, utmCampaign: '' } })
       .some((issue) => issue.field === 'utmCampaign')).toBe(true);
   });
