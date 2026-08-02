@@ -15,7 +15,7 @@ import { structuredError, structuredLog } from './structured-log';
 import { resolveReportBrand } from '../../workers/report/resolve-report-brand';
 import { sendAgencyReportEmail } from '../../workers/report/agency-report-email-delivery';
 import type { GpmR2BucketLike } from './geo-performance-report-store';
-import { isReportQuarantined } from './report-quarantine';
+import { isClientReportSharingHeld, isReportQuarantined } from './report-quarantine';
 
 export type AgencyReportStoreEnvLike = {
   readonly RESEND_API_KEY?: string;
@@ -223,6 +223,7 @@ export async function storeAgencyReport(args: {
 
   const recipients = recipientsFromMetadata(args.config.report_email, args.config.metadata);
   const deliveryEnabled = args.env.GPM_REPORT_DELIVERY_ENABLED?.trim().toLowerCase() === 'true';
+  const clientReviewHeld = isClientReportSharingHeld(profile.client?.metadata);
   const reportMetadata: Record<string, unknown> = {
     artifact_kind: 'agency_report_v2',
     artifact_version: artifactVersion,
@@ -232,9 +233,13 @@ export async function storeAgencyReport(args: {
     snapshot,
     email_status: recipients.length === 0
       ? 'not_configured'
-      : deliveryEnabled ? 'pending' : 'held_delivery_disabled',
+      : clientReviewHeld
+        ? 'held_client_review'
+        : deliveryEnabled ? 'pending' : 'held_delivery_disabled',
     recipient_count: recipients.length,
     delivery_url_kind: secureReportUrl ? 'revocable_client_summary' : 'attachment_only',
+    delivery_blocked: clientReviewHeld,
+    delivery_block_reason: clientReviewHeld ? 'client_report_sharing_held' : null,
   };
   const anchorRunGroupId = args.platformRuns[0]!.runGroupId;
   const { data: inserted, error } = await args.supabase.from('gpm_reports').insert({
@@ -256,7 +261,7 @@ export async function storeAgencyReport(args: {
   const reportId = String(inserted.id);
 
   let emailStatus = reportMetadata['email_status'] as string;
-  if (recipients.length > 0 && deliveryEnabled) {
+  if (recipients.length > 0 && deliveryEnabled && !clientReviewHeld) {
     const resendKey = args.env.RESEND_API_KEY?.trim();
     const resendFrom = args.env.RESEND_FROM_EMAIL?.trim();
     if (!resendKey || !resendFrom) {

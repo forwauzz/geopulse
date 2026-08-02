@@ -21,6 +21,16 @@ function pct(value: number): string {
   return `${String(Math.round(value * 100))}%`;
 }
 
+function reportScopeDisclosure(snapshot: AgencyReportSnapshotV2): string {
+  return snapshot.scope.disclosure.replace(/\b1 AI assistants\b/g, '1 AI assistant');
+}
+
+function naturalList(values: readonly string[]): string {
+  if (values.length <= 1) return values[0] ?? '';
+  if (values.length === 2) return `${values[0]} and ${values[1]}`;
+  return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`;
+}
+
 function periodLabel(windowDate: string): string {
   const month = /^(\d{4})-(\d{2})$/.exec(windowDate);
   if (month) {
@@ -96,7 +106,80 @@ function resultMark(question: AgencyReportQuestion): string {
   return `${String(question.citedByEngines)}/${String(question.enginesMeasured)}`;
 }
 
+export function buildAgencyReportCoverHeadline(snapshot: AgencyReportSnapshotV2): {
+  readonly eyebrow: string;
+  readonly metric: string;
+  readonly statement: string;
+  readonly detail: string;
+  readonly isBaseline: boolean;
+} {
+  if (snapshot.evaluationsCited === 0) {
+    return {
+      eyebrow: 'THE STARTING POINT',
+      metric: 'Baseline',
+      statement: `established across ${String(snapshot.evaluationsTracked)} measured AI answers`,
+      detail: `0 citations recorded; future progress will be measured against this exact scope.`,
+      isBaseline: true,
+    };
+  }
+  return {
+    eyebrow: 'THE HEADLINE',
+    metric: pct(snapshot.combinedVisibilityPct),
+    statement: `of measured AI answers cited ${snapshot.clientName}`,
+    detail: `${String(snapshot.evaluationsCited)} citations across ${String(snapshot.evaluationsTracked)} answer evaluations`,
+    isBaseline: false,
+  };
+}
+
+export function buildAgencyReportOverviewTitle(snapshot: AgencyReportSnapshotV2): string {
+  return snapshot.evaluationsCited === 0
+    ? 'Your measured starting point'
+    : 'Where the brand appears today';
+}
+
+export function buildAgencyOpportunityAction(question: AgencyReportQuestion, location: string): string {
+  const normalized = question.queryText.toLowerCase();
+  if (/executive health|annual (preventive )?health assessment|preventive screening/.test(normalized)) {
+    return 'Strengthen the executive and preventive health page with verified eligibility, assessment components, expected timing, the cost-confirmation path, and one clear booking step.';
+  }
+  if (/weight (management|loss)/.test(normalized)) {
+    return 'Strengthen the medical weight-management page with verified eligibility, the physician-led process, program components, follow-up expectations, safety limits, and a consultation step.';
+  }
+  if (/pediatric|child|children/.test(normalized) && /urgent|same-day|same day|prompt/.test(normalized)) {
+    return 'Strengthen the pediatric urgent-care page with verified age range, conditions handled, availability, booking instructions, and clear guidance for symptoms that require emergency care.';
+  }
+  if (/travel clinic|travel vaccination|travel medicine/.test(normalized)) {
+    return 'Strengthen the travel-clinic page with verified consultation steps, vaccine and certificate availability, recommended booking lead time, pricing access, and the appointment path.';
+  }
+  if (/women'?s health|gynecolog|contraception|menopause/.test(normalized)) {
+    return "Strengthen the women's-health page with verified services, who each service is for, privacy and appointment details, pricing access, and one booking step.";
+  }
+  if (/membership|ongoing family medicine|continuity/.test(normalized)) {
+    return 'Explain the verified membership and family-medicine options in one comparison-ready page: who each option serves, what is included, access expectations, fees, and how to enroll.';
+  }
+  if (/same-day|same day|next-day|next day|urgent care/.test(normalized)) {
+    return `Strengthen the rapid-access care page with verified availability in ${location}, conditions handled, booking instructions, fees, and emergency-care exclusions.`;
+  }
+  if (/how much|price|pricing|cost|pay/.test(normalized)) {
+    return `Publish a clear cost and access guide for ${location}, including only verified fees, eligibility details, and the next step to inquire or book.`;
+  }
+  if (/review|trust|expertise|proof|known for/.test(normalized)) {
+    return 'Strengthen the relevant service page with verifiable credentials, service details, and permitted customer proof. Avoid unsupported superiority claims.';
+  }
+  if (/compare|alternative|best|choose|specific needs/.test(normalized)) {
+    return `Create a decision-ready page that explains who the service is for, what is offered in ${location}, why it may fit, and the next step to inquire or book.`;
+  }
+  return `Answer this question directly on the most relevant service page with verifiable details, local context for ${location}, and one clear next step.`;
+}
+
 export function buildAgencyExecutiveSummary(snapshot: AgencyReportSnapshotV2): string {
+  if (snapshot.evaluationsCited === 0) {
+    const opportunity = snapshot.opportunities[0];
+    const next = opportunity
+      ? `Start with "${opportunity.queryText}" and strengthen the relevant service page with a direct, verifiable answer.`
+      : 'The next cycle should focus on earning consistent citations across the measured buyer questions.';
+    return `This report establishes a transparent starting point for ${snapshot.clientName} across ${String(snapshot.evaluationsTracked)} measured AI answers. No citation was recorded in this first period, so future work can be compared against one consistent scope. ${next}`;
+  }
   const opening = `${snapshot.clientName} appeared in ${String(snapshot.evaluationsCited)} of ${String(snapshot.evaluationsTracked)} measured AI answers (${pct(snapshot.combinedVisibilityPct)}) during ${periodLabel(snapshot.windowDate)}.`;
   const win = snapshot.wins[0]
     ? `The strongest result was "${snapshot.wins[0].queryText}", where ${String(snapshot.wins[0].citedByEngines)} of ${String(snapshot.wins[0].enginesMeasured)} assistants cited the brand.`
@@ -159,25 +242,30 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
     color: onPrimary,
   });
 
-  cover.drawText('THE HEADLINE', { x: MARGIN, y: 445, size: 8, font: fonts.bold, color: MUTED });
-  cover.drawText(pct(snapshot.combinedVisibilityPct), { x: MARGIN, y: 350, size: 74, font: fonts.bold, color: primary });
-  drawWrapped(cover, `of measured AI answers cited ${snapshot.clientName}`, {
+  const headline = buildAgencyReportCoverHeadline(snapshot);
+  cover.drawText(headline.eyebrow, { x: MARGIN, y: 445, size: 8, font: fonts.bold, color: MUTED });
+  if (headline.isBaseline) {
+    drawWrapped(cover, headline.metric, { x: MARGIN, y: 395, width: 170, font: fonts.bold, size: 34, lineHeight: 38, maxLines: 2, fill: primary });
+  } else {
+    cover.drawText(headline.metric, { x: MARGIN, y: 350, size: 74, font: fonts.bold, color: primary });
+  }
+  drawWrapped(cover, headline.statement, {
     x: 236, y: 402, width: 300, font: fonts.bold, size: 19, lineHeight: 24, maxLines: 3,
   });
-  cover.drawText(`${String(snapshot.evaluationsCited)} citations across ${String(snapshot.evaluationsTracked)} answer evaluations`, {
-    x: 238, y: 333, size: 10, font: fonts.regular, color: MUTED,
+  drawWrapped(cover, headline.detail, {
+    x: 238, y: 333, width: PAGE.width - MARGIN - 238, size: 9.5, lineHeight: 12, maxLines: 2, font: fonts.regular, fill: MUTED,
   });
   drawWrapped(cover, buildAgencyExecutiveSummary(snapshot), {
     x: MARGIN, y: 265, width: PAGE.width - MARGIN * 2, font: fonts.regular, size: 11.5, lineHeight: 17, maxLines: 8,
   });
-  cover.drawText(`Report profile ${snapshot.profileVersion} | ${snapshot.scope.disclosure}`, {
+  cover.drawText(`Report profile ${snapshot.profileVersion} | ${reportScopeDisclosure(snapshot)}`, {
     x: MARGIN, y: 58, size: 7.2, font: fonts.regular, color: MUTED, maxWidth: PAGE.width - MARGIN * 2,
   });
   drawFooter(cover, fonts, brand, 1);
 
   const overview = doc.addPage([PAGE.width, PAGE.height]);
   overview.drawRectangle({ x: 0, y: 0, width: PAGE.width, height: PAGE.height, color: rgb(1, 1, 1) });
-  let y = drawSectionTitle(overview, fonts, 'Performance overview', 'Where the brand is winning now', PAGE.height - MARGIN);
+  let y = drawSectionTitle(overview, fonts, 'Performance overview', buildAgencyReportOverviewTitle(snapshot), PAGE.height - MARGIN);
   const cardGap = 10;
   const cardWidth = (PAGE.width - MARGIN * 2 - cardGap * 2) / 3;
   snapshot.engines.forEach((engine, index) => {
@@ -196,38 +284,34 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
   if (snapshot.settings.sections.scopeStatement) {
     overview.drawRectangle({ x: MARGIN, y: y - 112, width: PAGE.width - MARGIN * 2, height: 102, color: PAPER });
     overview.drawText('MEASUREMENT SCOPE', { x: MARGIN + 16, y: y - 34, size: 8, font: fonts.bold, color: MUTED });
-    drawWrapped(overview, snapshot.scope.disclosure, { x: MARGIN + 16, y: y - 57, width: PAGE.width - MARGIN * 2 - 32, font: fonts.bold, size: 11, lineHeight: 15, maxLines: 3 });
+    drawWrapped(overview, reportScopeDisclosure(snapshot), { x: MARGIN + 16, y: y - 57, width: PAGE.width - MARGIN * 2 - 32, font: fonts.bold, size: 11, lineHeight: 15, maxLines: 3 });
     overview.drawText(`Comparison horizon: ${String(snapshot.comparisonMonths)} months | Captured ${new Date(snapshot.reportedAt).toISOString().slice(0, 10)}`, {
       x: MARGIN + 16, y: y - 94, size: 8, font: fonts.regular, color: MUTED,
     });
   }
   drawFooter(overview, fonts, brand, 2);
 
-  if (snapshot.settings.sections.trendOverTime) {
+  if (snapshot.settings.sections.trendOverTime && snapshot.trend.length > 1) {
     const trendPage = doc.addPage([PAGE.width, PAGE.height]);
     trendPage.drawRectangle({ x: 0, y: 0, width: PAGE.width, height: PAGE.height, color: rgb(1, 1, 1) });
     const trendY = drawSectionTitle(trendPage, fonts, 'Momentum', `Visibility over the selected ${String(snapshot.comparisonMonths)}-month horizon`, PAGE.height - MARGIN);
-    if (snapshot.trend.length > 1) {
-      const chartX = MARGIN;
-      const chartY = trendY - 300;
-      const chartHeight = 230;
-      const gap = 12;
-      const barWidth = Math.min(56, (PAGE.width - MARGIN * 2 - gap * (snapshot.trend.length - 1)) / snapshot.trend.length);
-      snapshot.trend.forEach((point, index) => {
-        const x = chartX + index * (barWidth + gap);
-        const height = Math.max(5, chartHeight * point.visibilityPct);
-        trendPage.drawRectangle({ x, y: chartY, width: barWidth, height: chartHeight, color: PAPER });
-        trendPage.drawRectangle({ x, y: chartY, width: barWidth, height, color: primary });
-        trendPage.drawText(pct(point.visibilityPct), { x, y: chartY + chartHeight + 15, size: 9, font: fonts.bold, color: INK });
-        trendPage.drawText(safeText(point.windowDate), { x, y: chartY - 18, size: 7.5, font: fonts.regular, color: MUTED });
-      });
-      const first = snapshot.trend[0]!;
-      const last = snapshot.trend.at(-1)!;
-      const delta = Math.round((last.visibilityPct - first.visibilityPct) * 100);
-      drawWrapped(trendPage, `${delta === 0 ? 'Visibility held steady' : `${delta > 0 ? '+' : ''}${String(delta)} percentage points`} across ${String(snapshot.trend.length)} comparable monthly measurements.`, { x: MARGIN, y: chartY - 70, width: PAGE.width - MARGIN * 2, font: fonts.bold, size: 15, lineHeight: 20 });
-    } else {
-      drawWrapped(trendPage, `Comparable baseline established at ${pct(snapshot.combinedVisibilityPct)}. Future monthly measurements will appear only when the same versioned prompt and engine profile is used.`, { x: MARGIN, y: trendY - 34, width: PAGE.width - MARGIN * 2, font: fonts.regular, size: 14, lineHeight: 21, maxLines: 5 });
-    }
+    const chartX = MARGIN;
+    const chartY = trendY - 300;
+    const chartHeight = 230;
+    const gap = 12;
+    const barWidth = Math.min(56, (PAGE.width - MARGIN * 2 - gap * (snapshot.trend.length - 1)) / snapshot.trend.length);
+    snapshot.trend.forEach((point, index) => {
+      const x = chartX + index * (barWidth + gap);
+      const height = Math.max(5, chartHeight * point.visibilityPct);
+      trendPage.drawRectangle({ x, y: chartY, width: barWidth, height: chartHeight, color: PAPER });
+      trendPage.drawRectangle({ x, y: chartY, width: barWidth, height, color: primary });
+      trendPage.drawText(pct(point.visibilityPct), { x, y: chartY + chartHeight + 15, size: 9, font: fonts.bold, color: INK });
+      trendPage.drawText(safeText(point.windowDate), { x, y: chartY - 18, size: 7.5, font: fonts.regular, color: MUTED });
+    });
+    const first = snapshot.trend[0]!;
+    const last = snapshot.trend.at(-1)!;
+    const delta = Math.round((last.visibilityPct - first.visibilityPct) * 100);
+    drawWrapped(trendPage, `${delta === 0 ? 'Visibility held steady' : `${delta > 0 ? '+' : ''}${String(delta)} percentage points`} across ${String(snapshot.trend.length)} comparable monthly measurements.`, { x: MARGIN, y: chartY - 70, width: PAGE.width - MARGIN * 2, font: fonts.bold, size: 15, lineHeight: 20 });
     drawFooter(trendPage, fonts, brand, doc.getPageCount());
   }
 
@@ -261,21 +345,22 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
     growth.drawRectangle({ x: 0, y: 0, width: PAGE.width, height: PAGE.height, color: rgb(1, 1, 1) });
     let growthY = drawSectionTitle(growth, fonts, 'Growth plan', 'What to do next', PAGE.height - MARGIN);
     if (snapshot.settings.sections.opportunities) {
-      growth.drawText('PRIORITY OPPORTUNITIES', { x: MARGIN, y: growthY, size: 8, font: fonts.bold, color: MUTED });
+      growth.drawText('RECOMMENDED ACTION PLAN', { x: MARGIN, y: growthY, size: 8, font: fonts.bold, color: MUTED });
       growthY -= 24;
-      const opportunities = snapshot.opportunities.slice(0, 5);
+      const opportunities = snapshot.opportunities.slice(0, 3);
       if (opportunities.length === 0) {
         growthY = drawWrapped(growth, 'Every selected buyer question earned at least one citation. Focus next on consistency across all measured assistants.', { x: MARGIN, y: growthY, width: PAGE.width - MARGIN * 2, font: fonts.regular, size: 11, lineHeight: 16 });
       } else {
         opportunities.forEach((question, index) => {
           growth.drawText(String(index + 1).padStart(2, '0'), { x: MARGIN, y: growthY, size: 11, font: fonts.bold, color: AMBER });
-          growthY = drawWrapped(growth, question.queryText, { x: MARGIN + 34, y: growthY, width: PAGE.width - MARGIN * 2 - 34, font: fonts.bold, size: 10.5, lineHeight: 14, maxLines: 2 }) - 6;
+          growthY = drawWrapped(growth, question.queryText, { x: MARGIN + 34, y: growthY, width: PAGE.width - MARGIN * 2 - 34, font: fonts.bold, size: 10.5, lineHeight: 14, maxLines: 2 }) - 3;
+          growthY = drawWrapped(growth, buildAgencyOpportunityAction(question, snapshot.location), { x: MARGIN + 34, y: growthY, width: PAGE.width - MARGIN * 2 - 34, font: fonts.regular, size: 9, lineHeight: 12, maxLines: 3, fill: MUTED }) - 11;
         });
       }
       growthY -= 20;
     }
     if (snapshot.settings.sections.competitorsTracked) {
-      growth.drawText('WHO APPEARED INSTEAD', { x: MARGIN, y: growthY, size: 8, font: fonts.bold, color: MUTED });
+      growth.drawText('MARKET SIGNAL OBSERVED', { x: MARGIN, y: growthY, size: 8, font: fonts.bold, color: MUTED });
       growthY -= 28;
       const competitors = snapshot.competitors.slice(0, 6);
       if (competitors.length === 0) {
@@ -290,6 +375,7 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
           growth.drawText(String(competitor.appearedInsteadCount), { x: 510, y: growthY, size: 8.5, font: fonts.bold, color: MUTED });
           growthY -= 30;
         });
+        drawWrapped(growth, 'This is a measured reference point inside the selected question set, not a claim of overall market leadership.', { x: MARGIN, y: growthY - 2, width: PAGE.width - MARGIN * 2, font: fonts.regular, size: 8.5, lineHeight: 12, maxLines: 2, fill: MUTED });
       }
     }
     drawFooter(growth, fonts, brand, doc.getPageCount());
@@ -299,10 +385,11 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
     const method = doc.addPage([PAGE.width, PAGE.height]);
     method.drawRectangle({ x: 0, y: 0, width: PAGE.width, height: PAGE.height, color: PAPER });
     let methodY = drawSectionTitle(method, fonts, 'Transparency', 'How to read this report', PAGE.height - MARGIN);
+    const unavailableLabels = snapshot.unavailableEngines.map((engine) => engine === 'gemini' ? 'Google Gemini' : engine === 'chatgpt' ? 'ChatGPT' : 'Perplexity');
     const notes = [
       ['Visibility', 'The share of completed, selected answer evaluations in which the measured domain was cited. The combined figure is recalculated from this report\'s exact engine and prompt scope.'],
-      ['Selection', snapshot.scope.disclosure],
-      ['Unavailable assistants', snapshot.unavailableEngines.length > 0 ? `${snapshot.unavailableEngines.map((engine) => engine === 'gemini' ? 'Google Gemini' : engine === 'chatgpt' ? 'ChatGPT' : 'Perplexity').join(', ')} did not produce a complete measurement and were omitted, not scored as zero.` : 'Every selected assistant produced a complete measurement.'],
+      ['Selection', reportScopeDisclosure(snapshot)],
+      ['Unavailable assistants', unavailableLabels.length > 0 ? `${naturalList(unavailableLabels)} ${unavailableLabels.length === 1 ? 'was' : 'were'} omitted because ${unavailableLabels.length === 1 ? 'it did' : 'they did'} not produce a complete measurement; ${unavailableLabels.length === 1 ? 'it was' : 'they were'} not scored as zero.` : 'Every selected assistant produced a complete measurement.'],
       ['Variance', 'AI answers can vary by session and over time. This artifact is a dated measurement, not a guarantee of future placement.'],
       ['Reproducibility', `Report profile ${snapshot.profileVersion}. Source runs remain attached to the stored snapshot for audit and regeneration.`],
     ] as const;
