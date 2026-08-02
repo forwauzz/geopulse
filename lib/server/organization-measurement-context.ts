@@ -32,7 +32,7 @@ function record(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function ownerForConfig(config: ClientBenchmarkConfigRow): {
+export function organizationOwnerForMeasurementConfig(config: ClientBenchmarkConfigRow): {
   readonly ownerType: OrganizationOwnerType;
   readonly ownerId: string | null;
 } | null {
@@ -49,7 +49,7 @@ function ownerForConfig(config: ClientBenchmarkConfigRow): {
   return null;
 }
 
-function storedContext(metadata: unknown): OrganizationContext | null {
+export function storedOrganizationContext(metadata: unknown): OrganizationContext | null {
   const ownerMetadata = record(metadata);
   const candidate = ownerMetadata['organization_context_snapshot']
     ?? ownerMetadata['organization_context'];
@@ -98,7 +98,7 @@ export async function loadConfirmedOrganizationContextByHost(args: {
     .eq('owner_id', args.ownerId)
     .maybeSingle();
   if (ownerError) throw ownerError;
-  const context = storedContext(owner?.metadata);
+  const context = storedOrganizationContext(owner?.metadata);
   if (!context || context.status !== 'confirmed') return null;
   if (context.owner.type !== args.ownerType || context.owner.id !== args.ownerId) return null;
   if (context.organization.identityId !== String(domain.id)) return null;
@@ -111,7 +111,7 @@ export async function loadActiveOrganizationMeasurementContext(args: {
   readonly supabase: SupabaseClient<any, 'public', any>;
   readonly config: ClientBenchmarkConfigRow;
 }): Promise<ActiveOrganizationMeasurementContext> {
-  const owner = ownerForConfig(args.config);
+  const owner = organizationOwnerForMeasurementConfig(args.config);
   if (!owner) return { status: 'blocked', reasons: ['owner_scope_missing'] };
 
   const { data: mapping, error: mappingError } = await args.supabase
@@ -139,7 +139,7 @@ export async function loadActiveOrganizationMeasurementContext(args: {
   if (ownerError) throw ownerError;
   if (!ownerData) return { status: 'blocked', reasons: ['owner_scope_missing'] };
 
-  const context = storedContext(ownerData.metadata);
+  const context = storedOrganizationContext(ownerData.metadata);
   if (!context) return { status: 'blocked', reasons: ['organization_context_missing'] };
   if (context.owner.type !== owner.ownerType || context.owner.id !== owner.ownerId) {
     return { status: 'blocked', reasons: ['organization_context_owner_mismatch'] };

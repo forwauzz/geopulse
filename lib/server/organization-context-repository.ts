@@ -1,6 +1,10 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  reconcileConfirmedOrganizationContext,
+  recordMaterialOrganizationContextChange,
+} from './organization-context-change';
 import { IDENTITY_NORMALIZATION_VERSION } from '../intelligence/identity';
 import { canAccessEvidence } from '../intelligence/evidence';
 import {
@@ -478,6 +482,7 @@ export async function persistConfirmedOrganizationContext(args: {
     .maybeSingle();
   if (existingOwnerError) throw existingOwnerError;
   const ownerMetadata = record(existingOwner?.metadata);
+  const previousSnapshot = organizationContextSchema.safeParse(ownerMetadata['organization_context_snapshot']);
   const ownerPayload = {
     domain_id: domain.id,
     owner_type: input.ownerType,
@@ -514,11 +519,22 @@ export async function persistConfirmedOrganizationContext(args: {
     ...ownerPayload.metadata,
     organization_context_snapshot: lookup.context,
   };
+  await recordMaterialOrganizationContextChange({
+    supabase: args.supabase,
+    previous: previousSnapshot.success ? previousSnapshot.data : null,
+    next: lookup.context,
+    now: new Date(confirmedAt),
+  });
   const { error: snapshotError } = await args.supabase
     .from('intelligence_domain_owners')
     .update({ metadata: nextOwnerMetadata })
     .eq('id', owner.id);
   if (snapshotError) throw snapshotError;
+  await reconcileConfirmedOrganizationContext({
+    supabase: args.supabase,
+    context: lookup.context,
+    now: new Date(confirmedAt),
+  });
   return lookup.context;
 }
 

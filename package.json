@@ -48,6 +48,7 @@
     "intelligence:identity:backfill": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-identity-backfill.ts",
     "intelligence:organization:resolve": "tsx scripts/organization-resolver-shadow.ts",
     "intelligence:organization:measurement:shadow": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/organization-measurement-context-shadow.ts",
+    "intelligence:organization:backfill": "node scripts/run-organization-context-backfill.cjs",
     "intelligence:lanes:backfill": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-measurement-lane-backfill.ts",
     "intelligence:runs:backfill": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-run-index-backfill.ts",
     "intelligence:evidence:backfill": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-evidence-backfill.ts",
