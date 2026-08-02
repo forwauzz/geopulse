@@ -34,7 +34,7 @@ export const dynamic = 'force-dynamic';
 export default async function DashboardHomePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ url?: string; prompt?: string }>;
+    searchParams?: Promise<{ url?: string; prompt?: string; onboarding?: string }>;
 }) {
   const sp = (await searchParams) ?? {};
   const supabase = await createSupabaseServerClient();
@@ -55,6 +55,7 @@ export default async function DashboardHomePage({
         <OnboardingGoalPanel
           goal={resolveOnboardingGoal(user.user_metadata, 'agency')}
           role="agency"
+          firstValue={sp.onboarding === 'first-value'}
         />
         <AgencyHome data={agencyWorkspace.data} portfolio={portfolio} />
       </div>
@@ -181,6 +182,7 @@ export default async function DashboardHomePage({
       <OnboardingGoalPanel
         goal={resolveOnboardingGoal(user.user_metadata, 'business')}
         role="business"
+        firstValue={sp.onboarding === 'first-value'}
       />
       <div className="mx-auto w-full max-w-2xl">
         <DashboardScanHero

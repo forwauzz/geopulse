@@ -6,6 +6,8 @@ import {
   organizationMeasurementMetadata,
 } from '@/lib/intelligence/organization-measurement-context';
 import type { OrganizationContext } from '@/lib/intelligence/organization-context';
+import { IDENTITY_NORMALIZATION_VERSION } from '@/lib/intelligence/identity';
+import type { ConfirmedOrganizationContextWrite } from './organization-context-repository';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -40,7 +42,12 @@ export type VisibilityBaselineResult =
   | { readonly ok: false; readonly reason: string };
 
 export type FreeVisibilityWorkspaceResult =
-  | { readonly ok: true; readonly workspaceId: string; readonly baseline: VisibilityBaselineResult }
+  | {
+      readonly ok: true;
+      readonly workspaceId: string;
+      readonly baseline: VisibilityBaselineResult;
+      readonly organizationContextVersion?: string;
+    }
   | { readonly ok: false; readonly reason: string };
 
 const PROVISIONING_VERSION = 'customer-baseline-v3';
@@ -326,6 +333,37 @@ export async function provisionCustomerVisibilityBaseline(
     if (domainError || !domainRow?.id) {
       return { ok: false, reason: domainError?.message ?? 'domain_failed' };
     }
+    if (binding) {
+      const { data: existingMapping, error: mappingReadError } = await supabase
+        .from('intelligence_source_identity_maps')
+        .select('canonical_domain_id,mapping_status')
+        .eq('source_kind', 'benchmark_domain')
+        .eq('source_id', String(domainRow.id))
+        .maybeSingle();
+      if (mappingReadError) return { ok: false, reason: mappingReadError.message };
+      if (existingMapping?.canonical_domain_id
+        && String(existingMapping.canonical_domain_id) !== binding.organizationIdentityId) {
+        return { ok: false, reason: 'benchmark_domain_identity_conflict' };
+      }
+      const { error: mappingError } = await supabase.from('intelligence_source_identity_maps').upsert({
+        source_kind: 'benchmark_domain',
+        source_id: String(domainRow.id),
+        source_table: 'benchmark_domains',
+        canonical_domain_id: binding.organizationIdentityId,
+        canonical_page_id: null,
+        mapping_status: 'mapped',
+        unmapped_reason: null,
+        observed_host: canonicalDomain,
+        observed_url: `https://${canonicalDomain}`,
+        normalization_version: IDENTITY_NORMALIZATION_VERSION,
+        metadata: {
+          source: input.source,
+          organization_context_version: binding.contextVersion,
+          organization_context_hash: binding.contextHash,
+        },
+      }, { onConflict: 'source_kind,source_id' });
+      if (mappingError) return { ok: false, reason: mappingError.message };
+    }
 
     const { error: promptError } = preservedApprovedQuerySet
       ? { error: null }
@@ -454,6 +492,7 @@ export async function ensureFreeVisibilityWorkspace(args: {
   readonly userEmail?: string | null;
   readonly domain: string;
   readonly companyName?: string | null;
+  readonly confirmedOrganization?: Omit<ConfirmedOrganizationContextWrite, 'ownerType' | 'ownerId'>;
 }): Promise<FreeVisibilityWorkspaceResult> {
   const canonicalDomain = canonicalizeDomain(args.domain);
   if (!canonicalDomain) return { ok: false, reason: 'invalid_domain' };
@@ -509,13 +548,29 @@ export async function ensureFreeVisibilityWorkspace(args: {
     );
     if (domainError) return { ok: false, reason: domainError.message };
 
+    const organizationContext = args.confirmedOrganization
+      ? await (await import('./organization-context-repository')).persistConfirmedOrganizationContext({
+          supabase: args.supabase as any,
+          input: {
+            ...args.confirmedOrganization,
+            ownerType: 'startup_workspace',
+            ownerId: String(workspace.id),
+          },
+        })
+      : undefined;
     const baseline = await provisionCustomerVisibilityBaseline(args.supabase, {
       startupWorkspaceId: workspace.id,
       domain: canonicalDomain,
       companyName: name,
+      organizationContext,
       source: 'startup_onboarding',
     });
-    return { ok: true, workspaceId: workspace.id, baseline };
+    return {
+      ok: true,
+      workspaceId: workspace.id,
+      baseline,
+      organizationContextVersion: organizationContext?.contextVersion,
+    };
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : 'unknown' };
   }

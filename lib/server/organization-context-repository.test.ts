@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 import {
+  confirmedOrganizationContextMetadata,
   createOrganizationContextRepository,
   projectOrganizationContext,
   type OrganizationContextProjectionRows,
@@ -33,6 +34,41 @@ const confirmedContext = {
   },
   versionReasonCodes: ['initial_projection', 'tenant_confirmation'],
 };
+
+describe('confirmed Organization Context writes', () => {
+  it('creates an auditable, normalized tenant confirmation payload', () => {
+    expect(confirmedOrganizationContextMetadata({
+      ownerType: 'agency_client',
+      ownerId: ids.agencyClient,
+      actorId: ids.confirmer,
+      canonicalDomain: 'WWW.Example.CA',
+      displayName: ' Example Clinic ',
+      category: ' preventive medicine clinic ',
+      services: ['travel health', 'travel health'],
+      buyer: ' patients ',
+      marketScope: 'local',
+      countryCode: 'ca',
+      subdivisionCode: 'ca-qc',
+      locality: 'Pointe-Claire',
+      serviceAreas: ["Montreal's West Island"],
+      languages: ['fr-CA', 'en-CA'],
+      timezone: 'America/Toronto',
+      approvedCompetitorDomains: ['UNIONMD.CA'],
+    }, '2026-08-02T00:00:00.000Z')).toMatchObject({
+      displayName: 'Example Clinic',
+      countryCode: 'CA',
+      subdivisionCode: 'CA-QC',
+      services: ['travel health'],
+      approvedCompetitorDomains: ['unionmd.ca'],
+      confirmation: {
+        actorType: 'user',
+        actorId: ids.confirmer,
+        confirmedAt: '2026-08-02T00:00:00.000Z',
+      },
+      versionReasonCodes: ['initial_projection', 'tenant_confirmation'],
+    });
+  });
+});
 
 function projectionRows(overrides: Partial<OrganizationContextProjectionRows> = {}): OrganizationContextProjectionRows {
   return {

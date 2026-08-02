@@ -22,6 +22,7 @@ import {
 } from './gpm-spend-guard';
 import { structuredError, structuredLog } from './structured-log';
 import { isClientReportSharingHeld } from './report-quarantine';
+import { loadConfirmedOrganizationContextByHost } from './organization-context-repository';
 
 type BaselineEnv = {
   readonly GEMINI_API_KEY?: string;
@@ -214,6 +215,20 @@ export async function completeAgencyClientBaseline(args: {
       shareToken: null, reason: 'client_or_domain_missing',
     };
   }
+  const organizationContext = await loadConfirmedOrganizationContextByHost({
+    supabase: args.supabase,
+    ownerType: 'agency_client',
+    ownerId: args.clientId,
+    canonicalDomain: domain,
+  }).catch(() => null);
+  if (!organizationContext) {
+    return {
+      ok: false, configId: null, scanId: null, score: null, competitorCount: 0,
+      promptCount: 0, launchedPlatforms: [], failedPlatforms: [], estimatedSpendUsd: 0,
+      monthSpendBeforeUsd: 0, monthlyCapUsd: resolveGpmSpendPolicy(args.env).monthlyCapUsd,
+      shareToken: null, reason: 'organization_context_confirmation_required',
+    };
+  }
 
   const { data: existingDomain } = await args.supabase
     .from('benchmark_domains')
@@ -304,6 +319,7 @@ export async function completeAgencyClientBaseline(args: {
     location: market.location,
     explicitCompetitors: market.competitorDomains,
     reportEmail: args.reportEmail ?? null,
+    organizationContext,
     approvedQuerySetId: typeof existingConfig?.query_set_id === 'string'
       ? existingConfig.query_set_id
       : null,

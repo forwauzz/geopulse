@@ -16,8 +16,8 @@ export function PendingSubmitButton({
   const { pending } = useFormStatus();
   return (
     <button disabled={pending} className={`${className} disabled:cursor-wait disabled:opacity-65`}>
-      <span className={`material-symbols-outlined text-[18px] ${pending ? 'animate-spin' : ''}`} aria-hidden>
-        {pending ? 'progress_activity' : icon}
+      <span className={`text-[18px] leading-none ${pending ? 'animate-spin' : ''}`} aria-hidden>
+        {pending ? '◌' : icon === 'refresh' ? '↻' : icon === 'monitoring' ? '⌁' : '→'}
       </span>
       {pending ? pendingLabel : idleLabel}
     </button>

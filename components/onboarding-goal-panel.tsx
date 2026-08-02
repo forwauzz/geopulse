@@ -34,13 +34,17 @@ const experiences = {
 export function OnboardingGoalPanel({
   goal,
   role,
+  firstValue = false,
 }: {
   readonly goal: OnboardingGoal;
   readonly role: OnboardingRole;
+  readonly firstValue?: boolean;
 }) {
   const experience = experiences[goal];
   const href = goal === 'reports' && role === 'agency' ? '/dashboard/clients' : experience.href;
-  const cta = goal === 'reports' && role === 'agency' ? 'Set up client reporting' : experience.cta;
+  const cta = firstValue
+    ? role === 'agency' ? 'Add the first client' : 'See the first visibility baseline'
+    : goal === 'reports' && role === 'agency' ? 'Set up client reporting' : experience.cta;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-surface-container-lowest to-tertiary/10 p-5 shadow-float md:p-6">
@@ -50,13 +54,15 @@ export function OnboardingGoalPanel({
             <span className="material-symbols-outlined text-[18px]" aria-hidden>
               {experience.icon}
             </span>
-            {experience.label}
+            {firstValue ? 'Your first useful view' : experience.label}
           </p>
           <h2 className="mt-3 font-headline text-2xl font-bold text-on-background">
-            {experience.title}
+            {firstValue ? 'Your business and market are confirmed' : experience.title}
           </h2>
           <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
-            {experience.description}
+            {firstValue
+              ? 'GEO-Pulse now uses the same confirmed context for buyer questions, competitors, reports, and recurring monitoring. Start with the one action below.'
+              : experience.description}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

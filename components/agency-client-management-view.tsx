@@ -6,6 +6,7 @@ import {
   createAgencyClientFromDashboard,
   type AgencyDashboardActionState,
 } from '@/app/dashboard/actions';
+import { ValueFirstOnboardingForm } from '@/components/value-first-onboarding-form';
 import type { AgencyDashboardClientDomain } from '@/lib/server/agency-dashboard-data';
 
 const initialState: AgencyDashboardActionState | null = null;
@@ -30,66 +31,21 @@ export function AgencyClientManagementView({
   clientOptions,
   selectedClientDomains,
 }: Props) {
-  const [clientState, createClientAction, clientPending] = useActionState(
-    createAgencyClientFromDashboard,
-    initialState
-  );
   const [domainState, addDomainAction, domainPending] = useActionState(
     addAgencyClientDomainFromDashboard,
-    initialState
+    initialState,
   );
 
   return (
     <section className="mt-8 grid gap-6 xl:grid-cols-2">
-      <form action={createClientAction} className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
-        <input type="hidden" name="agencyAccountId" value={agencyAccountId} />
-        <h3 className="font-headline text-lg font-semibold text-on-background">Add client</h3>
-        <p className="mt-1 text-sm text-on-surface-variant">
-          Add the business and website. GEO-Pulse handles the workspace details.
-        </p>
-        <div className="mt-4 grid gap-4">
-          <label className="flex flex-col gap-2 text-sm text-on-background">
-            <span className="font-medium">Client name</span>
-            <input
-              name="name"
-              required
-              placeholder="Clinic A"
-              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm text-on-background">
-            <span className="font-medium">Primary domain or site URL</span>
-            <input
-              name="primaryDomain"
-              required
-              placeholder="clinica.com"
-              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
-            />
-          </label>
-          <label className="flex flex-col gap-2 text-sm text-on-background">
-            <span className="font-medium">Industry <span className="font-normal text-on-surface-variant">(optional)</span></span>
-            <input
-              name="vertical"
-              placeholder="e.g. Healthcare"
-              className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2"
-            />
-          </label>
-        </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            type="submit"
-            disabled={clientPending}
-            className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-60"
-          >
-            {clientPending ? 'Saving…' : 'Create client'}
-          </button>
-          {clientState ? (
-            <p className={`text-sm ${clientState.ok ? 'text-primary' : 'text-error'}`}>
-              {clientState.message}
-            </p>
-          ) : null}
-        </div>
-      </form>
+      <ValueFirstOnboardingForm
+        action={createAgencyClientFromDashboard}
+        fixedIntent="agency"
+        hiddenFields={{ agencyAccountId }}
+        eyebrow="First client value"
+        title="Add the business; GEO-Pulse handles the setup"
+        description="Start with the client name and website. Confirm the detected market once, then GEO-Pulse builds a private baseline and held report preview."
+      />
 
       <div className="space-y-4">
         <form action={addDomainAction} className="rounded-xl bg-surface-container-lowest p-5 shadow-float">
@@ -111,9 +67,7 @@ export function AgencyClientManagementView({
               >
                 <option value="">{clientOptions.length > 0 ? 'Choose a client from the dashboard tabs' : 'No clients yet'}</option>
                 {clientOptions.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
+                  <option key={client.id} value={client.id}>{client.name}</option>
                 ))}
               </select>
             </label>
@@ -123,7 +77,7 @@ export function AgencyClientManagementView({
                 name="domainInput"
                 required
                 disabled={!selectedClientId}
-                placeholder="support.clinica.com"
+                placeholder="support.example.com"
                 className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 disabled:opacity-50"
               />
             </label>
@@ -147,9 +101,7 @@ export function AgencyClientManagementView({
               {domainPending ? 'Saving…' : 'Add domain'}
             </button>
             {domainState ? (
-              <p className={`text-sm ${domainState.ok ? 'text-primary' : 'text-error'}`}>
-                {domainState.message}
-              </p>
+              <p className={`text-sm ${domainState.ok ? 'text-primary' : 'text-error'}`}>{domainState.message}</p>
             ) : null}
           </div>
         </form>
@@ -163,26 +115,20 @@ export function AgencyClientManagementView({
           </p>
           <ul className="mt-4 space-y-3">
             {selectedClientDomains.length === 0 ? (
-              <li className="rounded-xl bg-surface-container-low px-4 py-4 text-sm text-on-surface-variant">
-                No tracked domains yet for this client.
-              </li>
-            ) : (
-              selectedClientDomains.map((domain) => (
-                <li key={domain.id} className="rounded-xl bg-surface-container-low px-4 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p className="font-medium text-on-background">{domain.canonicalDomain}</p>
-                      <p className="text-sm text-on-surface-variant">{domain.siteUrl ?? domain.domain}</p>
-                    </div>
-                    {domain.isPrimary ? (
-                      <span className="rounded-lg bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
-                        Primary
-                      </span>
-                    ) : null}
+              <li className="rounded-xl bg-surface-container-low px-4 py-4 text-sm text-on-surface-variant">No tracked domains yet for this client.</li>
+            ) : selectedClientDomains.map((domain) => (
+              <li key={domain.id} className="rounded-xl bg-surface-container-low px-4 py-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-on-background">{domain.canonicalDomain}</p>
+                    <p className="text-sm text-on-surface-variant">{domain.siteUrl ?? domain.domain}</p>
                   </div>
-                </li>
-              ))
-            )}
+                  {domain.isPrimary ? (
+                    <span className="rounded-lg bg-primary/15 px-3 py-1 text-xs font-medium text-primary">Primary</span>
+                  ) : null}
+                </div>
+              </li>
+            ))}
           </ul>
         </div>
       </div>
