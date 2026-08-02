@@ -2,7 +2,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { resolveReportFilesBucket } from '@/lib/server/report-branding-settings';
 import { readAgencyReportSnapshot } from '@/lib/server/agency-report-snapshot';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
-import { isReportQuarantined } from '@/lib/server/report-quarantine';
+import { isClientReportSharingHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
 
 export const runtime = 'nodejs';
 
@@ -43,7 +43,7 @@ export async function GET(
   const metadata = client?.metadata && typeof client.metadata === 'object'
     ? client.metadata as Record<string, unknown>
     : null;
-  if (metadata?.['client_summary_share_token'] !== share) {
+  if (isClientReportSharingHeld(metadata) || metadata?.['client_summary_share_token'] !== share) {
     return Response.json({ error: 'not_found' }, { status: 404 });
   }
 

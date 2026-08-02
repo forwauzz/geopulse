@@ -21,6 +21,7 @@ import {
   resolveGpmSpendPolicy,
 } from './gpm-spend-guard';
 import { structuredError, structuredLog } from './structured-log';
+import { isClientReportSharingHeld } from './report-quarantine';
 
 type BaselineEnv = {
   readonly GEMINI_API_KEY?: string;
@@ -413,17 +414,26 @@ export async function completeAgencyClientBaseline(args: {
     baseline.competitors.length >= 3 &&
     launchedPlatforms.length === platforms.length &&
     failedPlatforms.length === 0;
-  const shareToken = typeof client.metadata?.['client_summary_share_token'] === 'string'
-    ? String(client.metadata['client_summary_share_token'])
-    : crypto.randomUUID().replaceAll('-', '');
+  const sharingHeld = isClientReportSharingHeld(client.metadata);
+  const nextClientMetadata = { ...(client.metadata ?? {}) };
+  const shareToken = sharingHeld
+    ? null
+    : typeof client.metadata?.['client_summary_share_token'] === 'string'
+      ? String(client.metadata['client_summary_share_token'])
+      : crypto.randomUUID().replaceAll('-', '');
+  if (shareToken) {
+    nextClientMetadata['client_summary_share_token'] = shareToken;
+    nextClientMetadata['client_summary_shared_at'] = now.toISOString();
+    nextClientMetadata['client_summary_shared_by_user_id'] = args.userId;
+  } else {
+    delete nextClientMetadata['client_summary_share_token'];
+    delete nextClientMetadata['visibility_scorecard_share_token'];
+    delete nextClientMetadata['client_summary_shared_at'];
+    delete nextClientMetadata['client_summary_shared_by_user_id'];
+  }
   await Promise.all([
     args.supabase.from('agency_clients').update({
-      metadata: {
-        ...(client.metadata ?? {}),
-        client_summary_share_token: shareToken,
-        client_summary_shared_at: now.toISOString(),
-        client_summary_shared_by_user_id: args.userId,
-      },
+      metadata: nextClientMetadata,
       updated_at: now.toISOString(),
     }).eq('id', args.clientId).eq('agency_account_id', args.agencyAccountId),
     args.supabase.from('client_benchmark_configs').update({

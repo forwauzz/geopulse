@@ -13,6 +13,7 @@ import { parsePromptCsv } from '@/lib/server/prompt-csv';
 import { parseReportRecipients } from '@/lib/shared/report-recipients';
 import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
+import { isClientReportSharingHeld } from '@/lib/server/report-quarantine';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -441,6 +442,9 @@ export async function createClientShareLink(formData: FormData): Promise<void> {
   const metadata = client.metadata && typeof client.metadata === 'object'
     ? client.metadata as Record<string, unknown>
     : {};
+  if (isClientReportSharingHeld(metadata)) {
+    redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&share=held`);
+  }
   const existing = typeof metadata['client_summary_share_token'] === 'string'
     ? metadata['client_summary_share_token']
     : null;
