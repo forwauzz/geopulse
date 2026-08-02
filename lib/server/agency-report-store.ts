@@ -16,6 +16,10 @@ import { resolveReportBrand } from '../../workers/report/resolve-report-brand';
 import { sendAgencyReportEmail } from '../../workers/report/agency-report-email-delivery';
 import type { GpmR2BucketLike } from './geo-performance-report-store';
 import { isClientReportSharingHeld, isReportQuarantined } from './report-quarantine';
+import {
+  AGENCY_REPORT_PROVIDER_QUALITY_VERSION,
+  loadAgencyReportProviderQuality,
+} from './agency-report-provider-quality';
 
 export type AgencyReportStoreEnvLike = {
   readonly RESEND_API_KEY?: string;
@@ -66,7 +70,7 @@ export function buildAgencyReportArtifactVersion(args: {
     .sort((a, b) => a.platform.localeCompare(b.platform))
     .map((run) => `${run.platform}:${run.runGroupId}`)
     .join('|');
-  return `${args.profileVersion}-${shortFingerprint(`${sources}|brand:${args.brandVersion}`)}`;
+  return `${args.profileVersion}-${shortFingerprint(`${sources}|brand:${args.brandVersion}|quality:${AGENCY_REPORT_PROVIDER_QUALITY_VERSION}`)}`;
 }
 
 async function loadProfile(args: {
@@ -132,7 +136,20 @@ export async function storeAgencyReport(args: {
     config: args.config,
     domain: args.measuredCanonicalDomain,
   });
-  const payloads = await Promise.all(args.platformRuns.map((run) => buildGpmReportPayload({
+  const providerQuality = await loadAgencyReportProviderQuality({
+    supabase: args.supabase,
+    config: args.config,
+    platformRuns: args.platformRuns,
+  });
+  const measuredPlatformRuns = args.platformRuns.filter((run) =>
+    providerQuality.some((quality) =>
+      quality.platform === run.platform
+      && quality.runGroupId === run.runGroupId
+      && quality.status === 'measured'
+    )
+  );
+  if (measuredPlatformRuns.length === 0) throw new Error('agency_report_has_no_quality_valid_platform_runs');
+  const payloads = await Promise.all(measuredPlatformRuns.map((run) => buildGpmReportPayload({
     supabase: args.supabase,
     runGroupId: run.runGroupId,
     configId: args.config.id,
@@ -156,7 +173,7 @@ export async function storeAgencyReport(args: {
     windowDate: args.windowDate,
     reportedAt,
     payloads,
-    sourceRunGroupIds: Object.fromEntries(args.platformRuns.map((run) => [run.platform, run.runGroupId])),
+    sourceRunGroupIds: Object.fromEntries(measuredPlatformRuns.map((run) => [run.platform, run.runGroupId])),
     settings: profile.settings,
     enabledPlatforms,
   });
@@ -173,7 +190,7 @@ export async function storeAgencyReport(args: {
   const artifactVersion = buildAgencyReportArtifactVersion({
     profileVersion: baseSnapshot.profileVersion,
     brandVersion,
-    platformRuns: args.platformRuns,
+    platformRuns: measuredPlatformRuns,
   });
   const storedWindowKey = `${args.windowDate}@${artifactVersion}`;
 
@@ -233,7 +250,9 @@ export async function storeAgencyReport(args: {
     artifact_version: artifactVersion,
     cadence_window: args.windowDate,
     profile_version: snapshot.profileVersion,
-    source_run_group_ids: Object.fromEntries(args.platformRuns.map((run) => [run.platform, run.runGroupId])),
+    source_run_group_ids: Object.fromEntries(measuredPlatformRuns.map((run) => [run.platform, run.runGroupId])),
+    provider_quality_version: AGENCY_REPORT_PROVIDER_QUALITY_VERSION,
+    provider_quality: providerQuality,
     snapshot,
     email_status: recipients.length === 0
       ? 'not_configured'
@@ -245,7 +264,7 @@ export async function storeAgencyReport(args: {
     delivery_blocked: clientReviewHeld,
     delivery_block_reason: clientReviewHeld ? 'client_report_sharing_held' : null,
   };
-  const anchorRunGroupId = args.platformRuns[0]!.runGroupId;
+  const anchorRunGroupId = measuredPlatformRuns[0]!.runGroupId;
   const { data: inserted, error } = await args.supabase.from('gpm_reports').insert({
     config_id: args.config.id,
     run_group_id: anchorRunGroupId,
