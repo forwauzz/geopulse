@@ -491,10 +491,64 @@ export default async function EmailCampaignDetailPage({
       </Section>
 
       <Section status={section('results')}>
-        <p className="text-sm text-on-surface-variant">
-          Results reconcile against the send, reply, attribution, checkout, and subscription ledgers once this campaign
-          starts sending. Opens and clicks are leading indicators only.
-        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse text-sm">
+            <thead>
+              <tr className="text-left text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">
+                <th className="py-2 pr-4">Stage</th>
+                <th className="px-4 py-2">Count</th>
+                <th className="px-4 py-2">Of previous</th>
+                <th className="px-4 py-2">Stage age</th>
+                <th className="px-4 py-2">Measurement limits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.results.funnel.map((stage) => (
+                <tr key={stage.key} className={`border-t border-outline-variant/15 ${stage.isRevenue ? 'bg-emerald-500/5' : ''}`}>
+                  <td className="py-2 pr-4 font-semibold text-on-background">{stage.label}</td>
+                  <td className="px-4 py-2">
+                    {stage.count === null ? (
+                      <span className="rounded-full bg-surface-container px-2 py-0.5 text-xs font-semibold text-on-surface-variant">
+                        not available
+                      </span>
+                    ) : (
+                      <span className="text-on-background">{stage.count}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-on-surface-variant">
+                    {stage.ratePercent === null ? '—' : `${stage.ratePercent}% of ${String(stage.denominator)}`}
+                  </td>
+                  <td className="px-4 py-2 text-on-surface-variant">
+                    {stage.stageAgeHours === null ? '—' : `${stage.stageAgeHours} h`}
+                  </td>
+                  <td className="px-4 py-2 text-xs leading-5 text-on-surface-variant">{stage.limitation ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {detail.results.excludedNonCommercial > 0 ? (
+          <p className="mt-3 text-xs text-on-surface-variant">
+            {detail.results.excludedNonCommercial} internal / test / existing-relationship contact(s) excluded from every
+            commercial and revenue stage.
+          </p>
+        ) : null}
+
+        <div className="mt-5 rounded-xl bg-surface-container-low p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Decision</p>
+          <p className="mt-1 text-lg font-bold capitalize text-on-background">
+            {detail.results.closure.decision.replaceAll('_', ' ')}
+          </p>
+          <p className="mt-1 text-sm leading-6 text-on-surface-variant">{detail.results.closure.rationale}</p>
+          <dl className="mt-3 grid gap-3 text-sm md:grid-cols-2">
+            <div><dt className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Owner</dt><dd className="capitalize text-on-background">{detail.results.closure.owner}</dd></div>
+            <div><dt className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Due</dt><dd className="text-on-background">{detail.results.closure.dueAt ?? 'Not scheduled'}</dd></div>
+            <div className="md:col-span-2"><dt className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Next action</dt><dd className="text-on-background">{detail.results.closure.nextAction}</dd></div>
+            <div className="md:col-span-2"><dt className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Closure condition</dt><dd className="text-on-background">{detail.results.closure.closureCondition}</dd></div>
+            <div className="md:col-span-2"><dt className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Retry policy</dt><dd className="text-on-background">{detail.results.closure.retryPolicy}</dd></div>
+          </dl>
+        </div>
       </Section>
     </div>
   );

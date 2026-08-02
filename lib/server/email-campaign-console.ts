@@ -18,6 +18,7 @@ import { loadEmailCampaign, listEmailCampaigns, type EmailCampaignRecord } from 
 import { resolveCampaignSender, resolveTestRecipients, type SenderEnvLike, type SenderResolution } from './email-campaign-sender';
 import { renderCampaignPreview, type CampaignPreview, type PreviewContact } from './email-campaign-preview';
 import { runCampaignPreflight, type PreflightResult } from './email-campaign-preflight';
+import { loadCampaignResults, type CampaignResults } from './email-campaign-results';
 
 export interface EmailCampaignListItem {
   readonly interventionKey: string;
@@ -46,6 +47,7 @@ export interface EmailCampaignDetail {
   readonly preview: CampaignPreview | null;
   readonly audienceSample: readonly { readonly position: number; readonly email: string; readonly name: string | null; readonly company: string | null }[];
   readonly preflight: PreflightResult;
+  readonly results: CampaignResults;
   readonly warnings: readonly string[];
 }
 
@@ -187,11 +189,20 @@ export async function loadEmailCampaignDetail(args: {
     nowMs: Date.now(),
   });
 
+  const results = await loadCampaignResults({
+    supabase: args.supabase,
+    contract,
+    testRecipients: resolveTestRecipients(args.env),
+    nowMs: Date.now(),
+  });
+  warnings.push(...results.warnings);
+
   return {
     record,
     contract,
     sender,
     preflight,
+    results,
     sections: deriveSectionStates(contract),
     readyToSchedule: isReadyToSchedule(contract),
     locked: isLocked(contract),
