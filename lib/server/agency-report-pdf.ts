@@ -137,28 +137,38 @@ export function buildAgencyReportOverviewTitle(snapshot: AgencyReportSnapshotV2)
     : 'Where the brand appears today';
 }
 
-export function buildAgencyOpportunityAction(question: AgencyReportQuestion, location: string): string {
+function isClinicReportTopic(topic: string): boolean {
+  return /\b(clinic|medical|medicine|healthcare|health care|physician|doctor)\b/i.test(topic);
+}
+
+export function buildAgencyOpportunityAction(
+  question: AgencyReportQuestion,
+  context: { readonly location: string; readonly topic: string },
+): string {
   const normalized = question.queryText.toLowerCase();
-  if (/executive health|annual (preventive )?health assessment|preventive screening/.test(normalized)) {
-    return 'Strengthen the executive and preventive health page with verified eligibility, assessment components, expected timing, the cost-confirmation path, and one clear booking step.';
-  }
-  if (/weight (management|loss)/.test(normalized)) {
-    return 'Strengthen the medical weight-management page with verified eligibility, the physician-led process, program components, follow-up expectations, safety limits, and a consultation step.';
-  }
-  if (/pediatric|child|children/.test(normalized) && /urgent|same-day|same day|prompt/.test(normalized)) {
-    return 'Strengthen the pediatric urgent-care page with verified age range, conditions handled, availability, booking instructions, and clear guidance for symptoms that require emergency care.';
-  }
-  if (/travel clinic|travel vaccination|travel medicine/.test(normalized)) {
-    return 'Strengthen the travel-clinic page with verified consultation steps, vaccine and certificate availability, recommended booking lead time, pricing access, and the appointment path.';
-  }
-  if (/women'?s health|gynecolog|contraception|menopause/.test(normalized)) {
-    return "Strengthen the women's-health page with verified services, who each service is for, privacy and appointment details, pricing access, and one booking step.";
-  }
-  if (/membership|ongoing family medicine|continuity/.test(normalized)) {
-    return 'Explain the verified membership and family-medicine options in one comparison-ready page: who each option serves, what is included, access expectations, fees, and how to enroll.';
-  }
-  if (/same-day|same day|next-day|next day|urgent care/.test(normalized)) {
-    return `Strengthen the rapid-access care page with verified availability in ${location}, conditions handled, booking instructions, fees, and emergency-care exclusions.`;
+  const { location, topic } = context;
+  if (isClinicReportTopic(topic)) {
+    if (/executive health|annual (preventive )?health assessment|preventive screening/.test(normalized)) {
+      return 'Strengthen the executive and preventive health page with verified eligibility, assessment components, expected timing, the cost-confirmation path, and one clear booking step.';
+    }
+    if (/weight (management|loss)/.test(normalized)) {
+      return 'Strengthen the medical weight-management page with verified eligibility, the physician-led process, program components, follow-up expectations, safety limits, and a consultation step.';
+    }
+    if (/pediatric|child|children/.test(normalized) && /urgent|same-day|same day|prompt/.test(normalized)) {
+      return 'Strengthen the pediatric urgent-care page with verified age range, conditions handled, availability, booking instructions, and clear guidance for symptoms that require emergency care.';
+    }
+    if (/travel clinic|travel vaccination|travel medicine/.test(normalized)) {
+      return 'Strengthen the travel-clinic page with verified consultation steps, vaccine and certificate availability, recommended booking lead time, pricing access, and the appointment path.';
+    }
+    if (/women'?s health|gynecolog|contraception|menopause/.test(normalized)) {
+      return "Strengthen the women's-health page with verified services, who each service is for, privacy and appointment details, pricing access, and one booking step.";
+    }
+    if (/membership|ongoing family medicine|continuity/.test(normalized)) {
+      return 'Explain the verified membership and family-medicine options in one comparison-ready page: who each option serves, what is included, access expectations, fees, and how to enroll.';
+    }
+    if (/same-day|same day|next-day|next day|urgent care/.test(normalized)) {
+      return `Strengthen the rapid-access care page with verified availability in ${location}, conditions handled, booking instructions, fees, and emergency-care exclusions.`;
+    }
   }
   if (/how much|price|pricing|cost|pay/.test(normalized)) {
     return `Publish a clear cost and access guide for ${location}, including only verified fees, eligibility details, and the next step to inquire or book.`;
@@ -354,7 +364,10 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
         opportunities.forEach((question, index) => {
           growth.drawText(String(index + 1).padStart(2, '0'), { x: MARGIN, y: growthY, size: 11, font: fonts.bold, color: AMBER });
           growthY = drawWrapped(growth, question.queryText, { x: MARGIN + 34, y: growthY, width: PAGE.width - MARGIN * 2 - 34, font: fonts.bold, size: 10.5, lineHeight: 14, maxLines: 2 }) - 3;
-          growthY = drawWrapped(growth, buildAgencyOpportunityAction(question, snapshot.location), { x: MARGIN + 34, y: growthY, width: PAGE.width - MARGIN * 2 - 34, font: fonts.regular, size: 9, lineHeight: 12, maxLines: 3, fill: MUTED }) - 11;
+          growthY = drawWrapped(growth, buildAgencyOpportunityAction(question, {
+            location: snapshot.location,
+            topic: snapshot.topic,
+          }), { x: MARGIN + 34, y: growthY, width: PAGE.width - MARGIN * 2 - 34, font: fonts.regular, size: 9, lineHeight: 12, maxLines: 3, fill: MUTED }) - 11;
         });
       }
       growthY -= 20;

@@ -78,8 +78,9 @@ describe('agency report artifact', () => {
   it('turns measured opportunity questions into bounded, verifiable agency actions', () => {
     const decisionQuestion = zeroSnapshot.opportunities[0];
     expect(decisionQuestion).toBeDefined();
-    expect(buildAgencyOpportunityAction(decisionQuestion!, zeroSnapshot.location)).toContain('decision-ready page');
-    expect(buildAgencyOpportunityAction(decisionQuestion!, zeroSnapshot.location)).toContain('Toronto');
+    const context = { location: zeroSnapshot.location, topic: zeroSnapshot.topic };
+    expect(buildAgencyOpportunityAction(decisionQuestion!, context)).toContain('decision-ready page');
+    expect(buildAgencyOpportunityAction(decisionQuestion!, context)).toContain('Toronto');
   });
 
   it('turns clinic-service questions into specific, safety-bounded actions', () => {
@@ -87,8 +88,28 @@ describe('agency report artifact', () => {
       ...zeroSnapshot.opportunities[0]!,
       queryText: "Where can I get prompt private pediatric urgent care in Montreal's West Island?",
     };
-    expect(buildAgencyOpportunityAction(pediatric, zeroSnapshot.location)).toContain('age range');
-    expect(buildAgencyOpportunityAction(pediatric, zeroSnapshot.location)).toContain('emergency care');
+    const context = { location: zeroSnapshot.location, topic: zeroSnapshot.topic };
+    expect(buildAgencyOpportunityAction(pediatric, context)).toContain('age range');
+    expect(buildAgencyOpportunityAction(pediatric, context)).toContain('emergency care');
+  });
+
+  it('never applies clinic actions to non-clinic continuity or membership questions', () => {
+    const context = { location: 'Montreal', topic: 'managed IT services for small businesses' };
+    const questions = [
+      'Who provides business continuity and disaster recovery in Montreal?',
+      'Which MSP offers a managed IT membership plan for small firms?',
+      'Best gym membership in Toronto',
+      'What is the best co-managed IT continuity plan?',
+    ];
+
+    for (const queryText of questions) {
+      const action = buildAgencyOpportunityAction({
+        ...zeroSnapshot.opportunities[0]!,
+        queryText,
+      }, context);
+      expect(action).not.toContain('family-medicine');
+      expect(action).not.toContain('care page');
+    }
   });
 
   it('does not create an almost-empty trend page until two comparable periods exist', async () => {
