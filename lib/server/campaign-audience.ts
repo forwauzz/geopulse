@@ -150,7 +150,17 @@ export interface FrozenAudience {
   readonly checksum: string;
 }
 
-export async function loadAudienceEvidence(supabase: SupabaseClient): Promise<AudienceEvidence> {
+/**
+ * `excludeInterventionId` keeps a campaign from seeing its OWN prospects as a conflicting
+ * sequence. Without it, scheduling is a one-shot operation that can never be retried: the first
+ * run creates 25 active prospects, and a retry after a partial failure is refused by the conflict
+ * gate before the idempotency keys ever get a chance to make it safe. A contact already enrolled
+ * in this intervention is not a conflict — it is this campaign's own work.
+ */
+export async function loadAudienceEvidence(
+  supabase: SupabaseClient,
+  options: { readonly excludeInterventionId?: string } = {},
+): Promise<AudienceEvidence> {
   const unsubscribedEmails = new Set<string>();
   const convertedEmails = new Set<string>();
   const suppressedEmails = new Set<string>();
@@ -160,16 +170,23 @@ export async function loadAudienceEvidence(supabase: SupabaseClient): Promise<Au
   // Every read here is paginated: PostgREST silently caps a response at the server's max-rows,
   // and a suppression set that stops at 1000 rows would let the 1001st unsubscribed address
   // through as eligible.
-  const prospects = await fetchAllRows<{ email: string; enabled: boolean; lifecycle_status: string | null; unsubscribed_at: string | null }>(
-    () => supabase.from('outreach_prospects').select('email,enabled,lifecycle_status,unsubscribed_at'),
+  const prospects = await fetchAllRows<{ email: string; enabled: boolean; lifecycle_status: string | null; unsubscribed_at: string | null; growth_intervention_id: string | null }>(
+    () => supabase.from('outreach_prospects').select('email,enabled,lifecycle_status,unsubscribed_at,growth_intervention_id'),
     'outreach_prospects audience evidence',
   );
   for (const row of prospects) {
     const email = row.email.toLowerCase();
+    // Terminal states are absolute regardless of which campaign produced them: an unsubscribe
+    // this campaign itself caused still silences this campaign.
     if (row.unsubscribed_at) unsubscribedEmails.add(email);
     if (row.lifecycle_status === 'converted') convertedEmails.add(email);
     if (row.lifecycle_status === 'disqualified' || row.lifecycle_status === 'unsubscribed') suppressedEmails.add(email);
-    if (row.enabled && (row.lifecycle_status === 'active' || row.lifecycle_status === 'paused')) activeSequenceEmails.add(email);
+
+    const isOwnCampaign = Boolean(options.excludeInterventionId)
+      && String(row.growth_intervention_id ?? '') === options.excludeInterventionId;
+    if (!isOwnCampaign && row.enabled && (row.lifecycle_status === 'active' || row.lifecycle_status === 'paused')) {
+      activeSequenceEmails.add(email);
+    }
   }
 
   const subscriptions = await fetchAllRows<{ email: string }>(
@@ -178,11 +195,18 @@ export async function loadAudienceEvidence(supabase: SupabaseClient): Promise<Au
   );
   for (const row of subscriptions) convertedEmails.add(row.email.toLowerCase());
 
-  const enrollments = await fetchAllRows<{ contact_id: string }>(
-    () => supabase.from('outreach_campaign_enrollments').select('contact_id,status').in('status', ['enrolled', 'sending']),
+  const enrollments = await fetchAllRows<{ contact_id: string; intervention_id: string | null }>(
+    () => supabase
+      .from('outreach_campaign_enrollments')
+      .select('contact_id,status,intervention_id')
+      .in('status', ['enrolled', 'sending']),
     'outreach_campaign_enrollments',
   );
-  for (const row of enrollments) enrolledContactIds.add(String(row.contact_id));
+  for (const row of enrollments) {
+    // Same reasoning: this campaign's own enrollment must not block its own retry.
+    if (options.excludeInterventionId && String(row.intervention_id ?? '') === options.excludeInterventionId) continue;
+    enrolledContactIds.add(String(row.contact_id));
+  }
 
   const contacts = await fetchAllRows<{ email: string; eligibility_status: string }>(
     () => supabase.from('outreach_contacts').select('email,eligibility_status').in('eligibility_status', ['suppressed', 'converted']),

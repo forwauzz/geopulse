@@ -4,6 +4,7 @@ import {
   contactStrengthScore,
   enrollmentIdempotencyKey,
   freezeCampaignAudience,
+  loadAudienceEvidence,
   selectCampaignAudience,
   type AudienceCandidate,
   type AudienceEvidence,
@@ -116,6 +117,64 @@ describe('a frozen cohort cannot drift when its source segment changes', () => {
   it('a member list in a different order is a different audience', () => {
     const shuffled = [...frozen.members].reverse().map((member, index) => ({ ...member, position: index + 1 }));
     expect(audienceChecksum(shuffled)).not.toBe(frozen.checksum);
+  });
+});
+
+describe('a campaign does not block its own retry', () => {
+  function stubEvidence(prospects: unknown[], enrollments: unknown[]) {
+    function query(rows: unknown[]): any {
+      const builder: any = Promise.resolve({ data: rows, error: null });
+      builder.eq = () => builder;
+      builder.in = () => builder;
+      builder.limit = () => builder;
+      builder.range = () => builder;
+      return builder;
+    }
+    return {
+      from(table: string) {
+        return {
+          select: () => {
+            if (table === 'outreach_prospects') return query(prospects);
+            if (table === 'outreach_campaign_enrollments') return query(enrollments);
+            return query([]);
+          },
+        };
+      },
+    } as never;
+  }
+
+  const prospects = [
+    { email: 'mine@royco.ca', enabled: true, lifecycle_status: 'active', unsubscribed_at: null, growth_intervention_id: 'int-1' },
+    { email: 'other@royco.ca', enabled: true, lifecycle_status: 'active', unsubscribed_at: null, growth_intervention_id: 'int-2' },
+  ];
+  const enrollments = [
+    { contact_id: 'c-mine', status: 'enrolled', intervention_id: 'int-1' },
+    { contact_id: 'c-other', status: 'enrolled', intervention_id: 'int-2' },
+  ];
+
+  it('counts every active sequence as a conflict when no intervention is scoped', async () => {
+    const evidence = await loadAudienceEvidence(stubEvidence(prospects, enrollments));
+    expect(evidence.activeSequenceEmails).toEqual(new Set(['mine@royco.ca', 'other@royco.ca']));
+    expect(evidence.enrolledContactIds).toEqual(new Set(['c-mine', 'c-other']));
+  });
+
+  it('excludes this campaign\'s own prospects and enrollments', async () => {
+    // Without this, the first schedule creates 25 active prospects and a retry after a partial
+    // failure is refused by the conflict gate before the idempotency keys can make it safe.
+    const evidence = await loadAudienceEvidence(stubEvidence(prospects, enrollments), { excludeInterventionId: 'int-1' });
+    expect(evidence.activeSequenceEmails).toEqual(new Set(['other@royco.ca']));
+    expect(evidence.enrolledContactIds).toEqual(new Set(['c-other']));
+  });
+
+  it('still honours terminal states caused by this campaign itself', async () => {
+    const terminal = [
+      { email: 'gone@royco.ca', enabled: false, lifecycle_status: 'unsubscribed', unsubscribed_at: '2026-08-01T00:00:00.000Z', growth_intervention_id: 'int-1' },
+      { email: 'won@royco.ca', enabled: false, lifecycle_status: 'converted', unsubscribed_at: null, growth_intervention_id: 'int-1' },
+    ];
+    const evidence = await loadAudienceEvidence(stubEvidence(terminal, []), { excludeInterventionId: 'int-1' });
+    // An unsubscribe this campaign caused still silences this campaign.
+    expect(evidence.unsubscribedEmails.has('gone@royco.ca')).toBe(true);
+    expect(evidence.convertedEmails.has('won@royco.ca')).toBe(true);
   });
 });
 
