@@ -11,7 +11,8 @@ import {
 } from '@/lib/server/email-campaign-contract';
 import { loadEmailCampaign, saveValidatedEmailCampaign } from '@/lib/server/email-campaign-store';
 import { resolveCampaignSender } from '@/lib/server/email-campaign-sender';
-import { withResolvedSender } from '@/lib/server/email-campaign-console';
+import { loadEmailCampaignDetail, withResolvedSender } from '@/lib/server/email-campaign-console';
+import { scheduleCampaign, sendInternalTest, stopCampaign } from '@/lib/server/email-campaign-schedule';
 import {
   freezeCampaignAudience,
   loadAudienceCandidates,
@@ -188,6 +189,84 @@ export async function saveEmailCampaignDraftAction(formData: FormData): Promise<
   const { contract, newVersion } = applyContractEdit(current, edit);
   await saveValidatedEmailCampaign(ctx.adminDb, contract);
   structuredLog('email_campaign_saved', { interventionKey, version: contract.version, newVersion }, 'info');
+  revalidatePath(`${CONSOLE_PATH}/${interventionKey}`);
+}
+
+/**
+ * Deliver one internal test to the configured allowlist. The test never enrols a prospect,
+ * advances a sequence, or contributes to campaign metrics — its only lasting effect is evidence
+ * bound to this exact version checksum, which the preflight then requires.
+ */
+export async function sendInternalTestAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const interventionKey = text(formData, 'interventionKey');
+  const recipient = text(formData, 'recipient');
+  if (!interventionKey || !recipient) return;
+
+  const env = ctx.env as unknown as Record<string, string | undefined>;
+  const detail = await loadEmailCampaignDetail({ supabase: ctx.adminDb, env, interventionKey });
+  if (!detail) return;
+
+  await sendInternalTest({
+    supabase: ctx.adminDb,
+    env,
+    contract: detail.contract,
+    recipient,
+    sampleContact: detail.previewContacts[0] ?? null,
+    nowMs: Date.now(),
+    save: async (contract) => saveValidatedEmailCampaign(ctx.adminDb, contract),
+  });
+  revalidatePath(`${CONSOLE_PATH}/${interventionKey}`);
+}
+
+/**
+ * Schedule. Every gate in the preflight must pass; a failure records the exact failing gates on
+ * the contract and writes nothing. A success writes enrollments and staggered prospect rows — it
+ * does not send: the existing hourly outreach sweep delivers at each `next_run_at`.
+ */
+export async function scheduleEmailCampaignAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const interventionKey = text(formData, 'interventionKey');
+  if (!interventionKey) return;
+
+  const env = ctx.env as unknown as Record<string, string | undefined>;
+  const detail = await loadEmailCampaignDetail({ supabase: ctx.adminDb, env, interventionKey });
+  if (!detail) return;
+
+  await scheduleCampaign({
+    supabase: ctx.adminDb,
+    env,
+    contract: detail.contract,
+    nowMs: Date.now(),
+    save: async (contract) => saveValidatedEmailCampaign(ctx.adminDb, contract),
+  });
+  revalidatePath(`${CONSOLE_PATH}/${interventionKey}`);
+}
+
+/** Stop: disable every enrolled prospect and close the enrollments. No further step can send. */
+export async function stopEmailCampaignAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const interventionKey = text(formData, 'interventionKey');
+  const reason = text(formData, 'reason', 'operator stopped the campaign');
+  if (!interventionKey) return;
+
+  const env = ctx.env as unknown as Record<string, string | undefined>;
+  const detail = await loadEmailCampaignDetail({ supabase: ctx.adminDb, env, interventionKey });
+  if (!detail?.contract.audience.audienceId) return;
+
+  await stopCampaign({
+    supabase: ctx.adminDb,
+    contract: detail.contract,
+    reason,
+    nowMs: Date.now(),
+    save: async (contract) => saveValidatedEmailCampaign(ctx.adminDb, contract),
+  });
   revalidatePath(`${CONSOLE_PATH}/${interventionKey}`);
 }
 
