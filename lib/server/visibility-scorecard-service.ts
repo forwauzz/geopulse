@@ -7,7 +7,7 @@ import {
   type BrandSettingsView,
 } from './report-branding-settings';
 import { getTrackedPromptPanel, type TrackedPromptPanel } from './tracked-prompts';
-import { isReportQuarantined } from './report-quarantine';
+import { isClientReportSharingHeld, isReportQuarantined } from './report-quarantine';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -42,7 +42,7 @@ export type VisibilityScorecardData = {
 
 export type VisibilityScorecardSharingResult =
   | { readonly ok: true; readonly token: string | null }
-  | { readonly ok: false; readonly code: 'forbidden' | 'not_found' | 'write_failed' };
+  | { readonly ok: false; readonly code: 'forbidden' | 'not_found' | 'write_failed' | 'held' };
 
 const SHARE_TOKEN_KEY = 'visibility_scorecard_share_token';
 const LEGACY_AGENCY_SHARE_TOKEN_KEY = 'client_summary_share_token';
@@ -152,6 +152,13 @@ export async function updateVisibilityScorecardSharing(args: {
   const row = await loadSubjectRow(args.supabase, args.subject);
   if (!row) return { ok: false, code: 'not_found' };
   const metadata = objectRecord(row['metadata']);
+  if (
+    args.subject.kind === 'agency_client'
+    && args.mode !== 'disable'
+    && isClientReportSharingHeld(metadata)
+  ) {
+    return { ok: false, code: 'held' };
+  }
   const existing = readVisibilityScorecardShareToken(metadata, args.subject.kind);
   const now = new Date().toISOString();
   const token = args.mode === 'disable'

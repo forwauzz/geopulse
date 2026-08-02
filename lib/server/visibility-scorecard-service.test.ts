@@ -157,6 +157,26 @@ describe('visibility scorecard service', () => {
     expect(disabledDb.updates[0]?.values.metadata).not.toHaveProperty('visibility_scorecard_share_token');
   });
 
+  it('does not enable an agency client link while independent report review is held', async () => {
+    const seeded = makeSupabase({
+      agency_clients: [{
+        id: 'client-1',
+        agency_account_id: 'agency-1',
+        metadata: { report_quarantine_hold: { status: 'held_pending_independent_review' } },
+      }],
+      agency_users: [{ agency_account_id: 'agency-1', user_id: 'owner', status: 'active', role: 'owner' }],
+      user_subscriptions: [{ agency_account_id: 'agency-1', status: 'active', bundle_key: 'agency_core', created_at: '2026-07-01' }],
+    });
+
+    await expect(updateVisibilityScorecardSharing({
+      supabase: seeded.db,
+      userId: 'owner',
+      subject: { kind: 'agency_client', id: 'client-1' },
+      mode: 'enable',
+    })).resolves.toEqual({ ok: false, code: 'held' });
+    expect(seeded.updates).toHaveLength(0);
+  });
+
   it('scopes report history to the owner and returns only share-safe fields', async () => {
     const seeded = makeSupabase({
       gpm_reports: [

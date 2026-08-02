@@ -6,6 +6,7 @@ import { getBrandSettingsView, resolveReportFilesPublicBase } from '@/lib/server
 import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
 import { AgencyReportView } from '@/components/agency-report-view';
 import { PrintScorecardButton } from '@/components/print-scorecard-button';
+import { isClientReportSharingHeld } from '@/lib/server/report-quarantine';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
@@ -28,6 +29,7 @@ export default async function ClientSummaryPage({
     .maybeSingle();
   if (!client?.metadata || typeof client.metadata !== 'object') notFound();
   const clientMetadata = client.metadata as Record<string, unknown>;
+  if (isClientReportSharingHeld(clientMetadata)) notFound();
   if (clientMetadata['client_summary_share_token'] !== sp.share) notFound();
   const domain = typeof client.canonical_domain === 'string' ? client.canonical_domain : null;
   if (!domain) notFound();
