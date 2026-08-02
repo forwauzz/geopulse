@@ -216,6 +216,8 @@ function stubSupabase(options: { existingKeys?: string[]; prospectId?: string } 
     builder.eq = () => builder;
     builder.in = () => builder;
     builder.limit = () => builder;
+    // Evidence reads are paginated; the stub answers a range with the whole (small) fixture.
+    builder.range = () => builder;
     builder.order = () => builder;
     builder.select = () => builder;
     builder.maybeSingle = () => Promise.resolve({ data: single ?? null });
@@ -422,6 +424,8 @@ describe('stopping a campaign', () => {
       builder.eq = () => builder;
       builder.in = () => builder;
       builder.limit = () => builder;
+      // Evidence reads are paginated; the stub answers a range with the whole (small) fixture.
+      builder.range = () => builder;
       return builder;
     }
     const supabase = {

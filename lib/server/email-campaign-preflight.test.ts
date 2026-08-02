@@ -297,6 +297,8 @@ function stubSupabase(options: StubOptions = {}) {
     builder.eq = () => builder;
     builder.in = () => builder;
     builder.limit = () => builder;
+    // Evidence reads are paginated; the stub answers a range with the whole (small) fixture.
+    builder.range = () => builder;
     builder.order = () => builder;
     builder.maybeSingle = () => Promise.resolve({ data: single ?? null });
     builder.single = () => Promise.resolve({ data: single ?? null, error: null });
