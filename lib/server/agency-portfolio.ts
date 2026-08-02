@@ -21,6 +21,8 @@ export type AgencyPortfolioRow = {
 
 type ConfigRow = {
   readonly id: string;
+  readonly query_set_id: string;
+  readonly platforms_enabled: string[];
   readonly metadata: Record<string, unknown> | null;
   readonly competitor_list: string[];
 };
@@ -100,13 +102,15 @@ export async function loadAgencyPortfolio(args: {
     if (domainRow?.id) {
       const { data } = await args.supabase
         .from('client_benchmark_configs')
-        .select('id,metadata,competitor_list')
+        .select('id,query_set_id,platforms_enabled,metadata,competitor_list')
         .eq('agency_account_id', args.account.id)
         .eq('benchmark_domain_id', domainRow.id)
         .maybeSingle();
-      config = data
+      config = data?.query_set_id
         ? {
             id: String(data.id),
+            query_set_id: String(data.query_set_id),
+            platforms_enabled: Array.isArray(data.platforms_enabled) ? data.platforms_enabled : [],
             metadata: data.metadata && typeof data.metadata === 'object'
               ? data.metadata as Record<string, unknown>
               : null,
@@ -127,27 +131,35 @@ export async function loadAgencyPortfolio(args: {
       domain: canonical,
       configMetadata: config?.metadata,
       latestScan: scanDetail,
+      measurementScope: config ? {
+        querySetId: config.query_set_id,
+        agencyAccountId: args.account.id,
+        enabledPlatforms: config.platforms_enabled,
+      } : undefined,
     });
 
     let gpmReport: ReportRow | null = null;
     let leadingCompetitor: string | null = null;
     if (config?.id) {
-      const [{ data: reports }, { data: group }] = await Promise.all([
-        args.supabase
-          .from('gpm_reports')
-          .select('pdf_url,generated_at,metadata')
-          .eq('config_id', config.id)
-          .order('generated_at', { ascending: false })
-          .limit(25),
-        args.supabase
+      const { data: groups } = await args.supabase
           .from('benchmark_run_groups')
           .select('id')
-          .eq('metadata->>gpm_config_id', config.id)
+          .eq('query_set_id', config.query_set_id)
+          .eq('agency_account_id', args.account.id)
+          .eq('metadata->>domain_id', domainRow?.id ?? '')
           .eq('status', 'completed')
           .order('completed_at', { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
+          .limit(80);
+      const groupIds = ((groups ?? []) as Array<{ id: string }>).map((row) => row.id);
+      const { data: reports } = groupIds.length > 0
+        ? await args.supabase
+            .from('gpm_reports')
+            .select('pdf_url,generated_at,metadata')
+            .eq('config_id', config.id)
+            .in('run_group_id', groupIds)
+            .order('generated_at', { ascending: false })
+            .limit(25)
+        : { data: [] };
       const report = ((reports ?? []) as ReportRow[]).find((row) => !isReportQuarantined(row.metadata));
       gpmReport = report
         ? {
@@ -156,10 +168,10 @@ export async function loadAgencyPortfolio(args: {
             metadata: report.metadata,
           }
         : null;
-      if (group?.id) {
+      if (groupIds[0]) {
         leadingCompetitor = await leadingCompetitorForRun({
           supabase: args.supabase,
-          runGroupId: group.id,
+          runGroupId: groupIds[0],
           measuredDomain: canonical,
         });
       }

@@ -1,4 +1,9 @@
 import { canonicalizeDomain, engineForModelId, type EngineKey } from './dashboard-citation-metrics';
+import {
+  applyClientMeasurementScope,
+  isPlatformEnabled,
+  type ClientMeasurementScope,
+} from './client-measurement-scope';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -171,6 +176,7 @@ export async function loadClientOutcomeEngine(args: {
   readonly domain: string;
   readonly configMetadata?: Record<string, unknown> | null;
   readonly latestScan?: { issues_json?: unknown; full_results_json?: unknown } | null;
+  readonly measurementScope?: ClientMeasurementScope;
 }): Promise<OutcomeEngineView> {
   const canonical = canonicalizeDomain(args.domain);
   const eventsRaw = args.configMetadata?.['outcome_action_events'];
@@ -212,10 +218,26 @@ export async function loadClientOutcomeEngine(args: {
       .maybeSingle();
     if (!domainRow?.id) return empty(initialActions);
 
-    const { data: metricRows } = await args.supabase
+    let metricQuery = args.supabase
       .from('benchmark_domain_metrics')
       .select('run_group_id,model_id,citation_rate,metrics,computed_at')
-      .eq('domain_id', domainRow.id)
+      .eq('domain_id', domainRow.id);
+    if (args.measurementScope) {
+      let groupQuery = args.supabase
+        .from('benchmark_run_groups')
+        .select('id')
+        .eq('metadata->>domain_id', domainRow.id)
+        .eq('status', 'completed');
+      groupQuery = applyClientMeasurementScope(groupQuery, args.measurementScope);
+      const { data: scopedGroups, error: groupError } = await groupQuery
+        .order('started_at', { ascending: false })
+        .limit(80);
+      if (groupError || !Array.isArray(scopedGroups) || scopedGroups.length === 0) {
+        return empty(initialActions);
+      }
+      metricQuery = metricQuery.in('run_group_id', scopedGroups.map((row: { id: string }) => row.id));
+    }
+    const { data: metricRows } = await metricQuery
       .order('computed_at', { ascending: false })
       .limit(80);
 
@@ -231,6 +253,7 @@ export async function loadClientOutcomeEngine(args: {
       && typeof row.metrics?.['completed_runs'] === 'number'
       && row.metrics['completed_runs'] > 0
       && engineForModelId(row.model_id) !== null
+      && isPlatformEnabled(args.measurementScope, engineForModelId(row.model_id)!)
     );
 
     const latestByEngine = new Map<EngineKey, typeof rows>();

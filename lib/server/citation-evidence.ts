@@ -5,6 +5,11 @@
  * on faith.
  */
 import { canonicalizeDomain, engineForModelId, type EngineKey } from './dashboard-citation-metrics';
+import {
+  applyClientMeasurementScope,
+  isPlatformEnabled,
+  type ClientMeasurementScope,
+} from './client-measurement-scope';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -59,6 +64,7 @@ export async function getCitationEvidence(args: {
   readonly supabase: SupabaseLike;
   readonly domain: string;
   readonly maxRowsPerEngine?: number;
+  readonly measurementScope?: ClientMeasurementScope;
 }): Promise<EngineEvidence[]> {
   const canonical = canonicalizeDomain(args.domain);
   if (!canonical) return [];
@@ -71,10 +77,14 @@ export async function getCitationEvidence(args: {
       .maybeSingle();
     if (!domainRow?.id) return [];
 
-    const { data: groups } = await args.supabase
+    let groupsQuery = args.supabase
       .from('benchmark_run_groups')
       .select('id, model_set_version, metadata, started_at')
-      .eq('metadata->>domain_id', domainRow.id)
+      .eq('metadata->>domain_id', domainRow.id);
+    if (args.measurementScope) {
+      groupsQuery = applyClientMeasurementScope(groupsQuery, args.measurementScope);
+    }
+    const { data: groups } = await groupsQuery
       .order('started_at', { ascending: false })
       .limit(40);
 
@@ -86,7 +96,7 @@ export async function getCitationEvidence(args: {
       started_at?: string;
     }>) {
       const engine = engineForModelId(g.model_set_version ?? '');
-      if (!engine) continue;
+      if (!engine || !isPlatformEnabled(args.measurementScope, engine)) continue;
       const runMode = typeof g.metadata?.['run_mode'] === 'string' ? (g.metadata['run_mode'] as string) : null;
       const rank = MODE_RANK[runMode ?? ''] ?? 0;
       const existing = chosen.get(engine);

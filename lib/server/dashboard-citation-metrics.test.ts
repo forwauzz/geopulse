@@ -144,4 +144,50 @@ describe('loadEngineCitationMetrics', () => {
     expect(metrics.gemini?.citationRate).toBe(0.88);
     expect(metrics.gemini?.runMode).toBe('grounded_site');
   });
+
+  it('projects only the active tenant query set and enabled providers', async () => {
+    type Row = Record<string, unknown>;
+    const seed: Record<string, Row[]> = {
+      benchmark_domains: [{ id: 'sano-domain', canonical_domain: 'sanomedsolutions.com' }],
+      benchmark_run_groups: [
+        { id: 'gemini-current', query_set_id: 'verified-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', status: 'completed', started_at: '2026-08-02' },
+        { id: 'perplexity-current', query_set_id: 'verified-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', status: 'completed', started_at: '2026-08-02' },
+        { id: 'chatgpt-old', query_set_id: 'uk-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', status: 'completed', started_at: '2026-08-01' },
+      ],
+      benchmark_domain_metrics: [
+        { run_group_id: 'gemini-current', domain_id: 'sano-domain', model_id: 'gemini-3.5-flash-lite', citation_rate: 0, metrics: { run_mode: 'blind_discovery' }, computed_at: '2026-08-02' },
+        { run_group_id: 'perplexity-current', domain_id: 'sano-domain', model_id: 'sonar', citation_rate: 0.9, metrics: { run_mode: 'blind_discovery' }, computed_at: '2026-08-02' },
+        { run_group_id: 'chatgpt-old', domain_id: 'sano-domain', model_id: 'gpt-4o-mini', citation_rate: 0, metrics: { run_mode: 'blind_discovery' }, computed_at: '2026-08-01' },
+      ],
+    };
+    const supabase = {
+      from(table: string) {
+        const filters: Array<(row: Row) => boolean> = [];
+        const rows = () => (seed[table] ?? []).filter((row) => filters.every((filter) => filter(row)));
+        const chain: any = {
+          select() { return chain; },
+          eq(column: string, value: unknown) { filters.push((row) => row[column] === value); return chain; },
+          in(column: string, values: unknown[]) { filters.push((row) => values.includes(row[column])); return chain; },
+          order() { return chain; },
+          async limit(value: number) { return { data: rows().slice(0, value), error: null }; },
+          async maybeSingle() { return { data: rows()[0] ?? null, error: null }; },
+        };
+        return chain;
+      },
+    };
+
+    const metrics = await loadEngineCitationMetrics({
+      supabase,
+      domain: 'sanomedsolutions.com',
+      measurementScope: {
+        querySetId: 'verified-set',
+        agencyAccountId: 'lifter',
+        enabledPlatforms: ['gemini', 'perplexity'],
+      },
+    });
+
+    expect(metrics.gemini?.citationRate).toBe(0);
+    expect(metrics.perplexity?.citationRate).toBe(0.9);
+    expect(metrics.chatgpt).toBeUndefined();
+  });
 });

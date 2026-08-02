@@ -223,7 +223,7 @@ export async function completeAgencyClientBaseline(args: {
   const { data: existingConfig } = existingDomain?.id
     ? await args.supabase
         .from('client_benchmark_configs')
-        .select('topic,location,competitor_list')
+        .select('topic,location,query_set_id,competitor_list,metadata')
         .eq('agency_account_id', args.agencyAccountId)
         .eq('benchmark_domain_id', existingDomain.id)
         .maybeSingle()
@@ -304,6 +304,9 @@ export async function completeAgencyClientBaseline(args: {
     location: market.location,
     explicitCompetitors: market.competitorDomains,
     reportEmail: args.reportEmail ?? null,
+    approvedQuerySetId: typeof existingConfig?.query_set_id === 'string'
+      ? existingConfig.query_set_id
+      : null,
     source: 'agency_client_creation',
   });
   if (!baseline.ok) {

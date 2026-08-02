@@ -8,6 +8,11 @@
  * "queued" until its first run.
  */
 import { canonicalizeDomain, engineForModelId, type EngineKey } from './dashboard-citation-metrics';
+import {
+  applyClientMeasurementScope,
+  isPlatformEnabled,
+  type ClientMeasurementScope,
+} from './client-measurement-scope';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -44,6 +49,7 @@ function slugifyPromptKey(text: string): string {
 export async function getTrackedPromptPanel(args: {
   readonly supabase: SupabaseLike;
   readonly domain: string;
+  readonly measurementScope?: ClientMeasurementScope;
 }): Promise<TrackedPromptPanel> {
   const empty: TrackedPromptPanel = {
     tracked: false,
@@ -64,18 +70,26 @@ export async function getTrackedPromptPanel(args: {
     if (!domainRow?.id) return empty;
 
     // Latest blind run group per model for this domain.
-    const { data: groups } = await args.supabase
+    let groupsQuery = args.supabase
       .from('benchmark_run_groups')
       .select('id, model_set_version, metadata, started_at')
       .eq('metadata->>domain_id', domainRow.id)
-      .eq('metadata->>run_mode', 'blind_discovery')
+      .eq('metadata->>run_mode', 'blind_discovery');
+    if (args.measurementScope) {
+      groupsQuery = applyClientMeasurementScope(groupsQuery, args.measurementScope);
+    }
+    const { data: groups } = await groupsQuery
       .order('started_at', { ascending: false })
       .limit(24);
 
     const latestGroupByEngine = new Map<EngineKey, { id: string }>();
     for (const g of (groups ?? []) as Array<{ id: string; model_set_version?: string }>) {
       const engine = engineForModelId(g.model_set_version ?? '');
-      if (!engine || latestGroupByEngine.has(engine)) continue;
+      if (
+        !engine ||
+        latestGroupByEngine.has(engine) ||
+        !isPlatformEnabled(args.measurementScope, engine)
+      ) continue;
       latestGroupByEngine.set(engine, { id: g.id });
     }
 
