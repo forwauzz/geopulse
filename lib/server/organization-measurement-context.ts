@@ -8,7 +8,6 @@ import {
 } from '../intelligence/organization-measurement-context';
 import type { OrganizationContext, OrganizationOwnerType } from '../intelligence/organization-context';
 import type { ClientBenchmarkConfigRow } from './benchmark-repository';
-import { createOrganizationContextRepository } from './organization-context-repository';
 
 export type ActiveOrganizationMeasurementContext =
   | {
@@ -24,6 +23,8 @@ export type ActiveOrganizationMeasurementContext =
         | 'identity_mapping_needs_review'
         | 'owner_scope_missing'
         | 'organization_context_missing'
+        | 'organization_context_owner_mismatch'
+        | 'organization_context_identity_mismatch'
       )[];
     };
 
@@ -50,6 +51,28 @@ function ownerForConfig(config: ClientBenchmarkConfigRow): {
   return null;
 }
 
+function storedContext(metadata: unknown): OrganizationContext | null {
+  const ownerMetadata = record(metadata);
+  const candidate = ownerMetadata['organization_context_snapshot']
+    ?? ownerMetadata['organization_context'];
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  const context = candidate as Partial<OrganizationContext>;
+  if (!context.owner || !context.organization || !context.market) return null;
+  if (typeof context.contextId !== 'string'
+    || typeof context.contextVersion !== 'string'
+    || typeof context.contentHash !== 'string'
+    || typeof context.organization.identityId !== 'string'
+    || typeof context.organization.canonicalDomain !== 'string'
+    || !Array.isArray(context.organization.services)
+    || typeof context.market.scope !== 'string'
+    || typeof context.market.countryCode !== 'string'
+    || !Array.isArray(context.market.serviceAreas)
+    || !Array.isArray(context.market.languages)
+    || typeof context.market.timezone !== 'string'
+    || !Array.isArray(context.market.approvedCompetitorDomains)) return null;
+  return candidate as OrganizationContext;
+}
+
 /** Resolve the current context from the canonical intelligence plane, never from a stale config copy. */
 export async function loadActiveOrganizationMeasurementContext(args: {
   readonly supabase: SupabaseClient<any, 'public', any>;
@@ -71,19 +94,29 @@ export async function loadActiveOrganizationMeasurementContext(args: {
       : 'identity_mapping_missing'] };
   }
 
-  const lookup = await createOrganizationContextRepository(args.supabase).getByOwnerAndDomain({
-    ownerType: owner.ownerType,
-    ownerId: owner.ownerId,
-    domainId: String(mapping.canonical_domain_id),
-  });
-  if (lookup.status !== 'ready') {
-    return {
-      status: 'blocked',
-      reasons: [lookup.status === 'unauthorized' ? 'owner_scope_missing' : 'organization_context_missing'],
-    };
+  let ownerQuery = args.supabase
+    .from('intelligence_domain_owners')
+    .select('owner_type,owner_id,metadata')
+    .eq('domain_id', String(mapping.canonical_domain_id))
+    .eq('owner_type', owner.ownerType);
+  ownerQuery = owner.ownerId === null
+    ? ownerQuery.is('owner_id', null)
+    : ownerQuery.eq('owner_id', owner.ownerId);
+  const { data: ownerData, error: ownerError } = await ownerQuery.maybeSingle();
+  if (ownerError) throw ownerError;
+  if (!ownerData) return { status: 'blocked', reasons: ['owner_scope_missing'] };
+
+  const context = storedContext(ownerData.metadata);
+  if (!context) return { status: 'blocked', reasons: ['organization_context_missing'] };
+  if (context.owner.type !== owner.ownerType || context.owner.id !== owner.ownerId) {
+    return { status: 'blocked', reasons: ['organization_context_owner_mismatch'] };
   }
-  const derived = deriveOrganizationMeasurementBinding(lookup.context);
+  if (context.organization.identityId !== String(mapping.canonical_domain_id)) {
+    return { status: 'blocked', reasons: ['organization_context_identity_mismatch'] };
+  }
+
+  const derived = deriveOrganizationMeasurementBinding(context);
   return derived.ok
-    ? { status: 'ready', context: lookup.context, binding: derived.binding }
+    ? { status: 'ready', context, binding: derived.binding }
     : { status: 'blocked', reasons: derived.reasons };
 }

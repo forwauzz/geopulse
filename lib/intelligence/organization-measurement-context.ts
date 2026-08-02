@@ -2,8 +2,8 @@ import { z } from 'zod';
 import {
   organizationContextContentHash,
   organizationContextVersion,
-  type OrganizationContext,
-} from './organization-context';
+} from './organization-context-hash';
+import type { OrganizationContext } from './organization-context';
 
 export const ORGANIZATION_MEASUREMENT_POLICY_VERSION = 'organization-measurement-v1';
 export const ORGANIZATION_QUERY_GENERATOR_VERSION = 'organization-query-v1';

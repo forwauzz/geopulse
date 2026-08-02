@@ -171,9 +171,14 @@ parallel service or rewrite historical rows.
 The query-set version (`oqs1-…`) and approved competitor-cohort version
 (`occ1-…`) derive deterministically from the active context hash. Query inputs
 carry structured market scope, ISO country/subdivision, service areas, buyer,
-and language tags. Every customer run reloads the canonical tenant-scoped
-context, requires `confirmed` status, and compares the config and query-set
-snapshots before provider work or report assembly begins.
+and language tags. Every customer run reloads the complete versioned snapshot
+from the exact canonical owner record (`metadata.organization_context_snapshot`;
+a complete legacy `metadata.organization_context` is also accepted), requires
+`confirmed` status, and compares the config and query-set snapshots before
+provider work or report assembly begins. Missing, partial, owner-mismatched,
+identity-mismatched, or hash-invalid snapshots fail closed until the controlled
+backfill; the scheduler does not rebuild the entire intelligence projection
+inside the Worker runtime.
 
 A material context edit leaves prior runs intact but gives them a different
 context version. Current score reads filter run groups by query set, exact

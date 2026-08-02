@@ -1,10 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
-const mocks = vi.hoisted(() => ({ lookup: vi.fn() }));
-vi.mock('./organization-context-repository', () => ({
-  createOrganizationContextRepository: vi.fn(() => ({ getByOwnerAndDomain: mocks.lookup })),
-}));
 
 import { loadActiveOrganizationMeasurementContext } from './organization-measurement-context';
 import {
@@ -38,43 +34,76 @@ function config() {
   };
 }
 
-function supabase(mapping: Record<string, unknown> | null) {
+function supabase(
+  mapping: Record<string, unknown> | null,
+  context = confirmedContext(),
+) {
+  const ownerFilters: Array<[string, unknown]> = [];
   return {
-    from(table: string) {
-      expect(table).toBe('intelligence_source_identity_maps');
-      const chain: any = {
-        select: () => chain,
-        eq: () => chain,
-        maybeSingle: async () => ({ data: mapping, error: null }),
-      };
-      return chain;
+    ownerFilters,
+    client: {
+      from(table: string) {
+        const chain: any = {
+          select: () => chain,
+          eq: (field: string, value: unknown) => {
+            if (table === 'intelligence_domain_owners') ownerFilters.push([field, value]);
+            return chain;
+          },
+          is: (field: string, value: unknown) => {
+            if (table === 'intelligence_domain_owners') ownerFilters.push([field, value]);
+            return chain;
+          },
+          maybeSingle: async () => table === 'intelligence_source_identity_maps'
+            ? { data: mapping, error: null }
+            : { data: { metadata: { organization_context_snapshot: context } }, error: null },
+        };
+        return chain;
+      },
     },
   };
 }
 
 describe('active organization measurement context loader', () => {
-  beforeEach(() => vi.clearAllMocks());
-
   it('uses the exact agency-client tenant owner instead of the broader agency account', async () => {
-    mocks.lookup.mockResolvedValue({ status: 'ready', context: confirmedContext() });
+    const harness = supabase({ canonical_domain_id: '11111111-1111-4111-8111-111111111111', mapping_status: 'mapped' });
     const result = await loadActiveOrganizationMeasurementContext({
-      supabase: supabase({ canonical_domain_id: '11111111-1111-4111-8111-111111111111', mapping_status: 'mapped' }) as never,
+      supabase: harness.client as never,
       config: config(),
     });
     expect(result.status).toBe('ready');
-    expect(mocks.lookup).toHaveBeenCalledWith({
-      ownerType: 'agency_client',
-      ownerId: '33333333-3333-4333-8333-333333333333',
-      domainId: '11111111-1111-4111-8111-111111111111',
-    });
+    expect(harness.ownerFilters).toEqual([
+      ['domain_id', '11111111-1111-4111-8111-111111111111'],
+      ['owner_type', 'agency_client'],
+      ['owner_id', '33333333-3333-4333-8333-333333333333'],
+    ]);
   });
 
   it('fails closed when the operational domain has no canonical identity mapping', async () => {
     const result = await loadActiveOrganizationMeasurementContext({
-      supabase: supabase(null) as never,
+      supabase: supabase(null).client as never,
       config: config(),
     });
     expect(result).toEqual({ status: 'blocked', reasons: ['identity_mapping_missing'] });
-    expect(mocks.lookup).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the stored snapshot belongs to another tenant', async () => {
+    const context = confirmedContext();
+    const wrongOwner = { ...context, owner: { ...context.owner, id: '55555555-5555-4555-8555-555555555555' } };
+    const result = await loadActiveOrganizationMeasurementContext({
+      supabase: supabase({ canonical_domain_id: '11111111-1111-4111-8111-111111111111', mapping_status: 'mapped' }, wrongOwner).client as never,
+      config: config(),
+    });
+    expect(result).toEqual({ status: 'blocked', reasons: ['organization_context_owner_mismatch'] });
+  });
+
+  it('fails closed without throwing when the stored context is only a legacy partial', async () => {
+    const result = await loadActiveOrganizationMeasurementContext({
+      supabase: supabase(
+        { canonical_domain_id: '11111111-1111-4111-8111-111111111111', mapping_status: 'mapped' },
+        { owner: { type: 'agency_client', id: '33333333-3333-4333-8333-333333333333' }, organization: {}, market: {} } as never,
+      ).client as never,
+      config: config(),
+    });
+    expect(result).toEqual({ status: 'blocked', reasons: ['organization_context_missing'] });
   });
 });
