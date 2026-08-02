@@ -16,6 +16,7 @@
  * exact plan the dry run printed, so the counts an operator reviewed are the counts that land.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { fetchAllRows } from './supabase-page';
 
 // ── Contracts ───────────────────────────────────────────────────────────────────
 
@@ -493,27 +494,29 @@ export function planContactIntake(args: {
 
 // ── Apply ───────────────────────────────────────────────────────────────────────
 
-/** Load the suppression/conversion evidence the plan needs. Read-only. */
+/**
+ * Load the suppression/conversion evidence the plan needs. Read-only, and paginated: a partial
+ * read here would let a previously unsubscribed address come back as eligible.
+ */
 export async function loadSuppressionEvidence(supabase: SupabaseClient): Promise<ContactSuppressionEvidence> {
   const unsubscribedEmails = new Set<string>();
   const convertedEmails = new Set<string>();
 
-  const { data: prospects } = await supabase
-    .from('outreach_prospects')
-    .select('email,unsubscribed_at,lifecycle_status')
-    .limit(5000);
-  for (const row of (prospects ?? []) as { email: string; unsubscribed_at: string | null; lifecycle_status: string | null }[]) {
+  const prospects = await fetchAllRows<{ email: string; unsubscribed_at: string | null; lifecycle_status: string | null }>(
+    () => supabase.from('outreach_prospects').select('email,unsubscribed_at,lifecycle_status'),
+    'outreach_prospects suppression evidence',
+  );
+  for (const row of prospects) {
     const email = row.email.toLowerCase();
     if (row.unsubscribed_at) unsubscribedEmails.add(email);
     if (row.lifecycle_status === 'converted') convertedEmails.add(email);
   }
 
-  const { data: subscriptions } = await supabase
-    .from('monitoring_subscriptions')
-    .select('email,status')
-    .in('status', ['active', 'trialing'])
-    .limit(5000);
-  for (const row of (subscriptions ?? []) as { email: string }[]) {
+  const subscriptions = await fetchAllRows<{ email: string }>(
+    () => supabase.from('monitoring_subscriptions').select('email,status').in('status', ['active', 'trialing']),
+    'monitoring_subscriptions conversion evidence',
+  );
+  for (const row of subscriptions) {
     convertedEmails.add(row.email.toLowerCase());
   }
 
@@ -521,11 +524,13 @@ export async function loadSuppressionEvidence(supabase: SupabaseClient): Promise
 }
 
 export async function loadExistingContacts(supabase: SupabaseClient): Promise<ExistingContactState[]> {
-  const { data } = await supabase
-    .from('outreach_contacts')
-    .select('id,email,segment,source_class,eligibility_status,eligibility_reason,added_to_sequence_at')
-    .limit(5000);
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+  const data = await fetchAllRows<Record<string, unknown>>(
+    () => supabase
+      .from('outreach_contacts')
+      .select('id,email,segment,source_class,eligibility_status,eligibility_reason,added_to_sequence_at'),
+    'outreach_contacts',
+  );
+  return data.map((row) => ({
     id: String(row.id),
     email: String(row.email).toLowerCase(),
     segment: String(row.segment ?? ''),

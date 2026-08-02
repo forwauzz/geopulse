@@ -200,6 +200,8 @@ function stubSupabase(options: {
     builder.eq = () => builder;
     builder.in = () => builder;
     builder.limit = () => builder;
+    // Evidence reads are paginated; the stub answers a range with the whole (small) fixture.
+    builder.range = () => builder;
     builder.order = () => builder;
     return builder;
   }

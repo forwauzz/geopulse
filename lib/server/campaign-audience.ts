@@ -13,6 +13,7 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ContactEligibility } from './agency-contact-intake';
+import { fetchAllRows } from './supabase-page';
 
 export type AudienceExclusionReason =
   | 'not_eligible'
@@ -156,11 +157,14 @@ export async function loadAudienceEvidence(supabase: SupabaseClient): Promise<Au
   const activeSequenceEmails = new Set<string>();
   const enrolledContactIds = new Set<string>();
 
-  const { data: prospects } = await supabase
-    .from('outreach_prospects')
-    .select('email,enabled,lifecycle_status,unsubscribed_at')
-    .limit(5000);
-  for (const row of (prospects ?? []) as { email: string; enabled: boolean; lifecycle_status: string | null; unsubscribed_at: string | null }[]) {
+  // Every read here is paginated: PostgREST silently caps a response at the server's max-rows,
+  // and a suppression set that stops at 1000 rows would let the 1001st unsubscribed address
+  // through as eligible.
+  const prospects = await fetchAllRows<{ email: string; enabled: boolean; lifecycle_status: string | null; unsubscribed_at: string | null }>(
+    () => supabase.from('outreach_prospects').select('email,enabled,lifecycle_status,unsubscribed_at'),
+    'outreach_prospects audience evidence',
+  );
+  for (const row of prospects) {
     const email = row.email.toLowerCase();
     if (row.unsubscribed_at) unsubscribedEmails.add(email);
     if (row.lifecycle_status === 'converted') convertedEmails.add(email);
@@ -168,26 +172,23 @@ export async function loadAudienceEvidence(supabase: SupabaseClient): Promise<Au
     if (row.enabled && (row.lifecycle_status === 'active' || row.lifecycle_status === 'paused')) activeSequenceEmails.add(email);
   }
 
-  const { data: subscriptions } = await supabase
-    .from('monitoring_subscriptions')
-    .select('email,status')
-    .in('status', ['active', 'trialing'])
-    .limit(5000);
-  for (const row of (subscriptions ?? []) as { email: string }[]) convertedEmails.add(row.email.toLowerCase());
+  const subscriptions = await fetchAllRows<{ email: string }>(
+    () => supabase.from('monitoring_subscriptions').select('email,status').in('status', ['active', 'trialing']),
+    'monitoring_subscriptions',
+  );
+  for (const row of subscriptions) convertedEmails.add(row.email.toLowerCase());
 
-  const { data: enrollments } = await supabase
-    .from('outreach_campaign_enrollments')
-    .select('contact_id,status')
-    .in('status', ['enrolled', 'sending'])
-    .limit(5000);
-  for (const row of (enrollments ?? []) as { contact_id: string }[]) enrolledContactIds.add(String(row.contact_id));
+  const enrollments = await fetchAllRows<{ contact_id: string }>(
+    () => supabase.from('outreach_campaign_enrollments').select('contact_id,status').in('status', ['enrolled', 'sending']),
+    'outreach_campaign_enrollments',
+  );
+  for (const row of enrollments) enrolledContactIds.add(String(row.contact_id));
 
-  const { data: contacts } = await supabase
-    .from('outreach_contacts')
-    .select('email,eligibility_status')
-    .in('eligibility_status', ['suppressed', 'converted'])
-    .limit(5000);
-  for (const row of (contacts ?? []) as { email: string; eligibility_status: string }[]) {
+  const contacts = await fetchAllRows<{ email: string; eligibility_status: string }>(
+    () => supabase.from('outreach_contacts').select('email,eligibility_status').in('eligibility_status', ['suppressed', 'converted']),
+    'outreach_contacts suppression state',
+  );
+  for (const row of contacts) {
     if (row.eligibility_status === 'converted') convertedEmails.add(row.email.toLowerCase());
     else suppressedEmails.add(row.email.toLowerCase());
   }
@@ -196,12 +197,14 @@ export async function loadAudienceEvidence(supabase: SupabaseClient): Promise<Au
 }
 
 export async function loadAudienceCandidates(supabase: SupabaseClient, segment: string): Promise<AudienceCandidate[]> {
-  const { data } = await supabase
-    .from('outreach_contacts')
-    .select('id,email,name,company,contact_title,segment,eligibility_status')
-    .eq('segment', segment)
-    .limit(5000);
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+  const data = await fetchAllRows<Record<string, unknown>>(
+    () => supabase
+      .from('outreach_contacts')
+      .select('id,email,name,company,contact_title,segment,eligibility_status')
+      .eq('segment', segment),
+    `outreach_contacts segment ${segment}`,
+  );
+  return data.map((row) => ({
     contactId: String(row.id),
     email: String(row.email).toLowerCase(),
     name: (row.name as string | null) ?? null,
