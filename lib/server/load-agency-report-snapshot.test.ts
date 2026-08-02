@@ -26,6 +26,10 @@ function makeSupabase(seed: Record<string, Row[]>) {
           filters.push((row) => row[column] === value);
           return chain;
         },
+        in(column: string, values: unknown[]) {
+          filters.push((row) => values.includes(row[column]));
+          return chain;
+        },
         order(column: string, options?: { ascending?: boolean }) {
           orderColumn = column;
           ascending = options?.ascending !== false;
@@ -74,16 +78,26 @@ describe('loadLatestAgencyReport', () => {
     const db = makeSupabase({
       agency_clients: [{ id: 'client-1', agency_account_id: 'agency-1', canonical_domain: 'clinic.example' }],
       benchmark_domains: [{ id: 'domain-1', canonical_domain: 'clinic.example' }],
-      client_benchmark_configs: [{ id: 'config-1', agency_account_id: 'agency-1', benchmark_domain_id: 'domain-1' }],
+      client_benchmark_configs: [{ id: 'config-1', query_set_id: 'set-current', agency_account_id: 'agency-1', benchmark_domain_id: 'domain-1' }],
+      benchmark_run_groups: [
+        { id: 'run-unsafe', query_set_id: 'set-current', agency_account_id: 'agency-1', 'metadata->>domain_id': 'domain-1', started_at: '2026-08-02' },
+        { id: 'run-safe', query_set_id: 'set-current', agency_account_id: 'agency-1', 'metadata->>domain_id': 'domain-1', started_at: '2026-08-01' },
+        { id: 'run-old', query_set_id: 'set-old', agency_account_id: 'agency-1', 'metadata->>domain_id': 'domain-1', started_at: '2026-08-03' },
+      ],
       gpm_reports: [
         {
           id: 'unsafe', config_id: 'config-1', agency_client_id: 'client-1', platform: 'combined',
-          report_payload_version: '2', generated_at: '2026-08-02T00:00:00.000Z', pdf_r2_key: 'unsafe.pdf',
+          report_payload_version: '2', run_group_id: 'run-unsafe', generated_at: '2026-08-02T00:00:00.000Z', pdf_r2_key: 'unsafe.pdf',
           metadata: { quarantine_status: 'quarantined', snapshot },
         },
         {
           id: 'safe', config_id: 'config-1', agency_client_id: 'client-1', platform: 'combined',
-          report_payload_version: '2', generated_at: '2026-08-01T00:00:00.000Z', pdf_r2_key: 'safe.pdf',
+          report_payload_version: '2', run_group_id: 'run-safe', generated_at: '2026-08-01T00:00:00.000Z', pdf_r2_key: 'safe.pdf',
+          metadata: { snapshot },
+        },
+        {
+          id: 'wrong-version', config_id: 'config-1', agency_client_id: 'client-1', platform: 'combined',
+          report_payload_version: '2', run_group_id: 'run-old', generated_at: '2026-08-03T00:00:00.000Z', pdf_r2_key: 'wrong.pdf',
           metadata: { snapshot },
         },
       ],

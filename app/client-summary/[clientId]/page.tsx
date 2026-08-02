@@ -7,6 +7,7 @@ import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot
 import { AgencyReportView } from '@/components/agency-report-view';
 import { PrintScorecardButton } from '@/components/print-scorecard-button';
 import { isClientReportSharingHeld } from '@/lib/server/report-quarantine';
+import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
@@ -33,6 +34,26 @@ export default async function ClientSummaryPage({
   if (clientMetadata['client_summary_share_token'] !== sp.share) notFound();
   const domain = typeof client.canonical_domain === 'string' ? client.canonical_domain : null;
   if (!domain) notFound();
+  const { data: benchmarkDomain } = await admin
+    .from('benchmark_domains')
+    .select('id')
+    .eq('canonical_domain', domain.toLowerCase().replace(/^www\./, ''))
+    .maybeSingle();
+  const { data: config } = benchmarkDomain?.id
+    ? await admin
+        .from('client_benchmark_configs')
+        .select('query_set_id,platforms_enabled')
+        .eq('agency_account_id', client.agency_account_id)
+        .eq('benchmark_domain_id', benchmarkDomain.id)
+        .maybeSingle()
+    : { data: null };
+  const measurementScope: ClientMeasurementScope | undefined = typeof config?.query_set_id === 'string'
+    ? {
+        querySetId: config.query_set_id,
+        agencyAccountId: client.agency_account_id,
+        enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
+      }
+    : undefined;
 
   const accountRaw = Array.isArray(client.agency_accounts) ? client.agency_accounts[0] : client.agency_accounts;
   const account = (accountRaw ?? {}) as Record<string, unknown>;
@@ -76,6 +97,7 @@ export default async function ClientSummaryPage({
     supabase: admin,
     domain,
     latestScan,
+    measurementScope,
   });
   const readinessChange = latestScan?.score !== null && latestScan?.score !== undefined
     && previousScan?.score !== null && previousScan?.score !== undefined

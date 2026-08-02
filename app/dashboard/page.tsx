@@ -23,6 +23,7 @@ import { loadAgencyPortfolio } from '@/lib/server/agency-portfolio';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
 import { resolveOnboardingGoal } from '@/lib/server/onboarding-profile';
 import { OnboardingGoalPanel } from '@/components/onboarding-goal-panel';
+import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -138,11 +139,35 @@ export default async function DashboardHomePage({
   let promptPanel: TrackedPromptPanel | null = null;
   let citationEvidence: EngineEvidence[] = [];
   let marketPosition: MarketPosition | null = null;
-  if (admin && view.latest?.domain) {
+  let measurementScope: ClientMeasurementScope | undefined;
+  if (admin && view.latest?.domain && startupWorkspaceId) {
+    const canonical = view.latest.domain.toLowerCase().replace(/^www\./, '');
+    const { data: benchmarkDomain } = await admin
+      .from('benchmark_domains')
+      .select('id')
+      .eq('canonical_domain', canonical)
+      .maybeSingle();
+    const { data: config } = benchmarkDomain?.id
+      ? await admin
+          .from('client_benchmark_configs')
+          .select('query_set_id,platforms_enabled')
+          .eq('startup_workspace_id', startupWorkspaceId)
+          .eq('benchmark_domain_id', benchmarkDomain.id)
+          .maybeSingle()
+      : { data: null };
+    if (typeof config?.query_set_id === 'string') {
+      measurementScope = {
+        querySetId: config.query_set_id,
+        startupWorkspaceId,
+        enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
+      };
+    }
+  }
+  if (admin && view.latest?.domain && measurementScope) {
     [engineCitations, promptPanel, citationEvidence, marketPosition] = await Promise.all([
-      loadEngineCitationMetrics({ supabase: admin, domain: view.latest.domain }),
-      getTrackedPromptPanel({ supabase: admin, domain: view.latest.domain }),
-      getCitationEvidence({ supabase: admin, domain: view.latest.domain }),
+      loadEngineCitationMetrics({ supabase: admin, domain: view.latest.domain, measurementScope }),
+      getTrackedPromptPanel({ supabase: admin, domain: view.latest.domain, measurementScope }),
+      getCitationEvidence({ supabase: admin, domain: view.latest.domain, measurementScope }),
       // Same anonymized cohort computation as the PDF's market-position section (issue #133).
       getMarketPosition(admin, view.latest.domain, view.latest.score),
     ]);

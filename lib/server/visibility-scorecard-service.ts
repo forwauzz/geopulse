@@ -8,6 +8,7 @@ import {
 } from './report-branding-settings';
 import { getTrackedPromptPanel, type TrackedPromptPanel } from './tracked-prompts';
 import { isClientReportSharingHeld, isReportQuarantined } from './report-quarantine';
+import type { ClientMeasurementScope } from './client-measurement-scope';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -272,7 +273,7 @@ export async function loadVisibilityScorecard(args: {
   let configQuery = domainRow?.id
     ? args.supabase
         .from('client_benchmark_configs')
-        .select('id,location,competitor_list,metadata')
+        .select('id,query_set_id,location,competitor_list,platforms_enabled,metadata')
         .eq('benchmark_domain_id', domainRow.id)
     : null;
   if (configQuery) {
@@ -305,6 +306,19 @@ export async function loadVisibilityScorecard(args: {
   const latestScan = scanRows[0] ?? null;
   const previousScan = scanRows[1] ?? null;
   const configMetadata = objectRecord(config?.metadata);
+  const measurementScope: ClientMeasurementScope | undefined = typeof config?.query_set_id === 'string'
+    ? args.subject.kind === 'startup_workspace'
+      ? {
+          querySetId: config.query_set_id,
+          startupWorkspaceId: args.subject.id,
+          enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
+        }
+      : {
+          querySetId: config.query_set_id,
+          agencyAccountId: agencyAccountId!,
+          enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
+        }
+    : undefined;
   const [brand, outcome, prompts, evidence, reports] = await Promise.all([
     getBrandSettingsView({
       supabase: args.supabase as never,
@@ -316,9 +330,10 @@ export async function loadVisibilityScorecard(args: {
       domain: canonicalDomain,
       configMetadata,
       latestScan,
+      measurementScope,
     }),
-    getTrackedPromptPanel({ supabase: args.supabase, domain: canonicalDomain }),
-    getCitationEvidence({ supabase: args.supabase, domain: canonicalDomain, maxRowsPerEngine: 3 }),
+    getTrackedPromptPanel({ supabase: args.supabase, domain: canonicalDomain, measurementScope }),
+    getCitationEvidence({ supabase: args.supabase, domain: canonicalDomain, maxRowsPerEngine: 3, measurementScope }),
     config?.id
       ? listVisibilityReports({
           supabase: args.supabase,

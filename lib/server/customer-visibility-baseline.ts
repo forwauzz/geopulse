@@ -16,6 +16,8 @@ export type VisibilityBaselineInput = VisibilityBaselineOwner & {
   readonly location?: string | null;
   readonly explicitCompetitors?: readonly string[];
   readonly reportEmail?: string | null;
+  /** A previously confirmed query set may be retained only after its own provenance is verified. */
+  readonly approvedQuerySetId?: string | null;
   readonly source: 'startup_onboarding' | 'agency_client_creation' | 'backfill';
 };
 
@@ -38,6 +40,25 @@ const PROVISIONING_VERSION = 'customer-baseline-v3';
 const PROMPT_TEMPLATE_VERSION = 'local-market-v1';
 const DEFAULT_VERTICAL = 'business services';
 const DEFAULT_LOCATION = 'your market';
+
+export function isApprovedCustomerQuerySet(args: {
+  readonly metadata: unknown;
+  readonly status: unknown;
+  readonly canonicalDomain: string;
+  readonly promptCount: number;
+}): boolean {
+  const metadata = args.metadata && typeof args.metadata === 'object'
+    ? args.metadata as Record<string, unknown>
+    : {};
+  const verifiedAt = typeof metadata['source_verified_at'] === 'string'
+    ? metadata['source_verified_at']
+    : '';
+  return args.status === 'active'
+    && metadata['canonical_domain'] === args.canonicalDomain
+    && args.promptCount === 10
+    && metadata['approved_for_measurement'] === true
+    && Boolean(verifiedAt);
+}
 
 function cleanPhrase(value: string | null | undefined, fallback: string): string {
   const cleaned = value?.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
@@ -169,35 +190,67 @@ export async function provisionCustomerVisibilityBaseline(
       input.companyName?.trim() ||
       existingDomain?.display_name ||
       canonicalDomain.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
-    const prompts = buildBaselineBuyerPrompts({ vertical, subvertical, location });
+    let prompts = [...buildBaselineBuyerPrompts({ vertical, subvertical, location })];
     const contextVersion = promptContextVersion(subvertical || vertical, location);
 
-    const { data: querySet, error: querySetError } = await supabase
-      .from('benchmark_query_sets')
-      .upsert(
-        {
-          name: `client-prompts-${canonicalDomain}`,
-          version: contextVersion,
-          vertical,
-          description: `Automatically provisioned buyer questions for ${canonicalDomain}.`,
-          status: 'active',
-          metadata: {
-            source: input.source,
-            canonical_domain: canonicalDomain,
-            provisioning_version: PROVISIONING_VERSION,
-            prompt_source: intelligence.status === 'ready'
-              ? 'deterministic_company_context_plus_intelligence'
-              : 'deterministic_company_context',
-            intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
-            updated_at: now,
+    let querySet: { id: string } | null = null;
+    let preservedApprovedQuerySet = false;
+    if (input.approvedQuerySetId) {
+      const [{ data: approvedSet }, { data: approvedQueries }] = await Promise.all([
+        supabase
+          .from('benchmark_query_sets')
+          .select('id,status,metadata')
+          .eq('id', input.approvedQuerySetId)
+          .maybeSingle(),
+        supabase
+          .from('benchmark_queries')
+          .select('query_text')
+          .eq('query_set_id', input.approvedQuerySetId)
+          .order('query_key', { ascending: true })
+          .limit(11),
+      ]);
+      const approvedPromptRows = (approvedQueries ?? []) as Array<{ query_text: string }>;
+      if (approvedSet?.id && isApprovedCustomerQuerySet({
+        metadata: approvedSet.metadata,
+        status: approvedSet.status,
+        canonicalDomain,
+        promptCount: approvedPromptRows.length,
+      })) {
+        querySet = { id: String(approvedSet.id) };
+        prompts = approvedPromptRows.map((row) => row.query_text);
+        preservedApprovedQuerySet = true;
+      }
+    }
+
+    if (!querySet) {
+      const { data, error } = await supabase
+        .from('benchmark_query_sets')
+        .upsert(
+          {
+            name: `client-prompts-${canonicalDomain}`,
+            version: contextVersion,
+            vertical,
+            description: `Automatically provisioned buyer questions for ${canonicalDomain}.`,
+            status: 'active',
+            metadata: {
+              source: input.source,
+              canonical_domain: canonicalDomain,
+              provisioning_version: PROVISIONING_VERSION,
+              prompt_source: intelligence.status === 'ready'
+                ? 'deterministic_company_context_plus_intelligence'
+                : 'deterministic_company_context',
+              intelligence_evidence_ids: intelligence.evidence.map((item) => item.evidenceId),
+              updated_at: now,
+            },
           },
-        },
-        { onConflict: 'name,version' }
-      )
-      .select('id')
-      .single();
-    if (querySetError || !querySet?.id) {
-      return { ok: false, reason: querySetError?.message ?? 'query_set_failed' };
+          { onConflict: 'name,version' }
+        )
+        .select('id')
+        .single();
+      if (error || !data?.id) {
+        return { ok: false, reason: error?.message ?? 'query_set_failed' };
+      }
+      querySet = { id: String(data.id) };
     }
 
     const domainMetadata = {
@@ -232,7 +285,9 @@ export async function provisionCustomerVisibilityBaseline(
       return { ok: false, reason: domainError?.message ?? 'domain_failed' };
     }
 
-    const { error: promptError } = await supabase.from('benchmark_queries').upsert(
+    const { error: promptError } = preservedApprovedQuerySet
+      ? { error: null }
+      : await supabase.from('benchmark_queries').upsert(
       prompts.map((queryText, index) => ({
         query_set_id: querySet.id,
         query_key: promptKey(index, queryText),
@@ -286,7 +341,7 @@ export async function provisionCustomerVisibilityBaseline(
       metadata: {
         ...existingMetadata,
         setup_source: input.source,
-        prompt_source: 'automatic_baseline',
+        prompt_source: preservedApprovedQuerySet ? 'source_verified' : 'automatic_baseline',
         prompt_count: prompts.length,
         competitor_source: competitors.length > 0 ? 'intelligence_cohort' : 'awaiting_customer_input',
         intelligence_status: intelligence.status,

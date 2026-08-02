@@ -12,7 +12,8 @@ import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
 import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
 import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
-import { isReportQuarantined } from '@/lib/server/report-quarantine';
+import { isClientReportSharingHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
+import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,9 +55,12 @@ export default async function ClientScorecardPage({
     .eq('id', clientId)
     .eq('agency_account_id', account.id)
     .maybeSingle();
-  const shareToken = clientIdentity?.metadata && typeof clientIdentity.metadata === 'object'
-    && typeof (clientIdentity.metadata as Record<string, unknown>)['client_summary_share_token'] === 'string'
-    ? String((clientIdentity.metadata as Record<string, unknown>)['client_summary_share_token'])
+  const clientMetadata = clientIdentity?.metadata && typeof clientIdentity.metadata === 'object'
+    ? clientIdentity.metadata as Record<string, unknown>
+    : {};
+  const reportSharingHeld = isClientReportSharingHeld(clientMetadata);
+  const shareToken = !reportSharingHeld && typeof clientMetadata['client_summary_share_token'] === 'string'
+    ? String(clientMetadata['client_summary_share_token'])
     : null;
   const publicSummaryUrl = shareToken
     ? `https://getgeopulse.com/client-summary/${client.id}?share=${shareToken}`
@@ -67,18 +71,13 @@ export default async function ClientScorecardPage({
     : null;
   const domain = client.canonicalDomain ?? latestScan?.domain ?? null;
 
-  const [engines, prompts, evidence, configResult] = domain
-    ? await Promise.all([
-        loadEngineCitationMetrics({ supabase: admin, domain }),
-        getTrackedPromptPanel({ supabase: admin, domain }),
-        getCitationEvidence({ supabase: admin, domain }),
-        admin
-          .from('benchmark_domains')
-          .select('id')
-          .eq('canonical_domain', domain.replace(/^www\./, '').toLowerCase())
-          .maybeSingle(),
-      ])
-    : [{}, null, [], { data: null }] as const;
+  const configResult = domain
+    ? await admin
+        .from('benchmark_domains')
+        .select('id')
+        .eq('canonical_domain', domain.replace(/^www\./, '').toLowerCase())
+        .maybeSingle()
+    : { data: null };
 
   let competitors: string[] = [];
   let configId: string | null = null;
@@ -86,10 +85,11 @@ export default async function ClientScorecardPage({
   let reportEmail: string | null = null;
   let configMetadata: Record<string, unknown> = {};
   let platformsEnabled: string[] = [];
+  let querySetId: string | null = null;
   if (configResult.data?.id) {
     const { data: config } = await admin
       .from('client_benchmark_configs')
-      .select('id,competitor_list,cadence,report_email,metadata,platforms_enabled')
+      .select('id,query_set_id,competitor_list,cadence,report_email,metadata,platforms_enabled')
       .eq('agency_account_id', account.id)
       .eq('benchmark_domain_id', configResult.data.id)
       .maybeSingle();
@@ -101,7 +101,18 @@ export default async function ClientScorecardPage({
       ? config.metadata as Record<string, unknown>
       : {};
     platformsEnabled = Array.isArray(config?.platforms_enabled) ? config.platforms_enabled : [];
+    querySetId = typeof config?.query_set_id === 'string' ? config.query_set_id : null;
   }
+  const measurementScope: ClientMeasurementScope | undefined = querySetId
+    ? { querySetId, agencyAccountId: account.id, enabledPlatforms: platformsEnabled }
+    : undefined;
+  const [engines, prompts, evidence] = domain && measurementScope
+    ? await Promise.all([
+        loadEngineCitationMetrics({ supabase: admin, domain, measurementScope }),
+        getTrackedPromptPanel({ supabase: admin, domain, measurementScope }),
+        getCitationEvidence({ supabase: admin, domain, measurementScope }),
+      ])
+    : [{}, null, []] as const;
 
   const { data: latestScanDetail } = latestScan
     ? await admin
@@ -116,13 +127,26 @@ export default async function ClientScorecardPage({
         domain,
         configMetadata,
         latestScan: latestScanDetail,
+        measurementScope,
       })
     : null;
-  const { data: storedGpmReports } = configId
+  const { data: currentRunGroups } = configId && querySetId
+    ? await admin
+        .from('benchmark_run_groups')
+        .select('id')
+        .eq('query_set_id', querySetId)
+        .eq('agency_account_id', account.id)
+        .eq('metadata->>domain_id', configResult.data?.id ?? '')
+        .order('started_at', { ascending: false })
+        .limit(80)
+    : { data: null };
+  const currentRunGroupIds = (currentRunGroups ?? []).map((row: { id: string }) => row.id);
+  const { data: storedGpmReports } = configId && currentRunGroupIds.length > 0
     ? await admin
         .from('gpm_reports')
         .select('id,pdf_url,generated_at,platform,metadata')
         .eq('config_id', configId)
+        .in('run_group_id', currentRunGroupIds)
         .order('generated_at', { ascending: false })
         .limit(24)
     : { data: null };
@@ -140,6 +164,15 @@ export default async function ClientScorecardPage({
   const estimatedSpend = Number(configMetadata['spend_estimated_usd'] ?? 0);
   const monthSpend = Number(configMetadata['spend_month_to_date_usd'] ?? 0);
   const monthlyCap = Number(configMetadata['spend_monthly_cap_usd'] ?? 5);
+  const enabledPlatformLabels = platformsEnabled
+    .map((platform) => ENGINE_LABEL[platform as EngineKey] ?? platform)
+    .join(', ');
+  const latestReportMetadata = latestGpmReport?.metadata && typeof latestGpmReport.metadata === 'object'
+    ? latestGpmReport.metadata as Record<string, unknown>
+    : {};
+  const latestReportEmailStatus = String(latestReportMetadata['email_status'] ?? 'generated');
+  const latestReportHeld = reportSharingHeld || latestReportEmailStatus.startsWith('held_')
+    || latestReportMetadata['delivery_blocked'] === true;
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 py-4">
@@ -161,7 +194,7 @@ export default async function ClientScorecardPage({
               <span className="material-symbols-outlined text-[18px]" aria-hidden>refresh</span> Check again
             </Link>
             {publicSummaryUrl ? <Link href={publicSummaryUrl} target="_blank" className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"><span className="material-symbols-outlined text-[18px]" aria-hidden>share</span> Open client scorecard</Link> : null}
-            {!shareToken ? (
+            {!shareToken && !reportSharingHeld ? (
               <form action={createClientShareLink}>
                 <input type="hidden" name="clientId" value={client.id} />
                 <input type="hidden" name="agencyAccountId" value={account.id} />
@@ -181,6 +214,11 @@ export default async function ClientScorecardPage({
             <ClientScorecardShareControls summaryUrl={publicSummaryUrl} />
           </div>
         ) : null}
+        {reportSharingHeld ? (
+          <div className="mt-4 rounded-xl border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
+            Client sharing is held for review. Nothing here can be opened publicly or emailed until the review is released.
+          </div>
+        ) : null}
         <div className="mt-4 rounded-2xl border border-outline-variant/15 bg-surface-container-lowest p-5 shadow-float">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -191,7 +229,7 @@ export default async function ClientScorecardPage({
                   : 'Complete the first client-ready baseline'}
               </p>
               <p className="mt-1 text-sm text-on-surface-variant">
-                10 buyer questions · 3–5 researched competitors · ChatGPT, Gemini, and Perplexity · recurring {cadence ?? 'monthly'}
+                10 buyer questions · 3–5 researched competitors · {enabledPlatformLabels || 'AI measurement pending'} · recurring {cadence ?? 'monthly'}
               </p>
               <p className="mt-2 text-xs text-on-surface-variant">
                 Spend guard: {estimatedSpend > 0 ? `$${estimatedSpend.toFixed(2)} estimated` : 'estimated before launch'}
@@ -344,7 +382,7 @@ export default async function ClientScorecardPage({
                 {sp.monitoring === 'saved' || sp.monitoring === 'activated' ? <span className="text-sm font-medium text-primary">{sp.monitoring === 'activated' ? 'Tracking started' : 'Saved'}</span> : null}
               </div>
               <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 py-3 text-xs leading-relaxed text-on-surface-variant">
-                <p><strong className="text-on-background">Delivery:</strong> sent from reports@getgeopulse.com with your saved agency branding. Replies use your agency reply-to email when configured.</p>
+                <p><strong className="text-on-background">Delivery:</strong> {reportSharingHeld ? 'held for review; no client email or public link is available.' : 'sent from reports@getgeopulse.com with your saved agency branding. Replies use your agency reply-to email when configured.'}</p>
                 <p className="mt-1">Tracking: {platformsEnabled.map((platform) => platform === 'chatgpt' ? 'ChatGPT' : platform === 'gemini' ? 'Gemini' : platform).join(' + ') || 'Not configured'}</p>
               </div>
               <div className="rounded-xl bg-surface-container-low p-3 text-sm">
@@ -356,7 +394,7 @@ export default async function ClientScorecardPage({
                         {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(latestGpmReport.generated_at))} · {ENGINE_LABEL[String(latestGpmReport.platform) as EngineKey] ?? String(latestGpmReport.platform)}
                       </p>
                     </div>
-                    {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">Delivered by email</span>}
+                    {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">{latestReportHeld ? 'Held for review' : latestReportEmailStatus === 'sent' ? 'Sent by email' : 'Generated'}</span>}
                   </div>
                 ) : <p className="text-on-surface-variant">The first report will appear after a visibility check.</p>}
                 {(gpmReports ?? []).length > 0 ? (

@@ -1,4 +1,5 @@
 import { loadClientOutcomeEngine, type OutcomeEngineView } from './client-outcome-engine';
+import type { ClientMeasurementScope } from './client-measurement-scope';
 import {
   canManageVisibilityScorecard,
   listVisibilityReports,
@@ -104,7 +105,7 @@ export async function loadCustomerVisibilityView(args: {
   const { data: config } = domainRow?.id
     ? await args.supabase
         .from('client_benchmark_configs')
-        .select('id,query_set_id,competitor_list,metadata')
+        .select('id,query_set_id,competitor_list,platforms_enabled,metadata')
         .eq('startup_workspace_id', workspace.id)
         .eq('benchmark_domain_id', domainRow.id)
         .maybeSingle()
@@ -114,6 +115,13 @@ export async function loadCustomerVisibilityView(args: {
       ? config.metadata as Record<string, unknown>
       : null;
   const subject = { kind: 'startup_workspace' as const, id: workspace.id };
+  const measurementScope: ClientMeasurementScope | undefined = typeof config?.query_set_id === 'string'
+    ? {
+        querySetId: config.query_set_id,
+        startupWorkspaceId: workspace.id,
+        enabledPlatforms: Array.isArray(config.platforms_enabled) ? config.platforms_enabled : [],
+      }
+    : undefined;
   const [queryResult, outcome, canShareScorecard, reports] = await Promise.all([
     config?.query_set_id
       ? args.supabase
@@ -128,6 +136,7 @@ export async function loadCustomerVisibilityView(args: {
       domain,
       configMetadata: metadata,
       latestScan,
+      measurementScope,
     }),
     canManageVisibilityScorecard({ supabase: args.supabase, userId: args.userId, subject }),
     config?.id

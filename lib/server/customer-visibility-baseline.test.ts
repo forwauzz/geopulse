@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBaselineBuyerPrompts } from './customer-visibility-baseline';
+import { buildBaselineBuyerPrompts, isApprovedCustomerQuerySet } from './customer-visibility-baseline';
 
 describe('customer visibility baseline prompts', () => {
   it('creates a bounded blind buyer-question set from company context', () => {
@@ -23,5 +23,42 @@ describe('customer visibility baseline prompts', () => {
     expect(prompts).toHaveLength(10);
     expect(prompts[0]).toContain('business services');
     expect(prompts[0]).toContain('your market');
+  });
+});
+
+describe('approved customer query-set preservation', () => {
+  const verified = {
+    source: 'official_site_and_founder_correction',
+    source_verified_at: '2026-08-02T00:41:29.070Z',
+    approved_for_measurement: true,
+    canonical_domain: 'sanomedsolutions.com',
+  };
+
+  it('preserves exactly ten source-verified prompts for the same organization', () => {
+    expect(isApprovedCustomerQuerySet({
+      metadata: verified,
+      status: 'active',
+      canonicalDomain: 'sanomedsolutions.com',
+      promptCount: 10,
+    })).toBe(true);
+  });
+
+  it('rejects generic, wrong-domain, incomplete, or inactive sets', () => {
+    expect(isApprovedCustomerQuerySet({
+      metadata: { ...verified, approved_for_measurement: false },
+      status: 'active', canonicalDomain: 'sanomedsolutions.com', promptCount: 10,
+    })).toBe(false);
+    expect(isApprovedCustomerQuerySet({
+      metadata: verified,
+      status: 'active', canonicalDomain: 'sanomed.co.uk', promptCount: 10,
+    })).toBe(false);
+    expect(isApprovedCustomerQuerySet({
+      metadata: verified,
+      status: 'active', canonicalDomain: 'sanomedsolutions.com', promptCount: 9,
+    })).toBe(false);
+    expect(isApprovedCustomerQuerySet({
+      metadata: verified,
+      status: 'archived', canonicalDomain: 'sanomedsolutions.com', promptCount: 10,
+    })).toBe(false);
   });
 });

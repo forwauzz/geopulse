@@ -55,6 +55,7 @@ function runModeOf(row: { metrics?: unknown }): string | null {
 export async function loadEngineCitationMetrics(args: {
   readonly supabase: SupabaseLike;
   readonly domain: string;
+  readonly measurementScope?: ClientMeasurementScope;
 }): Promise<Partial<Record<EngineKey, EngineCitationMetric>>> {
   const canonical = canonicalizeDomain(args.domain);
   if (!canonical) return {};
@@ -67,10 +68,24 @@ export async function loadEngineCitationMetrics(args: {
       .maybeSingle();
     if (domainError || !domainRow?.id) return {};
 
-    const { data: metricRows, error: metricsError } = await args.supabase
+    let metricQuery = args.supabase
       .from('benchmark_domain_metrics')
       .select('model_id, citation_rate, metrics, computed_at')
-      .eq('domain_id', domainRow.id)
+      .eq('domain_id', domainRow.id);
+    if (args.measurementScope) {
+      let groupQuery = args.supabase
+        .from('benchmark_run_groups')
+        .select('id')
+        .eq('metadata->>domain_id', domainRow.id)
+        .eq('status', 'completed');
+      groupQuery = applyClientMeasurementScope(groupQuery, args.measurementScope);
+      const { data: scopedGroups, error: groupError } = await groupQuery
+        .order('started_at', { ascending: false })
+        .limit(80);
+      if (groupError || !Array.isArray(scopedGroups) || scopedGroups.length === 0) return {};
+      metricQuery = metricQuery.in('run_group_id', scopedGroups.map((row: { id: string }) => row.id));
+    }
+    const { data: metricRows, error: metricsError } = await metricQuery
       .order('computed_at', { ascending: false })
       .limit(60);
     if (metricsError || !Array.isArray(metricRows)) return {};
@@ -93,7 +108,7 @@ export async function loadEngineCitationMetrics(args: {
     }>) {
       const modelId = typeof row.model_id === 'string' ? row.model_id : '';
       const engine = engineForModelId(modelId);
-      if (!engine) continue;
+      if (!engine || !isPlatformEnabled(args.measurementScope, engine)) continue;
       if (typeof row.citation_rate !== 'number') continue;
       const runMode = runModeOf(row);
       const rank = MODE_RANK[runMode ?? ''] ?? 0;
@@ -113,3 +128,8 @@ export async function loadEngineCitationMetrics(args: {
     return {};
   }
 }
+import {
+  applyClientMeasurementScope,
+  isPlatformEnabled,
+  type ClientMeasurementScope,
+} from './client-measurement-scope';

@@ -32,11 +32,22 @@ export async function loadLatestAgencyReport(args: {
 
   const { data: config } = await args.supabase
     .from('client_benchmark_configs')
-    .select('id')
+    .select('id,query_set_id')
     .eq('agency_account_id', client.agency_account_id)
     .eq('benchmark_domain_id', domain.id)
     .maybeSingle();
-  if (!config?.id) return null;
+  if (!config?.id || !config.query_set_id) return null;
+
+  const { data: activeGroups } = await args.supabase
+    .from('benchmark_run_groups')
+    .select('id')
+    .eq('query_set_id', config.query_set_id)
+    .eq('agency_account_id', client.agency_account_id)
+    .eq('metadata->>domain_id', domain.id)
+    .order('started_at', { ascending: false })
+    .limit(80);
+  const activeGroupIds = ((activeGroups ?? []) as Array<{ id: string }>).map((row) => row.id);
+  if (activeGroupIds.length === 0) return null;
 
   const { data: reports } = await args.supabase
     .from('gpm_reports')
@@ -45,6 +56,7 @@ export async function loadLatestAgencyReport(args: {
     .eq('agency_client_id', args.agencyClientId)
     .eq('platform', 'combined')
     .eq('report_payload_version', '2')
+    .in('run_group_id', activeGroupIds)
     .order('generated_at', { ascending: false })
     .limit(25);
   const report = ((reports ?? []) as Array<{
