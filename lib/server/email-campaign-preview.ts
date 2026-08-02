@@ -15,6 +15,7 @@ import { renderOutreachTemplate, type OutreachTemplateVars } from './outreach-te
 import {
   CONTACT_MERGE_FIELDS,
   extractMergeFields,
+  stepContent,
   unsupportedMergeFields,
   type EmailCampaignV1,
 } from './email-campaign-contract';
@@ -58,12 +59,11 @@ export function unresolvedMergeFields(args: {
   readonly contract: EmailCampaignV1;
   readonly contact: PreviewContact;
   readonly scan?: PreviewScanContext | null;
+  /** Defaults to step 1; pass a later step to check a follow-up message's fields. */
+  readonly sequenceStep?: number;
 }): { readonly field: string; readonly why: string }[] {
-  const required = extractMergeFields(
-    args.contract.content.subject,
-    args.contract.content.previewText,
-    args.contract.content.bodyTemplate,
-  );
+  const step = stepContent(args.contract.content, args.sequenceStep ?? 1);
+  const required = extractMergeFields(step.subject, step.previewText, step.bodyTemplate);
   const unresolved: { field: string; why: string }[] = [];
 
   for (const field of unsupportedMergeFields(required)) {
@@ -118,8 +118,8 @@ export function renderCampaignPreview(args: {
   readonly sequenceStep?: number;
 }): CampaignPreview {
   const appUrl = args.appUrl.replace(/\/+$/, '');
-  const step = args.sequenceStep ?? 1;
-  const query = campaignUtmQuery(args.contract, step);
+  const sequenceStep = args.sequenceStep ?? 1;
+  const query = campaignUtmQuery(args.contract, sequenceStep);
   const domain = args.contact.companyDomain ?? args.contact.email.slice(args.contact.email.indexOf('@') + 1);
   const walkthroughUrl = `${appUrl}/walkthrough?${query}&source=outreach`;
   // Preview identifiers, not ledger rows: a preview must never allocate a real send id.
@@ -139,11 +139,12 @@ export function renderCampaignPreview(args: {
     personalizationSourceUrl: args.contact.personalizationSourceUrl,
   };
 
+  const step = stepContent(args.contract.content, sequenceStep);
   const rendered = renderOutreachTemplate(
     {
-      subjectTemplate: args.contract.content.subject,
+      subjectTemplate: step.subject,
       bodyFormat: args.contract.content.bodyFormat,
-      bodyTemplate: args.contract.content.bodyTemplate,
+      bodyTemplate: step.bodyTemplate,
     },
     vars,
     pixelUrl,
@@ -155,12 +156,17 @@ export function renderCampaignPreview(args: {
   return {
     subject: rendered.subject,
     html: rendered.html,
-    previewText: args.contract.content.previewText,
+    previewText: step.previewText,
     senderLine: `${args.contract.sender.displayName} <${args.contract.sender.authenticated ? args.contract.sender.fromAddressRef : 'no authenticated sender configured'}>`,
     replyToLine: args.contract.sender.authenticated ? args.contract.sender.replyToRef : 'no authenticated reply-to configured',
     unsubscribeUrl,
     links,
-    unresolved: unresolvedMergeFields({ contract: args.contract, contact: args.contact, scan: args.scan ?? null }),
+    unresolved: unresolvedMergeFields({
+      contract: args.contract,
+      contact: args.contact,
+      scan: args.scan ?? null,
+      sequenceStep,
+    }),
   };
 }
 

@@ -84,6 +84,12 @@ export interface EmailCampaignAudience {
   readonly excludedCounts: Readonly<Record<string, number>>;
 }
 
+export interface EmailCampaignStepContent {
+  readonly subject: string;
+  readonly previewText: string;
+  readonly bodyTemplate: string;
+}
+
 export interface EmailCampaignContent {
   readonly templateId: string | null;
   readonly templateVersion: number;
@@ -91,7 +97,31 @@ export interface EmailCampaignContent {
   readonly previewText: string;
   readonly bodyFormat: 'text' | 'html';
   readonly bodyTemplate: string;
+  /**
+   * Steps 2..N. VCI-8 keeps the bounded three-step default "only when all three approved
+   * templates are present", so the sequence length is derived from the approved copy rather than
+   * configured separately — a campaign cannot declare three steps and then have two written.
+   */
+  readonly followUpSteps: readonly EmailCampaignStepContent[];
   readonly requiredMergeFields: readonly string[];
+}
+
+/** Step 1 is the primary content; later steps come from `followUpSteps`. */
+export function stepContent(content: EmailCampaignContent, sequenceStep: number): EmailCampaignStepContent {
+  if (sequenceStep <= 1) {
+    return { subject: content.subject, previewText: content.previewText, bodyTemplate: content.bodyTemplate };
+  }
+  return (
+    content.followUpSteps[sequenceStep - 2]
+    ?? { subject: content.subject, previewText: content.previewText, bodyTemplate: content.bodyTemplate }
+  );
+}
+
+export function allStepContent(content: EmailCampaignContent): EmailCampaignStepContent[] {
+  return [
+    { subject: content.subject, previewText: content.previewText, bodyTemplate: content.bodyTemplate },
+    ...content.followUpSteps,
+  ];
 }
 
 export interface EmailCampaignTracking {
@@ -251,15 +281,22 @@ export function validateEmailCampaignV1(input: EmailCampaignV1): ContractIssue[]
   if (input.content.bodyFormat !== 'text' && input.content.bodyFormat !== 'html') {
     issues.push({ section: 'content', field: 'bodyFormat', message: 'body format must be text or html' });
   }
-  const declared = extractMergeFields(input.content.subject, input.content.previewText, input.content.bodyTemplate);
-  for (const field of unsupportedMergeFields(declared)) {
-    issues.push({ section: 'content', field: `{{${field}}}`, message: 'unknown merge field — it would ship literally to the recipient' });
-  }
-  for (const url of input.content.bodyTemplate.match(URL_IN_TEXT_RE) ?? []) {
-    if (url.startsWith('http://')) {
-      issues.push({ section: 'content', field: 'links', message: `insecure link ${url}` });
+  const steps = allStepContent(input.content);
+  steps.forEach((step, index) => {
+    const label = index === 0 ? 'step 1' : `step ${String(index + 1)}`;
+    if (index > 0) {
+      if (!step.subject.trim()) issues.push({ section: 'content', field: `${label}.subject`, message: 'follow-up subject is required' });
+      if (!step.bodyTemplate.trim()) issues.push({ section: 'content', field: `${label}.body`, message: 'follow-up body is required' });
     }
-  }
+    for (const field of unsupportedMergeFields(extractMergeFields(step.subject, step.previewText, step.bodyTemplate))) {
+      issues.push({ section: 'content', field: `${label} {{${field}}}`, message: 'unknown merge field — it would ship literally to the recipient' });
+    }
+    for (const url of step.bodyTemplate.match(URL_IN_TEXT_RE) ?? []) {
+      if (url.startsWith('http://')) {
+        issues.push({ section: 'content', field: `${label} links`, message: `insecure link ${url}` });
+      }
+    }
+  });
 
   // Tracking — attribution has to survive the click.
   requireText(input.tracking.utmSource, 'content', 'utmSource', issues, 'utm_source is required');
@@ -285,6 +322,13 @@ export function validateEmailCampaignV1(input: EmailCampaignV1): ContractIssue[]
   }
   if (input.schedule.sequenceDelaysDays.length !== input.schedule.maxSequenceSteps) {
     issues.push({ section: 'schedule', field: 'sequenceDelaysDays', message: 'declare one delay per sequence step' });
+  }
+  if (steps.length !== input.schedule.maxSequenceSteps) {
+    issues.push({
+      section: 'schedule',
+      field: 'maxSequenceSteps',
+      message: `${String(input.schedule.maxSequenceSteps)} steps are declared but ${String(steps.length)} message(s) are approved — the bounded sequence only runs when every step is written`,
+    });
   }
   if (!input.schedule.startAt) {
     issues.push({ section: 'schedule', field: 'startAt', message: 'choose a first send time' });
@@ -417,6 +461,7 @@ export function versionChecksum(contract: EmailCampaignV1): string {
     contract.content.previewText,
     contract.content.bodyFormat,
     contract.content.bodyTemplate,
+    contract.content.followUpSteps,
     contract.tracking.utmSource,
     contract.tracking.utmMedium,
     contract.tracking.utmCampaign,
@@ -522,7 +567,9 @@ export function createDraftContract(args: {
   readonly goal: EmailCampaignGoal;
   readonly sender: EmailCampaignSender;
   readonly segment: string;
-  readonly content: Omit<EmailCampaignContent, 'requiredMergeFields'>;
+  readonly content: Omit<EmailCampaignContent, 'requiredMergeFields' | 'followUpSteps'> & {
+    readonly followUpSteps?: readonly EmailCampaignStepContent[];
+  };
   readonly tracking: EmailCampaignTracking;
   readonly schedule: EmailCampaignSchedule;
   readonly nowIso?: string;
@@ -539,7 +586,15 @@ export function createDraftContract(args: {
     audience: { segment: args.segment, audienceId: null, checksum: null, recipientCount: null, frozenAt: null, excludedCounts: {} },
     content: {
       ...args.content,
-      requiredMergeFields: extractMergeFields(args.content.subject, args.content.previewText, args.content.bodyTemplate),
+      followUpSteps: args.content.followUpSteps ?? [],
+      requiredMergeFields: extractMergeFields(
+        ...[
+          args.content.subject,
+          args.content.previewText,
+          args.content.bodyTemplate,
+          ...(args.content.followUpSteps ?? []).flatMap((step) => [step.subject, step.previewText, step.bodyTemplate]),
+        ],
+      ),
     },
     tracking: args.tracking,
     schedule: args.schedule,
