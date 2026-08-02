@@ -72,3 +72,68 @@ The 2026-07-25 read-only preview evaluated 13,194 source records: 13,189 mapped
 to 266 domain identities, five old report evals were explicitly unmapped for
 missing identity, and 636 unique page URLs were identified. These are a dated
 observation; rerun preview for current coverage before any apply.
+
+## Organization Context projection
+
+`organization-context-v1` is the portable domain contract layered over this
+identity index. It does not add a table or replace operational foreign keys.
+The server-only repository first proves an exact `intelligence_domain_owners`
+link, then projects the canonical domain, verified aliases, structured market,
+and only evidence visible to that exact owner.
+
+Supported owner scopes are:
+
+- `agency_account` for an agency's own business;
+- `agency_client` for an agency-managed customer;
+- `startup_workspace` for a direct business subscription;
+- `user` for legacy user-owned sources; and
+- `internal_benchmark`, whose owner ID must remain null.
+
+The same public identity may be reused by several authorized owners. Private
+evidence and owner-level settings never cross those ownership links.
+
+Example projection:
+
+```json
+{
+  "contractVersion": "organization-context-v1",
+  "owner": { "type": "agency_client", "id": "<tenant UUID>" },
+  "organization": {
+    "canonicalDomain": "sanomedsolutions.com",
+    "aliases": [{ "host": "sanomed.ca", "relationship": "redirect", "reviewState": "verified" }],
+    "category": "private medical clinic",
+    "services": ["preventive medicine", "travel medicine"]
+  },
+  "market": {
+    "scope": "local",
+    "countryCode": "CA",
+    "subdivisionCode": "CA-QC",
+    "locality": "Pointe-Claire",
+    "serviceAreas": ["Montreal's West Island"],
+    "languages": ["en-CA", "fr-CA"],
+    "timezone": "America/Toronto"
+  },
+  "status": "confirmed"
+}
+```
+
+### Trust and failure behavior
+
+Fact precedence is fixed at tenant confirmation, exact official-site evidence,
+structured website evidence, trusted public evidence, grounded suggestions,
+then heuristic defaults. Lower-ranked evidence is retained as a proposal but
+cannot replace a higher-ranked fact. Material disagreements use stable codes
+such as `country_conflict`, `canonical_domain_conflict`,
+`market_location_conflict`, and `competitor_market_conflict`, and force the
+projection to `conflicted`.
+
+Country, subdivision, language, timezone, and market scope are structured
+keys rather than free-text joins. Missing required market keys return a stable
+`needs_review` reason instead of inventing a value. Context versions are
+deterministic content identities; changing projection time alone does not
+create a new version. Material changes produce explicit reason codes for
+market, services, buyer, language, aliases, competitors, and conflict state.
+
+The Zod contract and matching portable JSON Schema live in
+`lib/intelligence/organization-context.ts`. The tenant-scoped projection lives
+in `lib/server/organization-context-repository.ts`.
