@@ -22,7 +22,7 @@ import {
 } from './gpm-spend-guard';
 import { structuredError, structuredLog } from './structured-log';
 import { isClientReportSharingHeld } from './report-quarantine';
-import { loadConfirmedOrganizationContextByHost } from './organization-context-repository';
+import { loadConfirmedOrganizationContextByHost } from './organization-measurement-context';
 
 type BaselineEnv = {
   readonly GEMINI_API_KEY?: string;

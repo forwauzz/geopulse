@@ -8,6 +8,7 @@ import {
 } from '@/lib/intelligence/value-first-onboarding';
 import { recordActivationEvent } from '@/lib/server/activation-events';
 import { ensureFreeVisibilityWorkspace } from '@/lib/server/customer-visibility-baseline';
+import { persistConfirmedOrganizationContext } from '@/lib/server/organization-context-repository';
 import { resolveValueFirstOnboardingProposal } from '@/lib/server/value-first-onboarding';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -127,6 +128,7 @@ export async function completeWelcome(
       userEmail: user.email,
       domain: confirmed.canonicalDomain,
       companyName: confirmed.displayName,
+      persistOrganizationContext: persistConfirmedOrganizationContext,
       confirmedOrganization: {
         actorId: user.id,
         canonicalDomain: confirmed.canonicalDomain,

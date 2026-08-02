@@ -7,6 +7,7 @@ import {
 } from '@/lib/intelligence/organization-measurement-context';
 import type { OrganizationContext } from '@/lib/intelligence/organization-context';
 import { IDENTITY_NORMALIZATION_VERSION } from '@/lib/intelligence/identity';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ConfirmedOrganizationContextWrite } from './organization-context-repository';
 
 type SupabaseLike = { from(table: string): any };
@@ -493,6 +494,10 @@ export async function ensureFreeVisibilityWorkspace(args: {
   readonly domain: string;
   readonly companyName?: string | null;
   readonly confirmedOrganization?: Omit<ConfirmedOrganizationContextWrite, 'ownerType' | 'ownerId'>;
+  readonly persistOrganizationContext?: (args: {
+    readonly supabase: SupabaseClient<any, 'public', any>;
+    readonly input: ConfirmedOrganizationContextWrite;
+  }) => Promise<OrganizationContext>;
 }): Promise<FreeVisibilityWorkspaceResult> {
   const canonicalDomain = canonicalizeDomain(args.domain);
   if (!canonicalDomain) return { ok: false, reason: 'invalid_domain' };
@@ -548,8 +553,8 @@ export async function ensureFreeVisibilityWorkspace(args: {
     );
     if (domainError) return { ok: false, reason: domainError.message };
 
-    const organizationContext = args.confirmedOrganization
-      ? await (await import('./organization-context-repository')).persistConfirmedOrganizationContext({
+    const organizationContext = args.confirmedOrganization && args.persistOrganizationContext
+      ? await args.persistOrganizationContext({
           supabase: args.supabase as any,
           input: {
             ...args.confirmedOrganization,

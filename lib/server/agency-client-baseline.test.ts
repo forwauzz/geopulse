@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('./organization-context-repository', () => ({
+vi.mock('./organization-measurement-context', () => ({
   loadConfirmedOrganizationContextByHost: vi.fn().mockResolvedValue(null),
 }));
 

@@ -522,30 +522,6 @@ export async function persistConfirmedOrganizationContext(args: {
   return lookup.context;
 }
 
-export async function loadConfirmedOrganizationContextByHost(args: {
-  readonly supabase: SupabaseClient<any, 'public', any>;
-  readonly ownerType: OrganizationOwnerType;
-  readonly ownerId: string;
-  readonly canonicalDomain: string;
-}): Promise<OrganizationContext | null> {
-  const host = args.canonicalDomain.trim().toLowerCase().replace(/^www\./, '');
-  const { data: domain, error } = await args.supabase
-    .from('intelligence_domains')
-    .select('id')
-    .eq('normalized_host', host)
-    .maybeSingle();
-  if (error) throw error;
-  if (!domain?.id) return null;
-  const lookup = await createOrganizationContextRepository(args.supabase).getByOwnerAndDomain({
-    ownerType: args.ownerType,
-    ownerId: args.ownerId,
-    domainId: String(domain.id),
-  });
-  return lookup.status === 'ready' && lookup.context.status === 'confirmed'
-    ? lookup.context
-    : null;
-}
-
 export function createOrganizationContextRepository(supabase: SupabaseClient<any, 'public', any>) {
   return {
     async getByOwnerAndDomain(access: OrganizationContextAccess): Promise<OrganizationContextLookup> {
