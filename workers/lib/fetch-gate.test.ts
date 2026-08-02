@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchGateBytes } from './fetch-gate';
+import { fetchGateBytes, fetchGateText } from './fetch-gate';
 
 const PNG_MAGIC = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0]);
 
@@ -113,5 +113,22 @@ describe('fetchGateBytes', () => {
       acceptHeader: 'image/png',
     });
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('fetchGateText redirect evidence', () => {
+  it('records each validated redirect hop for identity review', async () => {
+    const spy = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 301, headers: { Location: 'https://example.com/home' } }))
+      .mockResolvedValueOnce(new Response('<html>ok</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }));
+    vi.stubGlobal('fetch', spy);
+    const result = await fetchGateText('https://example.com/', {
+      maxBytes: 1024,
+      acceptHeader: 'text/html',
+      requireContentTypes: ['text/html'],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.redirectChain).toEqual(['https://example.com/', 'https://example.com/home']);
   });
 });

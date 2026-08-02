@@ -221,6 +221,7 @@ beforeEach(() => {
         ok: true,
         html: '<a href="/a">A</a><a href="/b">B</a><a href="/c">C</a>',
         finalUrl: 'https://example.com/',
+        redirectChain: ['https://example.com/'],
         headers: {},
       };
     }
@@ -228,6 +229,7 @@ beforeEach(() => {
       ok: true,
       html: '<html><body>detail</body></html>',
       finalUrl: url,
+      redirectChain: [url],
       headers: {},
     };
   });
