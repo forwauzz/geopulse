@@ -402,7 +402,7 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
     const notes = [
       ['Visibility', 'The share of completed, selected answer evaluations in which the measured domain was cited. The combined figure is recalculated from this report\'s exact engine and prompt scope.'],
       ['Selection', reportScopeDisclosure(snapshot)],
-      ['Unavailable assistants', unavailableLabels.length > 0 ? `${naturalList(unavailableLabels)} ${unavailableLabels.length === 1 ? 'was' : 'were'} omitted because ${unavailableLabels.length === 1 ? 'it did' : 'they did'} not produce a complete measurement; ${unavailableLabels.length === 1 ? 'it was' : 'they were'} not scored as zero.` : 'Every selected assistant produced a complete measurement.'],
+      ['Unavailable assistants', unavailableLabels.length > 0 ? `${naturalList(unavailableLabels)} ${unavailableLabels.length === 1 ? 'was' : 'were'} omitted because ${unavailableLabels.length === 1 ? 'its measurement did' : 'their measurements did'} not pass the report quality gate; ${unavailableLabels.length === 1 ? 'it was' : 'they were'} not scored as zero.` : 'Every selected assistant passed the report quality gate with a complete measurement.'],
       ['Variance', 'AI answers can vary by session and over time. This artifact is a dated measurement, not a guarantee of future placement.'],
       ['Reproducibility', `Report profile ${snapshot.profileVersion}. Source runs remain attached to the stored snapshot for audit and regeneration.`],
     ] as const;

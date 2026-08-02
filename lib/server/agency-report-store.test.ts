@@ -73,6 +73,33 @@ describe('storeAgencyReport', () => {
             },
           })) };
         }
+        if (table === 'benchmark_queries') {
+          return { select: () => query(() => [{ id: 'q1' }, { id: 'q2' }]) };
+        }
+        if (table === 'benchmark_run_groups') {
+          return { select: () => query(() => ({
+            id: 'run-group', query_set_id: 'set-1', status: 'completed',
+            metadata: { run_mode: 'blind_discovery' },
+            startup_workspace_id: null, agency_account_id: 'agency-1',
+          })) };
+        }
+        if (table === 'query_runs') {
+          return { select: () => query(() => [
+            {
+              id: 'measure-1', query_id: 'q1', model_id: 'provider-model', status: 'completed',
+              response_text: 'Answer one', response_metadata: {}, error_message: null,
+              executed_at: '2026-08-01T12:00:00.000Z', created_at: '2026-08-01T11:59:00.000Z',
+            },
+            {
+              id: 'measure-2', query_id: 'q2', model_id: 'provider-model', status: 'completed',
+              response_text: 'Answer two', response_metadata: {}, error_message: null,
+              executed_at: '2026-08-01T12:00:00.000Z', created_at: '2026-08-01T11:59:00.000Z',
+            },
+          ]) };
+        }
+        if (table === 'query_citations') {
+          return { select: () => ({ in: async () => ({ data: [], error: null }) }) };
+        }
         expect(table).toBe('gpm_reports');
         return {
           select(columns: string) {
@@ -128,6 +155,11 @@ describe('storeAgencyReport', () => {
     });
     expect(inserted[0]?.['metadata']).toMatchObject({
       artifact_kind: 'agency_report_v2', email_status: 'held_client_review',
+      provider_quality_version: 'provider-quality-v1',
+      provider_quality: [
+        { platform: 'chatgpt', status: 'measured', expectedQueryCount: 2, validQueryCount: 2 },
+        { platform: 'gemini', status: 'measured', expectedQueryCount: 2, validQueryCount: 2 },
+      ],
       delivery_blocked: true,
       delivery_block_reason: 'client_report_sharing_held',
       delivery_url_kind: 'revocable_client_summary',
@@ -142,5 +174,103 @@ describe('storeAgencyReport', () => {
     expect(first.secureReportUrl).toContain('/client-summary/client-1?share=share-secret');
     expect(sendAgencyReportEmail).not.toHaveBeenCalled();
     expect(updated).toHaveLength(0);
+  });
+
+  it('excludes an incomplete provider instead of scoring it as zero', async () => {
+    const inserted: Record<string, unknown>[] = [];
+    function filteredQuery<T>(value: (filters: Record<string, unknown>) => T) {
+      const filters: Record<string, unknown> = {};
+      const chain = {
+        eq(column: string, filter: unknown) { filters[column] = filter; return chain; },
+        order() { return chain; },
+        limit() { return chain; },
+        in(column: string, filter: unknown) { filters[column] = filter; return chain; },
+        maybeSingle: async () => ({ data: value(filters), error: null }),
+        then(resolve: (result: { data: T; error: null }) => unknown) {
+          return Promise.resolve({ data: value(filters), error: null }).then(resolve);
+        },
+      };
+      return chain;
+    }
+    const supabase = {
+      from(table: string) {
+        if (table === 'agency_accounts') return { select: () => query(() => null) };
+        if (table === 'agency_clients') return { select: () => query(() => null) };
+        if (table === 'benchmark_queries') {
+          return { select: () => filteredQuery(() => [{ id: 'q1' }, { id: 'q2' }]) };
+        }
+        if (table === 'benchmark_run_groups') {
+          return { select: () => filteredQuery((filters) => ({
+            id: String(filters['id']), query_set_id: 'set-1',
+            status: filters['id'] === 'run-gemini' ? 'failed' : 'completed',
+            metadata: { run_mode: 'blind_discovery' },
+            startup_workspace_id: null, agency_account_id: 'agency-1',
+          })) };
+        }
+        if (table === 'query_runs') {
+          return { select: () => filteredQuery((filters) => filters['run_group_id'] === 'run-gemini'
+            ? [
+              {
+                id: 'gemini-1', query_id: 'q1', model_id: 'gemini-model', status: 'failed',
+                response_text: null, response_metadata: {}, error_message: 'provider unavailable',
+                executed_at: null, created_at: '2026-08-01T11:59:00.000Z',
+              },
+            ]
+            : [
+              {
+                id: 'chatgpt-1', query_id: 'q1', model_id: 'chatgpt-model', status: 'completed',
+                response_text: 'Answer one', response_metadata: {}, error_message: null,
+                executed_at: '2026-08-01T12:00:00.000Z', created_at: '2026-08-01T11:59:00.000Z',
+              },
+              {
+                id: 'chatgpt-2', query_id: 'q2', model_id: 'chatgpt-model', status: 'completed',
+                response_text: 'Answer two', response_metadata: {}, error_message: null,
+                executed_at: '2026-08-01T12:00:00.000Z', created_at: '2026-08-01T11:59:00.000Z',
+              },
+            ]) };
+        }
+        if (table === 'query_citations') {
+          return { select: () => filteredQuery(() => []) };
+        }
+        expect(table).toBe('gpm_reports');
+        return {
+          select(columns: string) {
+            return columns === 'metadata' ? query(() => []) : query(() => null);
+          },
+          insert(row: Record<string, unknown>) {
+            inserted.push(row);
+            return { select: () => ({ single: async () => ({ data: { id: 'report-2' }, error: null }) }) };
+          },
+          update: () => ({ eq: async () => ({ error: null }) }),
+        };
+      },
+    };
+    const result = await storeAgencyReport({
+      supabase: supabase as never,
+      config: {
+        id: 'config-1', startup_workspace_id: null, agency_account_id: 'agency-1', benchmark_domain_id: 'domain-1',
+        topic: 'managed IT', location: 'Montreal', query_set_id: 'set-1', competitor_list: [], cadence: 'monthly',
+        platforms_enabled: ['chatgpt', 'gemini'], report_email: null, metadata: {},
+        created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z',
+      },
+      platformRuns: [
+        { platform: 'chatgpt', runGroupId: 'run-chatgpt' },
+        { platform: 'gemini', runGroupId: 'run-gemini' },
+      ],
+      windowDate: '2026-08',
+      measuredCanonicalDomain: 'msp.example',
+      env: {},
+    });
+
+    expect(result.snapshot.engines.map((engine) => engine.key)).toEqual(['chatgpt']);
+    expect(result.snapshot.unavailableEngines).toEqual(['gemini']);
+    expect(result.snapshot.evaluationsTracked).toBe(2);
+    expect(result.snapshot.combinedVisibilityPct).toBe(0.5);
+    expect(inserted[0]?.['metadata']).toMatchObject({
+      provider_quality: [
+        { platform: 'chatgpt', status: 'measured', validQueryCount: 2 },
+        { platform: 'gemini', status: 'unavailable', validQueryCount: 0 },
+      ],
+    });
   });
 });
