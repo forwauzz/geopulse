@@ -170,11 +170,15 @@ describe('a campaign does not block its own retry', () => {
     const terminal = [
       { email: 'gone@royco.ca', enabled: false, lifecycle_status: 'unsubscribed', unsubscribed_at: '2026-08-01T00:00:00.000Z', growth_intervention_id: 'int-1' },
       { email: 'won@royco.ca', enabled: false, lifecycle_status: 'converted', unsubscribed_at: null, growth_intervention_id: 'int-1' },
+      { email: 'answered@royco.ca', enabled: false, lifecycle_status: 'replied', unsubscribed_at: null, growth_intervention_id: 'int-2' },
+      { email: 'interested@royco.ca', enabled: false, lifecycle_status: 'positive_reply', unsubscribed_at: null, growth_intervention_id: 'int-2' },
     ];
     const evidence = await loadAudienceEvidence(stubEvidence(terminal, []), { excludeInterventionId: 'int-1' });
     // An unsubscribe this campaign caused still silences this campaign.
     expect(evidence.unsubscribedEmails.has('gone@royco.ca')).toBe(true);
     expect(evidence.convertedEmails.has('won@royco.ca')).toBe(true);
+    expect(evidence.suppressedEmails.has('answered@royco.ca')).toBe(true);
+    expect(evidence.suppressedEmails.has('interested@royco.ca')).toBe(true);
   });
 });
 

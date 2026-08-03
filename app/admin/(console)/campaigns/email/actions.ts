@@ -7,6 +7,7 @@ import {
   applyContractEdit,
   createDraftContract,
   extractMergeFields,
+  allStepContent,
   type ContractEdit,
 } from '@/lib/server/email-campaign-contract';
 import { loadEmailCampaign, saveValidatedEmailCampaign } from '@/lib/server/email-campaign-store';
@@ -125,8 +126,8 @@ export async function createEmailCampaignAction(formData: FormData): Promise<voi
       startAt: null,
       spacingMinutes: integer(formData, 'spacingMinutes', 60),
       dailyCap: integer(formData, 'dailyCap', 25),
-      maxSequenceSteps: 3,
-      sequenceDelaysDays: [0, 4, 10],
+      maxSequenceSteps: 1,
+      sequenceDelaysDays: [0],
     },
   });
 
@@ -152,9 +153,26 @@ export async function saveEmailCampaignDraftAction(formData: FormData): Promise<
   const sender = resolveCampaignSender(ctx.env as unknown as Record<string, string | undefined>);
   const current = withResolvedSender(record.contract, sender);
 
-  const subject = text(formData, 'subject', current.content.subject);
-  const previewText = text(formData, 'previewText', current.content.previewText);
-  const bodyTemplate = String(formData.get('bodyTemplate') ?? current.content.bodyTemplate);
+  const sequenceStep = Math.max(1, Math.min(
+    current.schedule.maxSequenceSteps,
+    integer(formData, 'sequenceStep', 1),
+  ));
+  const selected = sequenceStep === 1
+    ? { subject: current.content.subject, previewText: current.content.previewText, bodyTemplate: current.content.bodyTemplate }
+    : current.content.followUpSteps[sequenceStep - 2]!;
+  const subject = text(formData, 'subject', selected.subject);
+  const previewText = text(formData, 'previewText', selected.previewText);
+  const bodyTemplate = String(formData.get('bodyTemplate') ?? selected.bodyTemplate);
+  const followUpSteps = [...current.content.followUpSteps];
+  if (sequenceStep > 1) followUpSteps[sequenceStep - 2] = { subject, previewText, bodyTemplate };
+  const nextContent = {
+    ...current.content,
+    ...(sequenceStep === 1 ? { subject, previewText, bodyTemplate } : {}),
+    followUpSteps,
+  };
+  const requiredMergeFields = extractMergeFields(
+    ...allStepContent(nextContent).flatMap((step) => [step.subject, step.previewText, step.bodyTemplate]),
+  );
   const startAtRaw = text(formData, 'startAt');
 
   const edit: ContractEdit = {
@@ -171,11 +189,12 @@ export async function saveEmailCampaignDraftAction(formData: FormData): Promise<
       retryPolicy: text(formData, 'retryPolicy', current.goal.retryPolicy),
     },
     content: {
-      subject,
-      previewText,
+      subject: nextContent.subject,
+      previewText: nextContent.previewText,
       bodyFormat: text(formData, 'bodyFormat', current.content.bodyFormat) === 'html' ? 'html' : 'text',
-      bodyTemplate,
-      requiredMergeFields: extractMergeFields(subject, previewText, bodyTemplate),
+      bodyTemplate: nextContent.bodyTemplate,
+      followUpSteps,
+      requiredMergeFields,
     },
     schedule: {
       startAt: startAtRaw ? resolveFirstRunAt(startAtRaw, Date.now()) : current.schedule.startAt,
@@ -203,6 +222,7 @@ export async function sendInternalTestAction(formData: FormData): Promise<void> 
 
   const interventionKey = text(formData, 'interventionKey');
   const recipient = text(formData, 'recipient');
+  const sequenceStep = integer(formData, 'sequenceStep', 1);
   if (!interventionKey || !recipient) return;
 
   const env = ctx.env as unknown as Record<string, string | undefined>;
@@ -216,6 +236,7 @@ export async function sendInternalTestAction(formData: FormData): Promise<void> 
     recipient,
     sampleContact: detail.previewContacts[0] ?? null,
     nowMs: Date.now(),
+    sequenceStep,
     save: async (contract) => saveValidatedEmailCampaign(ctx.adminDb, contract),
   });
   revalidatePath(`${CONSOLE_PATH}/${interventionKey}`);

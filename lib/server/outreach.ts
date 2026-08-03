@@ -23,6 +23,7 @@ import {
   type OutreachLifecycleStatus,
 } from './outreach-sequence';
 import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../../workers/report/report-qa-gate';
+import { runEmailCampaignDelivery } from './email-campaign-delivery';
 
 /**
  * Fail-closed QA before an outreach email leaves (spec §18): a scorecard whose findings
@@ -65,6 +66,8 @@ export type OutreachProspect = {
   readonly segment: string | null;
   readonly personalizationReason: string | null;
   readonly personalizationSourceUrl: string | null;
+  readonly growthCampaignId: string | null;
+  readonly growthInterventionId: string | null;
 };
 
 export type OutreachEnvLike = {
@@ -75,6 +78,9 @@ export type OutreachEnvLike = {
   readonly RESEND_FROM_EMAIL?: string;
   readonly SALES_REPLY_TO_EMAIL?: string;
   readonly NEXT_PUBLIC_APP_URL?: string;
+  readonly GEOPULSE_CAMPAIGN_FROM_EMAIL?: string;
+  readonly GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL?: string;
+  readonly GEOPULSE_CAMPAIGN_SENDER_VERIFIED?: string;
 };
 
 const CADENCE_MS: Record<OutreachCadence, number> = {
@@ -117,6 +123,8 @@ type ProspectRow = {
   segment?: string | null;
   personalization_reason?: string | null;
   personalization_source_url?: string | null;
+  growth_campaign_id?: string | null;
+  growth_intervention_id?: string | null;
 };
 
 function toProspect(row: ProspectRow): OutreachProspect {
@@ -143,6 +151,8 @@ function toProspect(row: ProspectRow): OutreachProspect {
     segment: row.segment ?? null,
     personalizationReason: row.personalization_reason ?? null,
     personalizationSourceUrl: row.personalization_source_url ?? null,
+    growthCampaignId: row.growth_campaign_id ?? null,
+    growthInterventionId: row.growth_intervention_id ?? null,
   };
 }
 
@@ -266,12 +276,13 @@ export async function sendOutreachEmail(
   subject: string,
   html: string,
   idempotencyKey: string,
+  identity?: { readonly from: string; readonly replyTo: string },
 ): Promise<{ ok: true; providerMessageId: string | null } | { ok: false; detail: string }> {
   const key = env.RESEND_API_KEY?.trim();
-  const from = env.RESEND_FROM_EMAIL?.trim();
+  const from = identity?.from.trim() || env.RESEND_FROM_EMAIL?.trim();
   if (!key || !from) return { ok: false, detail: 'resend_credentials_missing' };
 
-  const replyTo = env.SALES_REPLY_TO_EMAIL?.trim();
+  const replyTo = identity?.replyTo.trim() || env.SALES_REPLY_TO_EMAIL?.trim();
   const body = JSON.stringify({
     from,
     to,
@@ -331,12 +342,25 @@ export async function runOutreachForProspect(args: {
   readonly env: OutreachEnvLike;
   readonly prospect: OutreachProspect;
   readonly nowMs: number;
-}): Promise<{ ok: true; scanId: string; score: number } | { ok: false; reason: string }> {
+}): Promise<{ ok: true; scanId: string | null; score: number | null } | { ok: false; reason: string }> {
   const { supabase, env, prospect, nowMs } = args;
   const nowIso = new Date(nowMs).toISOString();
 
   if (!prospect.enabled || isOutreachStopped(prospect.lifecycleStatus)) {
     return { ok: false, reason: `outreach_stopped:${prospect.lifecycleStatus}` };
+  }
+
+  // A campaign enrollment is already the reviewed source of truth. It must never fall through to
+  // the legacy scan/scorecard renderer, because that would preview one message and send another.
+  if (prospect.growthInterventionId) {
+    return runEmailCampaignDelivery({
+      supabase,
+      env,
+      prospect,
+      nowMs,
+      sendEmail: (to, subject, html, idempotencyKey, identity) =>
+        sendOutreachEmail(env, to, subject, html, idempotencyKey, identity),
+    });
   }
 
   const scan = await runFreeScan(prospect.url, buildAuditLlm(env));

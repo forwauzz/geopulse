@@ -61,6 +61,7 @@ export async function sendInternalTest(args: {
   readonly recipient: string;
   readonly sampleContact: PreviewContact | null;
   readonly nowMs: number;
+  readonly sequenceStep?: number;
   readonly save: (contract: EmailCampaignV1) => Promise<{ ok: boolean }>;
 }): Promise<InternalTestResult> {
   const sender = resolveCampaignSender(args.env);
@@ -87,6 +88,11 @@ export async function sendInternalTest(args: {
     contract: args.contract,
     contact: args.sampleContact,
     appUrl: args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com',
+    sequenceStep: args.sequenceStep ?? 1,
+    resolvedSender: {
+      from: sender.resolvedFromAddress!,
+      replyTo: sender.resolvedReplyToAddress!,
+    },
   });
   if (preview.unresolved.length > 0) {
     return { ok: false, reason: `personalization does not resolve: ${preview.unresolved.map((item) => item.field).join(', ')}` };
@@ -97,7 +103,11 @@ export async function sendInternalTest(args: {
     recipient,
     `[TEST] ${preview.subject}`,
     preview.html,
-    `campaign-test-${args.contract.interventionKey}-v${String(args.contract.version)}-${checksum}-${recipient}`,
+    `campaign-test-${args.contract.interventionKey}-v${String(args.contract.version)}-${checksum}-step-${String(args.sequenceStep ?? 1)}-${recipient}`,
+    {
+      from: sender.resolvedFromAddress!,
+      replyTo: sender.resolvedReplyToAddress!,
+    },
   );
   if (!outcome.ok) return { ok: false, reason: outcome.detail };
 
@@ -111,7 +121,8 @@ export async function sendInternalTest(args: {
     },
     state: args.contract.state === 'qa_ready' || args.contract.state === 'content_ready' ? 'test_passed' : args.contract.state,
   });
-  await args.save(contract);
+  const saved = await args.save(contract);
+  if (!saved.ok) return { ok: false, reason: 'internal_test_evidence_save_failed' };
 
   structuredLog('email_campaign_internal_test_sent', {
     interventionKey: args.contract.interventionKey,
@@ -184,28 +195,41 @@ export async function scheduleCampaign(args: {
     const { contract } = applyContractEdit(args.contract, {
       governance: { preflightPassedAt: null, preflightFailures: result.failures },
     });
-    await args.save(contract);
-    return { ok: false, reason: 'preflight_failed', preflight: result };
+    const saved = await args.save(contract);
+    return {
+      ok: false,
+      reason: saved.ok ? 'preflight_failed' : 'preflight_failed_state_save_failed',
+      preflight: result,
+    };
   }
 
   const nowIso = new Date(args.nowMs).toISOString();
   const rows = buildScheduleRows({ contract: args.contract, recipients });
 
-  const { data: existingRows } = await args.supabase
+  const { data: existingRows, error: existingRowsError } = await args.supabase
     .from('outreach_campaign_enrollments')
     .select('idempotency_key')
     .eq('audience_id', args.contract.audience.audienceId);
+  if (existingRowsError) {
+    return { ok: false, reason: `enrollment_read_failed:${existingRowsError.message}`, preflight: result };
+  }
   const alreadyEnrolled = new Set(
     ((existingRows ?? []) as { idempotency_key: string }[]).map((row) => String(row.idempotency_key)),
   );
+  if (rows.length > 0 && rows.every((row) => alreadyEnrolled.has(row.idempotencyKey))) {
+    // A stale operator retry after a successful schedule is a read-only success. Re-saving the
+    // already locked version would either fork a phantom version or incorrectly report failure.
+    return { ok: true, enrolled: 0, alreadyEnrolled: rows.length, preflight: result };
+  }
 
   let enrolled = 0;
+  let racedEnrollment = 0;
   for (const row of rows) {
     if (alreadyEnrolled.has(row.idempotencyKey)) continue;
 
     // Prospect first: the enrollment references it, and an enrollment pointing at nothing would
     // read as "scheduled" while no send could ever happen.
-    const { data: prospect } = await args.supabase
+    const { data: prospect, error: prospectError } = await args.supabase
       .from('outreach_prospects')
       .upsert({
         email: row.email,
@@ -231,6 +255,13 @@ export async function scheduleCampaign(args: {
       }, { onConflict: 'email,url' })
       .select('id')
       .single();
+    if (prospectError || !prospect?.id) {
+      return {
+        ok: false,
+        reason: `prospect_upsert_failed:${prospectError?.message ?? 'prospect_id_missing'}`,
+        preflight: result,
+      };
+    }
 
     const { error } = await args.supabase.from('outreach_campaign_enrollments').insert({
       audience_id: args.contract.audience.audienceId,
@@ -238,14 +269,20 @@ export async function scheduleCampaign(args: {
       campaign_id: args.contract.campaignId,
       intervention_id: args.contract.interventionId,
       campaign_version: args.contract.version,
-      prospect_id: prospect?.id ? String(prospect.id) : null,
+      prospect_id: String(prospect.id),
       idempotency_key: row.idempotencyKey,
       status: 'enrolled',
       enrolled_at: nowIso,
     });
-    // A unique-violation here means a concurrent schedule already enrolled this contact. That is
-    // the constraint doing its job, not an error worth failing the whole cohort over.
-    if (!error) enrolled += 1;
+    if (!error) {
+      enrolled += 1;
+    } else if (error.code === '23505') {
+      // A concurrent scheduler won the same immutable idempotency key. Count it as durable work;
+      // every other database error is a partial failure and must keep the version unlocked.
+      racedEnrollment += 1;
+    } else {
+      return { ok: false, reason: `enrollment_insert_failed:${error.message}`, preflight: result };
+    }
   }
 
   const { contract } = applyContractEdit(args.contract, {
@@ -257,16 +294,19 @@ export async function scheduleCampaign(args: {
       lockedAt: nowIso,
     },
   });
-  await args.save(contract);
+  const saved = await args.save(contract);
+  if (!saved.ok) {
+    return { ok: false, reason: 'scheduled_contract_save_failed', preflight: result };
+  }
 
   structuredLog('email_campaign_scheduled', {
     interventionKey: args.contract.interventionKey,
     version: args.contract.version,
     enrolled,
-    alreadyEnrolled: alreadyEnrolled.size,
+    alreadyEnrolled: alreadyEnrolled.size + racedEnrollment,
   }, 'info');
 
-  return { ok: true, enrolled, alreadyEnrolled: alreadyEnrolled.size, preflight: result };
+  return { ok: true, enrolled, alreadyEnrolled: alreadyEnrolled.size + racedEnrollment, preflight: result };
 }
 
 // ── Lifecycle stops ─────────────────────────────────────────────────────────────

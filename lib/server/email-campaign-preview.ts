@@ -116,6 +116,9 @@ export function renderCampaignPreview(args: {
   readonly appUrl: string;
   readonly scan?: PreviewScanContext | null;
   readonly sequenceStep?: number;
+  /** Real identifiers are supplied by delivery; previews deliberately use inert identifiers. */
+  readonly trackingIds?: { readonly prospectId: string; readonly sendId: string };
+  readonly resolvedSender?: { readonly from: string; readonly replyTo: string };
 }): CampaignPreview {
   const appUrl = args.appUrl.replace(/\/+$/, '');
   const sequenceStep = args.sequenceStep ?? 1;
@@ -123,8 +126,10 @@ export function renderCampaignPreview(args: {
   const domain = args.contact.companyDomain ?? args.contact.email.slice(args.contact.email.indexOf('@') + 1);
   const walkthroughUrl = `${appUrl}/walkthrough?${query}&source=outreach`;
   // Preview identifiers, not ledger rows: a preview must never allocate a real send id.
-  const unsubscribeUrl = `${appUrl}/api/outreach/unsubscribe/preview-${args.contact.contactId}`;
-  const pixelUrl = `${appUrl}/api/outreach/open/preview-${args.contact.contactId}`;
+  const unsubscribeId = args.trackingIds?.prospectId ?? `preview-${args.contact.contactId}`;
+  const sendId = args.trackingIds?.sendId ?? `preview-${args.contact.contactId}`;
+  const unsubscribeUrl = `${appUrl}/api/outreach/unsubscribe/${unsubscribeId}`;
+  const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
 
   const vars: OutreachTemplateVars = {
     name: args.contact.name,
@@ -157,8 +162,8 @@ export function renderCampaignPreview(args: {
     subject: rendered.subject,
     html: rendered.html,
     previewText: step.previewText,
-    senderLine: `${args.contract.sender.displayName} <${args.contract.sender.authenticated ? args.contract.sender.fromAddressRef : 'no authenticated sender configured'}>`,
-    replyToLine: args.contract.sender.authenticated ? args.contract.sender.replyToRef : 'no authenticated reply-to configured',
+    senderLine: `${args.contract.sender.displayName} <${args.resolvedSender?.from ?? (args.contract.sender.authenticated ? args.contract.sender.fromAddressRef : 'no authenticated sender configured')}>`,
+    replyToLine: args.resolvedSender?.replyTo ?? (args.contract.sender.authenticated ? args.contract.sender.replyToRef : 'no authenticated reply-to configured'),
     unsubscribeUrl,
     links,
     unresolved: unresolvedMergeFields({

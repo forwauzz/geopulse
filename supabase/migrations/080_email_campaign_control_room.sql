@@ -49,7 +49,8 @@ COMMENT ON COLUMN public.outreach_contacts.eligibility_status IS
   'Fail-closed send eligibility. Only "eligible" may enter a campaign audience, and only after '
   'the ECP-3 preflight re-checks suppression, conversion, and sequence conflicts.';
 COMMENT ON COLUMN public.outreach_contacts.source_class IS
-  '"verified_published" = the person published this address (CASL implied-consent evidence). '
+  '"verified_published" means the source file labels this address as published; it is not by '
+  'itself a legal, consent, deliverability, or send-eligibility conclusion. '
   '"constructed_unverified" = pattern-guessed, no consent basis, never sendable through import. '
   '"rejection_evidence" = retained provenance that must never become sendable.';
 COMMENT ON COLUMN public.outreach_contacts.provenance IS
@@ -120,6 +121,14 @@ CREATE TABLE IF NOT EXISTS public.outreach_campaign_enrollments (
   UNIQUE (audience_id, contact_id)
 );
 
+-- One immutable provider idempotency key per campaign/contact/step. A provider-accepted request
+-- followed by an internal write failure must reconcile on retry, not allocate a second ledger row.
+ALTER TABLE public.outreach_sends
+  ADD COLUMN IF NOT EXISTS campaign_send_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS outreach_sends_campaign_send_key_idx
+  ON public.outreach_sends (campaign_send_key)
+  WHERE campaign_send_key IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS outreach_campaign_enrollments_contact_idx
   ON public.outreach_campaign_enrollments (contact_id, status);
 CREATE INDEX IF NOT EXISTS outreach_campaign_enrollments_campaign_idx
@@ -142,6 +151,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE
   ON TABLE public.outreach_campaign_audience_members TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE
   ON TABLE public.outreach_campaign_enrollments TO service_role;
+
+-- A fresh local/production stack must be runnable from migrations alone. These legacy outreach
+-- tables predate explicit grants, but the campaign control room reads and writes them through the
+-- service role. Keep the privilege contract documented here instead of relying on a manual grant.
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE public.outreach_contacts,
+           public.outreach_prospects,
+           public.outreach_sends
+  TO service_role;
 
 COMMENT ON TABLE public.outreach_campaign_audiences IS
   'Immutable recipient snapshot for one campaign version. Segment membership changing later '

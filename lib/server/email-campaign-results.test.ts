@@ -239,9 +239,9 @@ describe('reconciliation against the existing ledgers', () => {
           { id: 'p3', email: 'jack@lifter.ca', lifecycle_status: 'converted', last_run_at: '2026-08-10T13:30:00.000Z', replied_at: '2026-08-11T10:00:00.000Z' },
         ],
         sends: [
-          { id: 's1', prospect_id: 'p1', sent_at: '2026-08-10T13:00:00.000Z', delivery_status: 'sent', opened_at: null },
-          { id: 's2', prospect_id: 'p2', sent_at: '2026-08-10T13:15:00.000Z', delivery_status: 'sent', opened_at: '2026-08-10T14:00:00.000Z' },
-          { id: 's3', prospect_id: 'p3', sent_at: '2026-08-10T13:30:00.000Z', delivery_status: 'sent', opened_at: '2026-08-10T15:00:00.000Z' },
+          { id: 's1', prospect_id: 'p1', sequence_step: 1, sent_at: '2026-08-10T13:00:00.000Z', delivery_status: 'sent', opened_at: null },
+          { id: 's2', prospect_id: 'p2', sequence_step: 1, sent_at: '2026-08-10T13:15:00.000Z', delivery_status: 'sent', opened_at: '2026-08-10T14:00:00.000Z' },
+          { id: 's3', prospect_id: 'p3', sequence_step: 1, sent_at: '2026-08-10T13:30:00.000Z', delivery_status: 'sent', opened_at: '2026-08-10T15:00:00.000Z' },
         ],
       }),
       contract: contract(),
@@ -256,6 +256,28 @@ describe('reconciliation against the existing ledgers', () => {
     expect(stage('replied').count).toBe(0);
     expect(stage('positive_reply').count).toBe(0);
     expect(stage('active_recurring_subscription').count).toBe(0);
+  });
+
+  it('counts all sends operationally but only unique provider-accepted step-one recipients toward the stop threshold', async () => {
+    const results = await loadCampaignResults({
+      supabase: stubSupabase({
+        enrollments: [enrollments[0]!],
+        prospects: [{ id: 'p1', email: 'ann@royco.ca', lifecycle_status: 'completed', last_run_at: '2026-08-20T13:00:00.000Z', replied_at: null }],
+        sends: [1, 2, 3].map((sequenceStep) => ({
+          id: `s${String(sequenceStep)}`,
+          prospect_id: 'p1',
+          sequence_step: sequenceStep,
+          sent_at: `2026-08-${String(9 + sequenceStep).padStart(2, '0')}T13:00:00.000Z`,
+          delivery_status: 'sent',
+          opened_at: null,
+        })),
+      }),
+      contract: contract(),
+      nowMs: NOW,
+    });
+    const stage = (key: FunnelStageKey) => results.funnel.find((item) => item.key === key)!;
+    expect(stage('sent').count).toBe(3);
+    expect(stage('provider_accepted').count).toBe(1);
   });
 
   it('reports every stage as unavailable — not zero — when a ledger cannot be read', async () => {

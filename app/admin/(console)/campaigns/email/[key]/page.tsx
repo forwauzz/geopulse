@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { loadEmailCampaignDetail } from '@/lib/server/email-campaign-console';
 import type { SectionState, SectionStatus } from '@/lib/server/email-campaign-contract';
+import { stepContent } from '@/lib/server/email-campaign-contract';
 import {
   freezeEmailCampaignAudienceAction,
   saveEmailCampaignDraftAction,
@@ -87,7 +88,7 @@ export default async function EmailCampaignDetailPage({
   searchParams,
 }: {
   readonly params: Promise<{ key: string }>;
-  readonly searchParams?: Promise<{ contact?: string; view?: string }>;
+  readonly searchParams?: Promise<{ contact?: string; view?: string; step?: string }>;
 }) {
   const ctx = await loadAdminPageContext('/admin/campaigns/email');
   if (!ctx.ok) return <p className="text-error">{ctx.message}</p>;
@@ -99,10 +100,13 @@ export default async function EmailCampaignDetailPage({
     env: ctx.env as unknown as Record<string, string | undefined>,
     interventionKey: key,
     previewContactId: query.contact ?? null,
+    previewSequenceStep: Number(query.step) || 1,
   });
   if (!detail) notFound();
 
   const { contract, sections, preview, sender } = detail;
+  const activeStep = Math.max(1, Math.min(Number(query.step) || 1, contract.schedule.maxSequenceSteps));
+  const selectedContent = stepContent(contract.content, activeStep);
   const section = (name: string) => sections.find((item) => item.key === name)!;
   const mobileView = query.view === 'mobile';
 
@@ -148,6 +152,7 @@ export default async function EmailCampaignDetailPage({
 
       <form action={saveEmailCampaignDraftAction} className="space-y-6">
         <input type="hidden" name="interventionKey" value={contract.interventionKey} />
+        <input type="hidden" name="sequenceStep" value={activeStep} />
 
         <Section status={section('goal')}>
           <div className="grid gap-4 md:grid-cols-2">
@@ -182,7 +187,7 @@ export default async function EmailCampaignDetailPage({
             <div>
               <dt className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Reply-to</dt>
               <dd className="mt-1 text-on-background">
-                {sender.authenticated ? contract.sender.replyToRef : 'Unavailable'}
+                {sender.authenticated ? sender.resolvedReplyToAddress : 'Unavailable'}
               </dd>
             </div>
           </dl>
@@ -195,12 +200,23 @@ export default async function EmailCampaignDetailPage({
         </Section>
 
         <Section status={section('subject')}>
+          <div className="mb-4 flex flex-wrap gap-2" aria-label="Campaign message steps">
+            {Array.from({ length: contract.schedule.maxSequenceSteps }, (_, index) => index + 1).map((step) => (
+              <Link
+                key={step}
+                href={`/admin/campaigns/email/${contract.interventionKey}?step=${String(step)}${query.contact ? `&contact=${query.contact}` : ''}${mobileView ? '&view=mobile' : ''}`}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold ${activeStep === step ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface-variant'}`}
+              >
+                Message {step}
+              </Link>
+            ))}
+          </div>
           <div className="grid gap-4">
-            <Field label="Subject" name="subject" defaultValue={contract.content.subject} />
+            <Field label="Subject" name="subject" defaultValue={selectedContent.subject} />
             <Field
               label="Preview text"
               name="previewText"
-              defaultValue={contract.content.previewText}
+              defaultValue={selectedContent.previewText}
               hint="Shown beside the subject in most inboxes."
             />
           </div>
@@ -211,7 +227,7 @@ export default async function EmailCampaignDetailPage({
             <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Body</span>
             <textarea
               name="bodyTemplate"
-              defaultValue={contract.content.bodyTemplate}
+              defaultValue={selectedContent.bodyTemplate}
               rows={14}
               className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 font-mono text-xs text-on-background"
             />
@@ -297,6 +313,7 @@ export default async function EmailCampaignDetailPage({
         <div className="mt-5 flex flex-wrap items-end gap-3">
           <form action={sendInternalTestAction} className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="interventionKey" value={contract.interventionKey} />
+            <input type="hidden" name="sequenceStep" value={activeStep} />
             <label className="block">
               <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Internal test recipient</span>
               <select
@@ -419,13 +436,13 @@ export default async function EmailCampaignDetailPage({
       <Section status={section('preview_test')}>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            href={`/admin/campaigns/email/${contract.interventionKey}?view=desktop${query.contact ? `&contact=${query.contact}` : ''}`}
+            href={`/admin/campaigns/email/${contract.interventionKey}?view=desktop&step=${String(activeStep)}${query.contact ? `&contact=${query.contact}` : ''}`}
             className={`rounded-xl px-4 py-2 text-sm font-semibold ${!mobileView ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface-variant'}`}
           >
             Desktop
           </Link>
           <Link
-            href={`/admin/campaigns/email/${contract.interventionKey}?view=mobile${query.contact ? `&contact=${query.contact}` : ''}`}
+            href={`/admin/campaigns/email/${contract.interventionKey}?view=mobile&step=${String(activeStep)}${query.contact ? `&contact=${query.contact}` : ''}`}
             className={`rounded-xl px-4 py-2 text-sm font-semibold ${mobileView ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface-variant'}`}
           >
             Mobile
@@ -433,7 +450,7 @@ export default async function EmailCampaignDetailPage({
           {detail.previewContacts.slice(0, 5).map((contact) => (
             <Link
               key={contact.contactId}
-              href={`/admin/campaigns/email/${contract.interventionKey}?contact=${contact.contactId}${mobileView ? '&view=mobile' : ''}`}
+              href={`/admin/campaigns/email/${contract.interventionKey}?contact=${contact.contactId}&step=${String(activeStep)}${mobileView ? '&view=mobile' : ''}`}
               className="rounded-xl bg-surface-container-low px-3 py-2 text-xs font-semibold text-on-surface-variant"
             >
               as {contact.name ?? contact.email}

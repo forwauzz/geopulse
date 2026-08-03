@@ -203,16 +203,35 @@ describe('internal test', () => {
     expect(call[1]).toBe('qa@getgeopulse.com');
     expect(call[2]).toContain('[TEST]');
     expect(call[4]).toContain(versionChecksum(contract()));
+    expect(call[5]).toEqual({
+      from: 'elena@getgeopulse.com',
+      replyTo: 'elena@getgeopulse.com',
+    });
+  });
+
+  it('does not accept a test when its version evidence cannot be saved', async () => {
+    const result = await sendInternalTest({
+      supabase, env: AUTH_ENV, contract: contract(), recipient: 'qa@getgeopulse.com',
+      sampleContact: SAMPLE_CONTACT, nowMs: NOW, save: async () => ({ ok: false }),
+    });
+    expect(result).toEqual({ ok: false, reason: 'internal_test_evidence_save_failed' });
   });
 });
 
 // ── Scheduling against a stubbed database ───────────────────────────────────────
 
-function stubSupabase(options: { existingKeys?: string[]; prospectId?: string } = {}) {
+function stubSupabase(options: {
+  existingKeys?: string[];
+  prospectId?: string;
+  prospectFailureAt?: number;
+  enrollmentFailureAt?: number;
+} = {}) {
   const writes: { table: string; op: string; payload: any }[] = [];
+  let prospectWrites = 0;
+  let enrollmentWrites = 0;
 
-  function query(rows: unknown[], single?: unknown): any {
-    const builder: any = Promise.resolve({ data: rows, error: null });
+  function query(rows: unknown[], single?: unknown, error: { message: string; code?: string } | null = null): any {
+    const builder: any = Promise.resolve({ data: rows, error });
     builder.eq = () => builder;
     builder.in = () => builder;
     builder.limit = () => builder;
@@ -220,8 +239,8 @@ function stubSupabase(options: { existingKeys?: string[]; prospectId?: string } 
     builder.range = () => builder;
     builder.order = () => builder;
     builder.select = () => builder;
-    builder.maybeSingle = () => Promise.resolve({ data: single ?? null });
-    builder.single = () => Promise.resolve({ data: single ?? null, error: null });
+    builder.maybeSingle = () => Promise.resolve({ data: single ?? null, error });
+    builder.single = () => Promise.resolve({ data: single ?? null, error });
     return builder;
   }
 
@@ -253,10 +272,22 @@ function stubSupabase(options: { existingKeys?: string[]; prospectId?: string } 
         },
         insert(payload: any) {
           writes.push({ table, op: 'insert', payload });
+          if (table === 'outreach_campaign_enrollments') {
+            enrollmentWrites += 1;
+            if (options.enrollmentFailureAt === enrollmentWrites) {
+              return query([], null, { message: 'enrollment write failed', code: 'XX000' });
+            }
+          }
           return query([], { id: 'row-1' });
         },
         upsert(payload: any) {
           writes.push({ table, op: 'upsert', payload });
+          if (table === 'outreach_prospects') {
+            prospectWrites += 1;
+            if (options.prospectFailureAt === prospectWrites) {
+              return query([], null, { message: 'prospect write failed', code: 'XX000' });
+            }
+          }
           return query([], { id: options.prospectId ?? 'prospect-1' });
         },
         update(payload: any) {
@@ -362,6 +393,50 @@ describe('scheduling', () => {
     }
     expect(writes.filter((write) => write.table === 'outreach_campaign_enrollments')).toEqual([]);
     expect(writes.filter((write) => write.table === 'outreach_prospects')).toEqual([]);
+  });
+
+  it('keeps the version unlocked when a prospect write fails', async () => {
+    const { supabase } = stubSupabase({ prospectFailureAt: 1 });
+    const saved: EmailCampaignV1[] = [];
+    const outcome = await scheduleCampaign({
+      supabase, env: AUTH_ENV, contract: contract(), nowMs: NOW,
+      save: async (updated) => { saved.push(updated); return { ok: true }; },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toContain('prospect_upsert_failed');
+    expect(saved).toEqual([]);
+  });
+
+  it('keeps the version unlocked when an enrollment write fails after partial progress', async () => {
+    const { supabase, writes } = stubSupabase({ enrollmentFailureAt: 2 });
+    const saved: EmailCampaignV1[] = [];
+    const outcome = await scheduleCampaign({
+      supabase, env: AUTH_ENV, contract: contract(), nowMs: NOW,
+      save: async (updated) => { saved.push(updated); return { ok: true }; },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toContain('enrollment_insert_failed');
+    expect(writes.filter((write) => write.table === 'outreach_campaign_enrollments')).toHaveLength(2);
+    expect(saved).toEqual([]);
+  });
+
+  it('retries only the missing rows after a partial enrollment failure', async () => {
+    const retry = stubSupabase({ existingKeys: ['agency-reporting-montreal-v1@v1:c0'] });
+    const outcome = await scheduleCampaign({
+      supabase: retry.supabase, env: AUTH_ENV, contract: contract(), nowMs: NOW,
+      save: async () => ({ ok: true }),
+    });
+    expect(outcome).toMatchObject({ ok: true, enrolled: 2, alreadyEnrolled: 1 });
+  });
+
+  it('reports failure instead of success when the locked contract cannot be saved', async () => {
+    const { supabase } = stubSupabase();
+    const outcome = await scheduleCampaign({
+      supabase, env: AUTH_ENV, contract: contract(), nowMs: NOW,
+      save: async () => ({ ok: false }),
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toBe('scheduled_contract_save_failed');
   });
 });
 

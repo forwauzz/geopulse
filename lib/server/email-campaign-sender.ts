@@ -26,6 +26,7 @@ export type SenderEnvLike = Readonly<Record<string, string | undefined>>;
 export interface SenderResolution extends EmailCampaignSender {
   /** Present only for the admin UI's "who would this come from" line; never persisted. */
   readonly resolvedFromAddress: string | null;
+  readonly resolvedReplyToAddress: string | null;
   readonly blockingReason: string | null;
 }
 
@@ -34,7 +35,7 @@ export function resolveCampaignSender(env: SenderEnvLike, displayName = 'Elena a
   const replyTo = env[CAMPAIGN_REPLY_TO_ENV_KEY]?.trim().toLowerCase() ?? '';
   const verified = env[CAMPAIGN_SENDER_VERIFIED_ENV_KEY]?.trim().toLowerCase() === 'true';
 
-  const base: Omit<SenderResolution, 'authenticated' | 'authenticationEvidence' | 'blockingReason' | 'resolvedFromAddress'> = {
+  const base: Omit<SenderResolution, 'authenticated' | 'authenticationEvidence' | 'blockingReason' | 'resolvedFromAddress' | 'resolvedReplyToAddress'> = {
     displayName,
     fromAddressRef: CAMPAIGN_FROM_ENV_KEY,
     replyToRef: CAMPAIGN_REPLY_TO_ENV_KEY,
@@ -45,6 +46,7 @@ export function resolveCampaignSender(env: SenderEnvLike, displayName = 'Elena a
     authenticated: false,
     authenticationEvidence: null,
     resolvedFromAddress: null,
+    resolvedReplyToAddress: null,
     blockingReason: reason,
   });
 
@@ -72,6 +74,7 @@ export function resolveCampaignSender(env: SenderEnvLike, displayName = 'Elena a
     authenticated: true,
     authenticationEvidence: `${domain} verified via ${CAMPAIGN_SENDER_VERIFIED_ENV_KEY}`,
     resolvedFromAddress: from,
+    resolvedReplyToAddress: replyTo,
     blockingReason: null,
   };
 }

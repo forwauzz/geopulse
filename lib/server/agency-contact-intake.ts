@@ -4,7 +4,7 @@
  *
  * The founder's bundle contains three source classes that must never blur into each other:
  *
- *   1. published addresses the person put on a public page  → CASL implied-consent evidence
+ *   1. addresses described as published, with optional public-source evidence
  *   2. pattern-constructed guesses ("first@domain", 62% hit) → NO consent basis, ever
  *   3. names with no address, plus superseded exports        → provenance/rejection evidence only
  *
@@ -91,6 +91,7 @@ export interface ContactWrite {
   readonly sourceRowNumber: number;
   readonly eligibilityStatus: ContactEligibility;
   readonly eligibilityReason: string;
+  readonly publicSourceUrl: string | null;
   readonly provenance: Readonly<Record<string, unknown>>;
 }
 
@@ -138,7 +139,7 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /**
  * Role-based mailboxes reach a function, not a person. Published or not, they are not a
- * decision-maker with implied consent for this offer, so they stay unsendable.
+ * decision-maker evidence for this offer, so they stay unsendable.
  */
 const ROLE_LOCAL_PARTS = new Set([
   'info', 'contact', 'hello', 'bonjour', 'admin', 'office', 'sales', 'support', 'help',
@@ -224,6 +225,16 @@ export function isFreeMailDomain(email: string): boolean {
   return FREE_MAIL_DOMAINS.has(emailDomain(email));
 }
 
+export function normalizePublicSourceUrl(raw: string | null | undefined): string | null {
+  if (!raw?.trim()) return null;
+  try {
+    const parsed = new URL(raw.trim());
+    return parsed.protocol === 'https:' ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export type RegionScope = 'qc_montreal' | 'qc_other' | 'out_of_scope';
 
 export function classifyRegion(raw: string | null): RegionScope {
@@ -251,6 +262,7 @@ export function classifyEligibility(args: {
   readonly sourceClass: ContactSourceClass;
   readonly region: string | null;
   readonly suppression: ContactSuppressionEvidence;
+  readonly publicSourceUrl?: string | null;
 }): { readonly status: ContactEligibility; readonly reason: string } {
   const { email, sourceClass, region, suppression } = args;
 
@@ -281,7 +293,10 @@ export function classifyEligibility(args: {
       reason: `outside_approved_geography:${(region ?? 'unknown').trim().toLowerCase() || 'unknown'}`,
     };
   }
-  return { status: 'eligible', reason: 'published_address_in_approved_geography' };
+  if (!normalizePublicSourceUrl(args.publicSourceUrl)) {
+    return { status: 'needs_verification', reason: 'published_source_url_missing' };
+  }
+  return { status: 'eligible', reason: 'published_source_recorded_in_approved_geography' };
 }
 
 /**
@@ -405,7 +420,16 @@ export function planContactIntake(args: {
         }
       }
 
-      const classified = classifyEligibility({ email, sourceClass: file.sourceClass, region, suppression: args.suppression });
+      const publicSourceUrl = normalizePublicSourceUrl(
+        cell(header, values, 'public_source_url', 'publication_url', 'source_url'),
+      );
+      const classified = classifyEligibility({
+        email,
+        sourceClass: file.sourceClass,
+        region,
+        suppression: args.suppression,
+        publicSourceUrl,
+      });
       const segment = segmentFor(file.sourceClass, region);
       const existing = existingByEmail.get(email);
       const resolved = existing
@@ -446,13 +470,16 @@ export function planContactIntake(args: {
         sourceRowNumber: row,
         eligibilityStatus: resolved.eligibilityStatus,
         eligibilityReason: resolved.eligibilityReason,
+        publicSourceUrl,
         provenance: {
           source_file: file.name,
           source_file_sha256: file.sha256,
           source_row: row,
           source_class: file.sourceClass,
-          url_basis: 'derived_from_email_domain',
-          published_means_public_source_not_deliverability: file.sourceClass === 'verified_published',
+          website_url_basis: 'derived_from_email_domain',
+          public_source_url: publicSourceUrl,
+          source_url_present: Boolean(publicSourceUrl),
+          published_label_is_not_legal_or_deliverability_approval: file.sourceClass === 'verified_published',
           ...(cell(header, values, 'confidence') ? { construction_confidence: cell(header, values, 'confidence') } : {}),
           ...(cell(header, values, 'basis') ? { construction_basis: cell(header, values, 'basis') } : {}),
         },
@@ -574,6 +601,7 @@ export async function applyContactIntake(
       eligibility_status: write.eligibilityStatus,
       eligibility_reason: write.eligibilityReason,
       eligibility_checked_at: nowIso,
+      personalization_source_url: write.publicSourceUrl,
       provenance: write.provenance,
       updated_at: nowIso,
     }));

@@ -180,7 +180,12 @@ export async function loadAudienceEvidence(
     // this campaign itself caused still silences this campaign.
     if (row.unsubscribed_at) unsubscribedEmails.add(email);
     if (row.lifecycle_status === 'converted') convertedEmails.add(email);
-    if (row.lifecycle_status === 'disqualified' || row.lifecycle_status === 'unsubscribed') suppressedEmails.add(email);
+    if (
+      row.lifecycle_status === 'disqualified'
+      || row.lifecycle_status === 'unsubscribed'
+      || row.lifecycle_status === 'replied'
+      || row.lifecycle_status === 'positive_reply'
+    ) suppressedEmails.add(email);
 
     const isOwnCampaign = Boolean(options.excludeInterventionId)
       && String(row.growth_intervention_id ?? '') === options.excludeInterventionId;

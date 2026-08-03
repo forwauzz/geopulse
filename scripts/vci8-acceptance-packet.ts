@@ -226,6 +226,9 @@ async function main(): Promise<void> {
       'no external email and no internal test (sender is unauthenticated)',
       'no DNS or provider configuration change',
       'no migration applied and no deployment',
+      ...(selection.members.length < AGENCY_REPORTING_PILOT_RECIPIENTS
+        ? ['pilot launch held: fewer than 25 contacts have auditable public-source evidence']
+        : []),
     ],
     sourceFiles: files.map((file) => ({ name: file.name, sha256: file.sha256, sourceClass: file.sourceClass })),
     liveEvidenceRead: {
@@ -254,6 +257,10 @@ async function main(): Promise<void> {
       segment: AGENCY_REPORTING_PILOT_SEGMENT,
       candidatesInSegment: candidates.length,
       cohortSize: selection.members.length,
+      launchReady: selection.members.length === AGENCY_REPORTING_PILOT_RECIPIENTS,
+      launchBlocker: selection.members.length === AGENCY_REPORTING_PILOT_RECIPIENTS
+        ? null
+        : 'fewer_than_25_contacts_with_auditable_public_source',
       checksum: selection.checksum,
       excludedCounts: selection.excludedCounts,
       cohort: selection.members.map((member) => ({ position: member.position, email: member.email })),

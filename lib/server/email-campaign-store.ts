@@ -95,6 +95,22 @@ export async function loadEmailCampaign(
   return stored ? toRecord(data as Record<string, any>, stored) : null;
 }
 
+/** Load the immutable version named by an enrollment, never the mutable current version. */
+export async function loadEmailCampaignVersion(
+  supabase: SupabaseClient,
+  interventionId: string,
+  version: number,
+): Promise<EmailCampaignV1 | null> {
+  const { data, error } = await supabase
+    .from('growth_campaign_interventions')
+    .select('metadata')
+    .eq('id', interventionId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const stored = readStored((data as Record<string, unknown>).metadata);
+  return stored?.versions[String(version)] ?? null;
+}
+
 /**
  * The coarse intervention status stays authoritative for company-wide campaign intelligence, so
  * the detailed preparation state maps onto it rather than replacing it.

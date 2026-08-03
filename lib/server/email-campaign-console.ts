@@ -146,6 +146,7 @@ export async function loadEmailCampaignDetail(args: {
   readonly env: SenderEnvLike;
   readonly interventionKey: string;
   readonly previewContactId?: string | null;
+  readonly previewSequenceStep?: number;
   readonly appUrl?: string;
 }): Promise<EmailCampaignDetail | null> {
   const record = await loadEmailCampaign(args.supabase, args.interventionKey);
@@ -159,7 +160,21 @@ export async function loadEmailCampaignDetail(args: {
     : previewContacts[0];
 
   const appUrl = args.appUrl ?? args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com';
-  const preview = selected ? renderCampaignPreview({ contract, contact: selected, appUrl }) : null;
+  const previewSequenceStep = Math.max(1, Math.min(
+    args.previewSequenceStep ?? 1,
+    contract.schedule.maxSequenceSteps,
+  ));
+  const preview = selected
+    ? renderCampaignPreview({
+        contract,
+        contact: selected,
+        appUrl,
+        sequenceStep: previewSequenceStep,
+        ...(sender.resolvedFromAddress && sender.resolvedReplyToAddress
+          ? { resolvedSender: { from: sender.resolvedFromAddress, replyTo: sender.resolvedReplyToAddress } }
+          : {}),
+      })
+    : null;
 
   const warnings: string[] = [];
   if (sender.blockingReason) warnings.push(sender.blockingReason);

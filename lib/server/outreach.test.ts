@@ -160,4 +160,30 @@ describe('sendOutreachEmail', () => {
     expect(result).toEqual({ ok: false, detail: 'http_400 validation_error: bad recipient' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('uses an explicitly authenticated campaign identity instead of legacy sender variables', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'email_campaign' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await sendOutreachEmail(
+      {
+        RESEND_API_KEY: 're_test',
+        RESEND_FROM_EMAIL: 'legacy@getgeopulse.com',
+        SALES_REPLY_TO_EMAIL: 'legacy-reply@getgeopulse.com',
+      },
+      'buyer@example.com',
+      'Subject',
+      '<p>Hello</p>',
+      'campaign-send-1',
+      { from: 'elena@getgeopulse.com', replyTo: 'reply@getgeopulse.com' },
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      from: 'elena@getgeopulse.com',
+      reply_to: 'reply@getgeopulse.com',
+    });
+  });
 });

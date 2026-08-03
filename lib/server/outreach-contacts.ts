@@ -31,6 +31,7 @@ export interface ContactRow {
   readonly personalization_source_url: string | null;
   readonly personalization_verified_at: string | null;
   readonly added_to_sequence_at: string | null;
+  readonly eligibility_status: string;
   readonly created_at: string;
 }
 
@@ -157,7 +158,7 @@ export async function importContacts(
 export async function listContacts(supabase: SupabaseClient, segment?: string | null): Promise<ContactRow[]> {
   let query = supabase
     .from('outreach_contacts')
-    .select('id,email,name,company,url,segment,tags,city,source,personalization_reason,personalization_source_url,personalization_verified_at,added_to_sequence_at,created_at')
+    .select('id,email,name,company,url,segment,tags,city,source,personalization_reason,personalization_source_url,personalization_verified_at,added_to_sequence_at,eligibility_status,created_at')
     .order('created_at', { ascending: false })
     .limit(5000);
   if (segment) query = query.eq('segment', segment);
@@ -196,12 +197,16 @@ export async function addSegmentToSequence(args: {
   startMs: number;
   cadence?: OutreachCadence;
   spacingMinutes?: number;
-}): Promise<{ added: number; skippedUnsubscribed: number; skippedExisting: number; error?: string }> {
+}): Promise<{ added: number; skippedUnsubscribed: number; skippedExisting: number; skippedIneligible: number; error?: string }> {
   const { supabase, segment, startMs } = args;
   const cadence = normalizeOutreachCadence(args.cadence ?? 'monthly');
 
-  const contacts = (await listContacts(supabase, segment)).filter((c) => !c.added_to_sequence_at);
-  if (contacts.length === 0) return { added: 0, skippedUnsubscribed: 0, skippedExisting: 0 };
+  const savedContacts = (await listContacts(supabase, segment)).filter((c) => !c.added_to_sequence_at);
+  const contacts = savedContacts.filter((contact) => contact.eligibility_status === 'eligible');
+  const skippedIneligible = savedContacts.length - contacts.length;
+  if (contacts.length === 0) {
+    return { added: 0, skippedUnsubscribed: 0, skippedExisting: 0, skippedIneligible };
+  }
 
   const emails = contacts.map((c) => c.email);
   const { data: prospectRows } = await supabase
@@ -263,5 +268,6 @@ export async function addSegmentToSequence(args: {
     added,
     skippedUnsubscribed,
     skippedExisting: contacts.length - eligible.length - skippedUnsubscribed < 0 ? 0 : contacts.length - eligible.length,
+    skippedIneligible,
   };
 }

@@ -25,6 +25,12 @@ export type ScanApiEnv = {
   NEXT_PUBLIC_APP_URL: string;
   NEXT_PUBLIC_SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
+  /** Campaign console + internal test delivery; kept here because admin runtime uses ScanApiEnv. */
+  RESEND_API_KEY?: string;
+  GEOPULSE_CAMPAIGN_FROM_EMAIL?: string;
+  GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL?: string;
+  GEOPULSE_CAMPAIGN_SENDER_VERIFIED?: string;
+  GEOPULSE_CAMPAIGN_TEST_RECIPIENTS?: string;
   /** OSS de-paywall flag. "true" = legacy paid (Stripe) mode; anything else = full audit free for all. */
   LEGACY_PAID_ENABLED: string;
   /** Local competitor discovery: 'live'/'gemini' = Google-Search grounding (needs billed key); else mock. */
@@ -219,6 +225,11 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     NEXT_PUBLIC_APP_URL: String(e['NEXT_PUBLIC_APP_URL'] ?? ''),
     NEXT_PUBLIC_SUPABASE_URL: String(e['NEXT_PUBLIC_SUPABASE_URL'] ?? ''),
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
+    RESEND_API_KEY: String(e['RESEND_API_KEY'] ?? ''),
+    GEOPULSE_CAMPAIGN_FROM_EMAIL: String(e['GEOPULSE_CAMPAIGN_FROM_EMAIL'] ?? ''),
+    GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL: String(e['GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL'] ?? ''),
+    GEOPULSE_CAMPAIGN_SENDER_VERIFIED: String(e['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? ''),
+    GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: String(e['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? ''),
     LEGACY_PAID_ENABLED: String(e['LEGACY_PAID_ENABLED'] ?? ''),
     COMPETITOR_DISCOVERY_MODE: String(e['COMPETITOR_DISCOVERY_MODE'] ?? ''),
     COMPETITOR_DISCOVERY_GEMINI_MODEL: String(e['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? ''),
@@ -291,6 +302,11 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       NEXT_PUBLIC_SUPABASE_URL: process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
+      RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
+      GEOPULSE_CAMPAIGN_FROM_EMAIL: process.env['GEOPULSE_CAMPAIGN_FROM_EMAIL'] ?? '',
+      GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL: process.env['GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL'] ?? '',
+      GEOPULSE_CAMPAIGN_SENDER_VERIFIED: process.env['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? '',
+      GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: process.env['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? '',
       LEGACY_PAID_ENABLED: process.env['LEGACY_PAID_ENABLED'] ?? '',
       COMPETITOR_DISCOVERY_MODE: process.env['COMPETITOR_DISCOVERY_MODE'] ?? '',
       COMPETITOR_DISCOVERY_GEMINI_MODEL: process.env['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? '',

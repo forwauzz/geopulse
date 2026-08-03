@@ -52,7 +52,7 @@ const STAGE_LABELS: Record<FunnelStageKey, string> = {
   enrolled: 'Enrolled',
   queued: 'Queued',
   sent: 'Sent',
-  provider_accepted: 'Provider accepted / delivered',
+  provider_accepted: 'Provider-accepted first messages',
   opened: 'Opened',
   clicked: 'Clicked',
   replied: 'Replied',
@@ -304,7 +304,7 @@ export async function loadCampaignResults(args: {
         'Sends',
         args.supabase
           .from('outreach_sends')
-          .select('id,prospect_id,sent_at,opened_at,delivery_status,provider_message_id')
+          .select('id,prospect_id,sent_at,opened_at,delivery_status,provider_message_id,sequence_step')
           .in('prospect_id', prospectIds),
         warnings,
       )
@@ -340,6 +340,12 @@ export async function loadCampaignResults(args: {
 
   const countOrNull = (rows: Record<string, any>[] | null, predicate: (row: Record<string, any>) => boolean): number | null =>
     rows === null ? null : rows.filter(predicate).length;
+  const uniqueProspectsOrNull = (
+    rows: Record<string, any>[] | null,
+    predicate: (row: Record<string, any>) => boolean,
+  ): number | null => rows === null
+    ? null
+    : new Set(rows.filter(predicate).map((row) => String(row.prospect_id))).size;
 
   const oldest = (rows: Record<string, any>[] | null, field: string, predicate: (row: Record<string, any>) => boolean): string | null => {
     if (!rows) return null;
@@ -354,7 +360,10 @@ export async function loadCampaignResults(args: {
       enrolled: enrollments === null ? null : enrollments.length,
       queued: countOrNull(commercialProspects, (row) => row.lifecycle_status === 'active' && !row.last_run_at),
       sent: countOrNull(commercialSends, () => true),
-      provider_accepted: countOrNull(commercialSends, (row) => row.delivery_status === 'sent'),
+      provider_accepted: uniqueProspectsOrNull(
+        commercialSends,
+        (row) => row.delivery_status === 'sent' && Number(row.sequence_step) === 1,
+      ),
       opened: countOrNull(commercialSends, (row) => Boolean(row.opened_at)),
       // Click attribution is not wired into this ledger yet — reported as unavailable rather than
       // as zero, which would read as "nobody clicked".

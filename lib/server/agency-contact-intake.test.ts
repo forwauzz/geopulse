@@ -27,12 +27,16 @@ const NO_SUPPRESSION: ContactSuppressionEvidence = {
 };
 
 function verifiedFile(rows: string, name = '1-VERIFIED-published-327.csv'): IntakeSourceFile {
+  const withSources = rows
+    .split('\n')
+    .map((row, index) => `${row},https://directory.example/contact-${String(index + 1)}`)
+    .join('\n');
   return {
     path: `/bundle/${name}`,
     name,
     sha256: 'sha-verified',
     sourceClass: 'verified_published',
-    text: `name,title,company,email,region\n${rows}`,
+    text: `name,title,company,email,region,public_source_url\n${withSources}`,
   };
 }
 
@@ -103,8 +107,25 @@ describe('normalization', () => {
 describe('eligibility is fail-closed', () => {
   it('marks a published Montreal decision-maker eligible', () => {
     expect(
-      classifyEligibility({ email: 'ann@royco.ca', sourceClass: 'verified_published', region: 'Montreal', suppression: NO_SUPPRESSION }),
-    ).toEqual({ status: 'eligible', reason: 'published_address_in_approved_geography' });
+      classifyEligibility({
+        email: 'ann@royco.ca',
+        sourceClass: 'verified_published',
+        region: 'Montreal',
+        suppression: NO_SUPPRESSION,
+        publicSourceUrl: 'https://directory.example/ann',
+      }),
+    ).toEqual({ status: 'eligible', reason: 'published_source_recorded_in_approved_geography' });
+  });
+
+  it('keeps a published-labelled row unverified when the actual public source is absent', () => {
+    expect(
+      classifyEligibility({
+        email: 'ann@royco.ca',
+        sourceClass: 'verified_published',
+        region: 'Montreal',
+        suppression: NO_SUPPRESSION,
+      }),
+    ).toEqual({ status: 'needs_verification', reason: 'published_source_url_missing' });
   });
 
   it('never lets a constructed address become sendable, even in geography', () => {
@@ -151,7 +172,7 @@ describe('merging never erases stronger evidence', () => {
     segment: MONTREAL_PUBLISHED_SEGMENT,
     sourceClass: 'verified_published',
     eligibilityStatus: 'eligible',
-    eligibilityReason: 'published_address_in_approved_geography',
+    eligibilityReason: 'published_source_recorded_in_approved_geography',
     addedToSequenceAt: null,
   };
 
@@ -173,7 +194,7 @@ describe('merging never erases stronger evidence', () => {
       {
         sourceClass: 'verified_published',
         eligibilityStatus: 'eligible',
-        eligibilityReason: 'published_address_in_approved_geography',
+        eligibilityReason: 'published_source_recorded_in_approved_geography',
         segment: MONTREAL_PUBLISHED_SEGMENT,
       },
     );
@@ -187,7 +208,7 @@ describe('merging never erases stronger evidence', () => {
       {
         sourceClass: 'verified_published',
         eligibilityStatus: 'eligible',
-        eligibilityReason: 'published_address_in_approved_geography',
+        eligibilityReason: 'published_source_recorded_in_approved_geography',
         segment: MONTREAL_PUBLISHED_SEGMENT,
       },
     );
@@ -269,7 +290,8 @@ describe('intake plan (the dry run)', () => {
     expect(write?.url).toBe('https://royco.ca');
     expect(write?.companyDomain).toBe('royco.ca');
     expect(write?.provenance).toMatchObject({
-      url_basis: 'derived_from_email_domain',
+      website_url_basis: 'derived_from_email_domain',
+      public_source_url: 'https://directory.example/contact-1',
       source_file: '1-VERIFIED-published-327.csv',
       source_file_sha256: 'sha-verified',
       source_row: 2,
@@ -369,5 +391,14 @@ describe('migration 079', () => {
 
   it('protects frozen audiences from contact deletion', () => {
     expect(migration).toContain('REFERENCES public.outreach_contacts(id) ON DELETE RESTRICT');
+  });
+
+  it('declares campaign send idempotency and all service-role grants needed by a fresh stack', () => {
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS campaign_send_key TEXT');
+    expect(migration).toContain('outreach_sends_campaign_send_key_idx');
+    for (const table of ['public.outreach_contacts', 'public.outreach_prospects', 'public.outreach_sends']) {
+      expect(migration).toContain(table);
+    }
+    expect(migration).not.toContain('CASL implied-consent');
   });
 });
