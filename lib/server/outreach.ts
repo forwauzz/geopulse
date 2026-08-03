@@ -214,7 +214,7 @@ export function buildBoundedOutreachMessage(
 ): {
   readonly subject: string;
   readonly html: string;
-  readonly variant: 'evidence_opener' | 'reply_first_email_notes_v2' | 'close_the_loop';
+  readonly variant: 'evidence_opener' | 'reply_first_binary_choice_v3' | 'close_the_loop';
 } {
   if (args.sequenceStep <= 1) {
     return {
@@ -241,13 +241,13 @@ export function buildBoundedOutreachMessage(
           `<p style="margin:0 0 10px;">${greeting}</p>`,
           `<p style="margin:0 0 14px;">I sent the public-site audit for <strong>${escapeEmailHtml(args.domain)}</strong> earlier. It found observable access, structure, content, and trust gaps; it did not predict or guarantee citations.</p>`,
           issueContext,
-          '<p style="margin:0 0 14px;">Is AI-search visibility something your team owns, or should I send the evidence to someone else?</p>',
-          '<p style="margin:0;color:#586162;font-size:13px;">If you own it, reply with "notes" and I will send the two highest-confidence checks in this thread. No call or account is needed. If someone else owns it, their role is enough.</p>',
+          '<p style="margin:0 0 14px;">Would it be useful if I sent the two highest-confidence checks in this thread?</p>',
+          '<p style="margin:0;color:#586162;font-size:13px;">A simple yes or no is enough: reply "yes" and I will send the two highest-confidence checks in this thread. Reply "no" and I will close the audit out. No call or account is needed.</p>',
         ].join('\n'),
         unsubscribeUrl: args.unsubscribeUrl,
         pixelUrl: args.pixelUrl,
       }),
-      variant: 'reply_first_email_notes_v2',
+      variant: 'reply_first_binary_choice_v3',
     };
   }
 
