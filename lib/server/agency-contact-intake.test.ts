@@ -348,7 +348,7 @@ describe('apply writes only contact-bank state', () => {
 });
 
 describe('migration 079', () => {
-  const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations/079_email_campaign_control_room.sql'), 'utf8');
+  const migration = readFileSync(resolve(process.cwd(), 'supabase/migrations/080_email_campaign_control_room.sql'), 'utf8');
 
   it('defaults eligibility to the restrictive value', () => {
     expect(migration).toContain("ADD COLUMN IF NOT EXISTS eligibility_status TEXT NOT NULL DEFAULT 'needs_verification'");
