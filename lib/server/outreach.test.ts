@@ -88,16 +88,21 @@ describe('buildBoundedOutreachMessage', () => {
     expect(message.html).toContain('Request a focused walkthrough');
   });
 
-  it('turns sequence step two into a low-friction email-notes offer', () => {
+  it('keeps the V2 message fixed while making the reply mechanic a binary choice', () => {
     const message = buildBoundedOutreachMessage({ ...args, sequenceStep: 2 });
     expect(message).toMatchObject({
-      variant: 'reply_first_email_notes_v2',
+      variant: 'reply_first_binary_choice_v3',
       subject: 'Quick question about mipsmedia.com',
     });
-    expect(message.html).toContain('Is AI-search visibility something your team owns');
-    expect(message.html).toContain('reply with "notes"');
+    expect(message.html).toContain('Would it be useful if I sent the two highest-confidence checks');
+    expect(message.html).toContain('A simple yes or no is enough');
+    expect(message.html).toContain('reply "yes"');
+    expect(message.html).toContain('Reply "no" and I will close the audit out');
     expect(message.html).toContain('No call or account is needed');
     expect(message.html).toContain('Organization schema');
+    expect(message.html).not.toContain('reply with "notes"');
+    expect(message.html).not.toContain('should I send the evidence to someone else');
+    expect(message.html).not.toContain('their role is enough');
     expect(message.html).not.toContain('Review the audit');
     expect(message.html).not.toContain('Request a focused walkthrough');
   });
