@@ -12,6 +12,7 @@ import {
   type SocialOAuthProvider,
 } from '@/lib/server/distribution-social-oauth';
 import { encryptDistributionToken } from '@/lib/server/distribution-token-crypto';
+import { resolveApprovedLinkedInOrganization } from '@/lib/server/linkedin-company-publishing';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
 import {
   resolveDistributionOAuthAppUrl,
@@ -134,6 +135,29 @@ export async function GET(
             apiBaseUrl: env.X_API_BASE_URL,
           })
         : null;
+    const linkedInOrganization =
+      provider === 'linkedin'
+        ? await resolveApprovedLinkedInOrganization({
+            accessToken: token.accessToken,
+            expectedName:
+              typeof account.metadata?.['expected_organization_name'] === 'string'
+                ? String(account.metadata['expected_organization_name'])
+                : 'GEO-Pulse',
+            expectedWebsiteHost:
+              typeof account.metadata?.['expected_organization_website_host'] === 'string'
+                ? String(account.metadata['expected_organization_website_host'])
+                : 'getgeopulse.com',
+            expectedVanityNames: Array.isArray(
+              account.metadata?.['expected_organization_vanity_names']
+            )
+              ? account.metadata['expected_organization_vanity_names'].filter(
+                  (value): value is string => typeof value === 'string'
+                )
+              : ['geo-pulse', 'getgeopulse'],
+            apiBaseUrl: env.LINKEDIN_API_BASE_URL,
+            apiVersion: env.LINKEDIN_API_VERSION,
+          })
+        : null;
     const expectedXUsername =
       provider === 'x' && typeof account.metadata?.['expected_username'] === 'string'
         ? String(account.metadata['expected_username']).replace(/^@/, '').trim().toLowerCase()
@@ -177,19 +201,16 @@ export async function GET(
       },
     });
 
-    const authorUrnFromToken = provider === 'linkedin'
-      ? typeof (token.raw as Record<string, unknown>)['id_token_sub'] === 'string'
-        ? String((token.raw as Record<string, unknown>)['id_token_sub'])
-        : null
-      : null;
-
     callbackStage = 'account_persistence';
     await repo.upsertAccount({
       accountId: account.account_id,
       providerName: account.provider_name,
       accountLabel: account.account_label,
       externalAccountId:
-        xProfile?.id ?? instagramProfile?.userId ?? account.external_account_id,
+        xProfile?.id ??
+        instagramProfile?.userId ??
+        linkedInOrganization?.organizationUrn ??
+        account.external_account_id,
       status: 'connected',
       defaultAudienceId: account.default_audience_id,
       connectedByUserId: account.connected_by_user_id ?? user.id,
@@ -198,10 +219,17 @@ export async function GET(
         ...account.metadata,
         oauth_connected_at: new Date().toISOString(),
         oauth_connected_by_user_id: user.id,
-        ...(provider === 'linkedin' && account.external_account_id
-          ? { author_urn: account.external_account_id }
+        ...(linkedInOrganization
+          ? {
+              author_urn: linkedInOrganization.organizationUrn,
+              linkedin_organization_id: linkedInOrganization.id,
+              linkedin_organization_name: linkedInOrganization.localizedName,
+              linkedin_organization_website: linkedInOrganization.localizedWebsite,
+              linkedin_organization_vanity_name: linkedInOrganization.vanityName,
+              linkedin_organization_role: 'ADMINISTRATOR',
+              linkedin_identity_verified_at: new Date().toISOString(),
+            }
           : {}),
-        ...(provider === 'linkedin' && authorUrnFromToken ? { author_urn: authorUrnFromToken } : {}),
         ...(instagramProfile
           ? {
               instagram_user_id: instagramProfile.userId,

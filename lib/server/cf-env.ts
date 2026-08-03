@@ -54,6 +54,7 @@ export type ScanApiEnv = {
   DISTRIBUTION_ENGINE_BACKGROUND_ENABLED?: string;
   DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT?: string;
   X_OAUTH_CLIENT_ID?: string;
+  LINKEDIN_OAUTH_CLIENT_ID?: string;
   /** AES-GCM key for distribution account access and refresh tokens. */
   DISTRIBUTION_TOKEN_ENCRYPTION_KEY?: string;
   TURNSTILE_SECRET_KEY: string;
@@ -119,12 +120,12 @@ export type PaymentApiEnv = ScanApiEnv & {
   LINKEDIN_ACCESS_TOKEN?: string;
   LINKEDIN_AUTHOR_URN?: string;
   LINKEDIN_API_BASE_URL?: string;
+  LINKEDIN_API_VERSION?: string;
   INSTAGRAM_ACCESS_TOKEN?: string;
   INSTAGRAM_GRAPH_API_BASE_URL?: string;
   X_OAUTH_CLIENT_ID?: string;
   X_OAUTH_CLIENT_SECRET?: string;
   X_OAUTH_TOKEN_URL?: string;
-  LINKEDIN_OAUTH_CLIENT_ID?: string;
   LINKEDIN_OAUTH_CLIENT_SECRET?: string;
   LINKEDIN_OAUTH_TOKEN_URL?: string;
   INSTAGRAM_OAUTH_CLIENT_ID?: string;
@@ -254,6 +255,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
       e['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? ''
     ),
     X_OAUTH_CLIENT_ID: String(e['X_OAUTH_CLIENT_ID'] ?? ''),
+    LINKEDIN_OAUTH_CLIENT_ID: String(e['LINKEDIN_OAUTH_CLIENT_ID'] ?? ''),
     DISTRIBUTION_TOKEN_ENCRYPTION_KEY: String(
       e['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? ''
     ),
@@ -328,6 +330,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT:
         process.env['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? '',
       X_OAUTH_CLIENT_ID: process.env['X_OAUTH_CLIENT_ID'] ?? '',
+      LINKEDIN_OAUTH_CLIENT_ID: process.env['LINKEDIN_OAUTH_CLIENT_ID'] ?? '',
       DISTRIBUTION_TOKEN_ENCRYPTION_KEY:
         process.env['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? '',
       TURNSTILE_SECRET_KEY: process.env['TURNSTILE_SECRET_KEY'] ?? '',
@@ -401,6 +404,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       LINKEDIN_ACCESS_TOKEN: pickEnvString(e, 'LINKEDIN_ACCESS_TOKEN'),
       LINKEDIN_AUTHOR_URN: pickEnvString(e, 'LINKEDIN_AUTHOR_URN'),
       LINKEDIN_API_BASE_URL: pickEnvString(e, 'LINKEDIN_API_BASE_URL'),
+      LINKEDIN_API_VERSION: pickEnvString(e, 'LINKEDIN_API_VERSION'),
       INSTAGRAM_ACCESS_TOKEN: pickEnvString(e, 'INSTAGRAM_ACCESS_TOKEN'),
       INSTAGRAM_GRAPH_API_BASE_URL: pickEnvString(e, 'INSTAGRAM_GRAPH_API_BASE_URL'),
       X_OAUTH_CLIENT_ID: pickEnvString(e, 'X_OAUTH_CLIENT_ID'),
@@ -458,6 +462,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       LINKEDIN_ACCESS_TOKEN: process.env['LINKEDIN_ACCESS_TOKEN'] ?? '',
       LINKEDIN_AUTHOR_URN: process.env['LINKEDIN_AUTHOR_URN'] ?? '',
       LINKEDIN_API_BASE_URL: process.env['LINKEDIN_API_BASE_URL'] ?? '',
+      LINKEDIN_API_VERSION: process.env['LINKEDIN_API_VERSION'] ?? '',
       INSTAGRAM_ACCESS_TOKEN: process.env['INSTAGRAM_ACCESS_TOKEN'] ?? '',
       INSTAGRAM_GRAPH_API_BASE_URL: process.env['INSTAGRAM_GRAPH_API_BASE_URL'] ?? '',
       X_OAUTH_CLIENT_ID: process.env['X_OAUTH_CLIENT_ID'] ?? '',

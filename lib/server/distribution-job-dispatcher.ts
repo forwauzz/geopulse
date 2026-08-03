@@ -15,6 +15,12 @@ import { structuredError, structuredLog } from '@/lib/server/structured-log';
 import { publishInstagramAsset } from '@/lib/server/instagram-publisher';
 import { recordDistributionPublicationProof } from '@/lib/server/distribution-publication-proof';
 import {
+  buildLinkedInRestHeaders,
+  buildLinkedInTextPostPayload,
+  isLinkedInOrganizationUrn,
+  linkedInPostDestinationUrl,
+} from '@/lib/server/linkedin-company-publishing';
+import {
   createDistributionEngineRepository,
   type DistributionAccountRow,
   type DistributionAccountTokenRow,
@@ -35,6 +41,22 @@ type DispatchSummary = {
 };
 
 export type { DispatchSummary };
+
+export function canStartLinkedInProviderPublish(
+  status: DistributionJobRow['status']
+): boolean {
+  return status === 'queued' || status === 'scheduled';
+}
+
+export function isLinkedInAutomatedAssetType(
+  assetType: DistributionAssetRow['asset_type']
+): boolean {
+  return (
+    assetType === 'link_post' ||
+    assetType === 'thread_post' ||
+    assetType === 'single_image_post'
+  );
+}
 
 type DispatchFailureDetails = {
   readonly message: string;
@@ -273,12 +295,25 @@ async function resolveProviderRuntimeEnv(
   }
 
   if (account.provider_name === 'linkedin') {
-    const metadataAuthorUrn = readString((metadata as Record<string, unknown>)['author_urn']);
     const accountAuthorUrn = readString((accountMetadata as Record<string, unknown>)['author_urn']);
+    const externalAuthorUrn = readString(account.external_account_id);
+    if (
+      !accessToken ||
+      !isLinkedInOrganizationUrn(externalAuthorUrn) ||
+      accountAuthorUrn !== externalAuthorUrn
+    ) {
+      throw new ContentDestinationPublishError({
+        message:
+          'LinkedIn Company Page identity or encrypted OAuth token is not verified. Reconnect LinkedIn before publishing.',
+        providerName: 'linkedin',
+        retryable: false,
+      });
+    }
+    const verifiedAuthorUrn = externalAuthorUrn as string;
     return {
       ...env,
-      LINKEDIN_ACCESS_TOKEN: accessToken ?? env.LINKEDIN_ACCESS_TOKEN,
-      LINKEDIN_AUTHOR_URN: metadataAuthorUrn ?? accountAuthorUrn ?? env.LINKEDIN_AUTHOR_URN,
+      LINKEDIN_ACCESS_TOKEN: accessToken,
+      LINKEDIN_AUTHOR_URN: verifiedAuthorUrn,
     };
   }
 
@@ -676,31 +711,22 @@ async function publishLinkedInSingleImagePost(args: {
     ''
   );
 
-  const registerResponse = await fetch(`${apiBase}/v2/assets?action=registerUpload`, {
+  const registerResponse = await fetch(`${apiBase}/rest/images?action=initializeUpload`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      'X-Restli-Protocol-Version': '2.0.0',
-    },
+    headers: buildLinkedInRestHeaders({
+      accessToken,
+      apiVersion: args.env.LINKEDIN_API_VERSION,
+    }),
     body: JSON.stringify({
-      registerUploadRequest: {
+      initializeUploadRequest: {
         owner: authorUrn,
-        recipes: ['urn:li:digitalmediaRecipe:feedshare-image'],
-        serviceRelationships: [
-          {
-            relationshipType: 'OWNER',
-            identifier: 'urn:li:userGeneratedContent',
-          },
-        ],
-        supportedUploadMechanism: ['SYNCHRONOUS_UPLOAD'],
       },
     }),
   });
   const registerText = await registerResponse.text();
   if (!registerResponse.ok) {
     throw new ContentDestinationPublishError({
-      message: `LinkedIn media register failed (${registerResponse.status}): ${registerText}`,
+      message: `LinkedIn image initialization failed (${registerResponse.status}): ${registerText}`,
       providerName: 'linkedin',
       statusCode: registerResponse.status,
       retryable: isRetryableLinkedInFailure(registerResponse.status, registerText),
@@ -708,20 +734,17 @@ async function publishLinkedInSingleImagePost(args: {
   }
 
   const registerJson = JSON.parse(registerText) as Record<string, unknown>;
-  const uploadMechanism = (registerJson['value'] as Record<string, unknown>)?.[
-    'uploadMechanism'
-  ] as Record<string, unknown> | undefined;
-  const httpRequest = (uploadMechanism?.[
-    'com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest'
-  ] as Record<string, unknown>) ?? null;
-  const uploadUrl = typeof httpRequest?.['uploadUrl'] === 'string' ? String(httpRequest['uploadUrl']) : '';
-  const assetUrn = typeof (registerJson['value'] as Record<string, unknown>)?.['asset'] === 'string'
-    ? String((registerJson['value'] as Record<string, unknown>)['asset'])
+  const registerValue = registerJson['value'] as Record<string, unknown> | undefined;
+  const uploadUrl = typeof registerValue?.['uploadUrl'] === 'string'
+    ? String(registerValue['uploadUrl'])
+    : '';
+  const assetUrn = typeof registerValue?.['image'] === 'string'
+    ? String(registerValue['image'])
     : '';
 
   if (!uploadUrl || !assetUrn) {
     throw new ContentDestinationPublishError({
-      message: 'LinkedIn media register succeeded but upload URL or asset URN is missing.',
+      message: 'LinkedIn image initialization succeeded but upload URL or image URN is missing.',
       providerName: 'linkedin',
       retryable: false,
     });
@@ -730,7 +753,6 @@ async function publishLinkedInSingleImagePost(args: {
   const uploadResponse = await fetch(uploadUrl, {
     method: 'PUT',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': mediaContentType,
     },
     body: mediaBuffer,
@@ -745,53 +767,42 @@ async function publishLinkedInSingleImagePost(args: {
     });
   }
 
-  const postResponse = await fetch(`${apiBase}/v2/ugcPosts`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      'X-Restli-Protocol-Version': '2.0.0',
-    },
-    body: JSON.stringify({
-      author: authorUrn,
-      lifecycleState: 'PUBLISHED',
-      specificContent: {
-        'com.linkedin.ugc.ShareContent': {
-          shareCommentary: { text: buildLinkedInCaption(args.item) },
-          shareMediaCategory: 'IMAGE',
-          media: [
-            {
-              status: 'READY',
-              media: assetUrn,
-              title: { text: trimToLength(args.asset.title ?? args.item.title, 200) },
-            },
-          ],
-        },
-      },
-      visibility: {
-        'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
-      },
-    }),
-  });
+  let postResponse: Response;
+  try {
+    postResponse = await fetch(`${apiBase}/rest/posts`, {
+      method: 'POST',
+      headers: buildLinkedInRestHeaders({
+        accessToken,
+        apiVersion: args.env.LINKEDIN_API_VERSION,
+      }),
+      body: JSON.stringify(
+        buildLinkedInTextPostPayload({
+          authorUrn,
+          commentary: buildLinkedInCaption(args.item),
+          imageUrn: assetUrn,
+          imageAltText: readyMedia.alt_text,
+        })
+      ),
+    });
+  } catch {
+    throw new ContentDestinationPublishError({
+      message:
+        'LinkedIn publish outcome is unknown after a network interruption. Reconcile the Company Page before retrying.',
+      providerName: 'linkedin',
+      retryable: false,
+    });
+  }
   const postText = await postResponse.text();
   if (!postResponse.ok) {
     throw new ContentDestinationPublishError({
       message: `LinkedIn publish failed (${postResponse.status}): ${postText}`,
       providerName: 'linkedin',
       statusCode: postResponse.status,
-      retryable: isRetryableLinkedInFailure(postResponse.status, postText),
+      retryable: false,
     });
   }
 
-  let postId = postResponse.headers.get('x-restli-id')?.trim() ?? '';
-  if (!postId && postText.trim().length > 0) {
-    try {
-      const json = JSON.parse(postText) as Record<string, unknown>;
-      postId = typeof json['id'] === 'string' ? String(json['id']).trim() : '';
-    } catch {
-      postId = '';
-    }
-  }
+  const postId = postResponse.headers.get('x-restli-id')?.trim() ?? '';
   if (!postId) {
     throw new ContentDestinationPublishError({
       message: 'LinkedIn publish succeeded but no post id was returned.',
@@ -802,10 +813,13 @@ async function publishLinkedInSingleImagePost(args: {
 
   return {
     providerPublicationId: postId,
-    destinationUrl: null,
+    destinationUrl: linkedInPostDestinationUrl(postId),
     status: 'published',
     metadata: {
       provider: 'linkedin',
+      api: 'rest_posts_images',
+      api_version: args.env.LINKEDIN_API_VERSION || '202607',
+      author_urn: authorUrn,
       media_asset_urn: assetUrn,
       media_storage_url: readyMedia.storage_url,
     },
@@ -1474,12 +1488,6 @@ export async function dispatchDistributionJobById(
   const publishXLongVideo = deps.publishXLongVideoPost ?? publishXLongVideoPost;
   const publishLinkedInSingleImage =
     deps.publishLinkedInSingleImagePost ?? publishLinkedInSingleImagePost;
-  const publishLinkedInCarousel =
-    deps.publishLinkedInCarouselPost ?? publishLinkedInCarouselPost;
-  const publishLinkedInShortVideo =
-    deps.publishLinkedInShortVideoPost ?? publishLinkedInShortVideoPost;
-  const publishLinkedInLongVideo =
-    deps.publishLinkedInLongVideoPost ?? publishLinkedInLongVideoPost;
   const publishInstagram = deps.publishInstagramAsset ?? publishInstagramAsset;
   const recordPublicationProof = deps.recordPublicationProof ?? recordDistributionPublicationProof;
   const log = deps.structuredLog ?? structuredLog;
@@ -1510,6 +1518,7 @@ export async function dispatchDistributionJobById(
     return { scanned: 1, dispatched: 0, succeeded: 0, failed: 0 };
   }
 
+  const linkedinPublishCanStart = canStartLinkedInProviderPublish(job.status);
   let currentJob: DistributionJobRow = job;
 
   try {
@@ -1531,6 +1540,29 @@ export async function dispatchDistributionJobById(
     }
     if (!asset) {
       throw new Error('Distribution asset not found for job.');
+    }
+    if (account.provider_name === 'linkedin' && !linkedinPublishCanStart) {
+      throw new ContentDestinationPublishError({
+        message:
+          'LinkedIn job was already processing, so its external outcome is unknown. Reconcile the Company Page before creating a replacement job.',
+        providerName: 'linkedin',
+        retryable: false,
+      });
+    }
+    if (
+      account.provider_name === 'linkedin' &&
+      !isLinkedInAutomatedAssetType(asset.asset_type) &&
+      !(
+        (asset.asset_type === 'carousel_post' && deps.publishLinkedInCarouselPost) ||
+        (asset.asset_type === 'short_video_post' && deps.publishLinkedInShortVideoPost) ||
+        (asset.asset_type === 'long_video_post' && deps.publishLinkedInLongVideoPost)
+      )
+    ) {
+      throw new ContentDestinationPublishError({
+        message: `LinkedIn ${asset.asset_type} publishing remains manual until its Company Page publisher is independently proven.`,
+        providerName: 'linkedin',
+        retryable: false,
+      });
     }
     const approvedManualInstagram = canDispatchApprovedManualInstagramAsset(account, asset);
     if (asset.source_type !== 'content_item' && !approvedManualInstagram) {
@@ -1610,27 +1642,24 @@ export async function dispatchDistributionJobById(
         mediaRows,
         env: runtimeEnv,
       });
-    } else if (asset.asset_type === 'carousel_post' && account.provider_name === 'linkedin') {
-      result = await publishLinkedInCarousel({
-        item,
-        asset,
-        mediaRows,
-        env: runtimeEnv,
-      });
-    } else if (asset.asset_type === 'short_video_post' && account.provider_name === 'linkedin') {
-      result = await publishLinkedInShortVideo({
-        item,
-        asset,
-        mediaRows,
-        env: runtimeEnv,
-      });
-    } else if (asset.asset_type === 'long_video_post' && account.provider_name === 'linkedin') {
-      result = await publishLinkedInLongVideo({
-        item,
-        asset,
-        mediaRows,
-        env: runtimeEnv,
-      });
+    } else if (
+      asset.asset_type === 'carousel_post' &&
+      account.provider_name === 'linkedin' &&
+      deps.publishLinkedInCarouselPost
+    ) {
+      result = await deps.publishLinkedInCarouselPost({ item, asset, mediaRows, env: runtimeEnv });
+    } else if (
+      asset.asset_type === 'short_video_post' &&
+      account.provider_name === 'linkedin' &&
+      deps.publishLinkedInShortVideoPost
+    ) {
+      result = await deps.publishLinkedInShortVideoPost({ item, asset, mediaRows, env: runtimeEnv });
+    } else if (
+      asset.asset_type === 'long_video_post' &&
+      account.provider_name === 'linkedin' &&
+      deps.publishLinkedInLongVideoPost
+    ) {
+      result = await deps.publishLinkedInLongVideoPost({ item, asset, mediaRows, env: runtimeEnv });
     } else if (
       account.provider_name === 'instagram' &&
       (asset.asset_type === 'single_image_post' ||
@@ -1667,6 +1696,13 @@ export async function dispatchDistributionJobById(
         account_id: account.account_id,
         asset_id: asset.asset_id,
         publish_mode: currentJob.publish_mode,
+        publication_key: currentJob.job_id,
+        ...(account.provider_name === 'linkedin'
+          ? {
+              author_urn: account.external_account_id,
+              linkedin_api_version: runtimeEnv.LINKEDIN_API_VERSION || '202607',
+            }
+          : {}),
       },
       responseSummary: {
         delivery_status: result.status,

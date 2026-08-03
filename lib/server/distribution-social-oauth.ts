@@ -1,4 +1,8 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import {
+  LINKEDIN_COMPANY_REQUIRED_SCOPES,
+  assertLinkedInCompanyScopes,
+} from './linkedin-company-publishing';
 
 export type SocialOAuthProvider = 'x' | 'linkedin' | 'instagram';
 
@@ -180,6 +184,10 @@ export function assertRequiredSocialOAuthScopes(
   provider: SocialOAuthProvider,
   scopeList: ReadonlyArray<string>
 ): void {
+  if (provider === 'linkedin') {
+    assertLinkedInCompanyScopes(scopeList);
+    return;
+  }
   if (provider !== 'x') return;
   const granted = new Set(scopeList);
   const missing = X_REQUIRED_PUBLISH_SCOPES.filter((scope) => !granted.has(scope));
@@ -299,10 +307,12 @@ export function buildSocialOAuthAuthorizeUrl(input: SocialOAuthStartInput): stri
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('redirect_uri', redirectUri);
-  url.searchParams.set(
-    'scope',
-    splitScopes(input.linkedinScope, 'openid profile w_member_social').join(' ')
+  const requestedScopes = splitScopes(
+    input.linkedinScope,
+    LINKEDIN_COMPANY_REQUIRED_SCOPES.join(' ')
   );
+  assertRequiredSocialOAuthScopes('linkedin', requestedScopes);
+  url.searchParams.set('scope', requestedScopes.join(' '));
   url.searchParams.set('state', state);
   return url.toString();
 }
