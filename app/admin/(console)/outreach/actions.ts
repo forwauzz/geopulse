@@ -307,6 +307,8 @@ export async function runOutreachNowAction(formData: FormData): Promise<void> {
     segment: data.segment ?? null,
     personalizationReason: data.personalization_reason ?? null,
     personalizationSourceUrl: data.personalization_source_url ?? null,
+    growthCampaignId: data.growth_campaign_id ?? null,
+    growthInterventionId: data.growth_intervention_id ?? null,
   };
 
   await runOutreachForProspect({
