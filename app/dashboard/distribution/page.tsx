@@ -4,7 +4,11 @@ import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createDistributionEngineAdminData } from '@/lib/server/distribution-engine-admin-data';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
-import { startInstagramOauthConnect, startXOauthConnect } from './actions';
+import {
+  startInstagramOauthConnect,
+  startLinkedInOauthConnect,
+  startXOauthConnect,
+} from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -175,6 +179,10 @@ export default async function DistributionAdminPage(props: {
       adminContext.env.X_OAUTH_CLIENT_ID?.trim() &&
         adminContext.env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY?.trim()
     );
+    const linkedInOauthConfigured = Boolean(
+      adminContext.env.LINKEDIN_OAUTH_CLIENT_ID?.trim() &&
+        adminContext.env.DISTRIBUTION_TOKEN_ENCRYPTION_KEY?.trim()
+    );
 
     return (
       <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16">
@@ -320,6 +328,65 @@ export default async function DistributionAdminPage(props: {
                     ? 'Reconnect X'
                     : xOauthConfigured
                       ? 'Connect X'
+                      : 'Developer app required'}
+                </button>
+              </form>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float">
+          <div className="flex flex-wrap items-center gap-4">
+            <div
+              className="grid h-11 w-11 place-items-center rounded-xl bg-[#0A66C2] font-headline text-lg font-bold text-white"
+              aria-hidden
+            >
+              in
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h2 className="font-headline text-lg font-semibold text-on-background">
+                  LinkedIn · GEO-Pulse Company Page
+                </h2>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    overview.accounts.some(
+                      (account) =>
+                        account.provider_name === 'linkedin' && account.status === 'connected'
+                    )
+                      ? 'bg-primary/15 text-primary'
+                      : 'bg-surface-container-high text-on-surface-variant'
+                  }`}
+                >
+                  {overview.accounts.some(
+                    (account) =>
+                      account.provider_name === 'linkedin' && account.status === 'connected'
+                  )
+                    ? 'Connected'
+                    : linkedInOauthConfigured
+                      ? 'Ready to authorize'
+                      : 'Developer app required'}
+                </span>
+              </div>
+              <p className="mt-1 font-body text-sm text-on-surface-variant">
+                Scheduled text, links, and one image publish through the verified Company Page.
+                Video and carousels stay manual until their publisher is proven.
+              </p>
+            </div>
+            {flags.socialOauthEnabled ? (
+              <form action={startLinkedInOauthConnect}>
+                <button
+                  type="submit"
+                  disabled={!linkedInOauthConfigured}
+                  className="rounded-xl bg-[#0A66C2] px-4 py-2 font-body text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {overview.accounts.some(
+                    (account) =>
+                      account.provider_name === 'linkedin' && account.status === 'connected'
+                  )
+                    ? 'Reconnect LinkedIn'
+                    : linkedInOauthConfigured
+                      ? 'Connect LinkedIn'
                       : 'Developer app required'}
                 </button>
               </form>

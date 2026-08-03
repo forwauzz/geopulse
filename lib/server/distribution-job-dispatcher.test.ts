@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { ContentDestinationPublishError } from './content-destination-adapters';
 import { refreshSocialOAuthToken } from './distribution-social-oauth';
 import {
+  canStartLinkedInProviderPublish,
   canDispatchApprovedManualInstagramAsset,
   dispatchDistributionJobById,
   dispatchDistributionJobs,
+  isLinkedInAutomatedAssetType,
 } from './distribution-job-dispatcher';
 
 vi.mock('./distribution-social-oauth', async () => {
@@ -60,6 +62,17 @@ const baseEnv = {
 };
 
 describe('dispatchDistributionJobs', () => {
+  it('fails closed for stale LinkedIn jobs and unsupported formats', () => {
+    expect(canStartLinkedInProviderPublish('queued')).toBe(true);
+    expect(canStartLinkedInProviderPublish('scheduled')).toBe(true);
+    expect(canStartLinkedInProviderPublish('processing')).toBe(false);
+    expect(canStartLinkedInProviderPublish('failed')).toBe(false);
+    expect(isLinkedInAutomatedAssetType('link_post')).toBe(true);
+    expect(isLinkedInAutomatedAssetType('single_image_post')).toBe(true);
+    expect(isLinkedInAutomatedAssetType('carousel_post')).toBe(false);
+    expect(isLinkedInAutomatedAssetType('short_video_post')).toBe(false);
+  });
+
   it('allows only approved manual Instagram assets through the social-only path', () => {
     expect(
       canDispatchApprovedManualInstagramAsset(
@@ -1412,7 +1425,7 @@ describe('dispatchDistributionJobs', () => {
           expires_at: null,
           scopes: [],
           metadata: {
-            author_urn: 'urn:li:person:123',
+            author_urn: 'urn:li:organization:123',
           },
           created_at: '2026-04-02T00:00:00.000Z',
           updated_at: '2026-04-02T00:00:00.000Z',
@@ -1469,7 +1482,7 @@ describe('dispatchDistributionJobs', () => {
         structuredError: vi.fn(),
       })
     ).rejects.toThrow(
-      'Media-required asset has no provider-ready media. Save media rows with ready/uploaded status before dispatch.'
+      'LinkedIn carousel_post publishing remains manual until its Company Page publisher is independently proven.'
     );
 
     expect(repo.updateJob).toHaveBeenLastCalledWith(
@@ -2294,11 +2307,11 @@ describe('dispatchDistributionJobs', () => {
         account_id: 'linkedin_founder',
         provider_name: 'linkedin',
         account_label: 'Founder LinkedIn',
-        external_account_id: 'urn:li:person:123',
+        external_account_id: 'urn:li:organization:123',
         status: 'connected',
         default_audience_id: null,
         metadata: {
-          author_urn: 'urn:li:person:123',
+          author_urn: 'urn:li:organization:123',
         },
         connected_by_user_id: 'user-1',
         last_verified_at: null,
@@ -2352,7 +2365,7 @@ describe('dispatchDistributionJobs', () => {
           expires_at: null,
           scopes: [],
           metadata: {
-            author_urn: 'urn:li:person:123',
+            author_urn: 'urn:li:organization:123',
           },
           created_at: '2026-04-02T00:00:00.000Z',
           updated_at: '2026-04-02T00:00:00.000Z',
@@ -2491,11 +2504,11 @@ describe('dispatchDistributionJobs', () => {
         account_id: 'linkedin_founder',
         provider_name: 'linkedin',
         account_label: 'Founder LinkedIn',
-        external_account_id: 'urn:li:person:123',
+        external_account_id: 'urn:li:organization:123',
         status: 'connected',
         default_audience_id: null,
         metadata: {
-          author_urn: 'urn:li:person:123',
+          author_urn: 'urn:li:organization:123',
         },
         connected_by_user_id: 'user-1',
         last_verified_at: null,
@@ -2563,7 +2576,7 @@ describe('dispatchDistributionJobs', () => {
           expires_at: null,
           scopes: [],
           metadata: {
-            author_urn: 'urn:li:person:123',
+            author_urn: 'urn:li:organization:123',
           },
           created_at: '2026-04-02T00:00:00.000Z',
           updated_at: '2026-04-02T00:00:00.000Z',
@@ -2702,11 +2715,11 @@ describe('dispatchDistributionJobs', () => {
         account_id: 'linkedin_founder',
         provider_name: 'linkedin',
         account_label: 'Founder LinkedIn',
-        external_account_id: 'urn:li:person:123',
+        external_account_id: 'urn:li:organization:123',
         status: 'connected',
         default_audience_id: null,
         metadata: {
-          author_urn: 'urn:li:person:123',
+          author_urn: 'urn:li:organization:123',
         },
         connected_by_user_id: 'user-1',
         last_verified_at: null,
@@ -2760,7 +2773,7 @@ describe('dispatchDistributionJobs', () => {
           expires_at: null,
           scopes: [],
           metadata: {
-            author_urn: 'urn:li:person:123',
+            author_urn: 'urn:li:organization:123',
           },
           created_at: '2026-04-02T00:00:00.000Z',
           updated_at: '2026-04-02T00:00:00.000Z',
@@ -2899,11 +2912,11 @@ describe('dispatchDistributionJobs', () => {
         account_id: 'linkedin_founder',
         provider_name: 'linkedin',
         account_label: 'Founder LinkedIn',
-        external_account_id: 'urn:li:person:123',
+        external_account_id: 'urn:li:organization:123',
         status: 'connected',
         default_audience_id: null,
         metadata: {
-          author_urn: 'urn:li:person:123',
+          author_urn: 'urn:li:organization:123',
         },
         connected_by_user_id: 'user-1',
         last_verified_at: null,
@@ -2957,7 +2970,7 @@ describe('dispatchDistributionJobs', () => {
           expires_at: null,
           scopes: [],
           metadata: {
-            author_urn: 'urn:li:person:123',
+            author_urn: 'urn:li:organization:123',
           },
           created_at: '2026-04-02T00:00:00.000Z',
           updated_at: '2026-04-02T00:00:00.000Z',
@@ -3311,11 +3324,11 @@ describe('dispatchDistributionJobs', () => {
         account_id: 'linkedin_founder',
         provider_name: 'linkedin',
         account_label: 'Founder LinkedIn',
-        external_account_id: 'urn:li:person:123',
+        external_account_id: 'urn:li:organization:123',
         status: 'connected',
         default_audience_id: null,
         metadata: {
-          author_urn: 'urn:li:person:123',
+          author_urn: 'urn:li:organization:123',
         },
         connected_by_user_id: 'user-1',
         last_verified_at: null,

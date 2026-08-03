@@ -3,6 +3,11 @@ import type { PaymentApiEnv } from '@/lib/server/cf-env';
 import type { ContentAdminDetailRow } from '@/lib/server/content-admin-data';
 import type { ContentDestinationRow } from '@/lib/server/content-destination-admin-data';
 import { agentEmailSignatureHtml } from '@/lib/server/email-theme';
+import {
+  buildLinkedInRestHeaders,
+  buildLinkedInTextPostPayload,
+  linkedInPostDestinationUrl,
+} from '@/lib/server/linkedin-company-publishing';
 
 export type ContentPublishRequest = {
   readonly item: ContentAdminDetailRow;
@@ -582,47 +587,26 @@ class LinkedInContentDestinationAdapter implements ContentDestinationAdapter {
       ''
     );
 
-    const shareContent: {
-      shareCommentary: { text: string };
-      shareMediaCategory: 'NONE' | 'ARTICLE';
-      media?: Array<{
-        status: 'READY';
-        originalUrl: string;
-      }>;
-    } = canonicalUrl
-      ? {
-          shareCommentary: { text },
-          shareMediaCategory: 'ARTICLE',
-          media: [
-            {
-              status: 'READY',
-              originalUrl: canonicalUrl,
-            },
-          ],
-        }
-      : {
-          shareCommentary: { text },
-          shareMediaCategory: 'NONE',
-        };
-
-    const response = await fetch(`${apiBase}/v2/ugcPosts`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        'X-Restli-Protocol-Version': '2.0.0',
-      },
-      body: JSON.stringify({
-        author: authorUrn,
-        lifecycleState: 'PUBLISHED',
-        specificContent: {
-          'com.linkedin.ugc.ShareContent': shareContent,
-        },
-        visibility: {
-          'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC',
-        },
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${apiBase}/rest/posts`, {
+        method: 'POST',
+        headers: buildLinkedInRestHeaders({
+          accessToken,
+          apiVersion: request.env.LINKEDIN_API_VERSION,
+        }),
+        body: JSON.stringify(
+          buildLinkedInTextPostPayload({ authorUrn, commentary: text })
+        ),
+      });
+    } catch {
+      throw new ContentDestinationPublishError({
+        message:
+          'LinkedIn publish outcome is unknown after a network interruption. Reconcile the Company Page before retrying.',
+        providerName: 'linkedin',
+        retryable: false,
+      });
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -630,20 +614,12 @@ class LinkedInContentDestinationAdapter implements ContentDestinationAdapter {
         message: `LinkedIn publish failed (${response.status}): ${errorText}`,
         providerName: 'linkedin',
         statusCode: response.status,
-        retryable: isRetryableLinkedInFailure(response.status, errorText),
+        retryable: false,
       });
     }
 
     const responseHeaderId = response.headers.get('x-restli-id')?.trim() ?? '';
-    let responseBodyId = '';
-    try {
-      const json = (await response.json()) as { id?: string };
-      responseBodyId = json.id?.trim() ?? '';
-    } catch {
-      responseBodyId = '';
-    }
-
-    const providerPublicationId = responseHeaderId || responseBodyId;
+    const providerPublicationId = responseHeaderId;
     if (!providerPublicationId) {
       throw new ContentDestinationPublishError({
         message: 'LinkedIn publish succeeded but no post id was returned.',
@@ -654,10 +630,14 @@ class LinkedInContentDestinationAdapter implements ContentDestinationAdapter {
 
     return {
       providerPublicationId,
-      destinationUrl: null,
+      destinationUrl: linkedInPostDestinationUrl(providerPublicationId),
       status: 'published',
       metadata: {
         provider: 'linkedin',
+        api: 'rest_posts',
+        apiVersion: request.env.LINKEDIN_API_VERSION || '202607',
+        authorUrn,
+        canonicalUrl,
       },
     };
   }

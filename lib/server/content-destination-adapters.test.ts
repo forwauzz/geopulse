@@ -558,7 +558,7 @@ describe('resolveContentDestinationAdapter', () => {
       },
       env: {
         LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
-        LINKEDIN_AUTHOR_URN: 'urn:li:person:abc123',
+        LINKEDIN_AUTHOR_URN: 'urn:li:organization:12345',
         LINKEDIN_API_BASE_URL: 'https://api.linkedin.com',
       } as any,
       item: {
@@ -588,10 +588,14 @@ describe('resolveContentDestinationAdapter', () => {
 
     expect(result).toEqual({
       providerPublicationId: 'urn:li:share:12345',
-      destinationUrl: null,
+      destinationUrl: 'https://www.linkedin.com/feed/update/urn:li:share:12345',
       status: 'published',
       metadata: {
         provider: 'linkedin',
+        api: 'rest_posts',
+        apiVersion: '202607',
+        authorUrn: 'urn:li:organization:12345',
+        canonicalUrl: 'https://getgeopulse.com/blog/linkedin-post-content',
       },
     });
   });
@@ -794,7 +798,7 @@ describe('resolveContentDestinationAdapter', () => {
     });
   });
 
-  it('marks LinkedIn throttled 403 failures as retryable', async () => {
+  it('holds LinkedIn throttled failures for reconciliation instead of risking a duplicate', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 403,
@@ -826,7 +830,7 @@ describe('resolveContentDestinationAdapter', () => {
         destination: {} as any,
         env: {
           LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
-          LINKEDIN_AUTHOR_URN: 'urn:li:person:abc123',
+          LINKEDIN_AUTHOR_URN: 'urn:li:organization:12345',
         } as any,
         item: {
           id: 'item-linkedin-2',
@@ -855,7 +859,7 @@ describe('resolveContentDestinationAdapter', () => {
     ).rejects.toMatchObject({
       providerName: 'linkedin',
       statusCode: 403,
-      retryable: true,
+      retryable: false,
     });
   });
 
@@ -891,7 +895,7 @@ describe('resolveContentDestinationAdapter', () => {
         destination: {} as any,
         env: {
           LINKEDIN_ACCESS_TOKEN: 'linkedin_token',
-          LINKEDIN_AUTHOR_URN: 'urn:li:person:abc123',
+          LINKEDIN_AUTHOR_URN: 'urn:li:organization:12345',
         } as any,
         item: {
           id: 'item-linkedin-3',

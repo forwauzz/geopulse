@@ -899,6 +899,49 @@ export async function startXOauthConnect(): Promise<void> {
   );
 }
 
+export async function startLinkedInOauthConnect(): Promise<void> {
+  const context = await requireSocialOauthEnabled();
+  if (!context.ok) throw new Error(context.message);
+  const repo = createDistributionEngineRepository(context.adminDb);
+  const existing = await repo.getAccountByAccountId('linkedin_geopulse');
+  const account = await repo.upsertAccount({
+    accountId: 'linkedin_geopulse',
+    providerName: 'linkedin',
+    accountLabel: 'GEO-Pulse LinkedIn Company Page',
+    externalAccountId: existing?.external_account_id ?? null,
+    status: existing?.status === 'connected' ? 'connected' : 'draft',
+    connectedByUserId: existing?.connected_by_user_id ?? context.user.id,
+    lastVerifiedAt: existing?.last_verified_at ?? null,
+    metadata: {
+      ...(existing?.metadata ?? {}),
+      source: 'linkedin_company_quick_connect',
+      expected_organization_name: 'GEO-Pulse',
+      expected_organization_website_host: 'getgeopulse.com',
+      expected_organization_vanity_names: ['geo-pulse', 'getgeopulse'],
+    },
+  });
+  const appUrl = resolveDistributionOAuthAppUrl(process.env, context.env);
+  const stateSecret =
+    process.env['SUPABASE_SERVICE_ROLE_KEY']?.trim() ||
+    context.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!appUrl || !stateSecret) {
+    throw new Error('LinkedIn OAuth is missing the app URL or state secret.');
+  }
+  redirect(
+    buildSocialOAuthAuthorizeUrl({
+      provider: 'linkedin',
+      accountId: account.id,
+      userId: context.user.id,
+      appUrl,
+      stateSecret,
+      linkedinClientId:
+        process.env['LINKEDIN_OAUTH_CLIENT_ID'] || context.env.LINKEDIN_OAUTH_CLIENT_ID,
+      linkedinAuthorizeUrl: process.env['LINKEDIN_OAUTH_AUTH_URL'],
+      linkedinScope: process.env['LINKEDIN_OAUTH_SCOPE'],
+    })
+  );
+}
+
 export async function startInstagramOauthConnect(): Promise<void> {
   const context = await requireSocialOauthEnabled();
   if (!context.ok) throw new Error(context.message);

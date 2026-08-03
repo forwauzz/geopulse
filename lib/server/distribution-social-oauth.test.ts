@@ -9,6 +9,7 @@ import {
   validateSignedOAuthState,
   X_REQUIRED_PUBLISH_SCOPES,
 } from '@/lib/server/distribution-social-oauth';
+import { LINKEDIN_COMPANY_REQUIRED_SCOPES } from '@/lib/server/linkedin-company-publishing';
 
 const originalFetch = global.fetch;
 
@@ -150,6 +151,22 @@ describe('distribution-social-oauth', () => {
     expect(validated).toBeNull();
   });
 
+  it('requests only Company Page scopes for LinkedIn', () => {
+    const url = new URL(
+      buildSocialOAuthAuthorizeUrl({
+        provider: 'linkedin',
+        accountId: 'acct-linkedin',
+        userId: 'user-1',
+        appUrl: 'https://getgeopulse.com',
+        stateSecret: 'secret',
+        linkedinClientId: 'linkedin-client-id',
+      })
+    );
+    expect(url.searchParams.get('scope')?.split(' ')).toEqual(
+      LINKEDIN_COMPANY_REQUIRED_SCOPES
+    );
+  });
+
   it('builds Instagram Login with only publishing and insights scopes', () => {
     const url = new URL(
       buildSocialOAuthAuthorizeUrl({
@@ -179,7 +196,7 @@ describe('distribution-social-oauth', () => {
           access_token: 'access-token',
           refresh_token: 'refresh-token',
           expires_in: 3600,
-          scope: 'openid profile w_member_social',
+          scope: 'rw_organization_admin w_organization_social',
         }),
     } as Response) as typeof fetch;
 
@@ -193,7 +210,7 @@ describe('distribution-social-oauth', () => {
 
     expect(token.accessToken).toBe('access-token');
     expect(token.refreshToken).toBe('refresh-token');
-    expect(token.scopeList).toEqual(['openid', 'profile', 'w_member_social']);
+    expect(token.scopeList).toEqual(['rw_organization_admin', 'w_organization_social']);
     expect(token.expiresAt).toBeTruthy();
   });
 
@@ -270,7 +287,7 @@ describe('distribution-social-oauth', () => {
           access_token: 'linkedin-new-access-token',
           refresh_token: 'linkedin-new-refresh-token',
           expires_in: 5400,
-          scope: 'openid profile w_member_social',
+          scope: 'rw_organization_admin w_organization_social',
         }),
     } as Response) as typeof fetch;
 
@@ -283,7 +300,7 @@ describe('distribution-social-oauth', () => {
 
     expect(token.accessToken).toBe('linkedin-new-access-token');
     expect(token.refreshToken).toBe('linkedin-new-refresh-token');
-    expect(token.scopeList).toEqual(['openid', 'profile', 'w_member_social']);
+    expect(token.scopeList).toEqual(['rw_organization_admin', 'w_organization_social']);
     expect(token.expiresAt).toBeTruthy();
   });
 
