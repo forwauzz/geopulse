@@ -37,6 +37,14 @@ export function SiteFooter() {
           <Link href="/solutions/msps" className="hover:text-on-background hover:underline">For MSPs</Link>
           <Link href="/about" className="hover:text-on-background hover:underline">About</Link>
           <Link href="/privacy" className="hover:text-on-background hover:underline">Privacy</Link>
+          <a
+            href="https://www.linkedin.com/company/getgeopulse"
+            rel="me noopener"
+            target="_blank"
+            className="hover:text-on-background hover:underline"
+          >
+            LinkedIn
+          </a>
           <Link href="/login" className="hover:text-on-background hover:underline">Sign in</Link>
         </div>
       </div>
