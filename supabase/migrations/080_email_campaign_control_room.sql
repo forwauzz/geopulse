@@ -1,4 +1,4 @@
--- Migration 079 (VCI-8 / ECP-1): fail-closed contact eligibility and immutable campaign
+-- Migration 080 (VCI-8 / ECP-1): fail-closed contact eligibility and immutable campaign
 -- audiences for the centralized email campaign control room.
 --
 -- Two things the existing model could not express safely:
