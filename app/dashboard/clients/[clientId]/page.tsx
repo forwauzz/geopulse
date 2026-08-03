@@ -16,6 +16,7 @@ import { isClientReportSharingHeld, isReportQuarantined } from '@/lib/server/rep
 import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
 import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
 import { OnboardingFirstValueReveal } from '@/components/onboarding-first-value-reveal';
+import { resolveClientMonitoringState } from '@/lib/server/client-monitoring-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -162,7 +163,6 @@ export default async function ClientScorecardPage({
   const gpmReports = (storedGpmReports ?? [])
     .filter((report: { metadata: Record<string, unknown> | null }) => !isReportQuarantined(report.metadata))
     .slice(0, 6);
-  const engineEntries = (Object.entries(engines) as Array<[EngineKey, { citationRate: number }]>);
   const reportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
   const latestGpmReport = gpmReports?.[0] ?? null;
   const baselineStatus = typeof configMetadata['onboarding_loop_status'] === 'string'
@@ -170,6 +170,11 @@ export default async function ClientScorecardPage({
     : typeof configMetadata['baseline_status'] === 'string'
       ? String(configMetadata['baseline_status'])
       : 'not_started';
+  const monitoringState = resolveClientMonitoringState({
+    configuredPlatforms: platformsEnabled,
+    metrics: engines,
+    baselineStatus,
+  });
   const estimatedSpend = Number(configMetadata['spend_estimated_usd'] ?? 0);
   const monthSpend = Number(configMetadata['spend_month_to_date_usd'] ?? 0);
   const monthlyCap = Number(configMetadata['spend_monthly_cap_usd'] ?? 5);
@@ -240,7 +245,7 @@ export default async function ClientScorecardPage({
               clientId={client.id}
               agencyAccountId={account.id}
               clientName={client.name}
-              baselineReady={baselineStatus === 'closed' || baselineStatus === 'measured'}
+              baselineReady={monitoringState.status === 'active'}
               reportReady={Boolean(activationReport?.snapshot)}
             />
           </div>
@@ -251,12 +256,13 @@ export default async function ClientScorecardPage({
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Automatic customer baseline</p>
               <p className="mt-1 font-semibold text-on-background">
-                {baselineStatus === 'closed' || baselineStatus === 'measured'
-                  ? 'Research, audit, AI measurement, and scorecard are active'
-                  : 'Complete the first client-ready baseline'}
+                {monitoringState.headline}
               </p>
               <p className="mt-1 text-sm text-on-surface-variant">
-                10 buyer questions · 3–5 researched competitors · {enabledPlatformLabels || 'AI measurement pending'} · recurring {cadence ?? 'monthly'}
+                10 buyer questions · 3–5 researched competitors · {enabledPlatformLabels || 'AI measurement not configured'} · recurring {cadence ?? 'monthly'}
+              </p>
+              <p className="mt-2 text-sm text-on-surface-variant">
+                {monitoringState.detail}
               </p>
               <p className="mt-2 text-xs text-on-surface-variant">
                 Spend guard: {estimatedSpend > 0 ? `$${estimatedSpend.toFixed(2)} estimated` : 'estimated before launch'}
@@ -268,7 +274,7 @@ export default async function ClientScorecardPage({
               <input type="hidden" name="agencyAccountId" value={account.id} />
               <input type="hidden" name="reportEmail" value={reportRecipients[0] ?? user.email ?? ''} />
               <PendingSubmitButton
-                idleLabel={baselineStatus === 'closed' || baselineStatus === 'measured' ? 'Verify baseline' : 'Complete baseline'}
+                idleLabel={monitoringState.actionLabel}
                 pendingLabel="Researching and measuring…"
                 className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${sp.activation === '1' ? 'bg-primary text-on-primary' : 'bg-on-background text-background'}`}
               />
@@ -294,15 +300,27 @@ export default async function ClientScorecardPage({
         <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-float">
           <h2 className="font-headline text-lg font-semibold text-on-background">How often AI recommends this client</h2>
           <p className="mt-1 text-sm text-on-surface-variant">Measured from real buyer questions where the brand is not named.</p>
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {(['chatgpt', 'gemini', 'perplexity', 'claude'] as EngineKey[]).map((engine) => (
-              <div key={engine} className="rounded-xl bg-surface-container-low p-4">
-                <p className="text-sm font-medium text-on-background">{ENGINE_LABEL[engine]}</p>
-                <p className="mt-3 text-2xl font-bold text-on-background">{engines[engine] ? `${Math.round(engines[engine]!.citationRate * 100)}%` : '—'}</p>
-              </div>
-            ))}
-          </div>
-          {engineEntries.length === 0 ? <p className="mt-4 text-xs text-on-surface-variant">AI visibility tracking starts after this domain is enrolled in monitoring.</p> : null}
+          {monitoringState.engines.length > 0 ? (
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {monitoringState.engines.map((engine) => (
+                <div key={engine.engine} className="rounded-xl bg-surface-container-low p-4">
+                  <p className="text-sm font-medium text-on-background">{ENGINE_LABEL[engine.engine]}</p>
+                  <p className="mt-3 text-2xl font-bold text-on-background">
+                    {engine.metric ? `${Math.round(engine.metric.citationRate * 100)}%` : engine.status === 'pending' ? 'Pending' : 'Unavailable'}
+                  </p>
+                  <p className="mt-2 text-xs text-on-surface-variant">
+                    {engine.metric
+                      ? 'Quality-valid AI visibility measurement'
+                      : engine.status === 'pending'
+                        ? 'Configured; verified measurement has not completed'
+                        : 'Configured; no compatible verified measurement'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-xs text-on-surface-variant">AI visibility monitoring is not configured for this client yet.</p>
+          )}
         </div>
       </section>
 
