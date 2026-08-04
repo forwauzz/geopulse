@@ -77,9 +77,16 @@ export default async function ClientScorecardPage({
     : null;
   const domain = client.canonicalDomain ?? latestScan?.domain ?? null;
 
-  // The baseline refuses without this, so the page asks for it up front rather
-  // than letting the agency discover it by pressing a button that cannot work.
-  const confirmedOrganizationContext = domain
+  // The baseline refuses without this, so the page offers the confirmation up
+  // front rather than making the agency discover it by pressing a button that
+  // returns organization_context_confirmation_required.
+  //
+  // A failed lookup is not treated as a missing context: only a successful read
+  // that finds nothing prompts, so a transient error cannot invent this state.
+  // The baseline action stays visible either way — this prompt is additive, and
+  // hiding the primary action on the strength of one read would lock the agency
+  // out whenever the read is wrong.
+  const organizationContextLookup = domain
     ? await loadConfirmedOrganizationContextByHost({
         // The workspace loader hands back a narrowed query surface; this reader
         // only uses .from(...).select(...).eq(...).maybeSingle().
@@ -87,9 +94,9 @@ export default async function ClientScorecardPage({
         ownerType: 'agency_client',
         ownerId: clientId,
         canonicalDomain: domain,
-      }).catch(() => null)
-    : null;
-  const needsMarketConfirmation = Boolean(domain) && !confirmedOrganizationContext;
+      }).then((context) => ({ read: true, context })).catch(() => ({ read: false, context: null }))
+    : { read: false, context: null };
+  const needsMarketConfirmation = organizationContextLookup.read && !organizationContextLookup.context;
 
   const configResult = domain
     ? await admin
@@ -286,20 +293,18 @@ export default async function ClientScorecardPage({
                 {' · '}${monthSpend.toFixed(2)} of ${monthlyCap.toFixed(2)} monthly cap
               </p>
             </div>
-            {!needsMarketConfirmation ? (
-              <form action={completeClientBaseline}>
-                <input type="hidden" name="clientId" value={client.id} />
-                <input type="hidden" name="agencyAccountId" value={account.id} />
-                <input type="hidden" name="reportEmail" value={reportRecipients[0] ?? user.email ?? ''} />
-                <PendingSubmitButton
-                  idleLabel={monitoringState.actionLabel}
-                  pendingLabel="Researching and measuring…"
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${sp.activation === '1' ? 'bg-primary text-on-primary' : 'bg-on-background text-background'}`}
-                />
-              </form>
-            ) : null}
+            <form action={completeClientBaseline}>
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <input type="hidden" name="reportEmail" value={reportRecipients[0] ?? user.email ?? ''} />
+              <PendingSubmitButton
+                idleLabel={monitoringState.actionLabel}
+                pendingLabel="Researching and measuring…"
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${sp.activation === '1' ? 'bg-primary text-on-primary' : 'bg-on-background text-background'}`}
+              />
+            </form>
           </div>
-          {sp.baseline && !needsMarketConfirmation ? (
+          {sp.baseline ? (
             <p className={`mt-3 text-sm font-medium ${sp.baseline === 'complete' ? 'text-primary' : 'text-error'}`}>
               {sp.baseline === 'complete'
                 ? 'Baseline complete and recurring monitoring scheduled.'

@@ -6,7 +6,7 @@
  * tenants, and confirming against a form-supplied host would write a context
  * the baseline never reads, leaving the client silently unmeasurable again.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
@@ -112,8 +112,10 @@ const confirmedForm = (overrides: Record<string, string> = {}) => form({
 describe('confirmAgencyClientMarket', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env['NEXT_PUBLIC_SUPABASE_URL'] = 'https://project.supabase.co';
-    process.env['SUPABASE_SERVICE_ROLE_KEY'] = 'service-role-key';
+    // stubEnv rather than assignment: the project types process.env keys as
+    // literal values, so a direct assignment fails type-check in CI.
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://project.supabase.co');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
     validateAgencyContext.mockResolvedValue(true);
     persistConfirmedOrganizationContext.mockResolvedValue({ contextVersion: 'ocv1-test' });
     clientRow = {
@@ -123,6 +125,10 @@ describe('confirmAgencyClientMarket', () => {
       canonical_domain: 'sanomedsolutions.com',
       website_domain: 'sanomedsolutions.com',
     };
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('confirms against the stored client domain, not one supplied by the form', async () => {
