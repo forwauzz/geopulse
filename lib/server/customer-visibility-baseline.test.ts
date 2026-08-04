@@ -1,5 +1,43 @@
-import { describe, expect, it } from 'vitest';
-import { buildBaselineBuyerPrompts, isApprovedCustomerQuerySet } from './customer-visibility-baseline';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  buildBaselineBuyerPrompts,
+  isApprovedCustomerQuerySet,
+  resolveCompetitorCohort,
+} from './customer-visibility-baseline';
+
+describe('competitor cohort resolution', () => {
+  const cohort = ['clinique360.com', 'remd.ca', 'unionmd.ca'];
+
+  it('keeps a bound cohort without paying for a suggestion', async () => {
+    const suggest = vi.fn(async () => ['ignored.example']);
+    await expect(resolveCompetitorCohort({ bound: cohort, stored: [], suggest })).resolves.toEqual(cohort);
+    expect(suggest).not.toHaveBeenCalled();
+  });
+
+  it('treats an empty bound cohort as no answer rather than as an empty one', async () => {
+    const suggest = vi.fn(async () => cohort);
+    await expect(resolveCompetitorCohort({ bound: [], stored: [], suggest })).resolves.toEqual(cohort);
+    expect(suggest).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the stored cohort when discovery comes back empty', async () => {
+    await expect(resolveCompetitorCohort({
+      bound: [],
+      stored: cohort,
+      suggest: async () => [],
+    })).resolves.toEqual(cohort);
+  });
+
+  it('never reports fewer competitors than the tenant already entered', async () => {
+    for (const bound of [undefined, null, []] as const) {
+      await expect(resolveCompetitorCohort({
+        bound,
+        stored: cohort,
+        suggest: async () => [],
+      })).resolves.toHaveLength(cohort.length);
+    }
+  });
+});
 
 describe('customer visibility baseline prompts', () => {
   it('creates a bounded blind buyer-question set from company context', () => {

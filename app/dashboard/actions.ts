@@ -446,6 +446,35 @@ export async function createAgencyClientFromDashboard(
 }
 
 /**
+ * The competitor cohort already stored for a client's domain, if any.
+ *
+ * Read rather than asked for again: an agency that has curated competitors should
+ * not have to retype them to confirm a market, and a confirmation must never be
+ * the step that empties them.
+ */
+async function loadClientCompetitorCohort(
+  adminDb: ReturnType<typeof createServiceRoleClient>,
+  agencyAccountId: string,
+  canonicalDomain: string
+): Promise<readonly string[]> {
+  const { data: domain } = await adminDb
+    .from('benchmark_domains')
+    .select('id')
+    .eq('canonical_domain', canonicalDomain)
+    .maybeSingle();
+  if (!domain?.id) return [];
+  const { data: config } = await adminDb
+    .from('client_benchmark_configs')
+    .select('competitor_list')
+    .eq('agency_account_id', agencyAccountId)
+    .eq('benchmark_domain_id', domain.id)
+    .maybeSingle();
+  return Array.isArray(config?.competitor_list)
+    ? config.competitor_list.filter((entry: unknown): entry is string => typeof entry === 'string')
+    : [];
+}
+
+/**
  * Confirm market context for a client that already exists.
  *
  * `createAgencyClientFromDashboard` writes the confirmed context as part of
@@ -525,6 +554,17 @@ export async function confirmAgencyClientMarket(
       message: 'Confirm the market GEO-Pulse will measure for this client.',
     };
   }
+
+  // The cohort the agency already curated belongs to this client's profile, not to
+  // a delivery setting. Carrying it into the confirmed context is what puts it in
+  // the measurement binding; leaving it behind is why confirmed clients measured
+  // against nobody.
+  const approvedCompetitorDomains = await loadClientCompetitorCohort(
+    context.adminDb,
+    parsed.data.agencyAccountId,
+    storedDomain,
+  );
+
   const confirmation = confirmOrganizationOnboarding(detected.proposal, parsed.data);
   if (!confirmation.ok) {
     return {
@@ -555,7 +595,7 @@ export async function confirmAgencyClientMarket(
         serviceAreas: confirmed.serviceAreas,
         languages: confirmed.languages,
         timezone: confirmed.timezone,
-        approvedCompetitorDomains: [],
+        approvedCompetitorDomains,
         source: 'agency_client_market_confirmation',
       },
     });
