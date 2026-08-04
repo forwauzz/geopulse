@@ -17,6 +17,9 @@ import type { ClientMeasurementScope } from '@/lib/server/client-measurement-sco
 import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
 import { OnboardingFirstValueReveal } from '@/components/onboarding-first-value-reveal';
 import { resolveClientMonitoringState } from '@/lib/server/client-monitoring-state';
+import { loadConfirmedOrganizationContextByHost } from '@/lib/server/organization-measurement-context';
+import { ValueFirstOnboardingForm } from '@/components/value-first-onboarding-form';
+import { confirmAgencyClientMarket } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,11 +35,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -73,6 +76,20 @@ export default async function ClientScorecardPage({
     ? data.scans.find((scan) => scan.agencyClientId === clientId && scan.id !== latestScan.id) ?? null
     : null;
   const domain = client.canonicalDomain ?? latestScan?.domain ?? null;
+
+  // The baseline refuses without this, so the page asks for it up front rather
+  // than letting the agency discover it by pressing a button that cannot work.
+  const confirmedOrganizationContext = domain
+    ? await loadConfirmedOrganizationContextByHost({
+        // The workspace loader hands back a narrowed query surface; this reader
+        // only uses .from(...).select(...).eq(...).maybeSingle().
+        supabase: admin as unknown as Parameters<typeof loadConfirmedOrganizationContextByHost>[0]['supabase'],
+        ownerType: 'agency_client',
+        ownerId: clientId,
+        canonicalDomain: domain,
+      }).catch(() => null)
+    : null;
+  const needsMarketConfirmation = Boolean(domain) && !confirmedOrganizationContext;
 
   const configResult = domain
     ? await admin
@@ -269,23 +286,44 @@ export default async function ClientScorecardPage({
                 {' · '}${monthSpend.toFixed(2)} of ${monthlyCap.toFixed(2)} monthly cap
               </p>
             </div>
-            <form action={completeClientBaseline}>
-              <input type="hidden" name="clientId" value={client.id} />
-              <input type="hidden" name="agencyAccountId" value={account.id} />
-              <input type="hidden" name="reportEmail" value={reportRecipients[0] ?? user.email ?? ''} />
-              <PendingSubmitButton
-                idleLabel={monitoringState.actionLabel}
-                pendingLabel="Researching and measuring…"
-                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${sp.activation === '1' ? 'bg-primary text-on-primary' : 'bg-on-background text-background'}`}
-              />
-            </form>
+            {!needsMarketConfirmation ? (
+              <form action={completeClientBaseline}>
+                <input type="hidden" name="clientId" value={client.id} />
+                <input type="hidden" name="agencyAccountId" value={account.id} />
+                <input type="hidden" name="reportEmail" value={reportRecipients[0] ?? user.email ?? ''} />
+                <PendingSubmitButton
+                  idleLabel={monitoringState.actionLabel}
+                  pendingLabel="Researching and measuring…"
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold ${sp.activation === '1' ? 'bg-primary text-on-primary' : 'bg-on-background text-background'}`}
+                />
+              </form>
+            ) : null}
           </div>
-          {sp.baseline ? (
+          {sp.baseline && !needsMarketConfirmation ? (
             <p className={`mt-3 text-sm font-medium ${sp.baseline === 'complete' ? 'text-primary' : 'text-error'}`}>
               {sp.baseline === 'complete'
                 ? 'Baseline complete and recurring monitoring scheduled.'
                 : `Baseline needs attention: ${sp.baseline.replaceAll('_', ' ')}.`}
             </p>
+          ) : null}
+          {sp.market === 'confirmed' && !needsMarketConfirmation ? (
+            <p className="mt-3 text-sm font-medium text-primary">
+              Market confirmed. Run the baseline when you are ready.
+            </p>
+          ) : null}
+          {needsMarketConfirmation ? (
+            <div className="mt-5">
+              <ValueFirstOnboardingForm
+                action={confirmAgencyClientMarket}
+                fixedIntent="agency"
+                defaultName={client.name}
+                defaultWebsite={domain ?? ''}
+                hiddenFields={{ agencyAccountId: account.id, agencyClientId: String(client.id) }}
+                eyebrow="One step before measuring"
+                title="Confirm the market GEO-Pulse should measure"
+                description="This client was added before market confirmation existed, so nothing has been measured for it yet. Confirm the business and market once and the baseline can run."
+              />
+            </div>
           ) : null}
         </div>
         ) : null}
