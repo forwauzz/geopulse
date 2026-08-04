@@ -139,6 +139,32 @@ function promptKey(index: number, text: string): string {
   return `baseline-${String(index + 1).padStart(2, '0')}-${slug}`;
 }
 
+/**
+ * Which competitor cohort a baseline should store.
+ *
+ * Two rules, both learned from a client that measured against nobody:
+ *
+ * An empty cohort is not an answer. The bound cohort used to be taken with `??`,
+ * which accepts `[]` as a value, so a confirmed context carrying no competitors
+ * silently discarded the explicit and suggested lists too.
+ *
+ * A cohort already stored is never traded for an empty one. Grounded discovery can
+ * be unavailable — an unbilled key, a market it cannot resolve — and that must not
+ * cost the tenant competitors they already gave us.
+ *
+ * `suggest` stays lazy so a bound cohort still skips the query.
+ */
+export async function resolveCompetitorCohort(args: {
+  readonly bound?: readonly string[] | null;
+  readonly stored: readonly string[];
+  readonly suggest: () => Promise<readonly string[]>;
+}): Promise<readonly string[]> {
+  const bound = args.bound ?? [];
+  if (bound.length > 0) return bound;
+  const suggested = await args.suggest();
+  return suggested.length > 0 ? suggested : args.stored;
+}
+
 async function suggestCompetitors(args: {
   readonly supabase: SupabaseLike;
   readonly canonicalDomain: string;
@@ -387,23 +413,30 @@ export async function provisionCustomerVisibilityBaseline(
     );
     if (promptError) return { ok: false, reason: promptError.message };
 
-    const competitors = binding?.trackedCompetitorDomains ?? await suggestCompetitors({
-      supabase,
-      canonicalDomain,
-      vertical,
-      subvertical,
-      explicit: input.explicitCompetitors ?? [],
-    });
-
     const ownerFilter = input.startupWorkspaceId
       ? { column: 'startup_workspace_id', value: input.startupWorkspaceId }
       : { column: 'agency_account_id', value: input.agencyAccountId };
     const { data: existingConfig } = await supabase
       .from('client_benchmark_configs')
-      .select('id,metadata')
+      .select('id,metadata,competitor_list')
       .eq(ownerFilter.column, ownerFilter.value)
       .eq('benchmark_domain_id', domainRow.id)
       .maybeSingle();
+    const storedCompetitors = Array.isArray(existingConfig?.competitor_list)
+      ? existingConfig.competitor_list.filter((entry: unknown): entry is string => typeof entry === 'string')
+      : [];
+
+    const competitors = await resolveCompetitorCohort({
+      bound: binding?.trackedCompetitorDomains,
+      stored: storedCompetitors,
+      suggest: () => suggestCompetitors({
+        supabase,
+        canonicalDomain,
+        vertical,
+        subvertical,
+        explicit: input.explicitCompetitors ?? [],
+      }),
+    });
     const existingMetadata =
       existingConfig?.metadata && typeof existingConfig.metadata === 'object'
         ? existingConfig.metadata

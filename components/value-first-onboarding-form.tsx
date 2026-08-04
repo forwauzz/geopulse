@@ -153,10 +153,16 @@ function ConfirmationStep({
       ) : (
         <p className="rounded-xl bg-primary/8 px-4 py-3 text-sm text-on-background">The website supplied a complete profile. Confirm it once, then GEO-Pulse can keep the same context everywhere.</p>
       )}
+      {/*
+        These fields are already answered by the proposal, so they are edits rather
+        than questions — marking them required made the browser block submit on a
+        field collapsed out of view, which it cannot focus, leaving the button inert
+        with no message. Anything genuinely missing is asked above, not hidden here.
+      */}
       <details className="rounded-xl border border-outline-variant/20 px-4 py-3">
         <summary className="cursor-pointer text-sm font-semibold text-on-background">Edit detected details</summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {optionalEdits.map((field) => <ConfirmationField key={field} field={field} proposal={proposal} required={field !== 'subdivision_code'} />)}
+          {optionalEdits.map((field) => <ConfirmationField key={field} field={field} proposal={proposal} required={false} />)}
         </div>
       </details>
       <SubmitButton confirmation />
