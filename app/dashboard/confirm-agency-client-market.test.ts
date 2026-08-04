@@ -42,7 +42,7 @@ const resolveValueFirstOnboardingProposal = vi.fn(async (args: { website: string
     submittedName: 'SanoMed Solutions',
     submittedWebsite: args.website,
     displayName: 'SanoMed Solutions',
-    canonicalDomain: args.website,
+    canonicalDomain: 'sanomedsolutions.com',
     category: 'private medical clinic',
     services: ['preventive medicine'],
     buyer: 'patients seeking private medical care',
@@ -131,6 +131,15 @@ describe('confirmAgencyClientMarket', () => {
     vi.unstubAllEnvs();
   });
 
+  it('resolves an absolute URL, since the SSRF validator throws on a bare host', async () => {
+    const { confirmAgencyClientMarket } = await import('./actions');
+    await expect(confirmAgencyClientMarket(null, confirmedForm())).rejects.toThrow();
+
+    expect(resolveValueFirstOnboardingProposal).toHaveBeenCalledWith(
+      expect.objectContaining({ website: 'https://sanomedsolutions.com/' }),
+    );
+  });
+
   it('confirms against the stored client domain, not one supplied by the form', async () => {
     const { confirmAgencyClientMarket } = await import('./actions');
     await expect(
@@ -138,7 +147,7 @@ describe('confirmAgencyClientMarket', () => {
     ).rejects.toThrow();
 
     expect(resolveValueFirstOnboardingProposal).toHaveBeenCalledWith(
-      expect.objectContaining({ website: 'sanomedsolutions.com' }),
+      expect.objectContaining({ website: 'https://sanomedsolutions.com/' }),
     );
     expect(persistConfirmedOrganizationContext).toHaveBeenCalledWith(
       expect.objectContaining({

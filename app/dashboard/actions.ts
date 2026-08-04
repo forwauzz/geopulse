@@ -503,10 +503,13 @@ export async function confirmAgencyClientMarket(
   }
   const storedDomain = normalizeDomainHost(rawDomain);
 
+  // An absolute URL, not the bare host: the resolver's SSRF validator parses
+  // with `new URL(...)`, which throws on a scheme-less value and surfaces as
+  // "we could not read that website" long before any request is made.
   const detected = await resolveValueFirstOnboardingProposal({
     intent: 'agency',
     name: parsed.data.name,
-    website: storedDomain,
+    website: normalizeSiteUrl(storedDomain),
   });
   if (!detected.ok) {
     return {
