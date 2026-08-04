@@ -145,6 +145,24 @@ describe('Organization Context projection', () => {
     expect(result.context.versionReasonCodes).toContain('material_conflict_detected');
   });
 
+  it('projects evidence timestamps that arrive with a Postgres offset rather than a Z suffix', () => {
+    // Every other fixture uses the canonical Z form, which is why this reached
+    // production: `timestamptz` comes back as `+00:00`, and the schema rejects
+    // offsets. The projection threw instead of returning needs_review, so the
+    // backfill preview could not classify a single record.
+    const result = projectOrganizationContext(projectionRows({
+      evidence: [{
+        stable_evidence_id: 'ev-offset', source_kind: 'website', source_id: 'sanomed-ca',
+        evidence_kind: 'official_website_profile', artifact_status: 'present', privacy: 'public',
+        tenant_type: null, tenant_id: null, collected_at: '2026-08-04 14:01:59.900828+00',
+        metadata: { source_tier: 'exact_official_website', confidence: 0.9 },
+      }],
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.context.evidence[0]?.collectedAt).toBe('2026-08-04T14:01:59.900Z');
+  });
+
   it('does not change the context version merely because it is projected later', () => {
     const first = projectOrganizationContext(projectionRows());
     const later = projectOrganizationContext(projectionRows({ projectedAt: '2026-08-03T01:00:00.000Z' }));

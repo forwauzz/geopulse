@@ -113,6 +113,11 @@ const agencyClientSchema = z.object({
   timezone: z.string().trim().max(80).optional(),
 });
 
+/** Same confirmation fields as onboarding, addressed to a client that already exists. */
+const agencyClientMarketSchema = agencyClientSchema
+  .omit({ website: true })
+  .extend({ agencyClientId: z.string().uuid('Choose a valid client.') });
+
 const agencyClientDomainSchema = z.object({
   agencyAccountId: z.string().uuid('Choose a valid agency account.'),
   agencyClientId: z.string().uuid('Choose a valid client.'),
@@ -438,6 +443,145 @@ export async function createAgencyClientFromDashboard(
     baseline: completedBaseline?.ok ? 'complete' : completedBaseline?.reason ?? (baseline.ok ? 'queued' : baseline.reason),
   });
   redirect(`/dashboard/clients/${client.id}?${query.toString()}`);
+}
+
+/**
+ * Confirm market context for a client that already exists.
+ *
+ * `createAgencyClientFromDashboard` writes the confirmed context as part of
+ * creating a client, so every client created before that flow landed has none —
+ * and `completeAgencyClientBaseline` refuses to measure without one. There was
+ * no second way in, which left those clients permanently unable to run a
+ * baseline. This is the same confirmation, addressed to an existing client.
+ *
+ * The domain is taken from the stored client record rather than the form: the
+ * baseline looks context up by the client's canonical domain, so confirming
+ * against any other host would write a context that is never read.
+ */
+export async function confirmAgencyClientMarket(
+  _prev: ValueFirstOnboardingActionState | null,
+  formData: FormData
+): Promise<ValueFirstOnboardingActionState> {
+  const parsed = agencyClientMarketSchema.safeParse({
+    agencyAccountId: normalizeText(formData.get('agencyAccountId')),
+    agencyClientId: normalizeText(formData.get('agencyClientId')),
+    intent: normalizeText(formData.get('intent')),
+    name: normalizeText(formData.get('name')),
+    confirmed: normalizeText(formData.get('confirmed')),
+    displayName: normalizeText(formData.get('displayName')),
+    category: normalizeText(formData.get('category')),
+    countryCode: normalizeText(formData.get('countryCode')),
+    subdivisionCode: normalizeText(formData.get('subdivisionCode')),
+    locality: normalizeText(formData.get('locality')),
+    marketScope: normalizeText(formData.get('marketScope')),
+    languages: normalizeText(formData.get('languages')),
+    timezone: normalizeText(formData.get('timezone')),
+  });
+  if (!parsed.success) {
+    return { status: 'error', message: 'Confirm the client name and market to continue.' };
+  }
+
+  const context = await loadAgencyMemberActionContext(parsed.data.agencyAccountId);
+  if (!context.ok) return { status: 'error', message: context.message };
+
+  // Scoped to the agency account, so a member cannot confirm another tenant's client.
+  const { data: client, error: clientError } = await context.adminDb
+    .from('agency_clients')
+    .select('id,name,display_name,canonical_domain,website_domain')
+    .eq('id', parsed.data.agencyClientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (clientError) return { status: 'error', message: clientError.message };
+  if (!client?.id) return { status: 'error', message: 'That client is not available on this agency account.' };
+
+  // Guarded before normalising: normalizeDomainHost builds a URL and throws on
+  // an empty host, which would surface as a crash rather than this message.
+  const rawDomain = String(client.canonical_domain || client.website_domain || '').trim();
+  if (!rawDomain) {
+    return { status: 'error', message: 'Add a primary domain for this client before confirming its market.' };
+  }
+  const storedDomain = normalizeDomainHost(rawDomain);
+
+  const detected = await resolveValueFirstOnboardingProposal({
+    intent: 'agency',
+    name: parsed.data.name,
+    website: storedDomain,
+  });
+  if (!detected.ok) {
+    return {
+      status: 'error',
+      message: detected.message,
+      draft: { intent: 'agency', name: parsed.data.name, website: storedDomain },
+    };
+  }
+  if (parsed.data.confirmed !== '1') {
+    return {
+      status: 'needs_confirmation',
+      proposal: detected.proposal,
+      message: 'Confirm the market GEO-Pulse will measure for this client.',
+    };
+  }
+  const confirmation = confirmOrganizationOnboarding(detected.proposal, parsed.data);
+  if (!confirmation.ok) {
+    return {
+      status: 'needs_confirmation',
+      proposal: { ...detected.proposal, missingFields: confirmation.missingFields },
+      message: 'Answer the remaining question before the baseline can run.',
+    };
+  }
+  const confirmed = confirmation.value;
+
+  let organizationContext: Awaited<ReturnType<typeof persistConfirmedOrganizationContext>>;
+  try {
+    organizationContext = await persistConfirmedOrganizationContext({
+      supabase: context.adminDb,
+      input: {
+        ownerType: 'agency_client',
+        ownerId: String(client.id),
+        actorId: context.userId,
+        canonicalDomain: storedDomain,
+        displayName: confirmed.displayName,
+        category: confirmed.category,
+        services: confirmed.services,
+        buyer: confirmed.buyer,
+        marketScope: confirmed.marketScope,
+        countryCode: confirmed.countryCode,
+        subdivisionCode: confirmed.subdivisionCode,
+        locality: confirmed.locality,
+        serviceAreas: confirmed.serviceAreas,
+        languages: confirmed.languages,
+        timezone: confirmed.timezone,
+        approvedCompetitorDomains: [],
+        source: 'agency_client_market_confirmation',
+      },
+    });
+  } catch {
+    return {
+      status: 'error',
+      message: 'The market confirmation could not be saved. Try again to resume safely.',
+      draft: { intent: 'agency', name: confirmed.displayName, website: storedDomain },
+    };
+  }
+
+  // Not an activation event: that taxonomy marks a baseline starting, and this
+  // only restores the context one needs. A log keeps the confirmation traceable
+  // without widening the marketing event set.
+  structuredLog('agency_client_market_confirmed', {
+    agency_account_id: parsed.data.agencyAccountId,
+    agency_client_id: String(client.id),
+    canonical_domain: storedDomain,
+    context_version: organizationContext.contextVersion,
+  });
+
+  revalidatePath('/dashboard/clients');
+  revalidatePath('/dashboard/visibility');
+  revalidatePath(`/dashboard/clients/${client.id}`);
+  // The baseline is deliberately not run here. It spends against the GPM cap, so
+  // it stays an explicit action on the client page.
+  redirect(
+    `/dashboard/clients/${client.id}?agencyAccount=${parsed.data.agencyAccountId}&market=confirmed`
+  );
 }
 
 export async function addAgencyClientDomainFromDashboard(

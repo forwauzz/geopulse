@@ -141,6 +141,19 @@ function factCandidate(args: {
   return parsed.success ? parsed.data : null;
 }
 
+/**
+ * Postgres returns `timestamptz` with a numeric offset (`...+00:00`), which the
+ * context schema rejects — it accepts only the canonical `Z` form. Normalising
+ * here rather than loosening the schema also keeps the content hash stable,
+ * since the hash would otherwise vary with the serialisation the driver chose.
+ * `projectedAt` is normalised the same way where the projection is assembled.
+ */
+function canonicalInstant(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function evidenceFacts(row: EvidenceRow): OrganizationFactCandidate[] {
   const metadata = record(row.metadata);
   const facts = record(metadata['organization_facts']);
@@ -315,7 +328,7 @@ export function projectOrganizationContext(rows: OrganizationContextProjectionRo
       confidence: typeof evidence.metadata?.['confidence'] === 'number'
         ? Math.max(0, Math.min(1, evidence.metadata['confidence']))
         : 0.7,
-      collectedAt: evidence.collected_at,
+      collectedAt: canonicalInstant(evidence.collected_at),
     })).sort((left, right) => left.evidenceId.localeCompare(right.evidenceId)),
     conflicts,
     confirmation: confirmed,
