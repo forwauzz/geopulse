@@ -5,6 +5,7 @@ import {
   confirmedOrganizationContextMetadata,
   createOrganizationContextRepository,
   projectOrganizationContext,
+  sameCompetitorCohort,
   type OrganizationContextProjectionRows,
 } from './organization-context-repository';
 
@@ -34,6 +35,22 @@ const confirmedContext = {
   },
   versionReasonCodes: ['initial_projection', 'tenant_confirmation'],
 };
+
+describe('competitor cohort equality', () => {
+  it('ignores order, casing, blanks, and duplicates', () => {
+    expect(sameCompetitorCohort(
+      ['UnionMD.ca', 'clinique360.com', ''],
+      ['clinique360.com', 'unionmd.ca', 'unionmd.ca'],
+    )).toBe(true);
+  });
+
+  it('separates a genuine change from a reordering', () => {
+    expect(sameCompetitorCohort(['a.com', 'b.com'], ['b.com', 'a.com'])).toBe(true);
+    expect(sameCompetitorCohort(['a.com', 'b.com'], ['a.com', 'c.com'])).toBe(false);
+    // A cohort losing a member is a change; the client would be measured differently.
+    expect(sameCompetitorCohort(['a.com', 'b.com'], ['a.com'])).toBe(false);
+  });
+});
 
 describe('confirmed Organization Context writes', () => {
   it('creates an auditable, normalized tenant confirmation payload', () => {

@@ -14,6 +14,8 @@ import { parseReportRecipients } from '@/lib/shared/report-recipients';
 import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 import { isClientReportSharingHeld } from '@/lib/server/report-quarantine';
+import { syncConfirmedCompetitorCohort } from '@/lib/server/organization-context-repository';
+import { structuredError } from '@/lib/server/structured-log';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -137,6 +139,40 @@ export async function saveClientMonitoring(formData: FormData): Promise<void> {
     })
     .eq('id', parsed.data.configId)
     .eq('agency_account_id', parsed.data.agencyAccountId);
+
+  // The cohort is measurement input, but the run key is versioned by the confirmed
+  // context — so a cohort saved only here is deduped away and the client keeps
+  // being measured against the old set. Re-confirming moves the context version,
+  // which is what lets the next baseline actually run.
+  const { data: client } = await admin
+    .from('agency_clients')
+    .select('canonical_domain,website_domain')
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  const canonicalDomain = String(client?.canonical_domain || client?.website_domain || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, '');
+  if (canonicalDomain) {
+    // Best effort: the delivery settings are already saved, and a context that
+    // cannot be re-confirmed should not lose the agency that change.
+    await syncConfirmedCompetitorCohort({
+      supabase: admin,
+      ownerType: 'agency_client',
+      ownerId: parsed.data.clientId,
+      canonicalDomain,
+      actorId: auth.user.id,
+      competitorDomains: competitors,
+    }).catch((error) => {
+      structuredError('agency_client_cohort_context_sync_failed', {
+        agency_client_id: parsed.data.clientId,
+        canonical_domain: canonicalDomain,
+        message: error instanceof Error ? error.message : 'unknown',
+      });
+      return null;
+    });
+  }
 
   revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
   redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&monitoring=saved`);
