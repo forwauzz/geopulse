@@ -14,6 +14,8 @@ import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baselin
 import { getAutonomousEditorialEnv, getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   confirmOrganizationOnboarding,
+  onboardingCorrectionMessage,
+  proposalWithCorrections,
   type ValueFirstOnboardingActionState,
 } from '@/lib/intelligence/value-first-onboarding';
 import { persistConfirmedOrganizationContext } from '@/lib/server/organization-context-repository';
@@ -279,8 +281,9 @@ export async function createAgencyClientFromDashboard(
   if (!confirmation.ok) {
     return {
       status: 'needs_confirmation',
-      proposal: { ...detected.proposal, missingFields: confirmation.missingFields },
-      message: 'Answer the remaining question before the client baseline is built.',
+      proposal: proposalWithCorrections(detected.proposal, confirmation),
+      message: onboardingCorrectionMessage(confirmation.invalidFields)
+        ?? 'Answer the remaining question before the client baseline is built.',
     };
   }
   const confirmed = confirmation.value;
@@ -569,8 +572,9 @@ export async function confirmAgencyClientMarket(
   if (!confirmation.ok) {
     return {
       status: 'needs_confirmation',
-      proposal: { ...detected.proposal, missingFields: confirmation.missingFields },
-      message: 'Answer the remaining question before the baseline can run.',
+      proposal: proposalWithCorrections(detected.proposal, confirmation),
+      message: onboardingCorrectionMessage(confirmation.invalidFields)
+        ?? 'Answer the remaining question before the baseline can run.',
     };
   }
   const confirmed = confirmation.value;

@@ -9,7 +9,7 @@ import { loadEngineCitationMetrics, type EngineKey } from '@/lib/server/dashboar
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
-import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
+import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, releaseClientSharingHold, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
 import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
 import { isClientReportSharingHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
@@ -35,11 +35,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -260,7 +260,36 @@ export default async function ClientScorecardPage({
         ) : null}
         {reportSharingHeld ? (
           <div className="mt-4 rounded-xl border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
-            Client sharing is held for review. Nothing here can be opened publicly or emailed until the review is released.
+            <p>
+              Client sharing is held for review. Nothing here can be opened publicly or emailed until the review is released.
+            </p>
+            <form action={releaseClientSharingHold} className="mt-3">
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:bg-primary-dim"
+              >
+                Release for sharing
+              </button>
+              <span className="ml-3 text-xs text-amber-900 dark:text-amber-200">
+                Releasing does not send anything. It allows a link or email to be created.
+              </span>
+            </form>
+          </div>
+        ) : null}
+        {sp.release ? (
+          <div
+            role="status"
+            className="mt-4 rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-3 text-sm text-on-background"
+          >
+            {sp.release === 'released'
+              ? 'Review released. This client can now be shared by link or email.'
+              : sp.release === 'not_permitted'
+                ? 'Only an agency owner or admin can release a client for sharing.'
+                : sp.release === 'not_held'
+                  ? 'This client was not held for review, so nothing was released.'
+                  : 'The review could not be released. Nothing was shared.'}
           </div>
         ) : null}
         {sp.activation === '1' ? (

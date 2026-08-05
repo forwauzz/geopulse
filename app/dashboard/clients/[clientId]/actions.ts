@@ -13,9 +13,9 @@ import { parsePromptCsv } from '@/lib/server/prompt-csv';
 import { parseReportRecipients } from '@/lib/shared/report-recipients';
 import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
-import { isClientReportSharingHeld } from '@/lib/server/report-quarantine';
+import { isClientReportSharingHeld, releaseClientReportHold } from '@/lib/server/report-quarantine';
 import { syncConfirmedCompetitorCohort } from '@/lib/server/organization-context-repository';
-import { structuredError } from '@/lib/server/structured-log';
+import { structuredError, structuredLog } from '@/lib/server/structured-log';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -91,8 +91,16 @@ async function authorizedAdmin(args: {
       .maybeSingle(),
   ]);
   if (!membership || membership.role === 'viewer' || !client) return null;
-  return { admin, user };
+  return { admin, user, role: String(membership.role) };
 }
+
+/**
+ * Releasing a review hold is the one action here that can make a client's report
+ * publicly reachable, so it is restricted further than the rest: an editor may
+ * change what is measured, but only an owner or admin may decide it can leave the
+ * workspace.
+ */
+const SHARING_RELEASE_ROLES = new Set(['owner', 'admin']);
 
 export async function saveClientMonitoring(formData: FormData): Promise<void> {
   const parsed = schema.safeParse({
@@ -453,6 +461,66 @@ export async function completeClientBaseline(formData: FormData): Promise<void> 
   redirect(
     `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}` +
     `&baseline=${result.ok ? 'complete' : encodeURIComponent(result.reason ?? 'failed')}`,
+  );
+}
+
+/**
+ * Release a client's review hold so its scorecard and summary can be shared.
+ *
+ * Deliberately separate from creating a share link. Releasing is the judgement that
+ * a report is fit to leave the workspace; creating a link is the act of sending it.
+ * Keeping them apart means nothing is published as a side effect of a review.
+ */
+export async function releaseClientSharingHold(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    clientId: z.string().uuid(),
+    agencyAccountId: z.string().uuid(),
+  }).safeParse({
+    clientId: formData.get('clientId'),
+    agencyAccountId: formData.get('agencyAccountId'),
+  });
+  if (!parsed.success) return;
+  const auth = await authorizedAdmin(parsed.data);
+  if (!auth) return;
+  if (!SHARING_RELEASE_ROLES.has(auth.role)) {
+    redirect(
+      `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=not_permitted`
+    );
+  }
+  const { data: client } = await auth.admin
+    .from('agency_clients')
+    .select('metadata')
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  const released = releaseClientReportHold(client?.metadata, {
+    userId: auth.user.id,
+    at: new Date().toISOString(),
+  });
+  // Nothing held: say so rather than reporting a release that never happened.
+  if (!released) {
+    redirect(
+      `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=not_held`
+    );
+  }
+  const { error } = await auth.admin
+    .from('agency_clients')
+    .update({ metadata: released, updated_at: new Date().toISOString() })
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId);
+  if (error) {
+    redirect(
+      `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=failed`
+    );
+  }
+  structuredLog('agency_client_sharing_released', {
+    agency_account_id: parsed.data.agencyAccountId,
+    agency_client_id: parsed.data.clientId,
+    released_by_user_id: auth.user.id,
+  });
+  revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
+  redirect(
+    `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=released`
   );
 }
 

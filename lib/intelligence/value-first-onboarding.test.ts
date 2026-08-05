@@ -3,7 +3,10 @@ import {
   buildOrganizationOnboardingProposal,
   confirmOrganizationOnboarding,
   formatOnboardingMarket,
+  onboardingCorrectionMessage,
   onboardingQuestion,
+  proposalWithCorrections,
+  timeZoneForMarket,
 } from './value-first-onboarding';
 import type { ExactDomainResolution } from './organization-resolver';
 
@@ -43,6 +46,105 @@ function resolution(overrides: Partial<ExactDomainResolution> = {}): ExactDomain
     ...overrides,
   };
 }
+
+describe('time zone from market context', () => {
+  it('resolves Canadian and US subdivisions without asking', () => {
+    expect(timeZoneForMarket('CA', 'CA-QC')).toBe('America/Toronto');
+    expect(timeZoneForMarket('CA', 'CA-BC')).toBe('America/Vancouver');
+    expect(timeZoneForMarket('CA', 'CA-NL')).toBe('America/St_Johns');
+    expect(timeZoneForMarket('US', 'US-CA')).toBe('America/Los_Angeles');
+    expect(timeZoneForMarket('US', 'US-NY')).toBe('America/New_York');
+    expect(timeZoneForMarket('US', 'US-AZ')).toBe('America/Phoenix');
+  });
+
+  it('still asks when the market spans zones', () => {
+    // A country alone does not settle Canada or the US, so guessing would report a
+    // client's schedule in a time they never chose.
+    expect(timeZoneForMarket('CA', null)).toBeNull();
+    expect(timeZoneForMarket('US', null)).toBeNull();
+    expect(timeZoneForMarket('BR', null)).toBeNull();
+    expect(timeZoneForMarket(null, null)).toBeNull();
+  });
+
+  it('accepts a single-zone country', () => {
+    expect(timeZoneForMarket('GB', null)).toBe('Europe/London');
+  });
+});
+
+describe('onboarding correction loop', () => {
+  const incomplete = () => buildOrganizationOnboardingProposal({
+    intent: 'agency',
+    submittedName: 'Westside Clinic',
+    submittedWebsite: 'westside.example',
+    resolution: resolution({
+      status: 'needs_review',
+      reasonCodes: ['location_missing'],
+      markets: [{
+        scope: null, countryCode: null, subdivisionCode: null, locality: null,
+        serviceAreas: [], languages: ['en'], timezone: null,
+      }],
+    }),
+  });
+
+  it('completes without a time-zone question once the market settles it', () => {
+    expect(confirmOrganizationOnboarding(incomplete(), {
+      countryCode: 'CA',
+      subdivisionCode: 'CA-QC',
+      marketScope: 'local',
+      locality: 'Pointe-Claire',
+    })).toMatchObject({ ok: true, value: { timezone: 'America/Toronto' } });
+  });
+
+  it('keeps every other correction when one field is unusable', () => {
+    const result = confirmOrganizationOnboarding(incomplete(), {
+      countryCode: 'CA',
+      subdivisionCode: 'CA-QC',
+      marketScope: 'local',
+      locality: 'Pointe-Claire',
+      timezone: 'Montreal time',
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.missingFields).toContain('timezone');
+    expect(result.invalidFields).toEqual(['timezone']);
+    // The whole point: a retry must not cost the answers that were already right.
+    expect(result.submitted).toMatchObject({
+      country_code: 'CA',
+      subdivision_code: 'CA-QC',
+      market_scope: 'local',
+      locality: 'Pointe-Claire',
+      timezone: 'Montreal time',
+    });
+  });
+
+  it('re-renders the confirmation from the corrections, not the original detection', () => {
+    const proposal = incomplete();
+    const result = confirmOrganizationOnboarding(proposal, {
+      countryCode: 'CA',
+      subdivisionCode: 'CA-QC',
+      marketScope: 'local',
+      locality: 'Pointe-Claire',
+      timezone: 'Montreal time',
+    });
+    if (result.ok) throw new Error('expected a correction round');
+    const next = proposalWithCorrections(proposal, result);
+    expect(next).toMatchObject({
+      countryCode: 'CA',
+      subdivisionCode: 'CA-QC',
+      marketScope: 'local',
+      locality: 'Pointe-Claire',
+      timezone: 'Montreal time',
+    });
+    expect(onboardingCorrectionMessage(result.invalidFields)).toMatch(/IANA/);
+  });
+
+  it('does not blame the person for a time zone they never typed', () => {
+    const result = confirmOrganizationOnboarding(incomplete(), { countryCode: 'BR', marketScope: 'national' });
+    if (result.ok) throw new Error('expected a correction round');
+    expect(result.missingFields).toContain('timezone');
+    expect(result.invalidFields).toEqual([]);
+  });
+});
 
 describe('value-first onboarding contract', () => {
   it('turns a complete exact-site resolution into an understandable confirmation', () => {
@@ -121,6 +223,9 @@ describe('value-first onboarding contract', () => {
     expect(confirmOrganizationOnboarding(proposal, {})).toEqual({
       ok: false,
       missingFields: ['locality'],
+      // Nothing was typed, so there is nothing to hand back and nothing to blame.
+      submitted: {},
+      invalidFields: [],
     });
   });
 
@@ -155,6 +260,10 @@ describe('value-first onboarding contract', () => {
     })).toEqual({
       ok: false,
       missingFields: ['subdivision_code', 'timezone'],
+      // Both bad answers come back rather than reverting to the detected values,
+      // so the person can see and fix what they actually typed.
+      submitted: { subdivision_code: 'Ontario', timezone: 'Toronto time' },
+      invalidFields: ['timezone'],
     });
   });
 });

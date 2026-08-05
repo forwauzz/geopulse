@@ -17,3 +17,35 @@ export function isClientReportSharingHeld(metadata: unknown): boolean {
   const status = hold['status'];
   return typeof status === 'string' && (status === 'held' || status.startsWith('held_'));
 }
+
+export const CLIENT_REPORT_RELEASED_STATUS = 'released';
+
+/**
+ * Client metadata with the review hold released.
+ *
+ * The original hold is kept rather than overwritten: the reason a client was held,
+ * and by whom, is the audit trail for anything that was published afterwards. The
+ * release records its own actor and time alongside it.
+ *
+ * Returns null when there is nothing held, so a caller cannot manufacture a release
+ * record for a client that was never under review.
+ */
+export function releaseClientReportHold(
+  metadata: unknown,
+  actor: { readonly userId: string; readonly at: string },
+): Record<string, unknown> | null {
+  if (!isClientReportSharingHeld(metadata)) return null;
+  const current = record(metadata);
+  const hold = record(current[CLIENT_REPORT_HOLD_KEY]);
+  return {
+    ...current,
+    [CLIENT_REPORT_HOLD_KEY]: {
+      ...hold,
+      status: CLIENT_REPORT_RELEASED_STATUS,
+      released_by_user_id: actor.userId,
+      released_at: actor.at,
+      // Preserved verbatim so the release never erases what it overrode.
+      previous_status: hold['status'] ?? null,
+    },
+  };
+}
