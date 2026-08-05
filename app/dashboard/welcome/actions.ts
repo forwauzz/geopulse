@@ -4,6 +4,8 @@ import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import {
   confirmOrganizationOnboarding,
+  onboardingCorrectionMessage,
+  proposalWithCorrections,
   type ValueFirstOnboardingActionState,
 } from '@/lib/intelligence/value-first-onboarding';
 import { recordActivationEvent } from '@/lib/server/activation-events';
@@ -78,8 +80,9 @@ export async function completeWelcome(
   if (!confirmation.ok) {
     return {
       status: 'needs_confirmation',
-      proposal: { ...detected.proposal, missingFields: confirmation.missingFields },
-      message: 'Answer the remaining question before the first baseline is built.',
+      proposal: proposalWithCorrections(detected.proposal, confirmation),
+      message: onboardingCorrectionMessage(confirmation.invalidFields)
+        ?? 'Answer the remaining question before the first baseline is built.',
     };
   }
 
