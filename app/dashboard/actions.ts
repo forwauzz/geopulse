@@ -15,6 +15,7 @@ import { getAutonomousEditorialEnv, getPaymentApiEnv } from '@/lib/server/cf-env
 import {
   confirmOrganizationOnboarding,
   onboardingCorrectionMessage,
+  proposalWithLegacyHints,
   proposalWithCorrections,
   type ValueFirstOnboardingActionState,
 } from '@/lib/intelligence/value-first-onboarding';
@@ -519,7 +520,7 @@ export async function confirmAgencyClientMarket(
   // Scoped to the agency account, so a member cannot confirm another tenant's client.
   const { data: client, error: clientError } = await context.adminDb
     .from('agency_clients')
-    .select('id,name,display_name,canonical_domain,website_domain')
+    .select('id,name,display_name,canonical_domain,website_domain,vertical,subvertical,metadata')
     .eq('id', parsed.data.agencyClientId)
     .eq('agency_account_id', parsed.data.agencyAccountId)
     .eq('status', 'active')
@@ -550,10 +551,21 @@ export async function confirmAgencyClientMarket(
       draft: { intent: 'agency', name: parsed.data.name, website: storedDomain },
     };
   }
+  const clientMetadata = client.metadata && typeof client.metadata === 'object'
+    ? client.metadata as Record<string, unknown>
+    : {};
+  const proposal = proposalWithLegacyHints(detected.proposal, {
+    category: typeof client.subvertical === 'string' && client.subvertical.trim()
+      ? client.subvertical
+      : typeof client.vertical === 'string' ? client.vertical : null,
+    location: typeof clientMetadata['location'] === 'string'
+      ? String(clientMetadata['location'])
+      : null,
+  });
   if (parsed.data.confirmed !== '1') {
     return {
       status: 'needs_confirmation',
-      proposal: detected.proposal,
+      proposal,
       message: 'Confirm the market GEO-Pulse will measure for this client.',
     };
   }
@@ -568,11 +580,11 @@ export async function confirmAgencyClientMarket(
     storedDomain,
   );
 
-  const confirmation = confirmOrganizationOnboarding(detected.proposal, parsed.data);
+  const confirmation = confirmOrganizationOnboarding(proposal, parsed.data);
   if (!confirmation.ok) {
     return {
       status: 'needs_confirmation',
-      proposal: proposalWithCorrections(detected.proposal, confirmation),
+      proposal: proposalWithCorrections(proposal, confirmation),
       message: onboardingCorrectionMessage(confirmation.invalidFields)
         ?? 'Answer the remaining question before the baseline can run.',
     };

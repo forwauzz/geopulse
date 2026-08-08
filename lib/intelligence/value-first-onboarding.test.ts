@@ -5,6 +5,7 @@ import {
   formatOnboardingMarket,
   onboardingCorrectionMessage,
   onboardingQuestion,
+  proposalWithLegacyHints,
   proposalWithCorrections,
   timeZoneForMarket,
 } from './value-first-onboarding';
@@ -147,6 +148,67 @@ describe('onboarding correction loop', () => {
 });
 
 describe('value-first onboarding contract', () => {
+  it('fills only exact-site gaps from a legacy client profile', () => {
+    const incomplete = buildOrganizationOnboardingProposal({
+      intent: 'agency',
+      submittedName: 'Stability Labs',
+      submittedWebsite: 'https://stabilitylab.com',
+      resolution: resolution({
+        organization: {
+          ...resolution().organization,
+          displayName: 'Stability Labs',
+          category: null,
+        },
+        markets: [{
+          scope: null,
+          countryCode: null,
+          subdivisionCode: null,
+          locality: null,
+          serviceAreas: [],
+          languages: [],
+          timezone: null,
+        }],
+      }),
+    });
+
+    const proposal = proposalWithLegacyHints(incomplete, {
+      category: 'Vestibular rehabilitation clinic',
+      location: 'Vancouver',
+    });
+
+    expect(proposal).toMatchObject({
+      category: 'Vestibular rehabilitation clinic',
+      serviceAreas: ['Vancouver'],
+    });
+    expect(proposal.missingFields).not.toContain('category');
+    expect(confirmOrganizationOnboarding(proposal, {
+      countryCode: 'CA',
+      marketScope: 'local',
+      languages: 'en-CA',
+      timezone: 'America/Vancouver',
+    })).toMatchObject({
+      ok: true,
+      value: { serviceAreas: ['Vancouver'] },
+    });
+  });
+
+  it('never overwrites exact-site category or service areas with legacy hints', () => {
+    const exact = buildOrganizationOnboardingProposal({
+      intent: 'agency',
+      submittedName: 'Example Clinic',
+      submittedWebsite: 'https://example.ca',
+      resolution: resolution(),
+    });
+
+    expect(proposalWithLegacyHints(exact, {
+      category: 'legacy category',
+      location: 'legacy location',
+    })).toMatchObject({
+      category: 'preventive medicine clinic',
+      serviceAreas: ["Montreal's West Island"],
+    });
+  });
+
   it('turns a complete exact-site resolution into an understandable confirmation', () => {
     const proposal = buildOrganizationOnboardingProposal({
       intent: 'agency',

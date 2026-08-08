@@ -18,6 +18,27 @@ export function isClientReportSharingHeld(metadata: unknown): boolean {
   return typeof status === 'string' && (status === 'held' || status.startsWith('held_'));
 }
 
+/**
+ * Project the current delivery hold without rewriting immutable report history.
+ * A report generated while its client was held keeps that historical status,
+ * but the client-level release supersedes that one reason. Every other artifact
+ * hold and the current client hold still fail closed.
+ */
+export function isReportDeliveryHeld(
+  reportMetadata: unknown,
+  clientMetadata: unknown,
+): boolean {
+  if (isClientReportSharingHeld(clientMetadata)) return true;
+  const metadata = record(reportMetadata);
+  const status = metadata['email_status'];
+  const reason = metadata['delivery_block_reason'];
+  const releasedClientReview = status === 'held_client_review'
+    && reason === 'client_report_sharing_held';
+  if (releasedClientReview) return false;
+  return (typeof status === 'string' && status.startsWith('held_'))
+    || metadata['delivery_blocked'] === true;
+}
+
 export const CLIENT_REPORT_RELEASED_STATUS = 'released';
 
 /**
