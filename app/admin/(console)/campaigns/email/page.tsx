@@ -7,7 +7,7 @@ import {
 } from '@/lib/server/email-campaign-console';
 import { resolveCampaignSender } from '@/lib/server/email-campaign-sender';
 import { PRESET_OUTREACH_TEMPLATES } from '@/lib/server/outreach-templates';
-import { createEmailCampaignAction } from './actions';
+import { createEmailCampaignAction, importCampaignContactsAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +43,13 @@ function draftKey(campaignKey: string): string {
 export default async function EmailCampaignsPage({
   searchParams,
 }: {
-  readonly searchParams?: Promise<{ error?: string }>;
+  readonly searchParams?: Promise<{
+    error?: string;
+    contactsHeld?: string;
+    contactsSkipped?: string;
+    contactsInvalid?: string;
+    contactsError?: string;
+  }>;
 }) {
   const ctx = await loadAdminPageContext('/admin/campaigns/email');
   if (!ctx.ok) return <p className="text-error">{ctx.message}</p>;
@@ -96,26 +102,79 @@ export default async function EmailCampaignsPage({
         </p>
       ) : null}
 
-      <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+      <section aria-label="Campaign workflow" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ['1', 'Contacts', 'Import and review a held audience'],
+          ['2', 'Campaign', 'Choose name, segment, and message'],
+          ['3', 'Preview & test', 'Confirm the exact rendered email'],
+          ['4', 'Schedule', 'Release only after every gate passes'],
+        ].map(([step, label, detail]) => (
+          <div key={step} className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-primary">Step {step}</p>
+            <p className="mt-1 font-headline text-base font-bold text-on-background">{label}</p>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">{detail}</p>
+          </div>
+        ))}
+      </section>
+
+      <details id="import-contacts" open={query.contactsHeld !== undefined || Boolean(query.contactsError)} className="group rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 md:p-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Audience</p>
+            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Import contacts</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">CSV in, held contact bank out. No enrollment and no send.</p>
+          </div>
+          <span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary">Upload CSV</span>
+        </summary>
+        <div className="border-t border-outline-variant/15 p-5 md:p-6">
+          {query.contactsHeld !== undefined ? (
+            <p className="mb-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
+              Held {query.contactsHeld} new contact{query.contactsHeld === '1' ? '' : 's'} · {query.contactsSkipped ?? '0'} already saved · {query.contactsInvalid ?? '0'} unusable row{query.contactsInvalid === '1' ? '' : 's'}. Nothing was sent.
+            </p>
+          ) : null}
+          {query.contactsError ? (
+            <p role="alert" className="mb-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              Import needs attention: {query.contactsError.replaceAll('_', ' ')}.
+            </p>
+          ) : null}
+          <form action={importCampaignContactsAction} className="grid gap-4 md:grid-cols-2">
+            <label className="block md:col-span-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Contact CSV</span>
+              <input name="file" type="file" accept=".csv,text/csv" required className="mt-1 block w-full rounded-xl border border-dashed border-outline-variant/40 bg-surface-container-low px-4 py-5 text-sm" />
+              <span className="mt-1 block text-xs text-on-surface-variant">Apollo exports are recognized automatically. Missing or invalid email rows are reported, never fabricated.</span>
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Held segment</span>
+              <input name="segment" required defaultValue="apollo-import-2026-08" className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Tags</span>
+              <input name="tags" defaultValue="apollo, imported-2026-08" className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" />
+            </label>
+            <div className="flex flex-wrap items-center justify-between gap-3 md:col-span-2">
+              <p className="max-w-2xl text-xs leading-5 text-on-surface-variant">Provider verification is retained as provenance, not treated as permission to send. Existing suppression and stronger eligibility decisions are preserved.</p>
+              <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Import to contact bank</button>
+            </div>
+          </form>
+        </div>
+      </details>
+
+      <details id="new-campaign" open={Boolean(query.error)} className="group rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
+        <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-5 md:p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Compose</p>
-            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Create a governed campaign draft</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
-              Choose the active company campaign and an existing reviewed segment. Creating a draft does not freeze an
-              audience, add a prospect to a sequence, schedule delivery, or send email.
-            </p>
+            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Create campaign</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">Start with a name and reviewed audience. Message rules stay tucked away until needed.</p>
           </div>
-          <span className="rounded-full bg-surface-container px-3 py-1 text-xs font-bold text-on-surface-variant">
-            Draft only
-          </span>
-        </div>
+          <span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary">Create campaign</span>
+        </summary>
 
-        {composer.warnings.length > 0 ? (
-          <ul className="mt-4 space-y-1 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-on-surface-variant">
-            {composer.warnings.map((warning) => <li key={warning}>- {warning}</li>)}
-          </ul>
-        ) : null}
+        <div className="border-t border-outline-variant/15 p-5 md:p-6">
+          {composer.warnings.length > 0 ? (
+            <ul className="space-y-1 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-on-surface-variant">
+              {composer.warnings.map((warning) => <li key={warning}>- {warning}</li>)}
+            </ul>
+          ) : null}
 
         <div className="mt-5 grid gap-5 xl:grid-cols-2">
           {composer.campaigns.map((campaign) => {
@@ -150,10 +209,7 @@ export default async function EmailCampaignsPage({
                   Draft name
                   <input name="name" required defaultValue={`${campaign.role === 'primary' ? 'MSP' : 'Agency'} evidence-first pilot`} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
                 </label>
-                <label className="block text-sm font-semibold text-on-background">
-                  Versioned campaign key
-                  <input name="interventionKey" required defaultValue={draftKey(campaign.campaign_key)} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 font-mono text-xs" />
-                </label>
+                <input type="hidden" name="interventionKey" value={draftKey(campaign.campaign_key)} />
                 <label className="block text-sm font-semibold text-on-background">
                   Contact segment
                   <select name="segment" required disabled={segments.length === 0} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm disabled:opacity-60">
@@ -182,27 +238,17 @@ export default async function EmailCampaignsPage({
                   </div>
                 ))}
 
-                <label className="block text-sm font-semibold text-on-background">
-                  One meaningful variable
-                  <input name="meaningfulVariable" required defaultValue="Evidence-first email through the governed campaign workflow." className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
-                </label>
-                <label className="block text-sm font-semibold text-on-background">
-                  Success condition
-                  <input name="successCondition" required defaultValue={campaign.success_condition} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
-                </label>
-                <label className="block text-sm font-semibold text-on-background">
-                  Stop condition
-                  <input name="stopCondition" required defaultValue={campaign.stop_condition} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
-                </label>
-                <label className="block text-sm font-semibold text-on-background">
-                  Subject
-                  <input name="subject" required defaultValue={preset.subject} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
-                </label>
-                <input type="hidden" name="previewText" value="A dated public-site readiness audit with an evidence boundary." />
-                <label className="block text-sm font-semibold text-on-background">
-                  First message
-                  <textarea name="bodyTemplate" required defaultValue={preset.body} rows={10} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 font-mono text-xs leading-5" />
-                </label>
+                <details className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-on-background">Message and safeguards</summary>
+                  <div className="grid gap-4 border-t border-outline-variant/15 p-4">
+                    <label className="block text-sm font-semibold text-on-background">One meaningful variable<input name="meaningfulVariable" required defaultValue="Evidence-first email through the governed campaign workflow." className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <label className="block text-sm font-semibold text-on-background">Success condition<input name="successCondition" required defaultValue={campaign.success_condition} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <label className="block text-sm font-semibold text-on-background">Stop condition<input name="stopCondition" required defaultValue={campaign.stop_condition} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <label className="block text-sm font-semibold text-on-background">Subject<input name="subject" required defaultValue={preset.subject} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <input type="hidden" name="previewText" value="A dated public-site readiness audit with an evidence boundary." />
+                    <label className="block text-sm font-semibold text-on-background">First message<textarea name="bodyTemplate" required defaultValue={preset.body} rows={10} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 font-mono text-xs leading-5" /></label>
+                  </div>
+                </details>
                 <input type="hidden" name="owner" value="elena" />
                 <button type="submit" disabled={segments.length === 0} className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary disabled:opacity-50">
                   Create held draft
@@ -211,7 +257,8 @@ export default async function EmailCampaignsPage({
             );
           })}
         </div>
-      </section>
+        </div>
+      </details>
 
       <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
         <div className="border-b border-outline-variant/15 px-5 py-4 md:px-6">

@@ -22,6 +22,7 @@ import {
   selectCampaignAudience,
 } from '@/lib/server/campaign-audience';
 import { structuredLog } from '@/lib/server/structured-log';
+import { importContacts, normalizeSegment, parseContactCsvImport } from '@/lib/server/outreach-contacts';
 
 const CONSOLE_PATH = '/admin/campaigns/email';
 
@@ -32,6 +33,60 @@ function text(formData: FormData, key: string, fallback = ''): string {
 function integer(formData: FormData, key: string, fallback: number): number {
   const value = Number(formData.get(key));
   return Number.isFinite(value) ? Math.trunc(value) : fallback;
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Save a provider CSV into the contact bank without enrolling or sending. Provider verification
+ * labels are retained as provenance only; every newly inserted contact remains fail-closed until
+ * GEO-Pulse has independent eligibility evidence.
+ */
+export async function importCampaignContactsAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+
+  const file = formData.get('file');
+  const segment = normalizeSegment(text(formData, 'segment'));
+  if (!(file instanceof File) || file.size === 0 || !segment) {
+    redirect(`${CONSOLE_PATH}?contactsError=missing_file_or_segment#import-contacts`);
+  }
+  if (file.size > 5_000_000) {
+    redirect(`${CONSOLE_PATH}?contactsError=file_too_large#import-contacts`);
+  }
+
+  const csvText = await file.text();
+  const parsed = parseContactCsvImport(csvText);
+  const tags = text(formData, 'tags')
+    .split(',')
+    .map((tag) => tag.trim().toLowerCase())
+    .filter(Boolean)
+    .slice(0, 8);
+  const sourceFile = file.name.replace(/[^a-z0-9._-]+/gi, '-').slice(0, 120) || 'contacts.csv';
+  const result = await importContacts(ctx.adminDb, parsed.rows, {
+    segment,
+    tags,
+    source: 'provider-csv',
+    sourceFile,
+    sourceFileSha256: await sha256Hex(csvText),
+  });
+
+  structuredLog('campaign_contacts_imported_held', {
+    segment,
+    sourceFile,
+    imported: result.imported,
+    skippedExisting: result.skippedExisting,
+    invalid: parsed.invalid.length,
+    sendState: 'held',
+  }, result.error ? 'warning' : 'info');
+  revalidatePath(CONSOLE_PATH);
+  revalidatePath('/admin/outreach');
+  redirect(
+    `${CONSOLE_PATH}?contactsHeld=${String(result.imported)}&contactsSkipped=${String(result.skippedExisting)}&contactsInvalid=${String(parsed.invalid.length)}${result.error ? `&contactsError=${encodeURIComponent(result.error.slice(0, 120))}` : ''}#import-contacts`,
+  );
 }
 
 /**

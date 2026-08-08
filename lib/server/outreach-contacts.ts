@@ -11,6 +11,7 @@
  * Degrades to a dormant panel until migration 057 is applied (operator-run, as always).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeEmail, parseCsv } from './agency-contact-intake';
 import { normalizeProspectUrl } from './outreach-import';
 import { normalizeOutreachCadence, type OutreachCadence } from './outreach';
 
@@ -43,6 +44,9 @@ export interface ParsedContact {
   city: string | null;
   personalizationReason?: string | null;
   personalizationSourceUrl?: string | null;
+  contactTitle?: string | null;
+  region?: string | null;
+  provenance?: Readonly<Record<string, unknown>>;
 }
 
 export interface ContactParseResult {
@@ -120,6 +124,69 @@ export function parseContactImport(text: string): ContactParseResult {
   return result;
 }
 
+function csvCell(header: readonly string[], values: readonly string[], ...names: string[]): string {
+  for (const name of names) {
+    const index = header.indexOf(name);
+    if (index >= 0) return (values[index] ?? '').trim();
+  }
+  return '';
+}
+
+/**
+ * Parse a provider CSV into held contact-bank rows. Apollo exports are intentionally treated as
+ * sourcing evidence, not consent or send eligibility: every new row remains
+ * `needs_verification` when it is written.
+ */
+export function parseContactCsvImport(text: string): ContactParseResult {
+  const result: ContactParseResult = { rows: [], invalid: [] };
+  const { header, rows } = parseCsv(text);
+  const seen = new Set<string>();
+
+  for (const sourceRow of rows) {
+    const email = normalizeEmail(csvCell(header, sourceRow.values, 'email', 'email address'));
+    if (!email) {
+      result.invalid.push({ line: sourceRow.row, text: '', reason: 'missing or invalid email' });
+      continue;
+    }
+    if (seen.has(email)) continue;
+
+    const url = normalizeProspectUrl(csvCell(header, sourceRow.values, 'website', 'url', 'company website'));
+    if (!url) {
+      result.invalid.push({ line: sourceRow.row, text: email, reason: 'missing or invalid website' });
+      continue;
+    }
+    seen.add(email);
+
+    const firstName = csvCell(header, sourceRow.values, 'first name', 'firstname');
+    const lastName = csvCell(header, sourceRow.values, 'last name', 'lastname');
+    const name = [firstName, lastName].filter(Boolean).join(' ') || csvCell(header, sourceRow.values, 'name');
+    const city = csvCell(header, sourceRow.values, 'city', 'company city');
+    const state = csvCell(header, sourceRow.values, 'state', 'company state');
+    const country = csvCell(header, sourceRow.values, 'country', 'company country');
+    const personLinkedinUrl = csvCell(header, sourceRow.values, 'person linkedin url', 'linkedin url');
+
+    result.rows.push({
+      email,
+      url,
+      name: name || null,
+      company: csvCell(header, sourceRow.values, 'company name', 'company') || null,
+      city: city || null,
+      contactTitle: csvCell(header, sourceRow.values, 'title', 'job title') || null,
+      region: [city, state, country].filter(Boolean).join(', ') || null,
+      provenance: {
+        provider: 'apollo',
+        provider_email_status: csvCell(header, sourceRow.values, 'email status') || null,
+        provider_catch_all_status: csvCell(header, sourceRow.values, 'primary email catch-all status') || null,
+        provider_contact_id: csvCell(header, sourceRow.values, 'apollo contact id', 'apollo record id') || null,
+        person_linkedin_url: personLinkedinUrl || null,
+        source_row: sourceRow.row,
+      },
+    });
+    if (result.rows.length >= MAX_ROWS) break;
+  }
+  return result;
+}
+
 export async function contactsTableExists(supabase: SupabaseClient): Promise<boolean> {
   try {
     const { error } = await supabase.from('outreach_contacts').select('id', { head: true, count: 'exact' }).limit(1);
@@ -132,10 +199,24 @@ export async function contactsTableExists(supabase: SupabaseClient): Promise<boo
 export async function importContacts(
   supabase: SupabaseClient,
   rows: ParsedContact[],
-  meta: { segment: string; tags?: string[]; source?: string }
-): Promise<{ imported: number; error?: string }> {
-  if (rows.length === 0) return { imported: 0 };
-  const payload = rows.map((r) => ({
+  meta: { segment: string; tags?: string[]; source?: string; sourceFile?: string; sourceFileSha256?: string }
+): Promise<{ imported: number; skippedExisting: number; error?: string }> {
+  if (rows.length === 0) return { imported: 0, skippedExisting: 0 };
+  const emails = rows.map((row) => row.email);
+  const existing = new Set<string>();
+  for (let start = 0; start < emails.length; start += 150) {
+    const { data: existingRows, error: existingError } = await supabase
+      .from('outreach_contacts')
+      .select('email')
+      .in('email', emails.slice(start, start + 150));
+    if (existingError) return { imported: 0, skippedExisting: 0, error: existingError.message };
+    for (const row of (existingRows ?? []) as { email: string }[]) existing.add(row.email.toLowerCase());
+  }
+  const newRows = rows.filter((row) => !existing.has(row.email.toLowerCase()));
+  if (newRows.length === 0) return { imported: 0, skippedExisting: rows.length };
+
+  const nowIso = new Date().toISOString();
+  const payload = newRows.map((r, index) => ({
     email: r.email,
     url: r.url,
     name: r.name,
@@ -144,15 +225,30 @@ export async function importContacts(
     segment: meta.segment,
     tags: meta.tags ?? [],
     source: meta.source ?? 'manual',
+    source_class: 'operator_manual',
+    source_file: meta.sourceFile ?? null,
+    source_file_sha256: meta.sourceFileSha256 ?? null,
+    source_row_number: Number(r.provenance?.source_row ?? index + 2),
+    company_domain: new URL(r.url).hostname.replace(/^www\./, '').toLowerCase(),
+    region: r.region ?? r.city,
+    contact_title: r.contactTitle ?? null,
+    eligibility_status: 'needs_verification',
+    eligibility_reason: 'founder_authorized_import_requires_verification',
+    eligibility_checked_at: nowIso,
+    provenance: r.provenance ?? {},
     personalization_reason: r.personalizationReason ?? null,
     personalization_source_url: r.personalizationSourceUrl ?? null,
     personalization_verified_at:
       r.personalizationReason && r.personalizationSourceUrl ? new Date().toISOString() : null,
-    updated_at: new Date().toISOString(),
+    updated_at: nowIso,
   }));
-  const { error } = await supabase.from('outreach_contacts').upsert(payload, { onConflict: 'email' });
-  if (error) return { imported: 0, error: error.message };
-  return { imported: rows.length };
+  const { data: inserted, error } = await supabase
+    .from('outreach_contacts')
+    .upsert(payload, { onConflict: 'email', ignoreDuplicates: true })
+    .select('email');
+  if (error) return { imported: 0, skippedExisting: existing.size, error: error.message };
+  const imported = (inserted ?? []).length;
+  return { imported, skippedExisting: rows.length - imported };
 }
 
 export async function listContacts(supabase: SupabaseClient, segment?: string | null): Promise<ContactRow[]> {
