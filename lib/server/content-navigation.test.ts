@@ -80,6 +80,12 @@ describe('content navigation helpers', () => {
   it('builds topic hrefs', () => {
     expect(buildTopicHref('ai_search_readiness')).toBe('/blog/topic/ai_search_readiness');
     expect(buildTopicHref(null)).toBe('/blog/topic/general');
+    expect(buildTopicHref('AI visibility reporting for agencies')).toBe(
+      '/blog/topic/AI%20visibility%20reporting%20for%20agencies'
+    );
+    expect(buildTopicHref('What evidence should an MSP website provide for AI-assisted buyer questions?')).toBe(
+      '/blog/topic/What%20evidence%20should%20an%20MSP%20website%20provide%20for%20AI-assisted%20buyer%20questions%3F'
+    );
   });
 
   it('selects related articles from the same topic first', () => {

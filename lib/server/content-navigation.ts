@@ -28,7 +28,8 @@ export function buildTopicAnchor(topic: string | null): string {
 }
 
 export function buildTopicHref(topic: string | null): string {
-  return topic ? `/blog/topic/${topic}` : '/blog/topic/general';
+  const topicSegment = topic?.trim() || 'general';
+  return `/blog/topic/${encodeURIComponent(topicSegment)}`;
 }
 
 export function groupArticlesByTopic(articles: PublicContentListRow[]): TopicGroup[] {
