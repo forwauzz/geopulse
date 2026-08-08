@@ -19,6 +19,7 @@ import { resolveCampaignSender, resolveTestRecipients, type SenderEnvLike, type 
 import { renderCampaignPreview, type CampaignPreview, type PreviewContact } from './email-campaign-preview';
 import { runCampaignPreflight, type PreflightResult } from './email-campaign-preflight';
 import { loadCampaignResults, type CampaignResults } from './email-campaign-results';
+import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
 
 export interface EmailCampaignListItem {
   readonly interventionKey: string;
@@ -32,6 +33,75 @@ export interface EmailCampaignListItem {
   readonly owner: string;
   readonly readyToSchedule: boolean;
   readonly locked: boolean;
+}
+
+export interface EmailCampaignSegmentOption {
+  readonly segment: string;
+  readonly total: number;
+  readonly eligible: number;
+  readonly needsVerification: number;
+  readonly excluded: number;
+  readonly inSequence: number;
+}
+
+export interface EmailCampaignComposerOptions {
+  readonly campaigns: readonly GrowthCampaign[];
+  readonly segments: readonly EmailCampaignSegmentOption[];
+  readonly warnings: readonly string[];
+}
+
+type SegmentSummaryRow = {
+  readonly segment?: string | null;
+  readonly eligibility_status?: string | null;
+  readonly added_to_sequence_at?: string | null;
+};
+
+export function summarizeEmailCampaignSegments(
+  rows: readonly SegmentSummaryRow[],
+): EmailCampaignSegmentOption[] {
+  const summaries = new Map<string, EmailCampaignSegmentOption>();
+  for (const row of rows) {
+    const segment = row.segment?.trim();
+    if (!segment) continue;
+    const current = summaries.get(segment) ?? {
+      segment,
+      total: 0,
+      eligible: 0,
+      needsVerification: 0,
+      excluded: 0,
+      inSequence: 0,
+    };
+    const status = row.eligibility_status ?? 'needs_verification';
+    summaries.set(segment, {
+      ...current,
+      total: current.total + 1,
+      eligible: current.eligible + (status === 'eligible' ? 1 : 0),
+      needsVerification: current.needsVerification + (status === 'needs_verification' ? 1 : 0),
+      excluded: current.excluded + (['suppressed', 'rejected', 'converted'].includes(status) ? 1 : 0),
+      inSequence: current.inSequence + (row.added_to_sequence_at ? 1 : 0),
+    });
+  }
+  return [...summaries.values()].sort((left, right) => left.segment.localeCompare(right.segment));
+}
+
+export async function loadEmailCampaignComposerOptions(
+  supabase: SupabaseClient,
+): Promise<EmailCampaignComposerOptions> {
+  const [campaigns, contacts] = await Promise.all([
+    loadActiveGrowthCampaigns(supabase),
+    supabase
+      .from('outreach_contacts')
+      .select('segment,eligibility_status,added_to_sequence_at')
+      .limit(5000),
+  ]);
+  const warnings: string[] = [];
+  if (campaigns.length === 0) warnings.push('No active primary or challenger growth campaign is available.');
+  if (contacts.error) warnings.push('Contact segment counts are unavailable; draft creation remains held.');
+  return {
+    campaigns,
+    segments: summarizeEmailCampaignSegments((contacts.data ?? []) as SegmentSummaryRow[]),
+    warnings,
+  };
 }
 
 export interface EmailCampaignDetail {
