@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { resolveFirstRunAt } from '@/lib/server/montreal-time';
 import {
@@ -46,7 +47,9 @@ export async function createEmailCampaignAction(formData: FormData): Promise<voi
   const campaignId = text(formData, 'campaignId');
   const name = text(formData, 'name');
   const segment = text(formData, 'segment');
-  if (!interventionKey || !campaignId || !name || !segment) return;
+  if (!interventionKey || !campaignId || !name || !segment) {
+    redirect(`${CONSOLE_PATH}?error=missing_required_fields`);
+  }
 
   const meaningfulVariable = text(formData, 'meaningfulVariable');
   const successCondition = text(formData, 'successCondition');
@@ -76,7 +79,7 @@ export async function createEmailCampaignAction(formData: FormData): Promise<voi
       })
       .select('id')
       .single();
-    if (error || !inserted?.id) return;
+    if (error || !inserted?.id) redirect(`${CONSOLE_PATH}?error=intervention_create_failed`);
     interventionId = String(inserted.id);
   }
 
@@ -131,9 +134,11 @@ export async function createEmailCampaignAction(formData: FormData): Promise<voi
     },
   });
 
-  await saveValidatedEmailCampaign(ctx.adminDb, contract);
+  const saved = await saveValidatedEmailCampaign(ctx.adminDb, contract);
+  if (!saved.ok) redirect(`${CONSOLE_PATH}?error=draft_save_failed`);
   structuredLog('email_campaign_created', { interventionKey, segment }, 'info');
   revalidatePath(CONSOLE_PATH);
+  redirect(`${CONSOLE_PATH}/${encodeURIComponent(interventionKey)}`);
 }
 
 /**
