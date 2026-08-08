@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PRESET_OUTREACH_TEMPLATES,
   SAMPLE_TEMPLATE_VARS,
   escapeHtml,
   renderOutreachTemplate,
 } from './outreach-templates';
+
+describe('MSP baseline offer', () => {
+  it('does not claim a scan or require scan-only merge fields before one exists', () => {
+    const preset = PRESET_OUTREACH_TEMPLATES.find((template) => template.key === 'msp-evidence-first');
+    expect(preset).toBeDefined();
+    const copy = `${preset?.subject ?? ''}\n${preset?.body ?? ''}`;
+    expect(copy).not.toMatch(/\{\{(?:score|grade|top_issues|report_url)\}\}/);
+    expect(copy).not.toMatch(/we (?:ran|audited)|site scored/i);
+    expect(copy).toContain('not a promise of rankings or citations');
+    expect(copy).toContain('{{walkthrough_url}}');
+  });
+});
 
 const vars = {
   ...SAMPLE_TEMPLATE_VARS,
