@@ -26,6 +26,8 @@ type Props = {
   readonly eyebrow?: string;
   readonly title?: string;
   readonly description?: string;
+  readonly confirmationLabel?: string;
+  readonly confirmationPendingLabel?: string;
 };
 
 const ALL_EDITABLE_FIELDS: readonly OnboardingMissingField[] = [
@@ -39,7 +41,15 @@ const ALL_EDITABLE_FIELDS: readonly OnboardingMissingField[] = [
   'timezone',
 ];
 
-function SubmitButton({ confirmation }: { readonly confirmation: boolean }) {
+function SubmitButton({
+  confirmation,
+  confirmationLabel = 'Confirm and build the baseline',
+  confirmationPendingLabel = 'Building the first useful baseline…',
+}: {
+  readonly confirmation: boolean;
+  readonly confirmationLabel?: string;
+  readonly confirmationPendingLabel?: string;
+}) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -49,10 +59,10 @@ function SubmitButton({ confirmation }: { readonly confirmation: boolean }) {
     >
       {pending
         ? confirmation
-          ? 'Building the first useful baseline…'
+          ? confirmationPendingLabel
           : 'Reading the site for its name, market, and services…'
         : confirmation
-          ? 'Confirm and build the baseline'
+          ? confirmationLabel
           : 'Detect business details'}
       {!pending ? <span aria-hidden>→</span> : null}
     </button>
@@ -108,10 +118,14 @@ function ConfirmationStep({
   state,
   action,
   hiddenFields,
+  confirmationLabel,
+  confirmationPendingLabel,
 }: {
   readonly state: Extract<ValueFirstOnboardingActionState, { status: 'needs_confirmation' }>;
   readonly action: (formData: FormData) => void;
   readonly hiddenFields?: Props['hiddenFields'];
+  readonly confirmationLabel?: string;
+  readonly confirmationPendingLabel?: string;
 }) {
   const { proposal } = state;
   const optionalEdits = ALL_EDITABLE_FIELDS.filter((field) => !proposal.missingFields.includes(field));
@@ -165,7 +179,11 @@ function ConfirmationStep({
           {optionalEdits.map((field) => <ConfirmationField key={field} field={field} proposal={proposal} required={false} />)}
         </div>
       </details>
-      <SubmitButton confirmation />
+      <SubmitButton
+        confirmation
+        confirmationLabel={confirmationLabel}
+        confirmationPendingLabel={confirmationPendingLabel}
+      />
     </form>
   );
 }
@@ -180,10 +198,20 @@ export function ValueFirstOnboardingForm({
   eyebrow = 'Start with value',
   title = 'See what GEO-Pulse will do before you configure anything',
   description = 'Enter the business name and website. GEO-Pulse detects the market and asks only when something important is unclear.',
+  confirmationLabel,
+  confirmationPendingLabel,
 }: Props) {
   const [state, formAction] = useActionState(action, null);
   if (state?.status === 'needs_confirmation') {
-    return <ConfirmationStep state={state} action={formAction} hiddenFields={hiddenFields} />;
+    return (
+      <ConfirmationStep
+        state={state}
+        action={formAction}
+        hiddenFields={hiddenFields}
+        confirmationLabel={confirmationLabel}
+        confirmationPendingLabel={confirmationPendingLabel}
+      />
+    );
   }
   const draft = state?.status === 'error' ? state.draft : undefined;
   return (

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isClientReportSharingHeld,
+  isReportDeliveryHeld,
   isReportQuarantined,
   releaseClientReportHold,
 } from './report-quarantine';
@@ -55,6 +56,34 @@ describe('releasing a client review hold', () => {
 });
 
 describe('report quarantine', () => {
+  it('projects a released client-review report as ready without rewriting its history', () => {
+    const historicalReport = {
+      email_status: 'held_client_review',
+      delivery_blocked: true,
+      delivery_block_reason: 'client_report_sharing_held',
+    };
+    expect(isReportDeliveryHeld(historicalReport, {
+      report_quarantine_hold: { status: 'released' },
+    })).toBe(false);
+    expect(isReportDeliveryHeld(historicalReport, {
+      report_quarantine_hold: { status: 'held_onboarding_review' },
+    })).toBe(true);
+  });
+
+  it('keeps unrelated delivery holds fail closed after client release', () => {
+    const releasedClient = { report_quarantine_hold: { status: 'released' } };
+    expect(isReportDeliveryHeld({
+      email_status: 'held_delivery_disabled',
+      delivery_blocked: true,
+      delivery_block_reason: 'provider_disabled',
+    }, releasedClient)).toBe(true);
+    expect(isReportDeliveryHeld({
+      email_status: 'generated',
+      delivery_blocked: true,
+      delivery_block_reason: 'integrity_review',
+    }, releasedClient)).toBe(true);
+  });
+
   it('fails closed only for the explicit audited quarantine marker', () => {
     expect(isReportQuarantined({ quarantine_status: 'quarantined' })).toBe(true);
     expect(isReportQuarantined({ quarantine_status: 'released' })).toBe(false);

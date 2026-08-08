@@ -8,6 +8,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ResolveValueFirstProposalResult } from '@/lib/server/value-first-onboarding';
+
 vi.mock('server-only', () => ({}));
 
 const REDIRECT = Symbol('redirect');
@@ -34,7 +36,7 @@ vi.mock('@/lib/server/organization-context-repository', () => ({
   persistConfirmedOrganizationContext,
 }));
 
-const resolveValueFirstOnboardingProposal = vi.fn(async (args: { website: string }) => ({
+const resolveValueFirstOnboardingProposal = vi.fn(async (args: { website: string }): Promise<ResolveValueFirstProposalResult> => ({
   ok: true as const,
   proposal: {
     version: 'value-first-onboarding-v1',
@@ -54,7 +56,7 @@ const resolveValueFirstOnboardingProposal = vi.fn(async (args: { website: string
     languages: ['en-CA', 'fr-CA'],
     timezone: 'America/Toronto',
     confidence: 0.9,
-    resolverStatus: 'exact',
+    resolverStatus: 'proposed',
     reasonCodes: [],
     limitations: [],
     missingFields: [],
@@ -124,6 +126,9 @@ describe('confirmAgencyClientMarket', () => {
       display_name: 'SanoMed Solutions',
       canonical_domain: 'sanomedsolutions.com',
       website_domain: 'sanomedsolutions.com',
+      vertical: 'healthcare',
+      subvertical: 'private medical clinic',
+      metadata: { location: 'Pointe-Claire' },
     };
   });
 
@@ -190,6 +195,49 @@ describe('confirmAgencyClientMarket', () => {
     );
 
     expect(result).toMatchObject({ status: 'needs_confirmation' });
+    expect(persistConfirmedOrganizationContext).not.toHaveBeenCalled();
+  });
+
+  it('uses the legacy client category and location only when site detection leaves gaps', async () => {
+    resolveValueFirstOnboardingProposal.mockResolvedValueOnce({
+      ok: true,
+      proposal: {
+        version: 'value-first-onboarding-v1',
+        intent: 'agency',
+        submittedName: 'SanoMed Solutions',
+        submittedWebsite: 'https://sanomedsolutions.com/',
+        displayName: 'SanoMed Solutions',
+        canonicalDomain: 'sanomedsolutions.com',
+        category: null,
+        services: [],
+        buyer: null,
+        marketScope: null,
+        countryCode: null,
+        subdivisionCode: null,
+        locality: null,
+        serviceAreas: [],
+        languages: [],
+        timezone: null,
+        confidence: 0.4,
+        resolverStatus: 'needs_review',
+        reasonCodes: ['location_missing', 'country_missing', 'market_scope_missing'],
+        limitations: [],
+        missingFields: ['country_code', 'market_scope', 'languages', 'timezone', 'category'],
+      },
+    });
+    const { confirmAgencyClientMarket } = await import('./actions');
+    const result = await confirmAgencyClientMarket(null, confirmedForm({ confirmed: '' }));
+
+    expect(result).toMatchObject({
+      status: 'needs_confirmation',
+      proposal: {
+        category: 'private medical clinic',
+        serviceAreas: ['Pointe-Claire'],
+      },
+    });
+    if (result.status === 'needs_confirmation') {
+      expect(result.proposal.missingFields).not.toContain('category');
+    }
     expect(persistConfirmedOrganizationContext).not.toHaveBeenCalled();
   });
 

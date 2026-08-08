@@ -12,7 +12,7 @@ import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
 import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, releaseClientSharingHold, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
 import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
-import { isClientReportSharingHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
+import { isClientReportSharingHeld, isReportDeliveryHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
 import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
 import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
 import { OnboardingFirstValueReveal } from '@/components/onboarding-first-value-reveal';
@@ -212,8 +212,10 @@ export default async function ClientScorecardPage({
     ? latestGpmReport.metadata as Record<string, unknown>
     : {};
   const latestReportEmailStatus = String(latestReportMetadata['email_status'] ?? 'generated');
-  const latestReportHeld = reportSharingHeld || latestReportEmailStatus.startsWith('held_')
-    || latestReportMetadata['delivery_blocked'] === true;
+  const clientReviewHoldReleased = !reportSharingHeld
+    && latestReportEmailStatus === 'held_client_review'
+    && latestReportMetadata['delivery_block_reason'] === 'client_report_sharing_held';
+  const latestReportHeld = isReportDeliveryHeld(latestReportMetadata, clientMetadata);
   const activationReport = sp.activation === '1'
     ? await loadLatestAgencyReport({ supabase: admin, agencyClientId: client.id })
     : null;
@@ -355,7 +357,9 @@ export default async function ClientScorecardPage({
                 hiddenFields={{ agencyAccountId: account.id, agencyClientId: String(client.id) }}
                 eyebrow="One step before measuring"
                 title="Confirm the market GEO-Pulse should measure"
-                description="This client was added before market confirmation existed, so nothing has been measured for it yet. Confirm the business and market once and the baseline can run."
+                description="This client predates market confirmation. Confirm the business and market once to bind future measurements; historical reports remain available."
+                confirmationLabel="Save market"
+                confirmationPendingLabel="Saving the confirmed market…"
               />
             </div>
           ) : null}
@@ -512,7 +516,7 @@ export default async function ClientScorecardPage({
                         {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(latestGpmReport.generated_at))} · {ENGINE_LABEL[String(latestGpmReport.platform) as EngineKey] ?? String(latestGpmReport.platform)}
                       </p>
                     </div>
-                    {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">{latestReportHeld ? 'Held for review' : latestReportEmailStatus === 'sent' ? 'Sent by email' : 'Generated'}</span>}
+                    {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">{latestReportHeld ? 'Held for review' : clientReviewHoldReleased ? 'Ready in client scorecard' : latestReportEmailStatus === 'sent' ? 'Sent by email' : 'Generated'}</span>}
                   </div>
                 ) : <p className="text-on-surface-variant">The first report will appear after a visibility check.</p>}
                 {(gpmReports ?? []).length > 0 ? (
@@ -567,7 +571,9 @@ export default async function ClientScorecardPage({
               <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">
                 <span className="material-symbols-outlined text-[18px]" aria-hidden>monitoring</span> Start tracking
               </button>
-              <p className="text-xs leading-relaxed text-on-surface-variant">Uses ChatGPT, Gemini, and Perplexity. The first complete measurement becomes the baseline; later checks show improvement or regression.</p>
+              <p className="text-xs leading-relaxed text-on-surface-variant">
+                Uses the currently configured engines ({platformsEnabled.map((platform) => ENGINE_LABEL[platform as EngineKey] ?? platform).join(', ') || 'none available'}). The first complete measurement becomes the baseline; later checks show improvement or regression.
+              </p>
             </form>
           )}
         </div>

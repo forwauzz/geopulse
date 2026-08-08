@@ -72,6 +72,11 @@ export type OnboardingConfirmationInput = {
   readonly timezone?: string | null;
 };
 
+export type LegacyOnboardingHints = {
+  readonly category?: string | null;
+  readonly location?: string | null;
+};
+
 export type ValueFirstOnboardingActionState =
   | {
       readonly status: 'needs_confirmation';
@@ -250,6 +255,30 @@ export function buildOrganizationOnboardingProposal(args: {
     resolverStatus: args.resolution.status,
     reasonCodes: [...args.resolution.reasonCodes],
     limitations: [...args.resolution.limitations],
+  } satisfies Omit<OrganizationOnboardingProposal, 'missingFields'>;
+  return { ...base, missingFields: proposalMissingFields(base) };
+}
+
+/**
+ * Fill exact-site gaps from the client record the agency already curated.
+ *
+ * These are hints, not a second resolver: exact-site facts always win, and a
+ * legacy location is kept as a service area instead of being promoted to a
+ * locality, country, or timezone that the stored data never proved.
+ */
+export function proposalWithLegacyHints(
+  proposal: OrganizationOnboardingProposal,
+  hints: LegacyOnboardingHints,
+): OrganizationOnboardingProposal {
+  const category = proposal.category ?? clean(hints.category);
+  const legacyLocation = clean(hints.location);
+  const serviceAreas = proposal.serviceAreas.length > 0
+    ? [...proposal.serviceAreas]
+    : legacyLocation ? [legacyLocation] : [];
+  const base = {
+    ...proposal,
+    category,
+    serviceAreas,
   } satisfies Omit<OrganizationOnboardingProposal, 'missingFields'>;
   return { ...base, missingFields: proposalMissingFields(base) };
 }
