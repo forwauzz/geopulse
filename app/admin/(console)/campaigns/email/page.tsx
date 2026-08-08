@@ -45,7 +45,9 @@ export default async function EmailCampaignsPage({
 }: {
   readonly searchParams?: Promise<{
     error?: string;
+    contactsEligible?: string;
     contactsHeld?: string;
+    contactsSuppressed?: string;
     contactsSkipped?: string;
     contactsInvalid?: string;
     contactsError?: string;
@@ -104,7 +106,7 @@ export default async function EmailCampaignsPage({
 
       <section aria-label="Campaign workflow" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          ['1', 'Contacts', 'Import and review a held audience'],
+          ['1', 'Contacts', 'Import, suppress, and qualify MSPs'],
           ['2', 'Campaign', 'Choose name, segment, and message'],
           ['3', 'Preview & test', 'Confirm the exact rendered email'],
           ['4', 'Schedule', 'Release only after every gate passes'],
@@ -121,15 +123,15 @@ export default async function EmailCampaignsPage({
         <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 md:p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Audience</p>
-            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Import contacts</h2>
-            <p className="mt-1 text-sm text-on-surface-variant">CSV in, held contact bank out. No enrollment and no send.</p>
+            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Import and qualify contacts</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">CSV in, suppression and MSP-fit checks applied. No enrollment and no send.</p>
           </div>
           <span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary">Upload CSV</span>
         </summary>
         <div className="border-t border-outline-variant/15 p-5 md:p-6">
           {query.contactsHeld !== undefined ? (
             <p className="mb-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
-              Held {query.contactsHeld} new contact{query.contactsHeld === '1' ? '' : 's'} · {query.contactsSkipped ?? '0'} already saved · {query.contactsInvalid ?? '0'} unusable row{query.contactsInvalid === '1' ? '' : 's'}. Nothing was sent.
+              Qualified {query.contactsEligible ?? '0'} Quebec MSP{query.contactsEligible === '1' ? '' : 's'} · held {query.contactsHeld} · suppressed {query.contactsSuppressed ?? '0'} · {query.contactsSkipped ?? '0'} already saved · {query.contactsInvalid ?? '0'} unusable. Nothing was enrolled or sent.
             </p>
           ) : null}
           {query.contactsError ? (
@@ -152,8 +154,8 @@ export default async function EmailCampaignsPage({
               <input name="tags" defaultValue="apollo, imported-2026-08" className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" />
             </label>
             <div className="flex flex-wrap items-center justify-between gap-3 md:col-span-2">
-              <p className="max-w-2xl text-xs leading-5 text-on-surface-variant">Provider verification is retained as provenance, not treated as permission to send. Existing suppression and stronger eligibility decisions are preserved.</p>
-              <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Import to contact bank</button>
+              <p className="max-w-2xl text-xs leading-5 text-on-surface-variant">Apollo Verified contacts qualify automatically only when they are named decision-makers at an explicit Quebec MSP, use a matching business domain, and clear suppression and catch-all checks. Everything else stays held with a reason.</p>
+              <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Import and qualify</button>
             </div>
           </form>
         </div>

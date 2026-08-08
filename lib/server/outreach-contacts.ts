@@ -11,7 +11,13 @@
  * Degrades to a dormant panel until migration 057 is applied (operator-run, as always).
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { normalizeEmail, parseCsv } from './agency-contact-intake';
+import {
+  isFreeMailDomain,
+  isRoleBasedEmail,
+  normalizeEmail,
+  parseCsv,
+  type ContactEligibility,
+} from './agency-contact-intake';
 import { normalizeProspectUrl } from './outreach-import';
 import { normalizeOutreachCadence, type OutreachCadence } from './outreach';
 
@@ -52,6 +58,131 @@ export interface ParsedContact {
 export interface ContactParseResult {
   rows: ParsedContact[];
   invalid: { line: number; text: string; reason: string }[];
+}
+
+export const APOLLO_MSP_TARGET_SEGMENT = 'msp-qc';
+
+export interface ApolloPromotionEvidence {
+  readonly unsubscribedEmails: ReadonlySet<string>;
+  readonly convertedEmails: ReadonlySet<string>;
+  readonly suppressedEmails: ReadonlySet<string>;
+}
+
+export interface ApolloPromotionContact {
+  readonly id: string;
+  readonly email: string;
+  readonly segment: string;
+  readonly tags: readonly string[];
+  readonly eligibilityStatus: ContactEligibility;
+  readonly provenance: Readonly<Record<string, unknown>>;
+}
+
+export interface ApolloPromotionDecision {
+  readonly status: ContactEligibility;
+  readonly reason: string;
+  readonly targetSegment: string | null;
+}
+
+export interface ApolloPromotionUpdate {
+  readonly id: string;
+  readonly email: string;
+  readonly previousStatus: ContactEligibility;
+  readonly status: ContactEligibility;
+  readonly reason: string;
+  readonly segment: string;
+  readonly tags: readonly string[];
+  readonly provenance: Readonly<Record<string, unknown>>;
+}
+
+export interface ApolloPromotionPlan {
+  readonly updates: readonly ApolloPromotionUpdate[];
+  readonly counts: {
+    readonly sourceRows: number;
+    readonly providerVerified: number;
+    readonly eligibleMsp: number;
+    readonly held: number;
+    readonly suppressed: number;
+    readonly converted: number;
+    readonly terminalPreserved: number;
+    readonly missingContact: number;
+  };
+  readonly reasons: Readonly<Record<string, number>>;
+}
+
+const TERMINAL_ELIGIBILITY = new Set<ContactEligibility>(['suppressed', 'converted', 'rejected', 'enrolled']);
+const MSP_DECISION_MAKER_RE = /\b(owner|founder|co-?founder|president|chief executive|ceo|managing (?:director|partner)|principal)\b/i;
+const MSP_INDUSTRY_RE = /(information technology|it services|computer (?:&|and) network security|computer networking)/i;
+const MSP_SERVICE_RE = /\b(managed it|managed service provider|it support services|outsourced it|co-managed it|help ?desk services|managed network|managed cybersecurity)\b/i;
+
+function provenanceText(row: ParsedContact, key: string): string {
+  const value = row.provenance?.[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function businessIdentityMatches(row: ParsedContact): boolean {
+  try {
+    const emailHost = row.email.slice(row.email.indexOf('@') + 1).toLowerCase();
+    const siteHost = new URL(row.url).hostname.replace(/^www\./, '').toLowerCase();
+    if (emailHost === siteHost || emailHost.endsWith(`.${siteHost}`) || siteHost.endsWith(`.${emailHost}`)) return true;
+    return emailHost.split('.')[0] === siteHost.split('.')[0];
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Provider verification proves mailbox quality, not that a company belongs in the primary MSP
+ * cohort. This deterministic gate promotes only named Quebec MSP decision-makers whose Apollo
+ * record carries explicit managed-services evidence. Everything ambiguous remains saved and held.
+ */
+export function classifyApolloMspContact(
+  row: ParsedContact,
+  evidence: ApolloPromotionEvidence,
+): ApolloPromotionDecision {
+  const email = row.email.toLowerCase();
+  if (evidence.unsubscribedEmails.has(email) || evidence.suppressedEmails.has(email)) {
+    return { status: 'suppressed', reason: 'suppression_ledger_match', targetSegment: null };
+  }
+  if (evidence.convertedEmails.has(email)) {
+    return { status: 'converted', reason: 'active_or_trialing_customer', targetSegment: null };
+  }
+  if (provenanceText(row, 'provider') !== 'apollo') {
+    return { status: 'needs_verification', reason: 'apollo_provider_missing', targetSegment: null };
+  }
+  if (provenanceText(row, 'provider_email_status').toLowerCase() !== 'verified') {
+    return { status: 'needs_verification', reason: 'apollo_email_not_verified', targetSegment: null };
+  }
+  if (provenanceText(row, 'provider_catch_all_status').toLowerCase() === 'catch-all') {
+    return { status: 'needs_verification', reason: 'apollo_catch_all_mailbox', targetSegment: null };
+  }
+  if (!row.name || !row.company || !row.contactTitle || !row.url) {
+    return { status: 'needs_verification', reason: 'business_identity_incomplete', targetSegment: null };
+  }
+  if (isRoleBasedEmail(email)) {
+    return { status: 'needs_verification', reason: 'role_based_address', targetSegment: null };
+  }
+  if (isFreeMailDomain(email) || !businessIdentityMatches(row)) {
+    return { status: 'needs_verification', reason: 'business_domain_not_confirmed', targetSegment: null };
+  }
+  if (!MSP_DECISION_MAKER_RE.test(row.contactTitle)) {
+    return { status: 'needs_verification', reason: 'not_msp_decision_maker', targetSegment: null };
+  }
+
+  const companyCountry = provenanceText(row, 'company_country');
+  const companyState = provenanceText(row, 'company_state');
+  if (companyCountry.toLowerCase() !== 'canada' || !/^(quebec|québec)$/i.test(companyState)) {
+    return { status: 'needs_verification', reason: 'outside_primary_quebec_geography', targetSegment: null };
+  }
+  const industry = provenanceText(row, 'industry');
+  const keywords = provenanceText(row, 'keywords');
+  if (!MSP_INDUSTRY_RE.test(industry) || !MSP_SERVICE_RE.test(`${industry} ${keywords}`)) {
+    return { status: 'needs_verification', reason: 'not_msp_fit', targetSegment: null };
+  }
+  return {
+    status: 'eligible',
+    reason: 'apollo_verified_quebec_msp_decision_maker',
+    targetSegment: APOLLO_MSP_TARGET_SEGMENT,
+  };
 }
 
 /** Normalize a segment key: "Marketing Agencies QC" → "marketing-agencies-qc". */
@@ -177,8 +308,16 @@ export function parseContactCsvImport(text: string): ContactParseResult {
         provider: 'apollo',
         provider_email_status: csvCell(header, sourceRow.values, 'email status') || null,
         provider_catch_all_status: csvCell(header, sourceRow.values, 'primary email catch-all status') || null,
+        provider_email_source: csvCell(header, sourceRow.values, 'primary email source') || null,
+        provider_email_last_verified_at: csvCell(header, sourceRow.values, 'primary email last verified at') || null,
         provider_contact_id: csvCell(header, sourceRow.values, 'apollo contact id', 'apollo record id') || null,
         person_linkedin_url: personLinkedinUrl || null,
+        company_linkedin_url: csvCell(header, sourceRow.values, 'company linkedin url') || null,
+        company_country: csvCell(header, sourceRow.values, 'company country') || country || null,
+        company_state: csvCell(header, sourceRow.values, 'company state') || state || null,
+        industry: csvCell(header, sourceRow.values, 'industry') || null,
+        keywords: csvCell(header, sourceRow.values, 'keywords') || null,
+        employee_count: csvCell(header, sourceRow.values, '# employees') || null,
         source_row: sourceRow.row,
       },
     });
@@ -249,6 +388,143 @@ export async function importContacts(
   if (error) return { imported: 0, skippedExisting: existing.size, error: error.message };
   const imported = (inserted ?? []).length;
   return { imported, skippedExisting: rows.length - imported };
+}
+
+export async function loadApolloPromotionContacts(
+  supabase: SupabaseClient,
+  emails: readonly string[],
+): Promise<ApolloPromotionContact[]> {
+  const contacts: ApolloPromotionContact[] = [];
+  for (let start = 0; start < emails.length; start += 150) {
+    const { data, error } = await supabase
+      .from('outreach_contacts')
+      .select('id,email,segment,tags,eligibility_status,provenance')
+      .in('email', emails.slice(start, start + 150));
+    if (error) throw new Error(`apollo promotion contact read failed: ${error.message}`);
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      contacts.push({
+        id: String(row.id),
+        email: String(row.email).toLowerCase(),
+        segment: String(row.segment ?? ''),
+        tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+        eligibilityStatus: (row.eligibility_status as ContactEligibility) ?? 'needs_verification',
+        provenance: row.provenance && typeof row.provenance === 'object'
+          ? row.provenance as Record<string, unknown>
+          : {},
+      });
+    }
+  }
+  return contacts;
+}
+
+/** Pure preview: the exact records and reasons a production promotion would write. */
+export function planApolloMspPromotion(args: {
+  readonly rows: readonly ParsedContact[];
+  readonly contacts: readonly ApolloPromotionContact[];
+  readonly evidence: ApolloPromotionEvidence;
+}): ApolloPromotionPlan {
+  const existingByEmail = new Map(args.contacts.map((contact) => [contact.email.toLowerCase(), contact]));
+  const updates: ApolloPromotionUpdate[] = [];
+  const reasons: Record<string, number> = {};
+  let providerVerified = 0;
+  let eligibleMsp = 0;
+  let held = 0;
+  let suppressed = 0;
+  let converted = 0;
+  let terminalPreserved = 0;
+  let missingContact = 0;
+
+  for (const row of args.rows) {
+    if (provenanceText(row, 'provider_email_status').toLowerCase() === 'verified') providerVerified += 1;
+    const existing = existingByEmail.get(row.email.toLowerCase());
+    if (!existing) {
+      missingContact += 1;
+      reasons.contact_not_in_bank = (reasons.contact_not_in_bank ?? 0) + 1;
+      continue;
+    }
+    if (TERMINAL_ELIGIBILITY.has(existing.eligibilityStatus)) {
+      terminalPreserved += 1;
+      const reason = `terminal_preserved:${existing.eligibilityStatus}`;
+      reasons[reason] = (reasons[reason] ?? 0) + 1;
+      continue;
+    }
+
+    const decision = classifyApolloMspContact(row, args.evidence);
+    reasons[decision.reason] = (reasons[decision.reason] ?? 0) + 1;
+    if (decision.status === 'eligible') eligibleMsp += 1;
+    else if (decision.status === 'suppressed') suppressed += 1;
+    else if (decision.status === 'converted') converted += 1;
+    else held += 1;
+
+    const tags = [...new Set([
+      ...existing.tags,
+      'apollo',
+      ...(decision.status === 'eligible' ? ['apollo-verified', 'msp-fit'] : []),
+    ])].slice(0, 12);
+    updates.push({
+      id: existing.id,
+      email: existing.email,
+      previousStatus: existing.eligibilityStatus,
+      status: decision.status,
+      reason: decision.reason,
+      segment: decision.targetSegment ?? existing.segment,
+      tags,
+      provenance: { ...existing.provenance, ...(row.provenance ?? {}), msp_eligibility_rule: 'apollo-msp-v1' },
+    });
+  }
+
+  return {
+    updates,
+    counts: {
+      sourceRows: args.rows.length,
+      providerVerified,
+      eligibleMsp,
+      held,
+      suppressed,
+      converted,
+      terminalPreserved,
+      missingContact,
+    },
+    reasons,
+  };
+}
+
+/** Apply the reviewed plan without enrolling a prospect, freezing an audience, or sending mail. */
+export async function applyApolloMspPromotion(
+  supabase: SupabaseClient,
+  plan: ApolloPromotionPlan,
+  nowIso = new Date().toISOString(),
+): Promise<{ updated: number; stale: number; errors: readonly string[] }> {
+  let updated = 0;
+  let stale = 0;
+  const errors: string[] = [];
+  for (let start = 0; start < plan.updates.length; start += 25) {
+    const batch = plan.updates.slice(start, start + 25);
+    const results = await Promise.all(batch.map(async (item) => {
+      const { data, error } = await supabase
+        .from('outreach_contacts')
+        .update({
+          segment: item.segment,
+          tags: item.tags,
+          source_class: 'operator_manual',
+          eligibility_status: item.status,
+          eligibility_reason: item.reason,
+          eligibility_checked_at: nowIso,
+          provenance: item.provenance,
+          updated_at: nowIso,
+        })
+        .eq('id', item.id)
+        .eq('eligibility_status', item.previousStatus)
+        .select('id');
+      return { item, data, error };
+    }));
+    for (const result of results) {
+      if (result.error) errors.push(`${result.item.email}: ${result.error.message}`);
+      else if ((result.data ?? []).length === 0) stale += 1;
+      else updated += 1;
+    }
+  }
+  return { updated, stale, errors };
 }
 
 export async function listContacts(supabase: SupabaseClient, segment?: string | null): Promise<ContactRow[]> {

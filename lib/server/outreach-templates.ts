@@ -196,23 +196,19 @@ export const PRESET_OUTREACH_TEMPLATES: ReadonlyArray<{
 }> = [
   {
     key: 'msp-evidence-first',
-    name: 'MSP evidence-first - walkthrough opener',
-    description: 'MSP-specific first touch: public evidence, transparent boundary, and a human next step.',
-    subject: '{{company}}: an AI-search readiness audit of {{domain}}',
+    name: 'MSP baseline offer - evidence before claims',
+    description: 'MSP-specific first touch that offers a baseline without pretending an audit already exists.',
+    subject: '{{company}}: one AI visibility baseline for {{domain}}',
     bodyFormat: 'text',
     body: `Hi {{name}},
 
-We ran a public-site AI-search readiness audit of {{domain}} because it matches our current managed-services cohort.
+When a business asks an AI assistant for a managed IT provider, the answer depends on what the system can retrieve and verify about each company.
 
-The site scored {{score}}/100 (grade {{grade}}). That score summarizes observable access, structure, content, and trust checks; it does not predict or guarantee an AI citation.
+GEO-Pulse measures that for MSPs. We check the public signals on {{domain}}, run blind buyer questions across supported answer engines, and return the evidence behind each finding: what was observed, where a competitor appeared, and what to fix first.
 
-The highest-confidence gaps were:
+It is a baseline, not a promise of rankings or citations.
 
-{{top_issues}}
-
-The full report is free to view, with no account required: {{report_url}}
-
-If it would help, request a focused walkthrough and we will review the public evidence before replying: {{walkthrough_url}}`,
+Would it be useful if I prepared the first baseline for {{company}}? You can also see the short walkthrough here: {{walkthrough_url}}`,
   },
   {
     key: 'first-scorecard',

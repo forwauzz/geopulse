@@ -22,7 +22,14 @@ import {
   selectCampaignAudience,
 } from '@/lib/server/campaign-audience';
 import { structuredLog } from '@/lib/server/structured-log';
-import { importContacts, normalizeSegment, parseContactCsvImport } from '@/lib/server/outreach-contacts';
+import {
+  applyApolloMspPromotion,
+  importContacts,
+  loadApolloPromotionContacts,
+  normalizeSegment,
+  parseContactCsvImport,
+  planApolloMspPromotion,
+} from '@/lib/server/outreach-contacts';
 
 const CONSOLE_PATH = '/admin/campaigns/email';
 
@@ -41,9 +48,9 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 /**
- * Save a provider CSV into the contact bank without enrolling or sending. Provider verification
- * labels are retained as provenance only; every newly inserted contact remains fail-closed until
- * GEO-Pulse has independent eligibility evidence.
+ * Save a provider CSV into the contact bank without enrolling or sending. Apollo Verified rows
+ * are automatically promoted only when the strict Quebec MSP, business-identity, decision-maker,
+ * and suppression checks all pass. Every ambiguous row remains held with a machine-readable reason.
  */
 export async function importCampaignContactsAction(formData: FormData): Promise<void> {
   const ctx = await loadAdminActionContext();
@@ -74,18 +81,46 @@ export async function importCampaignContactsAction(formData: FormData): Promise<
     sourceFileSha256: await sha256Hex(csvText),
   });
 
-  structuredLog('campaign_contacts_imported_held', {
+  let promotionError: string | null = null;
+  let promotionPlan: ReturnType<typeof planApolloMspPromotion> | null = null;
+  let promotionResult: Awaited<ReturnType<typeof applyApolloMspPromotion>> | null = null;
+  if (!result.error) {
+    try {
+      const [contacts, evidence] = await Promise.all([
+        loadApolloPromotionContacts(ctx.adminDb, parsed.rows.map((row) => row.email)),
+        loadAudienceEvidence(ctx.adminDb),
+      ]);
+      promotionPlan = planApolloMspPromotion({ rows: parsed.rows, contacts, evidence });
+      promotionResult = await applyApolloMspPromotion(ctx.adminDb, promotionPlan);
+      if (promotionResult.errors.length > 0) {
+        promotionError = `promotion_failed_for_${String(promotionResult.errors.length)}_contacts`;
+      }
+    } catch (error) {
+      promotionError = error instanceof Error ? error.message : 'apollo_promotion_failed';
+    }
+  }
+
+  structuredLog('campaign_contacts_imported_and_qualified', {
     segment,
     sourceFile,
     imported: result.imported,
     skippedExisting: result.skippedExisting,
     invalid: parsed.invalid.length,
-    sendState: 'held',
-  }, result.error ? 'warning' : 'info');
+    providerVerified: promotionPlan?.counts.providerVerified ?? 0,
+    eligibleMsp: promotionPlan?.counts.eligibleMsp ?? 0,
+    held: promotionPlan?.counts.held ?? parsed.rows.length,
+    suppressed: promotionPlan?.counts.suppressed ?? 0,
+    converted: promotionPlan?.counts.converted ?? 0,
+    terminalPreserved: promotionPlan?.counts.terminalPreserved ?? 0,
+    promotionUpdated: promotionResult?.updated ?? 0,
+    promotionStale: promotionResult?.stale ?? 0,
+    sendState: 'not_enrolled',
+  }, result.error || promotionError ? 'warning' : 'info');
   revalidatePath(CONSOLE_PATH);
   revalidatePath('/admin/outreach');
+  const error = result.error ?? promotionError;
   redirect(
-    `${CONSOLE_PATH}?contactsHeld=${String(result.imported)}&contactsSkipped=${String(result.skippedExisting)}&contactsInvalid=${String(parsed.invalid.length)}${result.error ? `&contactsError=${encodeURIComponent(result.error.slice(0, 120))}` : ''}#import-contacts`,
+    `${CONSOLE_PATH}?contactsEligible=${String(promotionPlan?.counts.eligibleMsp ?? 0)}&contactsHeld=${String(promotionPlan?.counts.held ?? parsed.rows.length)}&contactsSuppressed=${String(promotionPlan?.counts.suppressed ?? 0)}&contactsSkipped=${String(result.skippedExisting)}&contactsInvalid=${String(parsed.invalid.length)}${error ? `&contactsError=${encodeURIComponent(error.slice(0, 120))}` : ''}#import-contacts`,
   );
 }
 

@@ -46,6 +46,27 @@ function baselineStatus(metadata: Record<string, unknown> | null): CustomerVisib
     : 'queued';
 }
 
+/** A stored flag cannot overrule the outcome engine's evidence boundary. */
+export function resolveCustomerVisibilityStatus(args: {
+  readonly configured: boolean;
+  readonly outcomeMeasured: boolean;
+  readonly metadata: Record<string, unknown> | null;
+}): CustomerVisibilityView['status'] {
+  if (args.outcomeMeasured) return 'measured';
+  if (!args.configured) return 'not_configured';
+  const stored = baselineStatus(args.metadata);
+  return stored === 'measured' ? 'failed' : stored;
+}
+
+function unresolvedStatusMessage(metadata: Record<string, unknown> | null): string | null {
+  if (typeof metadata?.['baseline_error'] === 'string') return String(metadata['baseline_error']);
+  if (baselineStatus(metadata) !== 'measured') return null;
+  if (metadata?.['baseline_required_reason'] === 'organization_context_confirmation_required') {
+    return 'Confirm the organization context, then retry the baseline measurement.';
+  }
+  return 'The stored baseline has no qualifying measured outcome. Retry the measurement.';
+}
+
 export async function loadCustomerVisibilityView(args: {
   readonly supabase: SupabaseLike;
   readonly userId: string;
@@ -154,8 +175,12 @@ export async function loadCustomerVisibilityView(args: {
     domain,
     readinessScore: typeof latestScan?.score === 'number' ? latestScan.score : null,
     configId: config?.id ?? null,
-    status: outcome.measured ? 'measured' : config ? baselineStatus(metadata) : 'not_configured',
-    statusMessage: typeof metadata?.['baseline_error'] === 'string' ? metadata['baseline_error'] : null,
+    status: resolveCustomerVisibilityStatus({
+      configured: Boolean(config),
+      outcomeMeasured: outcome.measured,
+      metadata,
+    }),
+    statusMessage: outcome.measured ? null : unresolvedStatusMessage(metadata),
     prompts: ((queryRows ?? []) as Array<{ query_text: string }>).map((row) => row.query_text),
     competitors: Array.isArray(config?.competitor_list) ? config.competitor_list : [],
     canShareScorecard,
