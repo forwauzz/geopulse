@@ -35,11 +35,38 @@ export interface PreviewContact {
 
 export interface PreviewScanContext {
   readonly scanId?: string;
+  readonly siteUrl?: string;
   readonly score: number;
   readonly grade: string;
   readonly topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
   readonly completedAt?: string;
+  readonly passedChecks?: number;
+  readonly totalChecks?: number;
+  readonly eligibleDestinations?: number;
+  readonly testedDestinations?: number;
+  readonly retrievalScore?: number;
+  readonly understandingTrustScore?: number;
   readonly reportUrl: string;
+}
+
+function hasSiteSpecificProof(scan: PreviewScanContext | null | undefined): boolean {
+  return Boolean(
+    scan?.siteUrl &&
+    scan.completedAt &&
+    scan.topIssues.length >= 2 &&
+    typeof scan.passedChecks === 'number' &&
+    typeof scan.totalChecks === 'number' &&
+    scan.totalChecks > 0 &&
+    scan.passedChecks >= 0 &&
+    scan.passedChecks <= scan.totalChecks &&
+    typeof scan.eligibleDestinations === 'number' &&
+    typeof scan.testedDestinations === 'number' &&
+    scan.testedDestinations > 0 &&
+    scan.eligibleDestinations >= 0 &&
+    scan.eligibleDestinations <= scan.testedDestinations &&
+    typeof scan.retrievalScore === 'number' &&
+    typeof scan.understandingTrustScore === 'number'
+  );
 }
 
 export interface CampaignPreview {
@@ -89,6 +116,9 @@ export function unresolvedMergeFields(args: {
     }
     if (SCAN_MERGE_FIELDS.includes(field) && !args.scan) {
       unresolved.push({ field, why: 'requires a completed scan for this recipient, and none exists' });
+    }
+    if (field === 'scan_preview' && args.scan && !hasSiteSpecificProof(args.scan)) {
+      unresolved.push({ field, why: 'requires URL, check counts, retrieval evidence, diagnostic scores, and two observed fixes from the same completed scan' });
     }
     if (field === 'personalization_reason' && !args.contact.personalizationReason) {
       unresolved.push({ field, why: 'no verified personalization evidence for this contact' });
@@ -147,10 +177,17 @@ export function renderCampaignPreview(args: {
     name: args.contact.name,
     company: args.contact.company,
     domain,
+    siteUrl: args.scan?.siteUrl ?? null,
     score: args.scan?.score ?? 0,
     grade: args.scan?.grade ?? '—',
     topIssues: args.scan?.topIssues ?? [],
     scanCompletedAt: args.scan?.completedAt ?? null,
+    passedChecks: args.scan?.passedChecks ?? null,
+    totalChecks: args.scan?.totalChecks ?? null,
+    eligibleDestinations: args.scan?.eligibleDestinations ?? null,
+    testedDestinations: args.scan?.testedDestinations ?? null,
+    retrievalScore: args.scan?.retrievalScore ?? null,
+    understandingTrustScore: args.scan?.understandingTrustScore ?? null,
     reportUrl: args.scan?.reportUrl ?? `${appUrl}/results/preview?${query}`,
     walkthroughUrl,
     personalizationReason: args.contact.personalizationReason,

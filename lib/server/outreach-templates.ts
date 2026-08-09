@@ -30,10 +30,17 @@ export interface OutreachTemplateVars {
   name: string | null;
   company: string | null;
   domain: string;
+  siteUrl?: string | null;
   score: number;
   grade: string;
   topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
   scanCompletedAt: string | null;
+  passedChecks?: number | null;
+  totalChecks?: number | null;
+  eligibleDestinations?: number | null;
+  testedDestinations?: number | null;
+  retrievalScore?: number | null;
+  understandingTrustScore?: number | null;
   reportUrl: string;
   walkthroughUrl: string;
   personalizationReason: string | null;
@@ -63,17 +70,38 @@ function topIssuesHtml(topIssues: OutreachTemplateVars['topIssues']): string {
 }
 
 function scanPreviewHtml(vars: OutreachTemplateVars): string {
-  if (!vars.scanCompletedAt || vars.topIssues.length === 0) return '';
+  if (
+    !vars.siteUrl ||
+    !vars.scanCompletedAt ||
+    vars.topIssues.length < 2 ||
+    typeof vars.passedChecks !== 'number' ||
+    typeof vars.totalChecks !== 'number' ||
+    typeof vars.eligibleDestinations !== 'number' ||
+    typeof vars.testedDestinations !== 'number' ||
+    typeof vars.retrievalScore !== 'number' ||
+    typeof vars.understandingTrustScore !== 'number'
+  ) return '';
   const date = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Toronto',
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   }).format(new Date(vars.scanCompletedAt));
+  const exactUrl = escapeHtml(vars.siteUrl);
+  const verificationPlan = {
+    check: 'Verify the change',
+    fix: `Publish the two changes, then re-run ${vars.domain} and compare these same checks against this baseline.`,
+  };
   return [
     '<div style="margin:22px 0;padding:20px;border:1px solid #E5E9E9;border-radius:12px;background:#FAFBFB;">',
-    scoreBlock(vars.score, vars.grade, `Public-site scan completed ${date}`),
-    issueListHtml(vars.topIssues.slice(0, 2), 'Two observed priorities'),
+    `<p style="margin:0 0 10px;color:#586162;font-family:Arial,sans-serif;font-size:12px;line-height:1.55;"><strong style="color:#2C3435;">Scanned URL:</strong> <a href="${exactUrl}" style="color:#565E74;">${exactUrl}</a><br/><strong style="color:#2C3435;">Completed:</strong> ${escapeHtml(date)}</p>`,
+    scoreBlock(vars.score, vars.grade, 'Public-site readiness result'),
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 0;border-collapse:separate;border-spacing:6px 0;">',
+    `<tr><td style="width:33%;padding:10px 8px;background:#FFFFFF;border:1px solid #E5E9E9;border-radius:8px;text-align:center;font-family:Arial,sans-serif;"><strong style="display:block;color:#1A1A1A;font-size:16px;">${String(vars.passedChecks)}/${String(vars.totalChecks)}</strong><span style="color:#586162;font-size:11px;">checks passed</span></td>`,
+    `<td style="width:33%;padding:10px 8px;background:#FFFFFF;border:1px solid #E5E9E9;border-radius:8px;text-align:center;font-family:Arial,sans-serif;"><strong style="display:block;color:#1A1A1A;font-size:16px;">${String(vars.eligibleDestinations)}/${String(vars.testedDestinations)}</strong><span style="color:#586162;font-size:11px;">retrieval destinations eligible</span></td>`,
+    `<td style="width:34%;padding:10px 8px;background:#FFFFFF;border:1px solid #E5E9E9;border-radius:8px;text-align:center;font-family:Arial,sans-serif;"><strong style="display:block;color:#1A1A1A;font-size:16px;">${String(vars.retrievalScore)} vs ${String(vars.understandingTrustScore)}</strong><span style="color:#586162;font-size:11px;">retrieval vs understanding</span></td></tr></table>`,
+    `<p style="margin:14px 0 0;color:#2C3435;font-family:Arial,sans-serif;font-size:13px;line-height:1.55;">What this means: access is the stronger side of this scan. Retrieval scored <strong>${String(vars.retrievalScore)}/100</strong>; AI Understanding &amp; Trust scored <strong>${String(vars.understandingTrustScore)}/100</strong>. The first work should improve how clearly the site describes and structures the business, then verify the same URL again.</p>`,
+    issueListHtml([...vars.topIssues.slice(0, 2), verificationPlan], 'A practical first pass'),
     '<p style="margin:16px 0 0;color:#586162;font-family:Arial,sans-serif;font-size:12px;line-height:1.55;">This is a technical readiness snapshot of public evidence, not a promise of rankings or citations. The full PDF is intentionally not attached.</p>',
     '</div>',
   ].join('');
@@ -331,6 +359,7 @@ export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {
   name: 'Alex',
   company: 'Acme IT Services',
   domain: 'acme-it.example',
+  siteUrl: 'https://acme-it.example/',
   score: 61,
   grade: 'D',
   topIssues: [
@@ -338,6 +367,12 @@ export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {
     { check: 'Structured data validity', fix: 'Add LocalBusiness schema with your name and address.' },
   ],
   scanCompletedAt: '2026-08-08T20:00:00.000Z',
+  passedChecks: 20,
+  totalChecks: 24,
+  eligibleDestinations: 5,
+  testedDestinations: 5,
+  retrievalScore: 100,
+  understandingTrustScore: 62,
   reportUrl: 'https://getgeopulse.com/results/sample',
   walkthroughUrl: 'https://getgeopulse.com/walkthrough?source=outreach',
   personalizationReason: 'The site matches the current managed-services audit cohort.',
