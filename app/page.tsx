@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AI_ENGINES, EngineLogo } from '@/components/ai-engines';
+import { HomeVisibilityFlow } from '@/components/home-visibility-flow';
 import { ScanForm } from '@/components/scan-form';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
@@ -56,24 +57,10 @@ const faqItems = [
   },
 ] as const;
 
-const previewEngineScores: Record<string, string> = {
-  chatgpt: '78%',
-  google: '69%',
-  perplexity: '61%',
-};
-
-const previewEngines = AI_ENGINES.filter((engine) => engine.key in previewEngineScores);
-
 function heroEngineLogoClass(engineKey: string): string {
   if (engineKey === 'claude') return 'h-7 w-48';
   if (engineKey === 'perplexity') return 'h-12 w-44';
   return 'h-10 w-auto max-w-[180px] md:h-12';
-}
-
-function previewEngineLogoClass(engineKey: string): string {
-  if (engineKey === 'claude') return 'h-5 w-32';
-  if (engineKey === 'perplexity') return 'h-7 w-28';
-  return 'h-7 w-auto max-w-[130px]';
 }
 
 async function loadBaseUrl(): Promise<string> {
@@ -85,8 +72,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = await loadBaseUrl();
   return buildPublicPageMetadata({
     baseUrl,
-    title: 'AI Visibility You Can Prove, Fix, and Report | GEO-Pulse',
-    description: 'See where competitors win in AI answers, what to fix on your website, and whether the work improved your visibility.',
+    title: 'AI Visibility Monitoring for MSPs | GEO-Pulse',
+    description: 'See where AI recommends competitors, connect every answer to website evidence, and verify whether your changes improved visibility.',
     canonicalPath: '/',
     openGraphType: 'website',
   });
@@ -105,13 +92,13 @@ export default async function HomePage({
   const uiFlags = await loadUiFlags();
   const primaryHref = uiFlags.show_pricing ? '/pricing' : '/login';
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
-  const description = 'See where competitors win in AI answers, what to fix on your website, and whether the work improved your visibility.';
+  const description = 'See where AI recommends competitors, connect every answer to website evidence, and verify whether your changes improved visibility.';
   const schemas = [
     buildOrganizationStructuredData({ url: siteUrl, description: SITE_DESCRIPTION }),
     buildWebSiteStructuredData({ url: siteUrl, description: SITE_DESCRIPTION }),
     buildWebPageStructuredData({
       url: siteUrl,
-      title: 'AI Visibility You Can Prove, Fix, and Report | GEO-Pulse',
+      title: 'AI Visibility Monitoring for MSPs | GEO-Pulse',
       description,
       siteUrl,
       dateModified: new Date().toISOString(),
@@ -145,20 +132,54 @@ export default async function HomePage({
         <script key={index} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }} />
       ))}
 
-      <section className="relative border-b border-gold/25 bg-[linear-gradient(180deg,rgb(var(--blog-hero-tint)),rgb(var(--color-background)))] px-5 pb-14 pt-12 sm:px-6 md:pb-20 md:pt-16">
-        <div className="mx-auto max-w-6xl text-center">
-          <p className="mx-auto inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-2 font-body text-xs font-semibold text-primary">
-            <span className="h-2 w-2 rounded-full bg-primary" aria-hidden />
-            Built for agencies, consultants, and ambitious businesses
-          </p>
-          <h1 className="mx-auto mt-6 max-w-4xl text-balance font-headline text-4xl font-semibold leading-[1.04] tracking-[-0.04em] text-on-background sm:text-5xl md:text-6xl lg:text-7xl">
-            AI visibility you can prove, fix, and report.
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-balance font-body text-base leading-7 text-on-surface-variant md:text-lg">
-            See where competitors win in AI answers, what is holding your website back, and whether your work actually improved the result.
-          </p>
+      <section className="home-commercial-hero border-b border-gold/20 px-5 pb-10 pt-10 sm:px-6 md:pb-12 md:pt-14">
+        <div className="mx-auto grid max-w-[90rem] items-center gap-12 xl:grid-cols-2 xl:gap-10">
+          <div className="relative z-10 max-w-3xl">
+            <p className="inline-flex items-center gap-2 font-body text-xs font-semibold uppercase tracking-[0.16em] text-[#4d5fd2]">
+              <span className="h-2 w-2 rounded-full bg-[#7e88e8]" aria-hidden />
+              AI visibility monitoring for MSPs
+            </p>
+            <h1 className="mt-6 font-body text-[clamp(2.65rem,3.35vw,3.4rem)] font-semibold leading-[1.08] tracking-[-0.055em] text-[#17202f]">
+              <span className="xl:block">See where AI </span>
+              <span className="xl:block xl:whitespace-nowrap">recommends competitors—</span>
+              <span>and what to fix next.</span>
+            </h1>
+            <p className="mt-6 max-w-2xl text-balance font-body text-base leading-7 text-[#5f6878] md:text-lg md:leading-8">
+              GEO-Pulse scans the buyer questions that matter, connects every answer to website evidence, and verifies whether your changes improved visibility.
+            </p>
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link href="/#audit" className="inline-flex min-h-14 items-center justify-center rounded-xl bg-[#101827] px-7 py-4 font-body text-sm font-semibold text-white shadow-[0_16px_36px_rgba(16,24,39,0.16)] transition hover:-translate-y-0.5 hover:bg-[#202b3d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#4d5fd2]">
+                Scan my MSP website
+              </Link>
+              <Link href="/walkthrough" className="inline-flex min-h-14 items-center justify-center gap-2 rounded-xl border border-[#cfd3dc] bg-white/85 px-7 py-4 font-body text-sm font-semibold text-[#222b3a] transition hover:-translate-y-0.5 hover:border-[#9ca4b6] hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#4d5fd2]">
+                <span className="material-symbols-outlined text-xl" aria-hidden>play_circle</span>
+                Watch the walkthrough
+              </Link>
+            </div>
+            <p className="mt-4 font-body text-xs text-[#77808e]">Free first scan <span aria-hidden>·</span> No credit card <span aria-hidden>·</span> Results in about 90 seconds</p>
+          </div>
 
-          <div id="audit" className="mx-auto mt-8 max-w-3xl scroll-mt-24">
+          <HomeVisibilityFlow />
+        </div>
+
+        <div className="mx-auto mt-12 max-w-5xl border-t border-[#d9d3c6] pt-8 md:mt-14">
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-5 md:gap-x-11">
+            {AI_ENGINES.map((engine) => (
+              <EngineLogo key={engine.key} engine={engine} className={heroEngineLogoClass(engine.key)} />
+            ))}
+          </div>
+          <p className="mt-6 text-center font-body text-lg font-medium tracking-[-0.02em] text-[#3a4352] md:text-xl">
+            Measure visibility across the engines buyers use
+          </p>
+        </div>
+      </section>
+
+      <section id="audit" className="scroll-mt-24 border-b border-gold/20 bg-surface-container-lowest px-5 py-12 sm:px-6 md:py-14">
+        <div className="mx-auto max-w-4xl text-center">
+          <p className="font-body text-xs font-semibold uppercase tracking-[0.18em] text-primary">Start with your MSP website</p>
+          <h2 className="mt-3 text-balance font-headline text-3xl font-semibold tracking-tight text-on-background md:text-4xl">Get the first evidence in about 90 seconds.</h2>
+          <p className="mx-auto mt-3 max-w-2xl font-body text-sm leading-6 text-on-surface-variant md:text-base">Enter a public website. GEO-Pulse will surface the first observable visibility and readiness priorities without requiring a credit card.</p>
+          <div className="mx-auto mt-7 max-w-3xl">
             {siteKey || user ? (
               <ScanForm
                 variant="hero"
@@ -169,85 +190,15 @@ export default async function HomePage({
                 skipTurnstile={Boolean(user)}
               />
             ) : (
-              <div className="rounded-2xl border border-error/20 bg-surface-container-lowest p-5 text-left text-sm text-error">
+              <div className="rounded-2xl border border-error/20 bg-surface-container-low p-5 text-left text-sm text-error">
                 The free audit is temporarily unavailable. Please check back shortly.
               </div>
             )}
           </div>
-          <p className="mt-3 font-body text-xs text-on-surface-variant">Free first audit · No credit card · Your first priorities in about 90 seconds</p>
-
-          <div className="mx-auto mt-8 max-w-5xl">
-            <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant">
-              Measure visibility across the engines buyers use
-            </p>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-10 gap-y-6 rounded-2xl border border-gold/25 bg-surface-container-lowest px-6 py-6 shadow-sm md:gap-x-14 md:px-10">
-              {AI_ENGINES.map((engine) => (
-                <EngineLogo
-                  key={engine.key}
-                  engine={engine}
-                  className={heroEngineLogoClass(engine.key)}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="mx-auto mt-10 overflow-hidden rounded-[2rem] border border-gold/30 bg-surface-container-lowest p-3 text-left shadow-[0_24px_80px_rgba(15,23,42,0.12)] md:p-5">
-            <div className="rounded-[1.35rem] border border-outline-variant/20 bg-surface-container-low p-5 md:p-7">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/20 pb-5">
-                <div>
-                  <p className="font-body text-xs font-semibold uppercase tracking-[0.16em] text-primary">Example product view</p>
-                  <p className="mt-1 font-headline text-xl font-semibold text-on-background">One answer, connected to the next action</p>
-                </div>
-                <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 font-body text-xs font-semibold text-emerald-700 dark:text-emerald-300">Example data · Monitoring active</span>
-              </div>
-              <div className="mt-5 grid gap-4 md:grid-cols-[0.8fr_1.2fr_1fr]">
-                <div className="rounded-2xl border border-gold/15 bg-[rgb(var(--blog-card-a))] p-5">
-                  <p className="font-body text-xs text-on-surface-variant">AI visibility score</p>
-                  <div className="mt-3 flex items-end gap-2">
-                    <span className="font-headline text-5xl font-semibold tracking-tight text-on-background">72</span>
-                    <span className="mb-1 text-sm font-semibold text-emerald-600">+8</span>
-                  </div>
-                  <div className="mt-5 h-2 overflow-hidden rounded-full bg-surface-container">
-                    <div className="h-full w-[72%] rounded-full bg-primary" />
-                  </div>
-                  <p className="mt-3 font-body text-[11px] text-on-surface-variant">Measured across buyer questions</p>
-                </div>
-                <div className="rounded-2xl border border-gold/15 bg-[rgb(var(--blog-card-a))] p-5">
-                  <p className="font-body text-xs text-on-surface-variant">Visibility by engine</p>
-                  <div className="mt-5 space-y-4">
-                    {previewEngines.map((engine) => (
-                      <div key={engine.key} className="flex items-center justify-between gap-4">
-                        <EngineLogo engine={engine} className={previewEngineLogoClass(engine.key)} />
-                        <span className="font-mono text-xs text-on-surface-variant">{previewEngineScores[engine.key]}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-gold/15 bg-[rgb(var(--blog-card-a))] p-5">
-                  <p className="font-body text-xs text-on-surface-variant">Why competitors win</p>
-                  <p className="mt-3 font-headline text-lg font-semibold leading-snug text-on-background">Their service pages answer the buyer question more directly.</p>
-                  <p className="mt-3 font-body text-xs leading-5 text-on-surface-variant">Next: improve 3 priority pages · verify on the next run</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="mx-auto mt-6 grid max-w-4xl gap-3 text-left sm:grid-cols-3">
-            {[
-              ['01', 'Find the gap', 'See the questions where competitors appear and you do not.'],
-              ['02', 'Fix the cause', 'Get practical website and content changes tied to evidence.'],
-              ['03', 'Prove the result', 'Measure again and share progress without rebuilding the report.'],
-            ].map(([number, title, copy]) => (
-              <div key={number} className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest px-5 py-4">
-                <p className="font-mono text-xs font-semibold text-primary">{number}</p>
-                <p className="mt-2 font-headline text-base font-semibold text-on-background">{title}</p>
-                <p className="mt-1 font-body text-xs leading-5 text-on-surface-variant">{copy}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
-      <section className="px-5 py-16 sm:px-6 md:py-20">
+      <section id="product" className="scroll-mt-24 px-5 py-16 sm:px-6 md:py-20">
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-2xl text-center">
             <p className="font-body text-xs font-semibold uppercase tracking-[0.18em] text-primary">The closed loop</p>
@@ -277,7 +228,7 @@ export default async function HomePage({
         </div>
       </section>
 
-      <section className="border-y border-gold/25 bg-[rgb(var(--blog-card-c))] px-5 py-12 sm:px-6">
+      <section id="how-it-works" className="scroll-mt-24 border-y border-gold/25 bg-[rgb(var(--blog-card-c))] px-5 py-12 sm:px-6">
         <div className="mx-auto grid max-w-6xl gap-8 text-center sm:grid-cols-3">
           {[['Measure', 'buyer questions and visibility'], ['Explain', 'why competitors are winning'], ['Verify', 'whether the fix worked']].map(([number, label]) => (
             <div key={label}>
