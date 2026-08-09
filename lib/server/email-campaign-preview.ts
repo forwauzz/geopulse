@@ -161,6 +161,7 @@ export function renderCampaignPreview(args: {
   const rendered = renderOutreachTemplate(
     {
       subjectTemplate: step.subject,
+      previewText: step.previewText,
       bodyFormat: args.contract.content.bodyFormat,
       bodyTemplate: step.bodyTemplate,
     },
@@ -174,7 +175,7 @@ export function renderCampaignPreview(args: {
   return {
     subject: rendered.subject,
     html: rendered.html,
-    previewText: step.previewText,
+    previewText: rendered.previewText,
     senderLine: `${args.contract.sender.displayName} <${args.resolvedSender?.from ?? (args.contract.sender.authenticated ? args.contract.sender.fromAddressRef : 'no authenticated sender configured')}>`,
     replyToLine: args.resolvedSender?.replyTo ?? (args.contract.sender.authenticated ? args.contract.sender.replyToRef : 'no authenticated reply-to configured'),
     unsubscribeUrl,

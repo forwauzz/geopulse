@@ -80,6 +80,23 @@ describe('renderOutreachTemplate (spec §9)', () => {
     expect(out.html).toContain('AI retrieval agent access');
   });
 
+  it('resolves and embeds the configured inbox preview line', () => {
+    const out = renderOutreachTemplate(
+      {
+        subjectTemplate: 'Your scan',
+        previewText: 'A real public-site scan for {{domain}}—no PDF attached.',
+        bodyFormat: 'text',
+        bodyTemplate: 'Hi {{name}}',
+      },
+      SAMPLE_TEMPLATE_VARS,
+      'px',
+    );
+    expect(out.previewText).toBe('A real public-site scan for acme-it.example—no PDF attached.');
+    expect(out.html).toContain('display:none;max-height:0');
+    expect(out.html).toContain('A real public-site scan for acme-it.example—no PDF attached.');
+    expect(out.html).not.toContain('{{domain}}');
+  });
+
   it('renders a bounded real-scan preview and a human CTA without exposing a raw URL', () => {
     const out = renderOutreachTemplate(
       {
