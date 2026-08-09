@@ -19,6 +19,7 @@ import { loadUiFlags } from '@/lib/server/app-ui-flags';
 import { monitorPriceIdForPlan, normalizeMonitorPlan } from '@/lib/server/monitor-subscription';
 import { optionalAttributionFields } from '@services/marketing-attribution/attribution-params';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
+import { isExcludedRevenueIdentity } from '@/lib/server/revenue-identity';
 
 export const runtime = 'nodejs';
 
@@ -256,9 +257,12 @@ export async function POST(request: Request): Promise<Response> {
       channel: parsed.data.utm_source ?? 'direct_or_unknown',
       idempotency_key: `monitor_checkout:${session.id}`,
       metadata: {
+        commerce_kind: 'paid_checkout',
+        checkout_mode: 'subscription',
         kind: 'monitor',
         plan,
         stripe_session_id: session.id,
+        is_internal: isExcludedRevenueIdentity({ email, domain: scan.url as string }),
       },
     });
 

@@ -26,6 +26,12 @@ import {
   type AgencyProspectingResult,
 } from './agency-prospecting-agent';
 import { judgeGrowthLoop, type GrowthJudgeDecision } from './growth-judge';
+import {
+  isExcludedRevenueIdentity,
+  isExternalPaidCheckout,
+  isVerifiedStripeSubscriptionId,
+  type RevenueIdentityMetadata,
+} from './revenue-identity';
 
 export type RevenueAgencyMode = 'off' | 'observe' | 'assist' | 'autonomous';
 
@@ -139,21 +145,201 @@ async function safeCount(
   }
 }
 
-async function safeAnalyticsCount(
+type RevenueIdentityScan = {
+  readonly id: string;
+  readonly domain: string | null;
+  readonly url: string | null;
+  readonly user_id: string | null;
+};
+
+async function loadRevenueIdentityLookups(
   supabase: SupabaseClient,
-  eventName: string,
+  scanIds: readonly string[],
+  directUserIds: readonly string[]
+): Promise<{
+  readonly scanById: ReadonlyMap<string, RevenueIdentityScan>;
+  readonly emailByUserId: ReadonlyMap<string, string>;
+}> {
+  const uniqueScanIds = [...new Set(scanIds.filter(Boolean))];
+  let scans: RevenueIdentityScan[] = [];
+  if (uniqueScanIds.length > 0) {
+    const result = await supabase
+      .from('scans')
+      .select('id,domain,url,user_id')
+      .in('id', uniqueScanIds)
+      .limit(5_000);
+    if (!result.error) scans = (result.data ?? []) as RevenueIdentityScan[];
+  }
+  const userIds = [...new Set([
+    ...directUserIds.filter(Boolean),
+    ...scans.map((row) => row.user_id).filter((value): value is string => Boolean(value)),
+  ])];
+  let users: Array<{ id: string; email: string }> = [];
+  if (userIds.length > 0) {
+    const result = await supabase.from('users').select('id,email').in('id', userIds).limit(5_000);
+    if (!result.error) users = (result.data ?? []) as Array<{ id: string; email: string }>;
+  }
+  return {
+    scanById: new Map(scans.map((row) => [row.id, row])),
+    emailByUserId: new Map(users.map((row) => [row.id, row.email])),
+  };
+}
+
+async function safeExternalCheckoutStartCount(
+  supabase: SupabaseClient,
   since: string
 ): Promise<number> {
   try {
-    const { count, error } = await supabase
+    const { data, error } = await supabase
       .schema('analytics')
       .from('marketing_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('event_name', eventName)
-      .gte('event_ts', since);
-    return error ? 0 : count ?? 0;
+      .select('id,scan_id,user_id,metadata_json')
+      .eq('event_name', 'checkout_started')
+      .gte('event_ts', since)
+      .limit(5_000);
+    if (error || !data?.length) return 0;
+    const rows = data as Array<{
+      id: string;
+      scan_id: string | null;
+      user_id: string | null;
+      metadata_json: RevenueIdentityMetadata;
+    }>;
+    const lookups = await loadRevenueIdentityLookups(
+      supabase,
+      rows.map((row) => row.scan_id).filter((value): value is string => Boolean(value)),
+      rows.map((row) => row.user_id).filter((value): value is string => Boolean(value))
+    );
+    return rows.filter((row) => {
+      const scan = row.scan_id ? lookups.scanById.get(row.scan_id) : undefined;
+      const userId = row.user_id ?? scan?.user_id ?? null;
+      return isExternalPaidCheckout({
+        email: userId ? lookups.emailByUserId.get(userId) ?? null : null,
+        domain: scan?.domain ?? scan?.url ?? null,
+        metadata: row.metadata_json,
+      });
+    }).length;
   } catch {
     return 0;
+  }
+}
+
+async function safeExternalPaymentCount(
+  supabase: SupabaseClient,
+  since: string
+): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('id,user_id,scan_id,stripe_session_id,amount_cents')
+      .eq('status', 'complete')
+      .gt('amount_cents', 0)
+      .gte('created_at', since)
+      .limit(5_000);
+    if (error || !data?.length) return 0;
+    const rows = data as Array<{
+      id: string;
+      user_id: string | null;
+      scan_id: string | null;
+      stripe_session_id: string | null;
+      amount_cents: number;
+    }>;
+    const lookups = await loadRevenueIdentityLookups(
+      supabase,
+      rows.map((row) => row.scan_id).filter((value): value is string => Boolean(value)),
+      rows.map((row) => row.user_id).filter((value): value is string => Boolean(value))
+    );
+    return rows.filter((row) => {
+      if (!/^cs_[A-Za-z0-9_]+$/.test(row.stripe_session_id?.trim() ?? '')) return false;
+      const scan = row.scan_id ? lookups.scanById.get(row.scan_id) : undefined;
+      const userId = row.user_id ?? scan?.user_id ?? null;
+      return !isExcludedRevenueIdentity({
+        email: userId ? lookups.emailByUserId.get(userId) ?? null : null,
+        domain: scan?.domain ?? scan?.url ?? null,
+      });
+    }).length;
+  } catch {
+    return 0;
+  }
+}
+
+type ExternalSubscriptionMetrics = {
+  readonly paidWorkspaceSubscriptions: number;
+  readonly paidMonitoringSubscriptions: number;
+  readonly cancellations: number;
+  readonly activeMonitoring: number;
+  readonly pastDueMonitoring: number;
+};
+
+async function loadExternalSubscriptionMetrics(
+  supabase: SupabaseClient,
+  since: string
+): Promise<ExternalSubscriptionMetrics> {
+  const empty: ExternalSubscriptionMetrics = {
+    paidWorkspaceSubscriptions: 0,
+    paidMonitoringSubscriptions: 0,
+    cancellations: 0,
+    activeMonitoring: 0,
+    pastDueMonitoring: 0,
+  };
+  try {
+    const [workspaceResult, monitoringResult] = await Promise.all([
+      supabase
+        .from('user_subscriptions')
+        .select('user_id,status,stripe_subscription_id,metadata,created_at,cancelled_at')
+        .limit(5_000),
+      supabase
+        .from('monitoring_subscriptions')
+        .select('email,domain,status,stripe_subscription_id,created_at,canceled_at')
+        .limit(5_000),
+    ]);
+    if (workspaceResult.error || monitoringResult.error) return empty;
+    const workspaceRows = (workspaceResult.data ?? []) as Array<{
+      user_id: string;
+      status: string;
+      stripe_subscription_id: string | null;
+      metadata: RevenueIdentityMetadata;
+      created_at: string;
+      cancelled_at: string | null;
+    }>;
+    const monitoringRows = (monitoringResult.data ?? []) as Array<{
+      email: string;
+      domain: string | null;
+      status: string;
+      stripe_subscription_id: string | null;
+      created_at: string;
+      canceled_at: string | null;
+    }>;
+    const lookups = await loadRevenueIdentityLookups(
+      supabase,
+      [],
+      workspaceRows.map((row) => row.user_id)
+    );
+    const externalWorkspace = workspaceRows.filter((row) =>
+      isVerifiedStripeSubscriptionId(row.stripe_subscription_id)
+      && !isExcludedRevenueIdentity({
+        email: lookups.emailByUserId.get(row.user_id) ?? null,
+        metadata: row.metadata,
+      })
+    );
+    const externalMonitoring = monitoringRows.filter((row) =>
+      isVerifiedStripeSubscriptionId(row.stripe_subscription_id)
+      && !isExcludedRevenueIdentity({ email: row.email, domain: row.domain })
+    );
+    return {
+      paidWorkspaceSubscriptions: externalWorkspace.filter((row) =>
+        ['active', 'trialing'].includes(row.status) && row.created_at >= since
+      ).length,
+      paidMonitoringSubscriptions: externalMonitoring.filter((row) =>
+        ['active', 'trialing'].includes(row.status) && row.created_at >= since
+      ).length,
+      cancellations:
+        externalWorkspace.filter((row) => row.status === 'cancelled' && (row.cancelled_at ?? '') >= since).length
+        + externalMonitoring.filter((row) => row.status === 'canceled' && (row.canceled_at ?? '') >= since).length,
+      activeMonitoring: externalMonitoring.filter((row) => row.status === 'active').length,
+      pastDueMonitoring: externalMonitoring.filter((row) => row.status === 'past_due').length,
+    };
+  } catch {
+    return empty;
   }
 }
 
@@ -225,13 +411,9 @@ export async function loadRevenueAgencySnapshot(
     activatedStartupWorkspaces,
     activatedAgencyAccounts,
     paymentsCompleted,
-    paidWorkspaceSubscriptions,
-    paidMonitoringSubscriptions,
-    cancellations,
+    subscriptionMetrics,
     proofAssets,
     publishedProof,
-    activeMonitoring,
-    pastDueMonitoring,
     activeAgencyAccounts,
   ] = await Promise.all([
     safeCount(supabase, 'leads', (q) => q.gte('created_at', since)),
@@ -246,7 +428,7 @@ export async function loadRevenueAgencySnapshot(
         .gte('created_at', since)
     ),
     safeQualifiedReportCount(supabase, since),
-    safeAnalyticsCount(supabase, 'checkout_started', since),
+    safeExternalCheckoutStartCount(supabase, since),
     safeCount(supabase, 'commercial_handoff_events', (q) =>
       q.eq('event_type', 'reply_received').gte('occurred_at', since)
     ),
@@ -255,29 +437,24 @@ export async function loadRevenueAgencySnapshot(
     ),
     safeCount(supabase, 'startup_workspaces', (q) => q.gte('created_at', since)),
     safeCount(supabase, 'agency_accounts', (q) => q.gte('created_at', since)),
-    safeCount(supabase, 'payments', (q) => q.eq('status', 'complete').gte('created_at', since)),
-    safeCount(supabase, 'user_subscriptions', (q) =>
-      q.in('status', ['active', 'trialing']).gte('created_at', since)
-    ),
-    safeCount(supabase, 'monitoring_subscriptions', (q) =>
-      q.in('status', ['active', 'trialing']).gte('created_at', since)
-    ),
-    safeCount(supabase, 'user_subscriptions', (q) =>
-      q.eq('status', 'cancelled').gte('cancelled_at', since)
-    ),
+    safeExternalPaymentCount(supabase, since),
+    loadExternalSubscriptionMetrics(supabase, since),
     safeCount(supabase, 'distribution_assets', (q) =>
       q.eq('metadata->>created_by_agent', 'social_proof_agent').gte('created_at', since)
     ),
     safeCount(supabase, 'distribution_jobs', (q) => q.eq('status', 'published').gte('completed_at', since)),
-    safeCount(supabase, 'monitoring_subscriptions', (q) => q.eq('status', 'active')),
-    safeCount(supabase, 'monitoring_subscriptions', (q) => q.eq('status', 'past_due')),
     safeCount(supabase, 'agency_accounts', (q) => q.eq('status', 'active')),
   ]);
   // Stripe-backed payment/subscription records, not a mutable CRM flag, are
   // the authority for paid conversion.
-  const paidSubscriptionsStarted = paidWorkspaceSubscriptions + paidMonitoringSubscriptions;
+  const paidSubscriptionsStarted =
+    subscriptionMetrics.paidWorkspaceSubscriptions
+    + subscriptionMetrics.paidMonitoringSubscriptions;
   const convertedLeads = paymentsCompleted + paidSubscriptionsStarted;
   const activatedWorkspaces = activatedStartupWorkspaces + activatedAgencyAccounts;
+  const cancellations = subscriptionMetrics.cancellations;
+  const activeMonitoring = subscriptionMetrics.activeMonitoring;
+  const pastDueMonitoring = subscriptionMetrics.pastDueMonitoring;
 
   const focus = chooseRevenueAgencyFocus({
     leads,

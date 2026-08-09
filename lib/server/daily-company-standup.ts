@@ -8,6 +8,15 @@ import {
   loadRevenueAgencySnapshot,
   type RevenueAgencySnapshot,
 } from './revenue-agency-agent';
+import {
+  isExcludedRevenueIdentity,
+  isVerifiedStripeSubscriptionId,
+} from './revenue-identity';
+
+export {
+  isExcludedRevenueIdentity,
+  isVerifiedStripeSubscriptionId,
+} from './revenue-identity';
 
 export type DepartmentId =
   | 'maya'
@@ -613,66 +622,6 @@ type ActiveWorkspaceSubscription = {
   readonly stripe_subscription_id: string | null;
   readonly metadata: SubscriptionMetadata;
 };
-
-const INTERNAL_REVENUE_EMAILS = new Set([
-  'tamonuzziel@gmail.com',
-  'uzzielt@techehealthservices.com',
-]);
-const INTERNAL_REVENUE_DOMAINS = new Set([
-  'getgeopulse.com',
-  'techehealthservices.com',
-  'lifter.ca',
-  'example.com',
-]);
-
-function normalizedDomain(value: string | null | undefined): string {
-  if (!value) return '';
-  const candidate = value.trim().toLowerCase();
-  if (!candidate) return '';
-  try {
-    return new URL(candidate.includes('://') ? candidate : `https://${candidate}`).hostname
-      .replace(/^www\./, '');
-  } catch {
-    return candidate.replace(/^www\./, '').split('/')[0] ?? '';
-  }
-}
-
-export function isExcludedRevenueIdentity(args: {
-  readonly email: string | null | undefined;
-  readonly domain?: string | null;
-  readonly metadata?: SubscriptionMetadata;
-}): boolean {
-  const email = args.email?.trim().toLowerCase() ?? '';
-  const emailDomain = email.split('@')[1] ?? '';
-  const siteDomain = normalizedDomain(args.domain);
-  const metadata = args.metadata ?? {};
-  const explicitInternal = [
-    metadata['internal'],
-    metadata['is_internal'],
-    metadata['test'],
-    metadata['is_test'],
-  ].some((value) => value === true || value === 'true');
-  const classification = [
-    metadata['account_type'],
-    metadata['revenue_classification'],
-    metadata['environment'],
-  ].map((value) => String(value ?? '').toLowerCase());
-  const source = String(metadata['source'] ?? '').trim().toLowerCase();
-
-  return !email
-    || INTERNAL_REVENUE_EMAILS.has(email)
-    || INTERNAL_REVENUE_DOMAINS.has(emailDomain)
-    || INTERNAL_REVENUE_DOMAINS.has(siteDomain)
-    || email.startsWith('test@')
-    || email.includes('+test@')
-    || explicitInternal
-    || ['admin_assign_plan', 'admin_comp'].includes(source)
-    || classification.some((value) => ['internal', 'test', 'sandbox'].includes(value));
-}
-
-export function isVerifiedStripeSubscriptionId(value: string | null | undefined): boolean {
-  return /^sub_[A-Za-z0-9]+$/.test(value?.trim() ?? '');
-}
 
 async function loadVerifiedRecurringCustomers(
   supabase: SupabaseClient

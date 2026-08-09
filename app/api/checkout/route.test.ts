@@ -6,34 +6,35 @@ const stripeCheckoutCreate = vi.fn();
 const emitMarketingEvent = vi.fn();
 const resolveStartupAccess = vi.fn();
 const handleCheckoutSessionCompleted = vi.fn(async () => ({ ok: true }));
+const getPaymentApiEnv = vi.fn();
+
+const paymentEnv = {
+  SCAN_CACHE: undefined,
+  LEGACY_PAID_ENABLED: 'true',
+  NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com',
+  NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
+  SUPABASE_SERVICE_ROLE_KEY: 'service-role',
+  STRIPE_SECRET_KEY: 'stripe-secret',
+  STRIPE_PRICE_ID_DEEP_AUDIT: 'price_123',
+  TURNSTILE_SECRET_KEY: 'turnstile-secret',
+  GEMINI_MODEL: 'gemini-2.0-flash',
+  GEMINI_API_KEY: 'gemini-key',
+  GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
+  BENCHMARK_EXECUTION_PROVIDER: '',
+  BENCHMARK_EXECUTION_API_KEY: '',
+  BENCHMARK_EXECUTION_MODEL: '',
+  BENCHMARK_EXECUTION_ENDPOINT: '',
+  DISTRIBUTION_ENGINE_UI_ENABLED: '',
+  DISTRIBUTION_ENGINE_WRITE_ENABLED: '',
+  DEEP_AUDIT_BROWSER_RENDER_MODE: 'off',
+  DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '10',
+  DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: '',
+  DEEP_AUDIT_INTERNAL_REWRITE_MODEL: '',
+};
 
 vi.mock('@/lib/server/cf-env', () => ({
   getClientIp: vi.fn(() => '203.0.113.10'),
-  getPaymentApiEnv: vi.fn(async () => ({
-    SCAN_CACHE: undefined,
-    // These two cases cover the LEGACY PAID paths (Stripe + startup bypass). Without this the
-    // OSS free branch short-circuits first and they'd pass/fail for the wrong reason.
-    LEGACY_PAID_ENABLED: 'true',
-    NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com',
-    NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
-    SUPABASE_SERVICE_ROLE_KEY: 'service-role',
-    STRIPE_SECRET_KEY: 'stripe-secret',
-    STRIPE_PRICE_ID_DEEP_AUDIT: 'price_123',
-    TURNSTILE_SECRET_KEY: 'turnstile-secret',
-    GEMINI_MODEL: 'gemini-2.0-flash',
-    GEMINI_API_KEY: 'gemini-key',
-    GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models',
-    BENCHMARK_EXECUTION_PROVIDER: '',
-    BENCHMARK_EXECUTION_API_KEY: '',
-    BENCHMARK_EXECUTION_MODEL: '',
-    BENCHMARK_EXECUTION_ENDPOINT: '',
-    DISTRIBUTION_ENGINE_UI_ENABLED: '',
-    DISTRIBUTION_ENGINE_WRITE_ENABLED: '',
-    DEEP_AUDIT_BROWSER_RENDER_MODE: 'off',
-    DEEP_AUDIT_DEFAULT_PAGE_LIMIT: '10',
-    DEEP_AUDIT_INTERNAL_REWRITE_ENABLED: '',
-    DEEP_AUDIT_INTERNAL_REWRITE_MODEL: '',
-  })),
+  getPaymentApiEnv,
 }));
 
 vi.mock('@/lib/server/rate-limit-kv', () => ({
@@ -90,11 +91,13 @@ vi.mock('@services/marketing-attribution/emit', () => ({
 describe('deep audit checkout route', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    getPaymentApiEnv.mockResolvedValue(paymentEnv);
     authGetUser.mockResolvedValue({ data: { user: { id: 'user-1', email: 'user@example.com' } }, error: null });
     scanMaybeSingle.mockResolvedValue({
       data: {
         id: '9fa517bd-cb3f-4072-9110-ec629ea1bd1f',
         user_id: 'user-1',
+        url: 'https://example.com',
         status: 'complete',
         agency_account_id: null,
         agency_client_id: null,
@@ -139,6 +142,44 @@ describe('deep audit checkout route', () => {
         cancel_url: 'https://getgeopulse.com/results/9fa517bd-cb3f-4072-9110-ec629ea1bd1f?checkout=cancel',
       })
     );
+    expect(emitMarketingEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      'checkout_started',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          commerce_kind: 'paid_checkout',
+          checkout_mode: 'one_time',
+          is_internal: true,
+          stripe_session_id: 'cs_test_123',
+        }),
+      })
+    );
+  });
+
+  it('does not emit paid checkout intent when the free report path completes', async () => {
+    getPaymentApiEnv.mockResolvedValueOnce({ ...paymentEnv, LEGACY_PAID_ENABLED: '' });
+    const { POST } = await import('./route');
+    const request = new Request('https://example.com/api/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scanId: '9fa517bd-cb3f-4072-9110-ec629ea1bd1f',
+        email: 'owner@example.com',
+        turnstileToken: 'token-1',
+      }),
+    });
+
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    expect(stripeCheckoutCreate).not.toHaveBeenCalled();
+    expect(handleCheckoutSessionCompleted).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ amount_total: 0 }),
+      'free-completed:9fa517bd-cb3f-4072-9110-ec629ea1bd1f',
+      expect.anything()
+    );
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
   });
 
   it('bypasses Stripe for a ready startup workspace scan', async () => {
@@ -146,6 +187,7 @@ describe('deep audit checkout route', () => {
       data: {
         id: '9fa517bd-cb3f-4072-9110-ec629ea1bd1f',
         user_id: 'user-1',
+        url: 'https://example.com',
         status: 'complete',
         agency_account_id: null,
         agency_client_id: null,

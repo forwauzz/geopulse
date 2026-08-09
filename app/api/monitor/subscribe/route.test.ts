@@ -136,6 +136,18 @@ describe('monitor subscription checkout', () => {
         },
       })
     );
+    expect(emitMarketingEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      'checkout_started',
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          commerce_kind: 'paid_checkout',
+          checkout_mode: 'subscription',
+          kind: 'monitor',
+          is_internal: true,
+        }),
+      })
+    );
   });
 
   it('creates and links one Stripe customer when the account has none', async () => {
