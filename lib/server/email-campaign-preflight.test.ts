@@ -227,6 +227,41 @@ describe('recipient gates', () => {
     expect(gate?.detail).toContain('{{name}}');
   });
 
+  it('requires a completed scan for proof-led copy and passes only with that scan bound', () => {
+    const base = contract();
+    const proofLed = {
+      ...base,
+      content: {
+        ...base.content,
+        bodyTemplate: 'Hi {{name}},\n\n{{scan_preview}}\n\n{{walkthrough_cta}}',
+        requiredMergeFields: ['name', 'scan_preview', 'walkthrough_cta'],
+      },
+    };
+    const contact = recipient(1);
+    const withoutScan = evaluateRecipients({
+      contract: proofLed,
+      recipients: [contact],
+      evidence: CLEAN_EVIDENCE,
+    }).find((item) => item.key === 'merge_fields_resolve');
+    expect(withoutScan?.ok).toBe(false);
+    expect(withoutScan?.detail).toContain('{{scan_preview}}');
+
+    const withScan = evaluateRecipients({
+      contract: proofLed,
+      recipients: [contact],
+      evidence: CLEAN_EVIDENCE,
+      scansByContactId: new Map([['c1', {
+        scanId: 'scan-1',
+        score: 76,
+        grade: 'C',
+        topIssues: [{ check: 'Answer-first content', fix: 'Lead with buyer questions.' }],
+        completedAt: '2026-08-09T01:05:00.000Z',
+        reportUrl: 'https://getgeopulse.com/results/scan-1',
+      }]]),
+    }).find((item) => item.key === 'merge_fields_resolve');
+    expect(withScan?.ok).toBe(true);
+  });
+
   it('fails on an empty cohort rather than reporting nothing to check', () => {
     const gates = evaluateRecipients({ contract: contract(), recipients: [], evidence: CLEAN_EVIDENCE });
     expect(gates.every((gate) => !gate.ok)).toBe(true);

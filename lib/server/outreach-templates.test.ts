@@ -80,6 +80,27 @@ describe('renderOutreachTemplate (spec §9)', () => {
     expect(out.html).toContain('AI retrieval agent access');
   });
 
+  it('renders a bounded real-scan preview and a human CTA without exposing a raw URL', () => {
+    const out = renderOutreachTemplate(
+      {
+        subjectTemplate: '{{company}}: your scan is ready',
+        bodyFormat: 'text',
+        bodyTemplate: 'Hi {{name}},\n\n{{scan_preview}}\n\n{{walkthrough_cta}}',
+      },
+      SAMPLE_TEMPLATE_VARS,
+      'px',
+      'https://getgeopulse.com/unsubscribe',
+    );
+    expect(out.html).toContain('61</span>');
+    expect(out.html).toContain('Two observed priorities');
+    expect(out.html).toContain('full PDF is intentionally not attached');
+    expect(out.html).toContain('>Review the scan with us</a>');
+    expect(out.html).not.toContain(`<p>${SAMPLE_TEMPLATE_VARS.walkthroughUrl}</p>`);
+    expect(out.html).toContain('https://www.instagram.com/get_geopulse/');
+    expect(out.html).toContain('https://www.linkedin.com/company/143052018/');
+    expect(out.html).toContain('/team/elena-park.jpg');
+  });
+
   it('always wraps in the brand shell with the tracking pixel', () => {
     const out = renderOutreachTemplate(
       { subjectTemplate: 's', bodyFormat: 'text', bodyTemplate: 'x' },

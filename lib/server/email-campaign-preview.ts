@@ -21,7 +21,7 @@ import {
 } from './email-campaign-contract';
 
 /** Fields that only exist once a site has been scanned for this recipient. */
-export const SCAN_MERGE_FIELDS: readonly string[] = ['score', 'grade', 'top_issues', 'report_url'];
+export const SCAN_MERGE_FIELDS: readonly string[] = ['score', 'grade', 'top_issues', 'report_url', 'scan_preview'];
 
 export interface PreviewContact {
   readonly contactId: string;
@@ -34,9 +34,11 @@ export interface PreviewContact {
 }
 
 export interface PreviewScanContext {
+  readonly scanId?: string;
   readonly score: number;
   readonly grade: string;
   readonly topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
+  readonly completedAt?: string;
   readonly reportUrl: string;
 }
 
@@ -49,6 +51,12 @@ export interface CampaignPreview {
   readonly unsubscribeUrl: string;
   readonly links: readonly string[];
   readonly unresolved: readonly { readonly field: string; readonly why: string }[];
+}
+
+export function requiresScanContext(contract: EmailCampaignV1, sequenceStep = 1): boolean {
+  const step = stepContent(contract.content, sequenceStep);
+  return extractMergeFields(step.subject, step.previewText, step.bodyTemplate)
+    .some((field) => SCAN_MERGE_FIELDS.includes(field));
 }
 
 /**
@@ -124,7 +132,11 @@ export function renderCampaignPreview(args: {
   const sequenceStep = args.sequenceStep ?? 1;
   const query = campaignUtmQuery(args.contract, sequenceStep);
   const domain = args.contact.companyDomain ?? args.contact.email.slice(args.contact.email.indexOf('@') + 1);
-  const walkthroughUrl = `${appUrl}/walkthrough?${query}&source=outreach`;
+  const walkthroughParams = new URLSearchParams(query);
+  walkthroughParams.set('source', 'outreach');
+  walkthroughParams.set('website', `https://${domain}`);
+  if (args.contact.company) walkthroughParams.set('company', args.contact.company);
+  const walkthroughUrl = `${appUrl}/walkthrough?${walkthroughParams.toString()}`;
   // Preview identifiers, not ledger rows: a preview must never allocate a real send id.
   const unsubscribeId = args.trackingIds?.prospectId ?? `preview-${args.contact.contactId}`;
   const sendId = args.trackingIds?.sendId ?? `preview-${args.contact.contactId}`;
@@ -138,6 +150,7 @@ export function renderCampaignPreview(args: {
     score: args.scan?.score ?? 0,
     grade: args.scan?.grade ?? '—',
     topIssues: args.scan?.topIssues ?? [],
+    scanCompletedAt: args.scan?.completedAt ?? null,
     reportUrl: args.scan?.reportUrl ?? `${appUrl}/results/preview?${query}`,
     walkthroughUrl,
     personalizationReason: args.contact.personalizationReason,

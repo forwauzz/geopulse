@@ -24,8 +24,9 @@ import {
 } from './email-campaign-contract';
 import { verifyFrozenAudience, type AudienceEvidence } from './campaign-audience';
 import { loadAudienceEvidence } from './campaign-audience';
-import { unresolvedMergeFields, type PreviewContact } from './email-campaign-preview';
+import { requiresScanContext, unresolvedMergeFields, type PreviewContact, type PreviewScanContext } from './email-campaign-preview';
 import { resolveCampaignSender, type SenderEnvLike } from './email-campaign-sender';
+import { loadCampaignScanContexts } from './email-campaign-scan-context';
 
 export type PreflightGateKey =
   | 'sender_authenticated'
@@ -195,6 +196,7 @@ export function evaluateRecipients(args: {
   readonly contract: EmailCampaignV1;
   readonly recipients: readonly PreflightRecipient[];
   readonly evidence: AudienceEvidence;
+  readonly scansByContactId?: ReadonlyMap<string, PreviewScanContext>;
 }): PreflightGate[] {
   const { contract, recipients, evidence } = args;
 
@@ -217,7 +219,11 @@ export function evaluateRecipients(args: {
 
   const unresolved: string[] = [];
   for (const recipient of recipients) {
-    const missing = unresolvedMergeFields({ contract, contact: recipient });
+    const missing = unresolvedMergeFields({
+      contract,
+      contact: recipient,
+      scan: args.scansByContactId?.get(recipient.contactId) ?? null,
+    });
     if (missing.length > 0) {
       unresolved.push(`${recipient.email}: ${missing.map((item) => `{{${item.field}}}`).join(', ')}`);
     }
@@ -363,6 +369,13 @@ export async function runCampaignPreflight(args: {
     return { result: assemblePreflight(gates, args.contract, nowIso), recipients };
   }
 
-  gates.push(...evaluateRecipients({ contract: args.contract, recipients, evidence }));
+  const scansByContactId = requiresScanContext(args.contract)
+    ? await loadCampaignScanContexts({
+        supabase: args.supabase,
+        contacts: recipients,
+        appUrl: args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com',
+      })
+    : undefined;
+  gates.push(...evaluateRecipients({ contract: args.contract, recipients, evidence, scansByContactId }));
   return { result: assemblePreflight(gates, args.contract, nowIso), recipients };
 }

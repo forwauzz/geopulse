@@ -27,7 +27,7 @@ const EMAIL_AGENTS: Record<EmailAgentKey, { name: string; role: string; avatar: 
   maya: { name: 'Maya Brooks', role: 'AI Chief of Staff', avatar: '/team/maya-brooks.webp' },
   noah: { name: 'Noah Carter', role: 'Activation Manager', avatar: '/team/noah-carter.webp' },
   priya: { name: 'Priya Shah', role: 'SEO & Customer Outcomes Strategist', avatar: '/team/priya-shah.webp' },
-  elena: { name: 'Elena Park', role: 'Customer Intelligence Lead', avatar: '/team/elena-park.webp' },
+  elena: { name: 'Elena Park', role: 'Customer Intelligence Lead', avatar: '/team/elena-park.jpg' },
   sofia: { name: 'Sofia Chen', role: 'Trend & Audience Researcher', avatar: '/team/sofia-chen.webp' },
   jordan: { name: 'Jordan Reyes', role: 'Social Producer & Publisher', avatar: '/team/jordan-reyes.webp' },
   marcus: { name: 'Marcus Reed', role: 'Reliability Engineer', avatar: '/team/marcus-reed.webp' },
@@ -52,6 +52,7 @@ export function agentEmailSignatureHtml(agentKey: EmailAgentKey): string {
     '<td style="vertical-align:middle;padding-left:10px;font-family:Arial,sans-serif;">',
     `<p style="margin:0;color:${EMAIL_COLORS.ink};font-size:14px;font-weight:700;">${escapeEmailHtml(agent.name)}</p>`,
     `<p style="margin:3px 0 0;color:${EMAIL_COLORS.muted};font-size:12px;">${escapeEmailHtml(agent.role)} · GEO-Pulse</p>`,
+    `<p style="margin:7px 0 0;color:${EMAIL_COLORS.muted};font-size:11px;line-height:1.6;"><a href="https://getgeopulse.com" style="color:${EMAIL_COLORS.primary};text-decoration:none;">Website</a> · <a href="https://www.instagram.com/get_geopulse/" style="color:${EMAIL_COLORS.primary};text-decoration:none;">Instagram</a> · <a href="https://www.linkedin.com/company/143052018/" style="color:${EMAIL_COLORS.primary};text-decoration:none;">LinkedIn</a></p>`,
     '</td>',
     '</tr>',
     '</table>',
@@ -135,7 +136,7 @@ export function emailShell(input: {
     `</td></tr>`,
     // Editorial footer.
     `<tr><td style="padding:20px 32px 24px;border-top:1px solid ${EMAIL_COLORS.bg};">`,
-    `<p style="margin:0;color:${EMAIL_COLORS.faint};font-size:12px;font-family:Arial,sans-serif;line-height:1.6;">— GEO-Pulse · editorial intelligence for AI search readiness<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:${EMAIL_COLORS.faint};">getgeopulse.com</a>${input.footerNote ? `<br/>${escapeEmailHtml(input.footerNote)}` : ''}</p>`,
+    `<p style="margin:0;color:${EMAIL_COLORS.faint};font-size:12px;font-family:Arial,sans-serif;line-height:1.6;">— GEO-Pulse · AI visibility you can prove, fix, and report<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:${EMAIL_COLORS.faint};">getgeopulse.com</a>${input.footerNote ? `<br/>${escapeEmailHtml(input.footerNote)}` : ''}</p>`,
     input.unsubscribeUrl
       ? `<p style="margin:8px 0 0;color:${EMAIL_COLORS.faint};font-size:11px;font-family:Arial,sans-serif;">No longer want these audits? <a href="${input.unsubscribeUrl}" style="color:${EMAIL_COLORS.faint};">Unsubscribe</a> — one click, effective immediately.</p>`
       : '',

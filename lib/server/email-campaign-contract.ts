@@ -188,7 +188,8 @@ export interface ContractIssue {
  */
 export const SUPPORTED_MERGE_FIELDS: readonly string[] = [
   'name', 'company', 'domain', 'score', 'grade', 'top_issues',
-  'report_url', 'walkthrough_url', 'personalization_reason', 'personalization_source_url',
+  'report_url', 'walkthrough_url', 'scan_preview', 'walkthrough_cta',
+  'personalization_reason', 'personalization_source_url',
 ];
 
 /** Fields that come from the CONTACT and therefore have to resolve per recipient. */
