@@ -141,7 +141,7 @@ export default async function HomePage({
             </p>
             <h1 className="mt-6 font-body text-[clamp(2.65rem,3.35vw,3.4rem)] font-semibold leading-[1.08] tracking-[-0.055em] text-[#17202f]">
               <span className="xl:block">See where AI </span>
-              <span className="xl:block xl:whitespace-nowrap">recommends competitors—</span>
+              <span className="xl:block xl:whitespace-nowrap">recommends competitors&mdash;</span>
               <span>and what to fix next.</span>
             </h1>
             <p className="mt-6 max-w-2xl text-balance font-body text-base leading-7 text-[#5f6878] md:text-lg md:leading-8">
@@ -156,7 +156,7 @@ export default async function HomePage({
                 Watch the walkthrough
               </Link>
             </div>
-            <p className="mt-4 font-body text-xs text-[#77808e]">Free first scan <span aria-hidden>·</span> No credit card <span aria-hidden>·</span> Results in about 90 seconds</p>
+            <p className="mt-4 font-body text-xs text-[#77808e]">Free first scan <span aria-hidden>&middot;</span> No credit card <span aria-hidden>&middot;</span> Results in about 90 seconds</p>
           </div>
 
           <HomeVisibilityFlow />
@@ -220,7 +220,7 @@ export default async function HomePage({
                   ))}
                 </ul>
                 <Link href={lane.href} className="mt-7 inline-flex items-center gap-1 font-body text-sm font-semibold text-primary">
-                  Explore {lane.eyebrow.toLowerCase()} <span aria-hidden>→</span>
+                  Explore {lane.eyebrow.toLowerCase()} <span aria-hidden>&rarr;</span>
                 </Link>
               </article>
             ))}

@@ -18,4 +18,4 @@ export const HOME_EXAMPLE_SCORES: Record<AiEngineKey, number> = {
 
 export const HOME_EXAMPLE_LABEL = 'Example data';
 export const HOME_EXAMPLE_FINDING = 'Their service pages answer the buyer question more directly.';
-export const HOME_EXAMPLE_ACTION = 'Next: improve 3 priority pages · verify on the next run';
+export const HOME_EXAMPLE_ACTION = 'Next: improve 3 priority pages \u00B7 verify on the next run';
