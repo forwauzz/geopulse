@@ -109,12 +109,22 @@ describe('renderOutreachTemplate (spec §9)', () => {
       'https://getgeopulse.com/unsubscribe',
     );
     expect(out.html).toContain('61</span>');
-    expect(out.html).toContain('Two observed priorities');
+    expect(out.html).toContain('Scanned URL:');
+    expect(out.html).toContain('https://acme-it.example/');
+    expect(out.html).toContain('20/24');
+    expect(out.html).toContain('5/5');
+    expect(out.html).toContain('100 vs 62');
+    expect(out.html).toContain('AI Understanding &amp; Trust scored <strong>62/100</strong>');
+    expect(out.html).toContain('A practical first pass');
+    expect(out.html).toContain('Verify the change');
+    expect(out.html).toContain('re-run acme-it.example');
     expect(out.html).toContain('full PDF is intentionally not attached');
     expect(out.html).toContain('>Review the scan with us</a>');
     expect(out.html).not.toContain(`<p>${SAMPLE_TEMPLATE_VARS.walkthroughUrl}</p>`);
     expect(out.html).toContain('https://www.instagram.com/get_geopulse/');
     expect(out.html).toContain('https://www.linkedin.com/company/143052018/');
+    expect(out.html).toContain('https://getgeopulse.com/branding/email/instagram.png');
+    expect(out.html).toContain('https://getgeopulse.com/branding/email/linkedin.png');
     expect(out.html).toContain('/team/elena-park.jpg');
   });
 

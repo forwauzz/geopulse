@@ -4,12 +4,22 @@ import type { PreviewContact, PreviewScanContext } from './email-campaign-previe
 
 type ScanRow = {
   readonly id: string;
+  readonly url: string | null;
   readonly domain: string | null;
   readonly score: number | null;
   readonly letter_grade: string | null;
   readonly issues_json: unknown;
   readonly full_results_json: unknown;
   readonly created_at: string | null;
+};
+
+type ProofCounts = {
+  readonly passedChecks: number;
+  readonly totalChecks: number;
+  readonly eligibleDestinations: number;
+  readonly testedDestinations: number;
+  readonly retrievalScore: number;
+  readonly understandingTrustScore: number;
 };
 
 function canonicalDomain(raw: string | null | undefined): string | null {
@@ -28,24 +38,88 @@ function issuePreview(raw: unknown): { check?: string; fix?: string } | null {
   return { check, ...(fix ? { fix } : {}) };
 }
 
+function finiteScore(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100
+    ? Math.round(value)
+    : null;
+}
+
+function proofCounts(fullIssues: readonly unknown[], fullResults: unknown): ProofCounts | null {
+  if (fullIssues.length === 0 || !fullResults || typeof fullResults !== 'object') return null;
+  const full = fullResults as Record<string, unknown>;
+  const matrix = full['accessMatrix'];
+  const rows = matrix && typeof matrix === 'object'
+    ? (matrix as Record<string, unknown>)['rows']
+    : null;
+  if (!Array.isArray(rows)) return null;
+
+  const statuses = rows.flatMap((raw) => {
+    if (!raw || typeof raw !== 'object') return [];
+    const status = (raw as Record<string, unknown>)['status'];
+    return status === 'eligible' || status === 'blocked' || status === 'not_tested' ? [status] : [];
+  });
+  const testedDestinations = statuses.filter((status) => status !== 'not_tested').length;
+  const eligibleDestinations = statuses.filter((status) => status === 'eligible').length;
+  if (statuses.length === 0 || testedDestinations === 0) return null;
+
+  const buckets = Array.isArray(full['bucketScores']) ? full['bucketScores'] : [];
+  const scoreFor = (bucket: string): number | null => {
+    const match = buckets.find((raw) => raw && typeof raw === 'object' && (raw as Record<string, unknown>)['bucket'] === bucket);
+    return match && typeof match === 'object'
+      ? finiteScore((match as Record<string, unknown>)['score'])
+      : null;
+  };
+  const retrievalScore = scoreFor('eligibility');
+  const understandingTrustScore = scoreFor('understanding');
+  if (retrievalScore === null || understandingTrustScore === null) return null;
+
+  return {
+    passedChecks: fullIssues.filter((raw) => raw && typeof raw === 'object' && (raw as Record<string, unknown>)['passed'] === true).length,
+    totalChecks: fullIssues.length,
+    eligibleDestinations,
+    testedDestinations,
+    retrievalScore,
+    understandingTrustScore,
+  };
+}
+
+function canonicalSiteUrl(raw: string | null, expectedDomain: string | null): string | null {
+  try {
+    const url = new URL(raw ?? '');
+    const hostname = canonicalDomain(url.hostname);
+    const domain = canonicalDomain(expectedDomain);
+    if (!hostname || !domain || hostname !== domain) return null;
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function scanContextFromRow(
   row: ScanRow,
   appUrl = 'https://getgeopulse.com',
 ): PreviewScanContext | null {
   if (!row.id || typeof row.score !== 'number' || !Number.isFinite(row.score)) return null;
   if (!row.letter_grade?.trim() || !row.created_at) return null;
-  const topIssues = fullIssueListFromScan(row.issues_json, row.full_results_json)
+  const siteUrl = canonicalSiteUrl(row.url, row.domain);
+  if (!siteUrl) return null;
+  const fullIssues = fullIssueListFromScan(row.issues_json, row.full_results_json);
+  const topIssues = fullIssues
     .map(issuePreview)
     .filter((issue): issue is { check?: string; fix?: string } => Boolean(issue))
     .slice(0, 2);
-  if (topIssues.length === 0) return null;
+  const counts = proofCounts(fullIssues, row.full_results_json);
+  if (topIssues.length < 2 || !counts) return null;
 
   return {
     scanId: row.id,
+    siteUrl,
     score: row.score,
     grade: row.letter_grade.trim(),
     topIssues,
     completedAt: row.created_at,
+    ...counts,
     reportUrl: `${appUrl.replace(/\/+$/, '')}/results/${encodeURIComponent(row.id)}`,
   };
 }
@@ -61,7 +135,7 @@ export async function loadCampaignScanContext(args: {
 
   const { data, error } = await args.supabase
     .from('scans')
-    .select('id,domain,score,letter_grade,issues_json,full_results_json,created_at')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at')
     .in('domain', [domain, `www.${domain}`])
     .eq('status', 'complete')
     .is('user_id', null)

@@ -252,10 +252,20 @@ describe('recipient gates', () => {
       evidence: CLEAN_EVIDENCE,
       scansByContactId: new Map([['c1', {
         scanId: 'scan-1',
+        siteUrl: 'https://example.com/',
         score: 76,
         grade: 'C',
-        topIssues: [{ check: 'Answer-first content', fix: 'Lead with buyer questions.' }],
+        topIssues: [
+          { check: 'Answer-first content', fix: 'Lead with buyer questions.' },
+          { check: 'Business schema', fix: 'Add a specific business type.' },
+        ],
         completedAt: '2026-08-09T01:05:00.000Z',
+        passedChecks: 20,
+        totalChecks: 24,
+        eligibleDestinations: 5,
+        testedDestinations: 5,
+        retrievalScore: 100,
+        understandingTrustScore: 62,
         reportUrl: 'https://getgeopulse.com/results/scan-1',
       }]]),
     }).find((item) => item.key === 'merge_fields_resolve');
