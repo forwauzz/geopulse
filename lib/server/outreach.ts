@@ -534,6 +534,7 @@ export async function runOutreachForProspect(args: {
             score: scan.output.score,
             grade: scan.output.letterGrade,
             topIssues: topFailed,
+            scanCompletedAt: new Date().toISOString(),
             reportUrl: resultsUrl,
             walkthroughUrl,
             personalizationReason: prospect.personalizationReason,

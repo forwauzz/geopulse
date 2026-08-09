@@ -16,10 +16,11 @@ import {
 } from './email-campaign-contract';
 import { loadEmailCampaign, listEmailCampaigns, type EmailCampaignRecord } from './email-campaign-store';
 import { resolveCampaignSender, resolveTestRecipients, type SenderEnvLike, type SenderResolution } from './email-campaign-sender';
-import { renderCampaignPreview, type CampaignPreview, type PreviewContact } from './email-campaign-preview';
+import { renderCampaignPreview, requiresScanContext, type CampaignPreview, type PreviewContact } from './email-campaign-preview';
 import { runCampaignPreflight, type PreflightResult } from './email-campaign-preflight';
 import { loadCampaignResults, type CampaignResults } from './email-campaign-results';
 import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
+import { loadCampaignScanContext } from './email-campaign-scan-context';
 
 export interface EmailCampaignListItem {
   readonly interventionKey: string;
@@ -234,11 +235,15 @@ export async function loadEmailCampaignDetail(args: {
     args.previewSequenceStep ?? 1,
     contract.schedule.maxSequenceSteps,
   ));
+  const scan = selected && requiresScanContext(contract, previewSequenceStep)
+    ? await loadCampaignScanContext({ supabase: args.supabase, contact: selected, appUrl })
+    : null;
   const preview = selected
     ? renderCampaignPreview({
         contract,
         contact: selected,
         appUrl,
+        scan,
         sequenceStep: previewSequenceStep,
         ...(sender.resolvedFromAddress && sender.resolvedReplyToAddress
           ? { resolvedSender: { from: sender.resolvedFromAddress, replyTo: sender.resolvedReplyToAddress } }

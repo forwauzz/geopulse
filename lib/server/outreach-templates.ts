@@ -13,7 +13,7 @@
  * yet) or empty, callers fall back to the built-in scorecard email.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { emailShell } from './email-theme';
+import { ctaButton, emailShell, issueListHtml, scoreBlock } from './email-theme';
 
 export type OutreachTemplateFormat = 'text' | 'html';
 
@@ -33,6 +33,7 @@ export interface OutreachTemplateVars {
   score: number;
   grade: string;
   topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
+  scanCompletedAt: string | null;
   reportUrl: string;
   walkthroughUrl: string;
   personalizationReason: string | null;
@@ -61,6 +62,31 @@ function topIssuesHtml(topIssues: OutreachTemplateVars['topIssues']): string {
   return items ? `<ul style="padding-left:18px;">${items}</ul>` : '';
 }
 
+function scanPreviewHtml(vars: OutreachTemplateVars): string {
+  if (!vars.scanCompletedAt || vars.topIssues.length === 0) return '';
+  const date = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(vars.scanCompletedAt));
+  return [
+    '<div style="margin:22px 0;padding:20px;border:1px solid #E5E9E9;border-radius:12px;background:#FAFBFB;">',
+    scoreBlock(vars.score, vars.grade, `Public-site scan completed ${date}`),
+    issueListHtml(vars.topIssues.slice(0, 2), 'Two observed priorities'),
+    '<p style="margin:16px 0 0;color:#586162;font-family:Arial,sans-serif;font-size:12px;line-height:1.55;">This is a technical readiness snapshot of public evidence, not a promise of rankings or citations. The full PDF is intentionally not attached.</p>',
+    '</div>',
+  ].join('');
+}
+
+function richBlocks(vars: OutreachTemplateVars): Readonly<Record<string, string>> {
+  return {
+    '{{top_issues}}': topIssuesHtml(vars.topIssues),
+    '{{scan_preview}}': scanPreviewHtml(vars),
+    '{{walkthrough_cta}}': ctaButton('Review the scan with us', vars.walkthroughUrl),
+  };
+}
+
 function substitute(template: string, vars: OutreachTemplateVars, opts: { escape: boolean }): string {
   const esc = (v: string) => (opts.escape ? escapeHtml(v) : v);
   return template
@@ -73,7 +99,11 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
     .replaceAll('{{walkthrough_url}}', vars.walkthroughUrl)
     .replaceAll('{{personalization_reason}}', esc(vars.personalizationReason ?? 'This site matches the current audit cohort.'))
     .replaceAll('{{personalization_source_url}}', vars.personalizationSourceUrl ?? '')
-    .replaceAll('{{top_issues}}', topIssuesHtml(vars.topIssues));
+    .replaceAll('{{scan_preview}}', opts.escape ? '{{scan_preview}}' : `${String(vars.score)}/100 (grade ${vars.grade})`)
+    .replaceAll('{{walkthrough_cta}}', opts.escape ? '{{walkthrough_cta}}' : vars.walkthroughUrl)
+    .replaceAll('{{top_issues}}', opts.escape
+      ? '{{top_issues}}'
+      : vars.topIssues.map((issue) => issue.check ?? '').filter(Boolean).join('; '));
 }
 
 /**
@@ -103,15 +133,23 @@ export function renderOutreachTemplate(
   let body: string;
   if (template.bodyFormat === 'html') {
     body = substitute(template.bodyTemplate, vars, { escape: true });
+    for (const [token, html] of Object.entries(richBlocks(vars))) body = body.replaceAll(token, html);
   } else {
     // Plain text: substitute with escaped values on the escaped body, then paragraphize.
     const escaped = escapeHtml(template.bodyTemplate);
     // Escaping turned {{...}} braces into themselves (braces are not escaped), so
     // substitution still works; values get escaped, the issues block stays HTML.
     const substituted = substitute(escaped, vars, { escape: true });
+    const blocks = richBlocks(vars);
     body = substituted
       .split(/\n{2,}/)
-      .map((p) => `<p>${p.replaceAll('\n', '<br/>')}</p>`)
+      .map((paragraph) => {
+        const trimmed = paragraph.trim();
+        if (trimmed in blocks) return blocks[trimmed];
+        let rendered = paragraph.replaceAll('\n', '<br/>');
+        for (const [token, html] of Object.entries(blocks)) rendered = rendered.replaceAll(token, html);
+        return `<p>${rendered}</p>`;
+      })
       .join('\n');
   }
 
@@ -290,6 +328,7 @@ export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {
     { check: 'AI retrieval agent access', fix: 'Allow OAI-SearchBot, Claude-SearchBot and PerplexityBot in robots.txt.' },
     { check: 'Structured data validity', fix: 'Add LocalBusiness schema with your name and address.' },
   ],
+  scanCompletedAt: '2026-08-08T20:00:00.000Z',
   reportUrl: 'https://getgeopulse.com/results/sample',
   walkthroughUrl: 'https://getgeopulse.com/walkthrough?source=outreach',
   personalizationReason: 'The site matches the current managed-services audit cohort.',

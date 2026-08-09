@@ -9,6 +9,7 @@ type Props = {
   readonly siteKey: string;
   readonly source: 'msp_solution' | 'outreach' | 'agency_solution' | 'walkthrough_page';
   readonly defaultWebsite?: string;
+  readonly defaultCompany?: string;
   readonly compact?: boolean;
 };
 
@@ -30,10 +31,11 @@ export function WalkthroughRequestForm({
   siteKey,
   source,
   defaultWebsite = '',
+  defaultCompany = '',
   compact = false,
 }: Props) {
   const [name, setName] = useState('');
-  const [company, setCompany] = useState('');
+  const [company, setCompany] = useState(defaultCompany);
   const [email, setEmail] = useState('');
   const [website, setWebsite] = useState(defaultWebsite);
   const [note, setNote] = useState('');

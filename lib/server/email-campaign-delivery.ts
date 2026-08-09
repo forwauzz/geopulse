@@ -7,11 +7,12 @@
  * closed; none may fall back to the legacy scorecard email.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { findLiteralTokens, renderCampaignPreview, type PreviewContact } from './email-campaign-preview';
+import { findLiteralTokens, renderCampaignPreview, requiresScanContext, type PreviewContact } from './email-campaign-preview';
 import { resolveCampaignSender, type SenderEnvLike } from './email-campaign-sender';
 import { loadEmailCampaignVersion } from './email-campaign-store';
 import { progressAfterFailedSend, progressAfterSuccessfulSend } from './outreach-sequence';
 import { structuredLog } from './structured-log';
+import { loadCampaignScanContext } from './email-campaign-scan-context';
 
 export interface CampaignDeliveryProspect {
   readonly id: string;
@@ -34,7 +35,7 @@ export type CampaignDeliveryEnv = SenderEnvLike & {
 };
 
 export type CampaignDeliveryOutcome =
-  | { readonly ok: true; readonly scanId: null; readonly score: null }
+  | { readonly ok: true; readonly scanId: string | null; readonly score: number | null }
   | { readonly ok: false; readonly reason: string };
 
 export type CampaignSend = (
@@ -223,10 +224,18 @@ export async function runEmailCampaignDelivery(args: {
     personalizationReason: (contact.personalization_reason as string | null) ?? null,
     personalizationSourceUrl: (contact.personalization_source_url as string | null) ?? null,
   };
+  const scan = requiresScanContext(contract, prospect.sequenceStep)
+    ? await loadCampaignScanContext({
+        supabase,
+        contact: previewContact,
+        appUrl: env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
+      })
+    : null;
   const rendered = renderCampaignPreview({
     contract,
     contact: previewContact,
     appUrl: env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
+    scan,
     sequenceStep: prospect.sequenceStep,
     trackingIds: { prospectId: prospect.id, sendId },
     resolvedSender: { from: sender.resolvedFromAddress, replyTo: sender.resolvedReplyToAddress },
@@ -241,6 +250,13 @@ export async function runEmailCampaignDelivery(args: {
       .update({ delivery_status: 'failed', delivery_error: detail, updated_at: nowIso })
       .eq('id', sendId);
     return recordDeliveryFailure({ supabase, prospect, nowMs, reason: detail });
+  }
+
+  if (scan?.scanId) {
+    await supabase
+      .from('outreach_sends')
+      .update({ scan_id: scan.scanId, score: scan.score, updated_at: nowIso })
+      .eq('id', sendId);
   }
 
   await supabase
@@ -331,5 +347,5 @@ export async function runEmailCampaignDelivery(args: {
     sequenceStep: prospect.sequenceStep,
     sendKey,
   }, 'info');
-  return { ok: true, scanId: null, score: null };
+  return { ok: true, scanId: scan?.scanId ?? null, score: scan?.score ?? null };
 }

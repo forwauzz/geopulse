@@ -21,11 +21,12 @@ import {
   type EmailCampaignV1,
 } from './email-campaign-contract';
 import { enrollmentIdempotencyKey } from './campaign-audience';
-import { renderCampaignPreview, type PreviewContact } from './email-campaign-preview';
+import { renderCampaignPreview, requiresScanContext, type PreviewContact } from './email-campaign-preview';
 import { resolveCampaignSender, resolveTestRecipients, type SenderEnvLike } from './email-campaign-sender';
 import { runCampaignPreflight, type PreflightRecipient, type PreflightResult, type ProviderCaps } from './email-campaign-preflight';
 import { sendOutreachEmail, type OutreachEnvLike } from './outreach';
 import { structuredLog } from './structured-log';
+import { loadCampaignScanContext } from './email-campaign-scan-context';
 
 /**
  * One key per (version, contact, step). The provider sees the same key on a retry, and the
@@ -84,10 +85,19 @@ export async function sendInternalTest(args: {
   }
 
   const checksum = versionChecksum(args.contract);
+  const appUrl = args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com';
+  const scan = requiresScanContext(args.contract, args.sequenceStep ?? 1)
+    ? await loadCampaignScanContext({
+        supabase: args.supabase,
+        contact: args.sampleContact,
+        appUrl,
+      })
+    : null;
   const preview = renderCampaignPreview({
     contract: args.contract,
     contact: args.sampleContact,
-    appUrl: args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com',
+    appUrl,
+    scan,
     sequenceStep: args.sequenceStep ?? 1,
     resolvedSender: {
       from: sender.resolvedFromAddress!,
