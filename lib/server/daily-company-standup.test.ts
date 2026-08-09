@@ -102,6 +102,7 @@ function loop(overrides: Partial<StandupWorkLoop>): StandupWorkLoop {
 describe('recurring revenue identity exclusions', () => {
   it('excludes founder, internal, Lifter, and test identities while allowing a real customer', () => {
     expect(isExcludedRevenueIdentity({ email: 'uzzielt@techehealthservices.com' })).toBe(true);
+    expect(isExcludedRevenueIdentity({ email: 'founder@gmail.com', domain: 'alie.app' })).toBe(true);
     expect(isExcludedRevenueIdentity({ email: 'jack@lifter.ca' })).toBe(true);
     expect(isExcludedRevenueIdentity({ email: 'buyer+test@msp.example' })).toBe(true);
     expect(isExcludedRevenueIdentity({
@@ -116,6 +117,7 @@ describe('recurring revenue identity exclusions', () => {
       email: 'owner@northstarmsp.ca',
       domain: 'northstarmsp.ca',
     })).toBe(false);
+    expect(isExcludedRevenueIdentity({ domain: 'northstarmsp.ca' })).toBe(false);
     expect(isVerifiedStripeSubscriptionId('admin_comp_123')).toBe(false);
     expect(isVerifiedStripeSubscriptionId('sub_1AbCdEfGhIjK')).toBe(true);
   });

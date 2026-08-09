@@ -13,6 +13,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { structuredLog } from '@/lib/server/structured-log';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
+import { isExcludedRevenueIdentity } from '@/lib/server/revenue-identity';
 import { buildReportUrl } from '@/lib/shared/report-route';
 import { isLegacyPaidEnabled } from '@/lib/shared/deep-audit-checkout-mode';
 
@@ -83,7 +84,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const { data: scan, error: scanErr } = await supabase
     .from('scans')
-    .select('id,user_id,status,agency_account_id,agency_client_id,startup_workspace_id')
+    .select('id,user_id,url,status,agency_account_id,agency_client_id,startup_workspace_id')
     .eq('id', parsed.data.scanId)
     .maybeSingle();
 
@@ -152,11 +153,6 @@ export async function POST(request: Request): Promise<Response> {
         { status: result.status }
       );
     }
-    await emitMarketingEvent(supabase, 'checkout_started', {
-      anonymous_id: parsed.data.anonymous_id,
-      scan_id: scanId,
-      metadata: { mode: 'free' },
-    });
     return Response.json({ url: buildReportUrl(baseUrl, scanId) });
   }
 
@@ -300,7 +296,18 @@ export async function POST(request: Request): Promise<Response> {
     await emitMarketingEvent(supabase, 'checkout_started', {
       anonymous_id: parsed.data.anonymous_id,
       scan_id: scanId,
-      metadata: { stripe_session_id: session.id },
+      user_id: sessionUserId,
+      email: sessionUserEmail,
+      metadata: {
+        commerce_kind: 'paid_checkout',
+        checkout_mode: 'one_time',
+        product: 'deep_audit',
+        stripe_session_id: session.id,
+        is_internal: isExcludedRevenueIdentity({
+          email: sessionUserEmail,
+          domain: scan.url,
+        }),
+      },
     });
 
     structuredLog('deep_audit_checkout_stripe_redirect', {
