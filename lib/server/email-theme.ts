@@ -105,6 +105,8 @@ export function issueListHtml(items: ReadonlyArray<{ check?: string; fix?: strin
 export function emailShell(input: {
   kicker: string;
   bodyHtml: string;
+  /** Hidden inbox preheader. It must already be resolved for the recipient. */
+  previewText?: string;
   /** The Mole employee accountable for this email. */
   sender: EmailAgentKey;
   /** e.g. 'Daily self-improvement report' — right side of the masthead. */
@@ -116,6 +118,9 @@ export function emailShell(input: {
   return [
     `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>`,
     `<body style="margin:0;padding:0;background:${EMAIL_COLORS.bg};">`,
+    input.previewText
+      ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${escapeEmailHtml(input.previewText)}</div>`
+      : '',
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL_COLORS.bg};padding:32px 0;"><tr><td align="center">`,
     `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:${EMAIL_COLORS.card};border-radius:12px;overflow:hidden;max-width:600px;width:100%;">`,
     // Masthead — navy band, wordmark, note.

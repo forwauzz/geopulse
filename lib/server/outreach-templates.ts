@@ -111,10 +111,16 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
  * CASL: the footer is part of the shell so no template — however custom — can ship
  * a commercial email without identification and a working unsubscribe (issue #97).
  */
-export function brandShell(innerHtml: string, pixelUrl: string, unsubscribeUrl?: string): string {
+export function brandShell(
+  innerHtml: string,
+  pixelUrl: string,
+  unsubscribeUrl?: string,
+  previewText?: string,
+): string {
   return emailShell({
     kicker: 'AI search readiness',
     bodyHtml: innerHtml,
+    previewText,
     sender: 'elena',
     unsubscribeUrl,
     pixelUrl,
@@ -123,12 +129,15 @@ export function brandShell(innerHtml: string, pixelUrl: string, unsubscribeUrl?:
 
 /** Render a template into { subject, html } ready for sending. */
 export function renderOutreachTemplate(
-  template: Pick<OutreachTemplate, 'subjectTemplate' | 'bodyFormat' | 'bodyTemplate'>,
+  template: Pick<OutreachTemplate, 'subjectTemplate' | 'bodyFormat' | 'bodyTemplate'> & { readonly previewText?: string },
   vars: OutreachTemplateVars,
   pixelUrl: string,
   unsubscribeUrl?: string
-): { subject: string; html: string } {
+): { subject: string; html: string; previewText: string } {
   const subject = substitute(template.subjectTemplate, vars, { escape: false });
+  const previewText = template.previewText
+    ? substitute(template.previewText, vars, { escape: false })
+    : '';
 
   let body: string;
   if (template.bodyFormat === 'html') {
@@ -153,7 +162,7 @@ export function renderOutreachTemplate(
       .join('\n');
   }
 
-  return { subject, html: brandShell(body, pixelUrl, unsubscribeUrl) };
+  return { subject, html: brandShell(body, pixelUrl, unsubscribeUrl, previewText), previewText };
 }
 
 type TemplateRow = {
