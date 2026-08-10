@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { IssueRow } from './deep-audit-report-helpers';
 import { buildOwnerPage } from './owner-page';
 import { buildCadencePlan } from './cadence-plan';
+import { assessBuyerQuestionCoverage } from './buyer-question-coverage';
 import { REMEDIATION_CATALOG, ownerRoleFor } from './remediation-catalog';
 import { CHECK_CATALOG } from '../scan-engine/check-catalog';
 
@@ -84,16 +85,54 @@ describe('buildOwnerPage (spec C9)', () => {
     expect(page.deferrals.some((d) => d.includes('Security'))).toBe(true);
     expect(page.deferrals.some((d) => d.toLowerCase().includes('optional'))).toBe(true);
   });
+
+  it('does not call a canonical-only failure an access blocker', () => {
+    const page = buildOwnerPage({
+      score: 74,
+      grade: 'C',
+      issues: [
+        row({ checkId: 'ai-crawler-access', status: 'PASS', passed: true }),
+        row({ checkId: 'canonical', status: 'FAIL', passed: false, finding: 'No canonical link found.' }),
+        row({ checkId: 'llm-qa-pattern', status: 'FAIL', passed: false, finding: 'No direct Q&A structure.' }),
+      ],
+    });
+    expect(page.verdict).not.toContain('access-level');
+    expect(page.verdict).toContain('AI engines can reach you');
+  });
 });
 
 describe('buildCadencePlan (spec C11)', () => {
   it('produces the five dated phases from the generation date', () => {
-    const phases = buildCadencePlan('2026-07-21T12:00:00.000Z');
+    const phases = buildCadencePlan('2026-07-21T12:00:00.000Z', [
+      row({ checkId: 'ai-crawler-access', status: 'FAIL', passed: false }),
+    ]);
     expect(phases).toHaveLength(5);
     expect(phases.map((p) => p.offsetDays)).toEqual([0, 14, 30, 60, 90]);
     expect(phases[0]?.date).toBe('2026-07-21');
     expect(phases[1]?.date).toBe('2026-08-04');
     expect(phases[4]?.date).toBe('2026-10-19');
     expect(phases[4]?.actions.join(' ')).toContain('baseline');
+  });
+
+  it('does not prescribe access remediation when access checks pass', () => {
+    const phases = buildCadencePlan('2026-07-21T12:00:00.000Z', [
+      row({ checkId: 'ai-crawler-access', status: 'PASS', passed: true }),
+      row({ checkId: 'canonical', status: 'FAIL', passed: false }),
+    ]);
+    expect(phases[0]?.title).toContain('highest-priority');
+    expect(phases[0]?.actions.join(' ')).not.toMatch(/robots|firewall|noindex/i);
+    expect(phases[1]?.title).toContain('verify the first fixes');
+  });
+});
+
+describe('assessBuyerQuestionCoverage', () => {
+  it('recognizes Teché practice-area pages as service coverage', () => {
+    const coverage = assessBuyerQuestionCoverage([
+      {
+        url: 'https://techehealthservices.com/practice-areas/it-services/',
+        textSample: 'Clinical operations consulting and EHR implementation services.',
+      },
+    ]);
+    expect(coverage.gaps.find((gap) => gap.category === 'service')?.covered).toBe(true);
   });
 });

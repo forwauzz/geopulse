@@ -427,7 +427,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   // The report ends with the dated plan + re-scan hook (spec C11).
   lines.push('## Your Next 90 Days');
   lines.push('');
-  for (const phase of buildCadencePlan(payload.generatedAt)) {
+  for (const phase of buildCadencePlan(payload.generatedAt, allIssues)) {
     lines.push(`### ${phase.date} — ${phase.title}`);
     lines.push('');
     for (const action of phase.actions) lines.push(`- ${action}`);

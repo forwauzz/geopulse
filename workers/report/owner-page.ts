@@ -37,6 +37,20 @@ function nameOf(row: IssueRow): string {
   return row.check ?? row.checkId ?? 'Check';
 }
 
+// These failures can actually prevent retrieval. Other checks in the broader
+// eligibility score (for example canonical selection) can weaken attribution or
+// URL choice, but must not be described as making the site unreachable.
+const ACCESS_BLOCKING_CHECK_IDS = new Set([
+  'ai-crawler-access',
+  'robots-meta',
+  'snippet-eligibility',
+  'https-only',
+]);
+
+export function isAccessBlockingFailure(row: IssueRow): boolean {
+  return statusOf(row) === 'FAIL' && ACCESS_BLOCKING_CHECK_IDS.has(row.checkId ?? '');
+}
+
 export function buildOwnerPage(input: {
   score: number;
   grade: string;
@@ -47,15 +61,16 @@ export function buildOwnerPage(input: {
 
   const failed = issues.filter((r) => statusOf(r) === 'FAIL');
   const notTested = issues.filter((r) => ['NOT_EVALUATED', 'BLOCKED'].includes(statusOf(r)));
-  const eligibilityFailed = failed.filter((r) => bucketOf(r.checkId ?? '') === 'eligibility');
+  const accessFailed = failed.filter(isAccessBlockingFailure);
 
   // Verdict — lead with the thing that gates everything else.
   let verdict: string;
-  if (eligibilityFailed.length > 0) {
+  if (accessFailed.length > 0) {
     verdict =
       `Your site scored ${String(input.score)}/100 (${input.grade}), but the score is not the headline: ` +
-      `${String(eligibilityFailed.length)} access-level ${eligibilityFailed.length === 1 ? 'issue' : 'issues'} ` +
-      'currently limit whether AI search engines can reach and cite you at all. Fix those first — everything else builds on them.';
+      `${String(accessFailed.length)} access-level ${accessFailed.length === 1 ? 'issue' : 'issues'} ` +
+      `currently ${accessFailed.length === 1 ? 'limits' : 'limit'} whether AI search engines can retrieve the site. ` +
+      'Fix those first; everything else builds on them.';
   } else if (counts.notTested > 0) {
     verdict =
       `Your site scored ${String(input.score)}/100 (${input.grade}) on the checks we could run. ` +
@@ -66,7 +81,7 @@ export function buildOwnerPage(input: {
   } else {
     verdict =
       `Your site scored ${String(input.score)}/100 (${input.grade}). AI engines can reach you, ` +
-      `but ${String(counts.failed)} ${counts.failed === 1 ? 'check' : 'checks'} below ${counts.failed === 1 ? 'makes' : 'make'} it harder for them to understand and cite you. The quick wins below are the fastest path up.`;
+      `but ${String(counts.failed)} ${counts.failed === 1 ? 'check' : 'checks'} below ${counts.failed === 1 ? 'makes' : 'make'} the site harder for them to understand and reuse accurately. The quick wins below are the fastest path up.`;
   }
 
   const blockedItems = failed
@@ -96,9 +111,9 @@ export function buildOwnerPage(input: {
 
   // Exposure framing — qualitative, never a fabricated dollar amount.
   const exposure =
-    eligibilityFailed.length > 0
-      ? 'What this costs you: when a prospect asks ChatGPT, Perplexity, or Google AI for a provider like you, an access-blocked site is simply absent from the answer — the referral goes to a competitor the engine can read. AI-search referrals are still a small share of traffic, but they convert far better than classic search, and early fixes compound.'
-      : 'What this costs you: every understanding gap below makes an AI engine slightly more likely to cite a competitor whose site is easier to parse. None of these is an emergency; together they decide who gets named in the answer.';
+    accessFailed.length > 0
+      ? 'Why this matters: a retrieval block can keep affected pages out of an AI system\'s usable source set. Actual indexing and citation must still be verified separately in the relevant engine and webmaster tools.'
+      : 'Why this matters: the understanding gaps below can make the site harder for machines to interpret and reuse accurately. This audit reports observable readiness signals; it does not predict rankings or citations.';
 
   // Explicit deferrals: hygiene misses + anything tagged Skip.
   const deferrals: string[] = [];

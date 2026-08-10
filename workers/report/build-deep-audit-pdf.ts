@@ -1200,7 +1200,7 @@ export async function buildDeepAuditPdf(input: {
   pdf.drawTechnicalAppendix(input.technicalAppendix, input.coverageSummary);
 
   // The report ends with the dated plan + re-scan hook (spec C11).
-  pdf.drawCadencePlan(buildCadencePlan(input.generatedAt ?? new Date().toISOString()));
+  pdf.drawCadencePlan(buildCadencePlan(input.generatedAt ?? new Date().toISOString(), allIssues));
 
   pdf.drawDisclaimer();
   return pdf.save();
