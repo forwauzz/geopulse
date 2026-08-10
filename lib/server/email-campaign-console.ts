@@ -21,6 +21,7 @@ import { runCampaignPreflight, type PreflightResult } from './email-campaign-pre
 import { loadCampaignResults, type CampaignResults } from './email-campaign-results';
 import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
 import { loadCampaignScanContext, loadCampaignScanContexts } from './email-campaign-scan-context';
+import { fetchAllRows } from './supabase-page';
 
 export interface EmailCampaignListItem {
   readonly interventionKey: string;
@@ -90,17 +91,21 @@ export async function loadEmailCampaignComposerOptions(
 ): Promise<EmailCampaignComposerOptions> {
   const [campaigns, contacts] = await Promise.all([
     loadActiveGrowthCampaigns(supabase),
-    supabase
-      .from('outreach_contacts')
-      .select('segment,eligibility_status,added_to_sequence_at')
-      .limit(5000),
+    fetchAllRows<SegmentSummaryRow>(
+      () => supabase.from('outreach_contacts').select('segment,eligibility_status,added_to_sequence_at'),
+      'campaign composer contact segments',
+    ).then((data) => ({ data, error: null as Error | null }))
+      .catch((error: unknown) => ({
+        data: [] as SegmentSummaryRow[],
+        error: error instanceof Error ? error : new Error(String(error)),
+      })),
   ]);
   const warnings: string[] = [];
   if (campaigns.length === 0) warnings.push('No active primary or challenger growth campaign is available.');
   if (contacts.error) warnings.push('Contact segment counts are unavailable; draft creation remains held.');
   return {
     campaigns,
-    segments: summarizeEmailCampaignSegments((contacts.data ?? []) as SegmentSummaryRow[]),
+    segments: summarizeEmailCampaignSegments(contacts.data),
     warnings,
   };
 }
