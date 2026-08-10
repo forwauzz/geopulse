@@ -22,6 +22,7 @@ function registerSelfAuditFetch(e: Record<string, unknown>): void {
 
 export type ScanApiEnv = {
   SCAN_CACHE: KVNamespace | undefined;
+  SCAN_QUEUE: Queue | undefined;
   NEXT_PUBLIC_APP_URL: string;
   NEXT_PUBLIC_SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
@@ -33,9 +34,12 @@ export type ScanApiEnv = {
   GEOPULSE_CAMPAIGN_TEST_RECIPIENTS?: string;
   /** HMAC secret for recipient-specific audit preview -> full report capabilities. */
   AUDIT_REPORT_CAPABILITY_SECRET?: string;
+  /** Apollo master/API key used only by the admin lead-intake workflow. */
+  APOLLO_API_KEY?: string;
   BROWSER_RENDERING_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   DEEP_AUDIT_BROWSER_RENDER_MODE?: string;
+  DEEP_AUDIT_DEFAULT_PAGE_LIMIT?: string;
   CF_BROWSER_RENDERING_ACCOUNT_ID?: string;
   CF_BROWSER_RENDERING_API_TOKEN?: string;
   DEEP_AUDIT_BROWSER_RENDERING_ENABLED?: string;
@@ -231,6 +235,7 @@ function resolveQueueBinding(e: Record<string, unknown>, key: string): Queue | u
 function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
   return {
     SCAN_CACHE: e['SCAN_CACHE'] as KVNamespace | undefined,
+    SCAN_QUEUE: resolveScanQueue(e),
     NEXT_PUBLIC_APP_URL: String(e['NEXT_PUBLIC_APP_URL'] ?? ''),
     NEXT_PUBLIC_SUPABASE_URL: String(e['NEXT_PUBLIC_SUPABASE_URL'] ?? ''),
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
@@ -240,9 +245,11 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     GEOPULSE_CAMPAIGN_SENDER_VERIFIED: String(e['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? ''),
     GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: String(e['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? ''),
     AUDIT_REPORT_CAPABILITY_SECRET: String(e['AUDIT_REPORT_CAPABILITY_SECRET'] ?? ''),
+    APOLLO_API_KEY: String(e['APOLLO_API_KEY'] ?? ''),
     BROWSER_RENDERING_API_TOKEN: String(e['BROWSER_RENDERING_API_TOKEN'] ?? ''),
     CLOUDFLARE_ACCOUNT_ID: String(e['CLOUDFLARE_ACCOUNT_ID'] ?? ''),
     DEEP_AUDIT_BROWSER_RENDER_MODE: String(e['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? ''),
+    DEEP_AUDIT_DEFAULT_PAGE_LIMIT: String(e['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? ''),
     CF_BROWSER_RENDERING_ACCOUNT_ID: String(e['CF_BROWSER_RENDERING_ACCOUNT_ID'] ?? ''),
     CF_BROWSER_RENDERING_API_TOKEN: String(e['CF_BROWSER_RENDERING_API_TOKEN'] ?? ''),
     DEEP_AUDIT_BROWSER_RENDERING_ENABLED: String(e['DEEP_AUDIT_BROWSER_RENDERING_ENABLED'] ?? ''),
@@ -316,6 +323,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
   } catch {
     return {
       SCAN_CACHE: undefined,
+      SCAN_QUEUE: undefined,
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       NEXT_PUBLIC_SUPABASE_URL: process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
@@ -325,9 +333,11 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       GEOPULSE_CAMPAIGN_SENDER_VERIFIED: process.env['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? '',
       GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: process.env['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? '',
       AUDIT_REPORT_CAPABILITY_SECRET: process.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '',
+      APOLLO_API_KEY: process.env['APOLLO_API_KEY'] ?? '',
       BROWSER_RENDERING_API_TOKEN: process.env['BROWSER_RENDERING_API_TOKEN'] ?? '',
       CLOUDFLARE_ACCOUNT_ID: process.env['CLOUDFLARE_ACCOUNT_ID'] ?? '',
       DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
+      DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
       CF_BROWSER_RENDERING_ACCOUNT_ID: process.env['CF_BROWSER_RENDERING_ACCOUNT_ID'] ?? '',
       CF_BROWSER_RENDERING_API_TOKEN: process.env['CF_BROWSER_RENDERING_API_TOKEN'] ?? '',
       DEEP_AUDIT_BROWSER_RENDERING_ENABLED: process.env['DEEP_AUDIT_BROWSER_RENDERING_ENABLED'] ?? '',

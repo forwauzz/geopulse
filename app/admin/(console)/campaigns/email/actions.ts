@@ -31,7 +31,10 @@ import {
   normalizeSegment,
   parseContactCsvImport,
   planApolloMspPromotion,
+  type ParsedContact,
 } from '@/lib/server/outreach-contacts';
+import { enrichApolloCandidates, searchApolloQuebecMspCandidates } from '@/lib/server/apollo-campaign-intake';
+import { prepareCampaignAudits } from '@/lib/server/campaign-audit-preparation';
 
 const CONSOLE_PATH = '/admin/campaigns/email';
 
@@ -40,6 +43,7 @@ export async function createAuditEmailCampaignAction(formData: FormData): Promis
   if (!ctx.ok) return;
   const campaignId = text(formData, 'campaignId');
   const segment = text(formData, 'segment');
+  const recipientCap = Math.max(1, Math.min(integer(formData, 'recipientCap', 10), 25));
   const interventionKey = 'audit-direct-business-2026q3-v1';
   if (!campaignId || !segment) redirect(`${CONSOLE_PATH}?error=missing_required_fields`);
 
@@ -59,8 +63,8 @@ export async function createAuditEmailCampaignAction(formData: FormData): Promis
       hypothesis: 'A prepared, prospect-branded audit with actionable fixes earns a qualified conversation.',
       meaningful_variable: 'personalized audit-led opening',
       success_condition: 'A qualified reply or full-report open from the bounded pilot.',
-      stop_condition: 'Stop after the two-contact pilot if neither recipient replies nor opens the full report.',
-      metadata: { owner: 'tamon', one_variable_only: true, bounded_pilot: true },
+      stop_condition: `Stop after ${String(recipientCap)} accepted first messages if no recipient replies or opens the full report.`,
+      metadata: { owner: 'tamon', one_variable_only: true, bounded_pilot: true, recipient_cap: recipientCap },
     }).select('id').single();
     if (error || !inserted?.id) redirect(`${CONSOLE_PATH}?error=intervention_create_failed`);
     interventionId = String(inserted.id);
@@ -76,13 +80,110 @@ export async function createAuditEmailCampaignAction(formData: FormData): Promis
     segment,
     content: base.content,
     tracking: base.tracking,
-    schedule: { ...base.schedule, dailyCap: 2 },
+    schedule: { ...base.schedule, dailyCap: recipientCap },
   });
   const saved = await saveValidatedEmailCampaign(ctx.adminDb, contract);
   if (!saved.ok) redirect(`${CONSOLE_PATH}?error=draft_save_failed`);
-  structuredLog('audit_email_campaign_created', { interventionKey, segment }, 'info');
+  structuredLog('audit_email_campaign_created', { interventionKey, segment, recipientCap }, 'info');
   revalidatePath(CONSOLE_PATH);
   redirect(`${CONSOLE_PATH}/${interventionKey}`);
+}
+
+/**
+ * UI-owned Apollo intake. Search is free; enrichment is capped by the visible credit limit.
+ * Contacts are saved and audits are queued, but no contact is enrolled and no email is sent.
+ */
+export async function prepareApolloCampaignContactsAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+  const requested = Math.max(1, Math.min(integer(formData, 'requested', 8), 10));
+  const apiKey = ctx.env.APOLLO_API_KEY?.trim() ?? '';
+  if (!apiKey) redirect(`${CONSOLE_PATH}?apolloError=apollo_api_key_missing#apollo-intake`);
+
+  let successUrl = CONSOLE_PATH;
+  try {
+    const candidates = await searchApolloQuebecMspCandidates({ apiKey, perPage: 100 });
+    const { data: existingRows, error: existingError } = await ctx.adminDb
+      .from('outreach_contacts')
+      .select('email,company_domain')
+      .limit(5000);
+    if (existingError) throw new Error(existingError.message);
+    const existingDomains = new Set(
+      ((existingRows ?? []) as Array<{ company_domain: string | null }>).map((row) => String(row.company_domain ?? '').toLowerCase()).filter(Boolean),
+    );
+    const newCandidates = candidates.filter((candidate) => !existingDomains.has(candidate.domain));
+    const enriched = await enrichApolloCandidates({ apiKey, candidates: newCandidates, maxCredits: requested });
+    const rows: ParsedContact[] = enriched.contacts.map((contact) => ({
+      email: contact.email,
+      url: `https://${contact.domain}`,
+      name: [contact.firstName, contact.lastName].filter(Boolean).join(' '),
+      company: contact.company,
+      city: contact.city || null,
+      contactTitle: contact.title,
+      region: [contact.city, contact.state, contact.country].filter(Boolean).join(', '),
+      personalizationReason: null,
+      personalizationSourceUrl: null,
+      provenance: {
+        provider: 'apollo',
+        provider_email_status: contact.emailStatus,
+        provider_contact_id: contact.personId,
+        person_linkedin_url: contact.linkedinUrl,
+        company_linkedin_url: contact.companyLinkedinUrl,
+        company_country: contact.country,
+        company_state: contact.state,
+        industry: contact.industry,
+        keywords: contact.keywords,
+        employee_count: contact.employeeCount,
+        source_timestamp: new Date().toISOString(),
+      },
+    }));
+
+    const imported = await importContacts(ctx.adminDb, rows, {
+      segment: 'apollo-msp-intake-2026-08',
+      tags: ['apollo', 'apollo-ui', 'imported-2026-08'],
+      source: 'apollo-api',
+      sourceFile: 'apollo-ui-live-search',
+      sourceFileSha256: await sha256Hex(rows.map((row) => `${row.email},${row.url}`).join('\n')),
+    });
+    if (imported.error) throw new Error(imported.error);
+
+    const [contacts, evidence] = await Promise.all([
+      loadApolloPromotionContacts(ctx.adminDb, rows.map((row) => row.email)),
+      loadAudienceEvidence(ctx.adminDb),
+    ]);
+    const plan = planApolloMspPromotion({ rows, contacts, evidence });
+    const promoted = await applyApolloMspPromotion(ctx.adminDb, plan);
+    if (promoted.errors.length > 0) throw new Error(`promotion_failed_for_${String(promoted.errors.length)}_contacts`);
+    const eligibleEmails = new Set(plan.updates.filter((update) => update.status === 'eligible').map((update) => update.email));
+    const contactIdByEmail = new Map(contacts.map((contact) => [contact.email, contact.id]));
+    const auditContacts = rows.filter((row) => eligibleEmails.has(row.email)).map((row) => ({
+      id: contactIdByEmail.get(row.email) ?? row.email,
+      email: row.email,
+      url: row.url,
+      company: row.company,
+    }));
+    const audits = await prepareCampaignAudits({ supabase: ctx.adminDb, env: ctx.env, contacts: auditContacts });
+
+    structuredLog('apollo_campaign_contacts_prepared', {
+      requested,
+      searched: candidates.length,
+      enrichmentAttempts: enriched.attempted,
+      enriched: rows.length,
+      eligible: plan.counts.eligibleMsp,
+      held: plan.counts.held,
+      auditsQueued: audits.queued,
+      auditsAlreadyReady: audits.alreadyReady,
+      auditFailures: audits.failed,
+      sendState: 'not_enrolled',
+    }, audits.failed > 0 ? 'warning' : 'info');
+    revalidatePath(CONSOLE_PATH);
+    revalidatePath('/admin/outreach');
+    successUrl = `${CONSOLE_PATH}?apolloSearched=${String(candidates.length)}&apolloCredits=${String(enriched.attempted)}&apolloEligible=${String(plan.counts.eligibleMsp)}&apolloHeld=${String(plan.counts.held)}&apolloAuditsQueued=${String(audits.queued)}&apolloAuditsReady=${String(audits.alreadyReady)}&apolloAuditFailures=${String(audits.failed)}#apollo-intake`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'apollo_intake_failed';
+    redirect(`${CONSOLE_PATH}?apolloError=${encodeURIComponent(message.slice(0, 120))}#apollo-intake`);
+  }
+  redirect(successUrl);
 }
 
 function text(formData: FormData, key: string, fallback = ''): string {
