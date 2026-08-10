@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { buildTecheHealthServicesFixture } from '../workers/report/fixtures/teche-health-services';
@@ -12,7 +12,8 @@ import type { PreviewContact, PreviewScanContext } from '../lib/server/email-cam
 
 const generatedAt = '2026-08-09T12:00:00.000Z';
 const nowMs = Date.parse(generatedAt);
-const outDir = resolve(process.cwd(), 'output', 'audit-campaign-acceptance');
+const outDir = resolve(process.cwd(), 'output', 'pdf', 'audit-campaign-acceptance');
+const fixtureDir = resolve(process.cwd(), 'workers', 'report', 'fixtures');
 
 function sha256(bytes: Uint8Array | string): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -36,11 +37,14 @@ async function main(): Promise<void> {
       })),
     ],
   };
+  const heroImage = new Uint8Array(await readFile(resolve(fixtureDir, 'teche-homepage-hero.png')));
+  const clientBranding = { siteName: 'TECHÉ Consulting', primaryHex: '#8FD299', heroImage } as const;
   const fullPdfBytes = await buildDeepAuditPdfFromPayload(payload, undefined, {
     preparedForLines: ['Tamon', 'Teché Health Services'],
     preparedByLines: ['The GEO-Pulse team', 'Montréal, Québec'],
     credibilityLines: ['Observed website signals', 'Prioritized fixes with owners', 'Fresh-scan verification'],
-    heroImage: null,
+    heroImage,
+    themePrimaryHex: clientBranding.primaryHex,
   });
   const fullPdf = await PDFDocument.load(fullPdfBytes);
   const measuredFullPages = fullPdf.getPageCount();
@@ -51,7 +55,7 @@ async function main(): Promise<void> {
   const token = issueAuditFullReportCapability({ secret, nowMs, expiresAtMs: nowMs + 30 * 86_400_000, scanId: '00000000-0000-4000-8000-000000000001', shareSlug: '1234567890abcdef1234567890abcdef', recipientEmail: 'owner@techehealthservices.com', domain: payload.domain, campaignId: 'audit-direct-business-v1' });
   const fullReportUrl = `https://getgeopulse.com/api/audit-preview/full/${token}`;
   const preview = deriveAuditCampaignPreview({ payload, recipient: { firstName: 'Tamon', company: 'Teché Health Services' }, preparedBy: 'The GEO-Pulse team — Montréal, Québec', fullReportPageCount: campaignPageCount, fullReportUrl });
-  const previewPdfBytes = await buildAuditCampaignPreviewPdf(preview);
+  const previewPdfBytes = await buildAuditCampaignPreviewPdf(preview, clientBranding);
   const previewPdf = await PDFDocument.load(previewPdfBytes);
 
   const baseline: AuditFindingSnapshot[] = payload.pages.flatMap((page) => page.issuesJson.map((issue) => ({ checkId: issue.checkId ?? issue.check ?? 'unknown', url: page.url, status: (issue.status ?? (issue.passed ? 'PASS' : 'FAIL')) as AuditFindingSnapshot['status'], fix: issue.fix })));
@@ -88,11 +92,11 @@ async function main(): Promise<void> {
   const evidence = {
     contract: 'audit_campaign_acceptance_v1', generatedAt, verdict: 'campaign_ready_pending_independent_review_and_explicit_activation',
     sendsFrozen: true, providerCalls: 0, scan: { fixture: 'teche-health-services', canonicalPayloadVersion: payload.version, domain: payload.domain },
-    artifacts: { fullReport: { pageCount: measuredFullPages, sha256: sha256(fullPdfBytes), path: 'full-audit.pdf' }, preview: { pageCount: previewPdf.getPageCount(), semanticRoles: preview.pages.map((page) => page.role), sha256: sha256(previewPdfBytes), path: '10-page-preview.pdf', dynamicRemainingPages: campaignPageCount - 10 } },
+    artifacts: { fullReport: { pageCount: measuredFullPages, sha256: sha256(fullPdfBytes), path: 'full-audit.pdf' }, preview: { pageCount: previewPdf.getPageCount(), semanticRoles: preview.pages.map((page) => page.role), sha256: sha256(previewPdfBytes), path: '10-page-preview.pdf', dynamicRemainingPages: campaignPageCount - 10, clientBranding: { siteName: clientBranding.siteName, primaryHex: clientBranding.primaryHex, homepageHeroSha256: sha256(heroImage) } } },
     capabilityChecks, recurringDelta: delta, campaigns: { directBusiness: directDryRun, agencyPartner: agencyDryRun }, apolloIntake: apollo,
     activationGate: ['Independent customer-facing review accepted', 'Production secret configured', 'Live sender authentication passes', 'Fresh suppression evidence loaded', 'Founder explicitly activates the bounded cohort'],
   };
-  const summary = `# GEO-Pulse audit campaign acceptance\n\nVerdict: **campaign ready pending independent review and explicit activation**\n\n- Canonical full audit: ${String(measuredFullPages)} generated pages\n- Personalized preview: 10/10 semantic pages\n- Secure full-report transition: valid; tampered, expired, and wrong-audience cases rejected\n- Recurring comparison: new ${String(delta.counts.new)}, resolved ${String(delta.counts.resolved)}, regressed ${String(delta.counts.regressed)}\n- Campaign lanes: direct business + agency partner\n- Dry-run provider calls: 0\n- Apollo enrollments/sends: 0\n\nSending remains frozen until independent review and explicit activation.\n`;
+  const summary = `# GEO-Pulse audit campaign acceptance\n\nVerdict: **campaign ready pending independent review and explicit activation**\n\n- Canonical full audit: ${String(measuredFullPages)} generated pages\n- Personalized preview: 10/10 semantic pages with prospect-owned palette and homepage hero\n- Secure full-report transition: valid; tampered, expired, and wrong-audience cases rejected\n- Recurring comparison: new ${String(delta.counts.new)}, resolved ${String(delta.counts.resolved)}, regressed ${String(delta.counts.regressed)}\n- Campaign lanes: direct business + agency partner\n- Dry-run provider calls: 0\n- Apollo enrollments/sends: 0\n\nSending remains frozen until independent review and explicit activation.\n`;
   await mkdir(outDir, { recursive: true });
   await Promise.all([
     writeFile(resolve(outDir, 'full-audit.pdf'), fullPdfBytes),

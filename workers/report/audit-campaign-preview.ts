@@ -1,4 +1,4 @@
-import { PDFDocument, PDFString, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, PDFString, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
 import type { DeepAuditReportPayload } from './deep-audit-report-payload';
 import { issueStatusLabel } from './deep-audit-report-helpers';
 import { deriveCheckCounts } from './check-counts';
@@ -26,6 +26,14 @@ export type AuditCampaignPreview = {
   readonly preparedBy: string;
   readonly fullReportPageCount: number;
   readonly pages: readonly AuditPreviewPage[];
+};
+
+export type AuditCampaignPreviewBranding = {
+  readonly siteName?: string | null;
+  readonly primaryHex?: string | null;
+  /** 2:1 homepage hero screenshot captured by the existing report design agent. */
+  readonly heroImage?: Uint8Array | null;
+  readonly logoBytes?: Uint8Array | null;
 };
 
 function text(value: unknown, fallback = 'Not available'): string {
@@ -74,6 +82,30 @@ const BLUE = rgb(0.07, 0.31, 0.78);
 const IVORY = rgb(0.975, 0.965, 0.93);
 const MUTED = rgb(0.34, 0.38, 0.45);
 
+function colorFromHex(value: string | null | undefined): RGB | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(value?.trim() ?? '');
+  if (!match?.[1]) return null;
+  return rgb(
+    Number.parseInt(match[1].slice(0, 2), 16) / 255,
+    Number.parseInt(match[1].slice(2, 4), 16) / 255,
+    Number.parseInt(match[1].slice(4, 6), 16) / 255,
+  );
+}
+
+function readableAccent(primary: RGB): RGB {
+  const luminance = 0.2126 * primary.red + 0.7152 * primary.green + 0.0722 * primary.blue;
+  if (luminance <= 0.42) return primary;
+  const factor = 0.48;
+  return rgb(primary.red * factor, primary.green * factor, primary.blue * factor);
+}
+
+async function embedOptionalImage(doc: PDFDocument, bytes: Uint8Array | null | undefined): Promise<PDFImage | null> {
+  if (!bytes?.length) return null;
+  try { return await doc.embedPng(bytes); } catch {
+    try { return await doc.embedJpg(bytes); } catch { return null; }
+  }
+}
+
 function wrap(font: PDFFont, value: string, size: number, width: number): string[] {
   const words = value.split(/\s+/);
   const lines: string[] = [];
@@ -97,26 +129,62 @@ function drawWrapped(page: PDFPage, font: PDFFont, value: string, args: { x: num
   return y;
 }
 
-export async function buildAuditCampaignPreviewPdf(preview: AuditCampaignPreview): Promise<Uint8Array> {
+export async function buildAuditCampaignPreviewPdf(
+  preview: AuditCampaignPreview,
+  branding: AuditCampaignPreviewBranding = {},
+): Promise<Uint8Array> {
   if (preview.pages.length !== 10) throw new Error('Campaign previews must contain exactly ten pages.');
   const doc = await PDFDocument.create();
   doc.setTitle(`${preview.recipient.company} — GEO-Pulse audit preview`);
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const primary = colorFromHex(branding.primaryHex) ?? BLUE;
+  const accent = readableAccent(primary);
+  const hero = await embedOptionalImage(doc, branding.heroImage);
+  const logo = await embedOptionalImage(doc, branding.logoBytes);
   for (const item of preview.pages) {
     const page = doc.addPage([PAGE_W, PAGE_H]);
     page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: PAGE_H, color: IVORY });
-    page.drawRectangle({ x: 0, y: PAGE_H - 10, width: PAGE_W, height: 10, color: BLUE });
+    page.drawRectangle({ x: 0, y: PAGE_H - 10, width: PAGE_W, height: 10, color: primary });
+
+    if (item.role === 'cover') {
+      const identity = text(branding.siteName, preview.recipient.company);
+      if (logo) {
+        const scale = Math.min(150 / logo.width, 34 / logo.height, 1);
+        page.drawImage(logo, { x: 48, y: 728, width: logo.width * scale, height: logo.height * scale });
+      } else {
+        page.drawText(identity, { x: 48, y: 744, size: 12, font: bold, color: INK });
+      }
+      page.drawText('PRIVATE AUDIT  /  PREPARED BY GEO-PULSE', { x: 354, y: 744, size: 7.5, font: bold, color: MUTED });
+      page.drawText(item.eyebrow, { x: 48, y: 696, size: 9, font: bold, color: accent });
+      let coverY = drawWrapped(page, bold, item.title, { x: 48, y: 662, size: 27, width: 516, lineHeight: 32 });
+      coverY -= 16;
+      if (hero) {
+        const frameW = 516;
+        const frameH = 258;
+        page.drawRectangle({ x: 44, y: coverY - frameH - 4, width: frameW + 8, height: frameH + 8, color: primary });
+        page.drawImage(hero, { x: 48, y: coverY - frameH, width: frameW, height: frameH });
+        coverY -= frameH + 28;
+      }
+      page.drawText(`Prepared for ${preview.recipient.firstName} at ${preview.recipient.company}`, { x: 48, y: coverY, size: 13, font: bold, color: INK });
+      page.drawText(`${preview.domain}  /  ${preview.generatedAt.slice(0, 10)}`, { x: 48, y: coverY - 22, size: 10, font: regular, color: MUTED });
+      page.drawLine({ start: { x: 48, y: coverY - 38 }, end: { x: 564, y: coverY - 38 }, thickness: 1, color: primary });
+      page.drawText('Observed gaps  /  prioritized fixes  /  assigned owners  /  fresh-scan verification', { x: 48, y: coverY - 58, size: 9, font: bold, color: accent });
+      page.drawText(`Prepared by ${preview.preparedBy}`, { x: 48, y: 40, size: 8, font: regular, color: MUTED });
+      page.drawText('01 / 10', { x: 518, y: 40, size: 8, font: bold, color: MUTED });
+      continue;
+    }
+
     page.drawText('GEO-PULSE', { x: 48, y: 744, size: 12, font: bold, color: INK });
-    page.drawText(item.eyebrow, { x: 48, y: 686, size: 9, font: bold, color: BLUE });
-    let y = drawWrapped(page, bold, item.title, { x: 48, y: 650, size: item.role === 'cover' ? 32 : 27, width: 516, lineHeight: 37 });
+    page.drawText(item.eyebrow, { x: 48, y: 686, size: 9, font: bold, color: accent });
+    let y = drawWrapped(page, bold, item.title, { x: 48, y: 650, size: 27, width: 516, lineHeight: 37 });
     y -= 28;
     for (const line of item.body) {
-      page.drawCircle({ x: 54, y: y + 5, size: 3, color: BLUE });
+      page.drawCircle({ x: 54, y: y + 5, size: 3, color: accent });
       y = drawWrapped(page, regular, line, { x: 68, y, size: 13, width: 480, color: MUTED, lineHeight: 19 }) - 14;
     }
     if (item.ctaLabel && item.ctaUrl) {
-      page.drawRectangle({ x: 48, y: 112, width: 300, height: 48, color: BLUE });
+      page.drawRectangle({ x: 48, y: 112, width: 300, height: 48, color: accent });
       page.drawText(item.ctaLabel, { x: 66, y: 130, size: 13, font: bold, color: rgb(1, 1, 1) });
       page.drawText('Private link · getgeopulse.com', { x: 48, y: 88, size: 8, font: regular, color: MUTED });
       const annotation = doc.context.obj({

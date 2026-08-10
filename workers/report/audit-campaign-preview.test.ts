@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { buildTecheHealthServicesFixture } from './fixtures/teche-health-services';
 import { buildAuditCampaignPreviewPdf, deriveAuditCampaignPreview } from './audit-campaign-preview';
@@ -23,9 +23,19 @@ describe('audit campaign preview', () => {
     expect(preview.pages[9]?.body.join(' ')).toContain('20 pages left');
     expect(preview.pages[9]?.ctaUrl).toBe('https://getgeopulse.com/api/audit-preview/full/signed-token');
 
-    const bytes = await buildAuditCampaignPreviewPdf(preview);
+    const onePixelPng = Uint8Array.from(Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    ));
+    const bytes = await buildAuditCampaignPreviewPdf(preview, {
+      siteName: 'TECHÉ Consulting',
+      primaryHex: '#8FD299',
+      heroImage: onePixelPng,
+    });
     const pdf = await PDFDocument.load(bytes);
     expect(pdf.getPageCount()).toBe(10);
+    expect(pdf.getTitle()).toBe('Teché Health Services — GEO-Pulse audit preview');
+    expect(pdf.getPage(0).node.Resources()?.get(PDFName.of('XObject'))).toBeDefined();
     expect(pdf.getPage(9).node.Annots()?.size()).toBe(1);
   });
 });
