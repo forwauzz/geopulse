@@ -267,6 +267,23 @@ describe('freezing persistence', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('refuses to persist a zero-recipient snapshot', async () => {
+    const { supabase, calls } = stubSupabase();
+    const emptySelection = selectCampaignAudience({ candidates: [], evidence: NO_EVIDENCE, limit: 25 });
+    const result = await freezeCampaignAudience({ supabase, ...freezeArgs, selection: emptySelection });
+    expect(result).toEqual({ ok: false, reason: 'no_eligible_recipients' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does not treat a previously written empty header as a frozen audience', async () => {
+    const { supabase, calls } = stubSupabase({
+      existing: { id: 'aud-empty', audience_key: 'agency-reporting-montreal-v1@v1', campaign_version: 1, recipient_count: 0, checksum: audienceChecksum([]) },
+    });
+    const result = await freezeCampaignAudience({ supabase, ...freezeArgs });
+    expect(result).toEqual({ ok: false, reason: 'empty_audience_snapshot' });
+    expect(calls).toHaveLength(0);
+  });
+
   it('removes a half-written snapshot rather than leaving an empty approved audience', async () => {
     const { supabase, calls } = stubSupabase({ memberError: 'member insert failed' });
     const result = await freezeCampaignAudience({ supabase, ...freezeArgs });

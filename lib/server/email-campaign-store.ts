@@ -166,9 +166,9 @@ export async function saveValidatedEmailCampaign(
   supabase: SupabaseClient,
   contract: EmailCampaignV1,
 ): Promise<{ ok: true } | { ok: false; reason: string; issues: readonly string[] }> {
-  // A draft is allowed to be incomplete — that is what "draft" means. Anything past qa_ready has
-  // to satisfy the full contract before it can be stored in that state.
-  if (contract.state !== 'draft') {
+  // Preparation is incremental: audience freeze happens before scheduling and internal testing.
+  // Once the test is accepted, every contract field must be complete before lifecycle advances.
+  if (requiresCompleteEmailCampaignContract(contract.state)) {
     const issues = validateEmailCampaignV1(contract);
     if (issues.length > 0) {
       return {
@@ -180,4 +180,13 @@ export async function saveValidatedEmailCampaign(
   }
   const result = await saveEmailCampaign(supabase, contract);
   return result.ok ? { ok: true } : { ok: false, reason: result.reason, issues: [] };
+}
+
+export function requiresCompleteEmailCampaignContract(state: EmailCampaignV1['state']): boolean {
+  return state === 'test_passed'
+    || state === 'scheduled'
+    || state === 'running'
+    || state === 'evaluating'
+    || state === 'completed'
+    || state === 'stopped';
 }

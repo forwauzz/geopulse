@@ -14,7 +14,12 @@ import {
   resolveCampaignSender,
   resolveTestRecipients,
 } from './email-campaign-sender';
-import { interventionStatusFor, saveEmailCampaign, saveValidatedEmailCampaign } from './email-campaign-store';
+import {
+  interventionStatusFor,
+  requiresCompleteEmailCampaignContract,
+  saveEmailCampaign,
+  saveValidatedEmailCampaign,
+} from './email-campaign-store';
 import { withResolvedSender } from './email-campaign-console';
 
 const CONTACT: PreviewContact = {
@@ -206,9 +211,18 @@ describe('store', () => {
     expect(interventionStatusFor('stopped')).toBe('stopped');
   });
 
-  it('refuses to store a non-draft contract that does not satisfy the contract', () => {
+  it('allows incremental preparation states but requires completeness after the internal test', () => {
+    expect(requiresCompleteEmailCampaignContract('draft')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('audience_ready')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('content_ready')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('qa_ready')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('test_passed')).toBe(true);
+    expect(requiresCompleteEmailCampaignContract('scheduled')).toBe(true);
+  });
+
+  it('refuses to store a test-passed contract that does not satisfy the contract', () => {
     const supabase = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null }) }) }) }) } as never;
-    return saveValidatedEmailCampaign(supabase, { ...contract(), state: 'qa_ready' }).then((result) => {
+    return saveValidatedEmailCampaign(supabase, { ...contract(), state: 'test_passed' }).then((result) => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.reason).toBe('contract_invalid');
