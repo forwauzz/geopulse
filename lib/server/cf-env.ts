@@ -31,6 +31,8 @@ export type ScanApiEnv = {
   GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL?: string;
   GEOPULSE_CAMPAIGN_SENDER_VERIFIED?: string;
   GEOPULSE_CAMPAIGN_TEST_RECIPIENTS?: string;
+  /** HMAC secret for recipient-specific audit preview -> full report capabilities. */
+  AUDIT_REPORT_CAPABILITY_SECRET?: string;
   /** OSS de-paywall flag. "true" = legacy paid (Stripe) mode; anything else = full audit free for all. */
   LEGACY_PAID_ENABLED: string;
   /** Local competitor discovery: 'live'/'gemini' = Google-Search grounding (needs billed key); else mock. */
@@ -231,6 +233,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL: String(e['GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL'] ?? ''),
     GEOPULSE_CAMPAIGN_SENDER_VERIFIED: String(e['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? ''),
     GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: String(e['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? ''),
+    AUDIT_REPORT_CAPABILITY_SECRET: String(e['AUDIT_REPORT_CAPABILITY_SECRET'] ?? ''),
     LEGACY_PAID_ENABLED: String(e['LEGACY_PAID_ENABLED'] ?? ''),
     COMPETITOR_DISCOVERY_MODE: String(e['COMPETITOR_DISCOVERY_MODE'] ?? ''),
     COMPETITOR_DISCOVERY_GEMINI_MODEL: String(e['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? ''),
@@ -309,6 +312,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL: process.env['GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL'] ?? '',
       GEOPULSE_CAMPAIGN_SENDER_VERIFIED: process.env['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? '',
       GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: process.env['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? '',
+      AUDIT_REPORT_CAPABILITY_SECRET: process.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '',
       LEGACY_PAID_ENABLED: process.env['LEGACY_PAID_ENABLED'] ?? '',
       COMPETITOR_DISCOVERY_MODE: process.env['COMPETITOR_DISCOVERY_MODE'] ?? '',
       COMPETITOR_DISCOVERY_GEMINI_MODEL: process.env['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? '',
