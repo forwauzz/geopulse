@@ -269,6 +269,9 @@ export async function freezeCampaignAudience(args: {
     .eq('audience_key', audienceKey)
     .maybeSingle();
   if (existing?.id) {
+    if (Number(existing.recipient_count) < 1) {
+      return { ok: false, reason: 'empty_audience_snapshot' };
+    }
     return {
       ok: true,
       created: false,
@@ -280,6 +283,10 @@ export async function freezeCampaignAudience(args: {
         checksum: String(existing.checksum),
       },
     };
+  }
+
+  if (args.selection.members.length < 1) {
+    return { ok: false, reason: 'no_eligible_recipients' };
   }
 
   const { data: inserted, error } = await args.supabase
