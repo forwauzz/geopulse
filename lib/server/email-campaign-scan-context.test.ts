@@ -108,4 +108,27 @@ describe('campaign scan context', () => {
       },
     })).toBeNull();
   });
+
+  it('accepts a prepared deep-audit payload without legacy scorecard diagnostics', () => {
+    const context = scanContextFromRow({
+      id: 'deep-audit',
+      url: 'https://example.com/',
+      domain: 'example.com',
+      score: 68,
+      letter_grade: 'D+',
+      created_at: '2026-08-10T14:48:55Z',
+      issues_json: [],
+      full_results_json: {
+        allIssues: [
+          { passed: false, check: 'Answer-first content', fix: 'Lead with buyer questions.' },
+          { passed: false, check: 'Business schema', fix: 'Add a specific business type.' },
+        ],
+        categoryScores: [{ category: 'ai_readiness', score: 91 }],
+        reportPayloadVersion: '3',
+      },
+    });
+    expect(context).toMatchObject({ scanId: 'deep-audit', score: 68, grade: 'D+' });
+    expect(context?.passedChecks).toBeUndefined();
+    expect(context?.retrievalScore).toBeUndefined();
+  });
 });

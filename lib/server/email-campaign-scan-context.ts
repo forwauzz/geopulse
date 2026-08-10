@@ -125,7 +125,7 @@ export function scanContextFromRow(
     .filter((issue): issue is { check?: string; fix?: string } => Boolean(issue))
     .slice(0, 2);
   const counts = proofCounts(fullIssues, row.full_results_json);
-  if (topIssues.length < 2 || !counts) return null;
+  if (topIssues.length < 2) return null;
 
   return {
     scanId: row.id,
@@ -134,7 +134,7 @@ export function scanContextFromRow(
     grade: row.letter_grade.trim(),
     topIssues,
     completedAt: row.created_at,
-    ...counts,
+    ...(counts ?? {}),
     reportUrl: `${appUrl.replace(/\/+$/, '')}/results/${encodeURIComponent(row.id)}`,
   };
 }
