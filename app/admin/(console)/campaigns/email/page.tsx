@@ -7,7 +7,13 @@ import {
 } from '@/lib/server/email-campaign-console';
 import { resolveCampaignSender } from '@/lib/server/email-campaign-sender';
 import { PRESET_OUTREACH_TEMPLATES } from '@/lib/server/outreach-templates';
-import { createAuditEmailCampaignAction, createEmailCampaignAction, importCampaignContactsAction, prepareApolloCampaignContactsAction } from './actions';
+import {
+  createAuditEmailCampaignAction,
+  createEmailCampaignAction,
+  importCampaignContactsAction,
+  prepareApolloCampaignContactsAction,
+  prepareSavedApolloCampaignContactsAction,
+} from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -36,6 +42,10 @@ function campaignSegments(vertical: string, segments: readonly EmailCampaignSegm
   return segments.filter((segment) => pattern.test(segment.segment));
 }
 
+function auditCampaignSegments(segments: readonly EmailCampaignSegmentOption[]) {
+  return segments.filter((segment) => /(^|-)msp(s)?($|-)|^apollo-import-/i.test(segment.segment));
+}
+
 function draftKey(campaignKey: string): string {
   return `${campaignKey}-email-pilot-v1`.replace(/[^a-z0-9-]+/gi, '-').toLowerCase();
 }
@@ -59,6 +69,12 @@ export default async function EmailCampaignsPage({
     apolloAuditsReady?: string;
     apolloAuditFailures?: string;
     apolloError?: string;
+    savedApolloSelected?: string;
+    savedApolloHeld?: string;
+    savedApolloAuditsQueued?: string;
+    savedApolloAuditsReady?: string;
+    savedApolloAuditFailures?: string;
+    savedApolloError?: string;
   }>;
 }) {
   const ctx = await loadAdminPageContext('/admin/campaigns/email');
@@ -73,6 +89,7 @@ export default async function EmailCampaignsPage({
   const query = (await searchParams) ?? {};
   const mspPreset = PRESET_OUTREACH_TEMPLATES.find((template) => template.key === 'msp-evidence-first')!;
   const agencyPreset = PRESET_OUTREACH_TEMPLATES.find((template) => template.key === 'first-scorecard')!;
+  const savedApolloSegments = composer.segments.filter((segment) => /^apollo-import-/i.test(segment.segment));
 
   return (
     <div className="space-y-6">
@@ -207,6 +224,42 @@ export default async function EmailCampaignsPage({
         </form>
       </section>
 
+      {savedApolloSegments.length > 0 ? (
+        <section id="saved-apollo-intake" className="rounded-2xl border border-primary/25 bg-primary/5 p-5 md:p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Saved Apollo audience</p>
+          <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Prepare uploaded contacts without calling Apollo again</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
+            Selects a bounded set of named business contacts from the existing import, checks live suppression and company-domain identity,
+            and queues personalized campaign-preview audits. It consumes no Apollo credits, enrolls nobody, and sends no prospect email.
+          </p>
+          {query.savedApolloSelected !== undefined ? (
+            <p className="mt-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
+              Selected {query.savedApolloSelected} contacts | held {query.savedApolloHeld ?? '0'} | audits queued {query.savedApolloAuditsQueued ?? '0'} | already ready {query.savedApolloAuditsReady ?? '0'} | failures {query.savedApolloAuditFailures ?? '0'} | Apollo credits 0. No enrollment and no send.
+            </p>
+          ) : null}
+          {query.savedApolloError ? (
+            <p role="alert" className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              Saved Apollo intake needs attention: {query.savedApolloError.replaceAll('_', ' ')}.
+            </p>
+          ) : null}
+          <form action={prepareSavedApolloCampaignContactsAction} className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="min-w-72 flex-1 text-sm font-semibold text-on-background">
+              Uploaded contact segment
+              <select name="segment" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm">
+                {savedApolloSegments.map((segment) => (
+                  <option key={segment.segment} value={segment.segment}>{segment.segment} | {segment.total} saved</option>
+                ))}
+              </select>
+            </label>
+            <label className="w-44 text-sm font-semibold text-on-background">
+              Contacts to prepare
+              <input name="requested" type="number" min="1" max="10" defaultValue="8" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
+            </label>
+            <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Prepare saved contacts</button>
+          </form>
+        </section>
+      ) : null}
+
       {composer.campaigns.find((campaign) => campaign.role === 'primary') ? (
         <section className="rounded-2xl border border-primary/25 bg-primary/5 p-5 md:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Prepared-audit pilot</p>
@@ -217,14 +270,14 @@ export default async function EmailCampaignsPage({
             <label className="min-w-72 flex-1 text-sm font-semibold text-on-background">
               Qualified contact segment
               <select name="segment" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm">
-                {campaignSegments('msp_it_services', composer.segments).map((segment) => (
+                {auditCampaignSegments(composer.segments).map((segment) => (
                   <option key={segment.segment} value={segment.segment}>{segment.segment} — {segment.eligible} eligible / {segment.total} total</option>
                 ))}
               </select>
             </label>
             <label className="w-36 text-sm font-semibold text-on-background">
               Recipient cap
-              <input name="recipientCap" type="number" min="1" max="25" defaultValue="10" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
+              <input name="recipientCap" type="number" min="1" max="25" defaultValue="8" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
             </label>
             <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Create audit campaign</button>
           </form>

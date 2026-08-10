@@ -35,6 +35,8 @@ import {
 } from '@/lib/server/outreach-contacts';
 import { enrichApolloCandidates, searchApolloQuebecMspCandidates } from '@/lib/server/apollo-campaign-intake';
 import { prepareCampaignAudits } from '@/lib/server/campaign-audit-preparation';
+import { fetchAllRows } from '@/lib/server/supabase-page';
+import { selectSavedApolloContacts, type SavedApolloContact } from '@/lib/server/saved-apollo-campaign-intake';
 
 const CONSOLE_PATH = '/admin/campaigns/email';
 
@@ -42,9 +44,11 @@ export async function createAuditEmailCampaignAction(formData: FormData): Promis
   const ctx = await loadAdminActionContext();
   if (!ctx.ok) return;
   const campaignId = text(formData, 'campaignId');
-  const segment = text(formData, 'segment');
+  const segment = normalizeSegment(text(formData, 'segment')) ?? '';
   const recipientCap = Math.max(1, Math.min(integer(formData, 'recipientCap', 10), 25));
-  const interventionKey = 'audit-direct-business-2026q3-v1';
+  const interventionKey = segment.startsWith('apollo-import-')
+    ? `audit-direct-business-${segment}-v1`
+    : 'audit-direct-business-2026q3-v1';
   if (!campaignId || !segment) redirect(`${CONSOLE_PATH}?error=missing_required_fields`);
 
   const { data: existing } = await ctx.adminDb
@@ -87,6 +91,96 @@ export async function createAuditEmailCampaignAction(formData: FormData): Promis
   structuredLog('audit_email_campaign_created', { interventionKey, segment, recipientCap }, 'info');
   revalidatePath(CONSOLE_PATH);
   redirect(`${CONSOLE_PATH}/${interventionKey}`);
+}
+
+/**
+ * Prepare an already-uploaded Apollo segment for the audit-led campaign. This path does not call
+ * Apollo or consume credits. It promotes only a bounded, identity-matched cohort after the live
+ * suppression ledgers pass, then queues internal campaign-preview reports with delivery disabled.
+ */
+export async function prepareSavedApolloCampaignContactsAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+  const segment = normalizeSegment(text(formData, 'segment')) ?? '';
+  const requested = Math.max(1, Math.min(integer(formData, 'requested', 8), 10));
+  if (!/^apollo-import-[a-z0-9-]+$/i.test(segment)) {
+    redirect(`${CONSOLE_PATH}?savedApolloError=invalid_source_segment#saved-apollo-intake`);
+  }
+
+  let successUrl = CONSOLE_PATH;
+  try {
+    const [rows, evidence] = await Promise.all([
+      fetchAllRows<Record<string, unknown>>(
+        () => ctx.adminDb
+          .from('outreach_contacts')
+          .select('id,email,name,company,url,company_domain,contact_title,eligibility_status,tags')
+          .eq('segment', segment),
+        `saved Apollo segment ${segment}`,
+      ),
+      loadAudienceEvidence(ctx.adminDb),
+    ]);
+    const contacts: SavedApolloContact[] = rows.map((row) => ({
+      id: String(row.id),
+      email: String(row.email ?? '').trim().toLowerCase(),
+      name: typeof row.name === 'string' ? row.name : null,
+      company: typeof row.company === 'string' ? row.company : null,
+      url: String(row.url ?? ''),
+      companyDomain: typeof row.company_domain === 'string' ? row.company_domain : null,
+      contactTitle: typeof row.contact_title === 'string' ? row.contact_title : null,
+      eligibilityStatus: String(row.eligibility_status ?? 'needs_verification'),
+      tags: Array.isArray(row.tags) ? row.tags.map(String) : [],
+    }));
+    const selection = selectSavedApolloContacts({ contacts, evidence, limit: requested });
+    if (selection.selected.length === 0) throw new Error('no_safe_contacts_in_saved_segment');
+
+    const checkedAt = new Date().toISOString();
+    const updates = await Promise.all(selection.selected.map(async (contact) => {
+      const { data, error } = await ctx.adminDb
+        .from('outreach_contacts')
+        .update({
+          eligibility_status: 'eligible',
+          eligibility_reason: 'founder_authorized_apollo_import_identity_checked',
+          eligibility_checked_at: checkedAt,
+          tags: [...new Set([...contact.tags, 'apollo', 'campaign-reviewed', 'audit-pilot'])].slice(0, 12),
+          updated_at: checkedAt,
+        })
+        .eq('id', contact.id)
+        .in('eligibility_status', ['needs_verification', 'eligible'])
+        .select('id');
+      return { contact, data, error };
+    }));
+    const failedUpdates = updates.filter((result) => result.error || (result.data ?? []).length !== 1);
+    if (failedUpdates.length > 0) throw new Error(`saved_contact_promotion_failed_${String(failedUpdates.length)}`);
+
+    const audits = await prepareCampaignAudits({
+      supabase: ctx.adminDb,
+      env: ctx.env,
+      contacts: selection.selected.map((contact) => ({
+        id: contact.id,
+        email: contact.email,
+        url: contact.url,
+        company: contact.company,
+      })),
+    });
+    structuredLog('saved_apollo_campaign_contacts_prepared', {
+      segment,
+      requested,
+      selected: selection.selected.length,
+      rejectedCounts: JSON.stringify(selection.rejectedCounts),
+      auditsQueued: audits.queued,
+      auditsAlreadyReady: audits.alreadyReady,
+      auditFailures: audits.failed,
+      enrichmentCredits: 0,
+      sendState: 'not_enrolled',
+    }, audits.failed > 0 ? 'warning' : 'info');
+    revalidatePath(CONSOLE_PATH);
+    revalidatePath('/admin/outreach');
+    successUrl = `${CONSOLE_PATH}?savedApolloSelected=${String(selection.selected.length)}&savedApolloHeld=${String(Math.max(0, contacts.length - selection.selected.length))}&savedApolloAuditsQueued=${String(audits.queued)}&savedApolloAuditsReady=${String(audits.alreadyReady)}&savedApolloAuditFailures=${String(audits.failed)}#saved-apollo-intake`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'saved_apollo_intake_failed';
+    redirect(`${CONSOLE_PATH}?savedApolloError=${encodeURIComponent(message.slice(0, 120))}#saved-apollo-intake`);
+  }
+  redirect(successUrl);
 }
 
 /**
