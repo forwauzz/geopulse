@@ -21,7 +21,7 @@ import {
 } from './email-campaign-contract';
 
 /** Fields that only exist once a site has been scanned for this recipient. */
-export const SCAN_MERGE_FIELDS: readonly string[] = ['score', 'grade', 'top_issues', 'report_url', 'scan_preview'];
+export const SCAN_MERGE_FIELDS: readonly string[] = ['score', 'grade', 'top_issues', 'report_url', 'report_thumbnail', 'scan_preview'];
 
 export interface PreviewContact {
   readonly contactId: string;
@@ -57,6 +57,7 @@ export interface PreviewScanContext {
   readonly retrievalScore?: number;
   readonly understandingTrustScore?: number;
   readonly reportUrl: string;
+  readonly reportThumbnailUrl?: string;
 }
 
 function hasSiteSpecificProof(scan: PreviewScanContext | null | undefined): boolean {
@@ -130,6 +131,9 @@ export function unresolvedMergeFields(args: {
     if (field === 'scan_preview' && args.scan && !hasSiteSpecificProof(args.scan)) {
       unresolved.push({ field, why: 'requires URL, check counts, retrieval evidence, diagnostic scores, and two observed fixes from the same completed scan' });
     }
+    if (field === 'report_thumbnail' && args.scan && !args.scan.reportThumbnailUrl) {
+      unresolved.push({ field, why: 'requires the signed first-page JPEG for this recipient' });
+    }
     if (field === 'personalization_reason' && !args.contact.personalizationReason) {
       unresolved.push({ field, why: 'no verified personalization evidence for this contact' });
     }
@@ -199,6 +203,7 @@ export function renderCampaignPreview(args: {
     retrievalScore: args.scan?.retrievalScore ?? null,
     understandingTrustScore: args.scan?.understandingTrustScore ?? null,
     reportUrl: args.scan?.reportUrl ?? `${appUrl}/results/preview?${query}`,
+    reportThumbnailUrl: args.scan?.reportThumbnailUrl ?? null,
     walkthroughUrl,
     personalizationReason: args.contact.personalizationReason,
     personalizationSourceUrl: args.contact.personalizationSourceUrl,

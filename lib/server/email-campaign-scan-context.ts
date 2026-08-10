@@ -177,7 +177,12 @@ export async function loadCampaignScanContext(args: {
     domain,
     campaignId: args.auditPreview.campaignId,
   });
-  return { ...context, reportUrl: `${(args.appUrl ?? 'https://getgeopulse.com').replace(/\/+$/, '')}/api/audit-preview/pdf/${encodeURIComponent(token)}` };
+  const appUrl = (args.appUrl ?? 'https://getgeopulse.com').replace(/\/+$/, '');
+  return {
+    ...context,
+    reportUrl: `${appUrl}/api/audit-preview/pdf/${encodeURIComponent(token)}`,
+    reportThumbnailUrl: `${appUrl}/api/audit-preview/thumbnail/${encodeURIComponent(token)}`,
+  };
 }
 
 export async function loadCampaignScanContexts(args: {

@@ -2,7 +2,7 @@
  * Outreach message templates (spec §9) — admin-authored subject/body with variables,
  * rendered into the branded email shell.
  *
- * Variables: {{name}} {{company}} {{domain}} {{score}} {{grade}} {{top_issues}} {{report_url}} {{walkthrough_url}} {{personalization_reason}} {{personalization_source_url}}
+ * Variables: {{name}} {{company}} {{domain}} {{score}} {{grade}} {{top_issues}} {{report_url}} {{report_thumbnail}} {{walkthrough_url}} {{personalization_reason}} {{personalization_source_url}}
  *   - All variable VALUES are HTML-escaped except {{top_issues}} and {{report_url}}
  *     (we generate that markup ourselves).
  *   - 'text' bodies are escaped and paragraph-wrapped, then branded — an admin can
@@ -42,6 +42,7 @@ export interface OutreachTemplateVars {
   retrievalScore?: number | null;
   understandingTrustScore?: number | null;
   reportUrl: string;
+  reportThumbnailUrl?: string | null;
   walkthroughUrl: string;
   personalizationReason: string | null;
   personalizationSourceUrl: string | null;
@@ -108,8 +109,19 @@ function scanPreviewHtml(vars: OutreachTemplateVars): string {
 }
 
 function richBlocks(vars: OutreachTemplateVars): Readonly<Record<string, string>> {
+  const reportThumbnail = vars.reportThumbnailUrl
+    ? [
+        '<div style="margin:22px 0 18px;text-align:center;">',
+        `<a href="${escapeHtml(vars.reportUrl)}" style="display:block;text-decoration:none;" aria-label="Open the private audit prepared for ${escapeHtml(vars.company ?? vars.domain)}">`,
+        `<img src="${escapeHtml(vars.reportThumbnailUrl)}" width="480" alt="First page of the private audit prepared for ${escapeHtml(vars.company ?? vars.domain)}" style="display:block;width:100%;max-width:480px;height:auto;margin:0 auto;border:1px solid #D9DEDE;border-radius:8px;box-shadow:0 8px 24px rgba(26,26,26,0.10);"/>`,
+        '</a>',
+        `<p style="margin:10px 0 0;color:#586162;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;"><a href="${escapeHtml(vars.reportUrl)}" style="color:#565E74;font-weight:700;">Open your private 10-page audit</a></p>`,
+        '</div>',
+      ].join('')
+    : '';
   return {
     '{{top_issues}}': topIssuesHtml(vars.topIssues),
+    '{{report_thumbnail}}': reportThumbnail,
     '{{scan_preview}}': scanPreviewHtml(vars),
     '{{walkthrough_cta}}': ctaButton('Review the scan with us', vars.walkthroughUrl),
   };
@@ -124,6 +136,7 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
     .replaceAll('{{score}}', esc(String(vars.score)))
     .replaceAll('{{grade}}', esc(vars.grade))
     .replaceAll('{{report_url}}', vars.reportUrl)
+    .replaceAll('{{report_thumbnail}}', opts.escape ? '{{report_thumbnail}}' : vars.reportThumbnailUrl ?? '')
     .replaceAll('{{walkthrough_url}}', vars.walkthroughUrl)
     .replaceAll('{{personalization_reason}}', esc(vars.personalizationReason ?? 'This site matches the current audit cohort.'))
     .replaceAll('{{personalization_source_url}}', vars.personalizationSourceUrl ?? '')
@@ -150,6 +163,8 @@ export function brandShell(
     bodyHtml: innerHtml,
     previewText,
     sender: 'elena',
+    signoff: 'Regards,',
+    confidentialityNotice: true,
     unsubscribeUrl,
     pixelUrl,
   });
@@ -374,6 +389,7 @@ export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {
   retrievalScore: 100,
   understandingTrustScore: 62,
   reportUrl: 'https://getgeopulse.com/results/sample',
+  reportThumbnailUrl: 'https://getgeopulse.com/api/audit-preview/thumbnail/sample',
   walkthroughUrl: 'https://getgeopulse.com/walkthrough?source=outreach',
   personalizationReason: 'The site matches the current managed-services audit cohort.',
   personalizationSourceUrl: 'https://acme-it.example/about',
