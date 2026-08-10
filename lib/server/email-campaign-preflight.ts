@@ -374,6 +374,9 @@ export async function runCampaignPreflight(args: {
         supabase: args.supabase,
         contacts: recipients,
         appUrl: args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com',
+        auditPreview: args.contract.tracking.tags.includes('audit-led')
+          ? { secret: args.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '', campaignId: args.contract.campaignId, nowMs: args.nowMs }
+          : null,
       })
     : undefined;
   gates.push(...evaluateRecipients({ contract: args.contract, recipients, evidence, scansByContactId }));

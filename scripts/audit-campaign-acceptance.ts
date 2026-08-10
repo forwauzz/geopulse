@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   const campaignPageCount = measuredFullPages;
 
   const secret = 'acceptance-only-audit-capability-secret';
-  const token = issueAuditFullReportCapability({ secret, nowMs, expiresAtMs: nowMs + 30 * 86_400_000, scanId: '00000000-0000-4000-8000-000000000001', shareSlug: '1234567890abcdef1234567890abcdef', recipientEmail: 'owner@techehealthservices.com', domain: payload.domain, campaignId: 'audit-direct-business-v1' });
+  const token = issueAuditFullReportCapability({ secret, nowMs, expiresAtMs: nowMs + 30 * 86_400_000, scanId: '00000000-0000-4000-8000-000000000001', shareSlug: '1234567890abcdef1234567890abcdef', recipientEmail: 'owner@techehealthservices.com', recipientFirstName: 'Tamon', recipientCompany: 'Teché Health Services', domain: payload.domain, campaignId: 'audit-direct-business-v1' });
   const fullReportUrl = `https://getgeopulse.com/api/audit-preview/full/${token}`;
   const preview = deriveAuditCampaignPreview({ payload, recipient: { firstName: 'Tamon', company: 'Teché Health Services' }, preparedBy: 'The GEO-Pulse team — Montréal, Québec', fullReportPageCount: campaignPageCount, fullReportUrl });
   const previewPdfBytes = await buildAuditCampaignPreviewPdf(preview, clientBranding);

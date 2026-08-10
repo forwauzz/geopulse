@@ -91,6 +91,9 @@ export async function sendInternalTest(args: {
         supabase: args.supabase,
         contact: args.sampleContact,
         appUrl,
+        auditPreview: args.contract.tracking.tags.includes('audit-led')
+          ? { secret: args.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '', campaignId: args.contract.campaignId }
+          : null,
       })
     : null;
   const preview = renderCampaignPreview({

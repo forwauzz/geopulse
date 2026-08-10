@@ -236,7 +236,14 @@ export async function loadEmailCampaignDetail(args: {
     contract.schedule.maxSequenceSteps,
   ));
   const scan = selected && requiresScanContext(contract, previewSequenceStep)
-    ? await loadCampaignScanContext({ supabase: args.supabase, contact: selected, appUrl })
+    ? await loadCampaignScanContext({
+        supabase: args.supabase,
+        contact: selected,
+        appUrl,
+        auditPreview: contract.tracking.tags.includes('audit-led')
+          ? { secret: args.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '', campaignId: contract.campaignId }
+          : null,
+      })
     : null;
   const preview = selected
     ? renderCampaignPreview({
