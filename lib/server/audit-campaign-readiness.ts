@@ -13,7 +13,7 @@ const sender = {
 };
 
 function schedule() {
-  return { timezone: 'America/Toronto', sendWindowStartHour: 9, sendWindowEndHour: 16, startAt: null, spacingMinutes: 12, dailyCap: 25, maxSequenceSteps: 2, sequenceDelaysDays: [4] };
+  return { timezone: 'America/Toronto', sendWindowStartHour: 9, sendWindowEndHour: 16, startAt: null, spacingMinutes: 12, dailyCap: 25, maxSequenceSteps: 2, sequenceDelaysDays: [0, 4] };
 }
 
 export function buildAuditCampaignContracts(nowIso = new Date().toISOString()): { directBusiness: EmailCampaignV1; agencyPartner: EmailCampaignV1 } {

@@ -20,7 +20,7 @@ import { renderCampaignPreview, requiresScanContext, type CampaignPreview, type 
 import { runCampaignPreflight, type PreflightResult } from './email-campaign-preflight';
 import { loadCampaignResults, type CampaignResults } from './email-campaign-results';
 import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
-import { loadCampaignScanContext } from './email-campaign-scan-context';
+import { loadCampaignScanContext, loadCampaignScanContexts } from './email-campaign-scan-context';
 
 export interface EmailCampaignListItem {
   readonly interventionKey: string;
@@ -225,24 +225,37 @@ export async function loadEmailCampaignDetail(args: {
 
   const sender = resolveCampaignSender(args.env);
   const contract = withResolvedSender(record.contract, sender);
-  const previewContacts = await loadPreviewContacts(args.supabase, contract);
-  const selected = args.previewContactId
-    ? previewContacts.find((contact) => contact.contactId === args.previewContactId) ?? previewContacts[0]
-    : previewContacts[0];
-
+  const loadedPreviewContacts = await loadPreviewContacts(args.supabase, contract);
   const appUrl = args.appUrl ?? args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com';
   const previewSequenceStep = Math.max(1, Math.min(
     args.previewSequenceStep ?? 1,
     contract.schedule.maxSequenceSteps,
   ));
+  const auditPreview = contract.tracking.tags.includes('audit-led')
+    ? { secret: args.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '', campaignId: contract.campaignId }
+    : null;
+  const auditScans = requiresScanContext(contract, previewSequenceStep) && auditPreview
+    ? await loadCampaignScanContexts({
+        supabase: args.supabase,
+        contacts: loadedPreviewContacts,
+        appUrl,
+        auditPreview,
+      })
+    : new Map<string, Awaited<ReturnType<typeof loadCampaignScanContext>>>();
+  const previewContacts = auditPreview
+    ? [...loadedPreviewContacts].sort((left, right) =>
+        Number(auditScans.has(right.contactId)) - Number(auditScans.has(left.contactId)))
+    : loadedPreviewContacts;
+  const selected = args.previewContactId
+    ? previewContacts.find((contact) => contact.contactId === args.previewContactId) ?? previewContacts[0]
+    : previewContacts[0];
+
   const scan = selected && requiresScanContext(contract, previewSequenceStep)
-    ? await loadCampaignScanContext({
+    ? auditScans.get(selected.contactId) ?? await loadCampaignScanContext({
         supabase: args.supabase,
         contact: selected,
         appUrl,
-        auditPreview: contract.tracking.tags.includes('audit-led')
-          ? { secret: args.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '', campaignId: contract.campaignId }
-          : null,
+        auditPreview,
       })
     : null;
   const preview = selected

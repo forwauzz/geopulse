@@ -7,6 +7,7 @@ describe('audit campaign readiness', () => {
     expect(contracts.directBusiness.goal.buyer).not.toBe(contracts.agencyPartner.goal.buyer);
     expect(contracts.directBusiness.content.bodyTemplate).toContain('10-page');
     expect(contracts.agencyPartner.content.bodyTemplate).toContain('client');
+    expect(contracts.directBusiness.schedule.sequenceDelaysDays).toEqual([0, 4]);
 
     const manifest = buildAuditDryRun({
       contract: contracts.directBusiness,

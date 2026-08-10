@@ -132,6 +132,7 @@ async function main(): Promise<void> {
       email: write.email,
       name: write.name,
       company: write.company,
+      companyDomain: write.companyDomain,
       contactTitle: write.contactTitle,
       segment: write.segment,
       eligibilityStatus: write.eligibilityStatus,
