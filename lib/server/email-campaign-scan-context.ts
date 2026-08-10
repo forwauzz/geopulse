@@ -15,6 +15,19 @@ type ScanRow = {
   readonly share_slug?: string | null;
 };
 
+export function selectCampaignScanCandidate(args: {
+  readonly rows: readonly ScanRow[];
+  readonly reportScanIds?: ReadonlySet<string>;
+  readonly appUrl?: string;
+}): { readonly row: ScanRow; readonly context: PreviewScanContext } | null {
+  for (const row of args.rows) {
+    if (args.reportScanIds && !args.reportScanIds.has(row.id)) continue;
+    const context = scanContextFromRow(row, args.appUrl);
+    if (context) return { row, context };
+  }
+  return null;
+}
+
 type ProofCounts = {
   readonly passedChecks: number;
   readonly totalChecks: number;
@@ -145,22 +158,27 @@ export async function loadCampaignScanContext(args: {
     .neq('run_source', 'internal_benchmark')
     .not('score', 'is', null)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return null;
-  const row = data as ScanRow;
-  const context = scanContextFromRow(row, args.appUrl);
-  if (!context || !args.auditPreview) return context;
-  const { data: report, error: reportError } = await args.supabase
+    .limit(10);
+  if (error || !data?.length) return null;
+  const rows = data as ScanRow[];
+  if (!args.auditPreview) return selectCampaignScanCandidate({ rows, appUrl: args.appUrl })?.context ?? null;
+
+  // A newer lightweight/public scan may exist after the deep audit. Select the newest
+  // valid scan that actually owns a prepared PDF instead of failing on the newest row.
+  const { data: reports, error: reportError } = await args.supabase
     .from('reports')
-    .select('pdf_url')
-    .eq('scan_id', row.id)
+    .select('scan_id,pdf_url')
+    .in('scan_id', rows.map((row) => row.id))
     .eq('type', 'deep_audit')
     .not('pdf_url', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (reportError || !report?.pdf_url) return null;
+    .order('created_at', { ascending: false });
+  if (reportError || !reports?.length) return null;
+  const reportScanIds = new Set(reports
+    .filter((report) => typeof report.pdf_url === 'string' && report.pdf_url.length > 0)
+    .map((report) => String(report.scan_id)));
+  const selected = selectCampaignScanCandidate({ rows, reportScanIds, appUrl: args.appUrl });
+  if (!selected) return null;
+  const { row, context } = selected;
   const firstName = campaignGreetingName(args.contact.name) ?? '';
   const company = args.contact.company?.trim() ?? '';
   if (!firstName || !company || args.auditPreview.secret.length < 24) return null;
