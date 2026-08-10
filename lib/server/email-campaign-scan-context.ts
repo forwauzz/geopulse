@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fullIssueListFromScan } from './scan-issue-list';
 import type { PreviewContact, PreviewScanContext } from './email-campaign-preview';
+import { issueAuditFullReportCapability } from './audit-report-capability';
 
 type ScanRow = {
   readonly id: string;
@@ -11,6 +12,7 @@ type ScanRow = {
   readonly issues_json: unknown;
   readonly full_results_json: unknown;
   readonly created_at: string | null;
+  readonly share_slug?: string | null;
 };
 
 type ProofCounts = {
@@ -129,13 +131,14 @@ export async function loadCampaignScanContext(args: {
   readonly supabase: SupabaseClient;
   readonly contact: PreviewContact;
   readonly appUrl?: string;
+  readonly auditPreview?: { readonly secret: string; readonly campaignId: string; readonly nowMs?: number } | null;
 }): Promise<PreviewScanContext | null> {
   const domain = canonicalDomain(args.contact.companyDomain);
   if (!domain) return null;
 
   const { data, error } = await args.supabase
     .from('scans')
-    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at')
+    .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,share_slug')
     .in('domain', [domain, `www.${domain}`])
     .eq('status', 'complete')
     .is('user_id', null)
@@ -145,17 +148,37 @@ export async function loadCampaignScanContext(args: {
     .limit(1)
     .maybeSingle();
   if (error || !data) return null;
-  return scanContextFromRow(data as ScanRow, args.appUrl);
+  const row = data as ScanRow;
+  const context = scanContextFromRow(row, args.appUrl);
+  if (!context || !args.auditPreview) return context;
+  const firstName = args.contact.name?.trim().split(/\s+/)[0] ?? '';
+  const company = args.contact.company?.trim() ?? '';
+  if (!firstName || !company || args.auditPreview.secret.length < 24) return null;
+  const nowMs = args.auditPreview.nowMs ?? Date.now();
+  const token = issueAuditFullReportCapability({
+    secret: args.auditPreview.secret,
+    nowMs,
+    expiresAtMs: nowMs + 30 * 24 * 60 * 60 * 1000,
+    scanId: row.id,
+    shareSlug: row.share_slug,
+    recipientEmail: args.contact.email,
+    recipientFirstName: firstName,
+    recipientCompany: company,
+    domain,
+    campaignId: args.auditPreview.campaignId,
+  });
+  return { ...context, reportUrl: `${(args.appUrl ?? 'https://getgeopulse.com').replace(/\/+$/, '')}/api/audit-preview/pdf/${encodeURIComponent(token)}` };
 }
 
 export async function loadCampaignScanContexts(args: {
   readonly supabase: SupabaseClient;
   readonly contacts: readonly PreviewContact[];
   readonly appUrl?: string;
+  readonly auditPreview?: { readonly secret: string; readonly campaignId: string; readonly nowMs?: number } | null;
 }): Promise<ReadonlyMap<string, PreviewScanContext>> {
   const pairs = await Promise.all(args.contacts.map(async (contact) => [
     contact.contactId,
-    await loadCampaignScanContext({ supabase: args.supabase, contact, appUrl: args.appUrl }),
+    await loadCampaignScanContext({ supabase: args.supabase, contact, appUrl: args.appUrl, auditPreview: args.auditPreview }),
   ] as const));
   return new Map(pairs.filter((pair): pair is readonly [string, PreviewScanContext] => Boolean(pair[1])));
 }

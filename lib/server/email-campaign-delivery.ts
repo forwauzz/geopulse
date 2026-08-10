@@ -229,6 +229,9 @@ export async function runEmailCampaignDelivery(args: {
         supabase,
         contact: previewContact,
         appUrl: env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
+        auditPreview: contract.tracking.tags.includes('audit-led')
+          ? { secret: env.AUDIT_REPORT_CAPABILITY_SECRET ?? '', campaignId: contract.campaignId, nowMs }
+          : null,
       })
     : null;
   const rendered = renderCampaignPreview({

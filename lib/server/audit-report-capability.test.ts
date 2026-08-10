@@ -15,6 +15,8 @@ describe('audit full-report capability', () => {
       recipientEmail: 'owner@techehealthservices.com',
       domain: 'techehealthservices.com',
       campaignId: 'audit-direct-business-v1',
+      recipientFirstName: 'Uzziel',
+      recipientCompany: 'Teché Health Services',
     });
 
     expect(verifyAuditFullReportCapability({ token, secret, nowMs, recipientEmail: 'owner@techehealthservices.com', domain: 'techehealthservices.com' }).ok).toBe(true);

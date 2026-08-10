@@ -75,6 +75,51 @@ export function deriveAuditCampaignPreview(args: {
   return { contract: 'audit_campaign_preview_v1', scanId: args.payload.scanId, domain: args.payload.domain, generatedAt: args.payload.generatedAt, recipient: { firstName, company }, preparedBy: args.preparedBy, fullReportPageCount: args.fullReportPageCount, pages };
 }
 
+export type AuditCampaignScanSignals = {
+  readonly scanId: string;
+  readonly domain: string;
+  readonly generatedAt: string;
+  readonly score: number;
+  readonly grade: string;
+  readonly passedChecks: number;
+  readonly totalChecks: number;
+  readonly eligibleDestinations: number;
+  readonly testedDestinations: number;
+  readonly retrievalScore: number;
+  readonly understandingTrustScore: number;
+  readonly topIssues: ReadonlyArray<{ readonly check?: string; readonly fix?: string }>;
+};
+
+/** Build the same ten-page sales artifact from the measured scan contract used by email delivery. */
+export function deriveAuditCampaignPreviewFromSignals(args: {
+  signals: AuditCampaignScanSignals;
+  recipient: { firstName: string; company: string };
+  preparedBy: string;
+  fullReportPageCount: number;
+  fullReportUrl: string;
+}): AuditCampaignPreview {
+  if (args.fullReportPageCount <= 10) throw new Error('The canonical full report must contain more than ten pages.');
+  const s = args.signals;
+  const company = text(args.recipient.company, s.domain);
+  const firstName = text(args.recipient.firstName, 'Website owner');
+  const fixes = s.topIssues.slice(0, 5).map((issue) => `${text(issue.check)} — ${text(issue.fix, 'Review the finding and assign the fix.')}`);
+  const remaining = args.fullReportPageCount - 10;
+  const remainingLabel = `${String(remaining)} ${remaining === 1 ? 'page' : 'pages'}`;
+  const pages: AuditPreviewPage[] = [
+    { number: 1, role: 'cover', eyebrow: 'AI SEARCH READINESS AUDIT', title: `What AI systems can understand about ${company}`, body: [`Prepared for ${firstName} at ${company}`, `Prepared by ${args.preparedBy}`, `${s.domain} · ${s.generatedAt.slice(0, 10)}`, 'Inside: observed gaps, prioritized fixes, owners, and a way to verify the work.'] },
+    { number: 2, role: 'owner_summary', eyebrow: 'THE BUSINESS VIEW', title: 'What this audit gives you', body: ['A plain-English view of what was tested.', 'The website gaps most likely to block accurate reuse.', 'Specific actions your web and content teams can take.', 'A repeatable monthly comparison so fixes are verified, not assumed.'] },
+    { number: 3, role: 'scorecard', eyebrow: 'OBSERVED READINESS', title: `${String(s.score)}/100 · Grade ${s.grade}`, body: [`${String(s.passedChecks)} of ${String(s.totalChecks)} tested website checks passed.`, `${String(s.eligibleDestinations)} of ${String(s.testedDestinations)} tested retrieval destinations were eligible.`, 'This score describes tested website signals; it does not predict rankings or citations.'] },
+    { number: 4, role: 'priority_fixes', eyebrow: 'START HERE', title: 'The highest-priority fixes', body: fixes.length ? fixes : ['No failed findings were available for this preview.'] },
+    { number: 5, role: 'buyer_questions', eyebrow: 'ANSWER COVERAGE', title: 'Can buyers get a direct answer?', body: [`Understanding and trust signals scored ${String(s.understandingTrustScore)}/100.`, ...fixes.slice(0, 3)] },
+    { number: 6, role: 'page_patterns', eyebrow: 'SITEWIDE PATTERNS', title: 'Fix once, then apply consistently', body: fixes.slice(0, 4).map((line) => `${line} Check every affected template, not only the home page.`) },
+    { number: 7, role: 'delegation', eyebrow: 'HAND THIS TO THE TEAM', title: 'Every action needs an owner and proof', body: s.topIssues.slice(0, 4).map((issue) => `${/(schema|canonical|robots|header)/i.test(text(issue.check)) ? 'Web developer' : 'Content team'}: ${text(issue.fix, 'Review and correct this finding.')} Verify with a fresh scan.`) },
+    { number: 8, role: 'technical_access', eyebrow: 'ACCESS & TRUST', title: 'What machines can retrieve and interpret', body: [`Retrieval readiness scored ${String(s.retrievalScore)}/100.`, `${String(s.eligibleDestinations)} of ${String(s.testedDestinations)} tested destinations were eligible.`, 'Access checks and content-quality checks are reported separately; one does not prove the other.'] },
+    { number: 9, role: 'monthly_monitoring', eyebrow: 'MONTH TWO AND BEYOND', title: 'See what changed after the work ships', body: ['Baseline the first run.', 'Classify each later finding as new, resolved, regressed, unchanged, or not comparable.', 'Keep the full audit each month, plus a concise change summary.', 'Run an on-demand verification scan after important fixes.'] },
+    { number: 10, role: 'full_report_cta', eyebrow: 'YOUR FULL AUDIT IS READY', title: `Continue to the remaining ${remainingLabel}`, body: [`There ${remaining === 1 ? 'is' : 'are'} ${remainingLabel} left in the complete ${String(args.fullReportPageCount)}-page report, including detailed findings and remediation evidence.`, 'The private link is signed, target-bound, and expires.'], ctaLabel: `View the remaining ${remainingLabel}`, ctaUrl: args.fullReportUrl },
+  ];
+  return { contract: 'audit_campaign_preview_v1', scanId: s.scanId, domain: s.domain, generatedAt: s.generatedAt, recipient: { firstName, company }, preparedBy: args.preparedBy, fullReportPageCount: args.fullReportPageCount, pages };
+}
+
 const PAGE_W = 612;
 const PAGE_H = 792;
 const INK = rgb(0.055, 0.075, 0.11);

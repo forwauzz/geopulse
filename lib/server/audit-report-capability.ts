@@ -1,14 +1,16 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
-const VERSION = 'audit-full-v1';
+const VERSION = 'audit-full-v2';
 
 type CapabilityPayload = {
   v: typeof VERSION;
   scanId: string;
-  shareSlug: string;
+  shareSlug: string | null;
   recipientHash: string;
   domain: string;
   campaignId: string;
+  recipientFirstName: string;
+  recipientCompany: string;
   issuedAt: number;
   expiresAt: number;
 };
@@ -32,20 +34,24 @@ export function issueAuditFullReportCapability(args: {
   nowMs: number;
   expiresAtMs: number;
   scanId: string;
-  shareSlug: string;
+  shareSlug?: string | null;
   recipientEmail: string;
   domain: string;
   campaignId: string;
+  recipientFirstName: string;
+  recipientCompany: string;
 }): string {
   if (args.secret.length < 24) throw new Error('AUDIT_REPORT_CAPABILITY_SECRET must contain at least 24 characters.');
   if (args.expiresAtMs <= args.nowMs) throw new Error('Capability expiry must be in the future.');
   const payload: CapabilityPayload = {
     v: VERSION,
     scanId: args.scanId,
-    shareSlug: args.shareSlug,
+    shareSlug: args.shareSlug?.trim() || null,
     recipientHash: recipientHash(args.recipientEmail, args.domain),
     domain: normalize(args.domain),
     campaignId: args.campaignId,
+    recipientFirstName: args.recipientFirstName.trim().slice(0, 80),
+    recipientCompany: args.recipientCompany.trim().slice(0, 160),
     issuedAt: args.nowMs,
     expiresAt: args.expiresAtMs,
   };
@@ -74,7 +80,8 @@ export function verifyAuditFullReportCapability(args: {
   } catch {
     return { ok: false, code: 'malformed' };
   }
-  if (payload.v !== VERSION || !payload.shareSlug || !payload.scanId) return { ok: false, code: 'malformed' };
+  if (payload.v !== VERSION || !payload.scanId || !payload.domain || !payload.campaignId
+    || !payload.recipientFirstName || !payload.recipientCompany) return { ok: false, code: 'malformed' };
   if (args.nowMs > payload.expiresAt) return { ok: false, code: 'expired' };
   if ((args.recipientEmail || args.domain) && (!args.recipientEmail || !args.domain
     || payload.domain !== normalize(args.domain)

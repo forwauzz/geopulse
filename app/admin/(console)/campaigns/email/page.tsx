@@ -7,7 +7,7 @@ import {
 } from '@/lib/server/email-campaign-console';
 import { resolveCampaignSender } from '@/lib/server/email-campaign-sender';
 import { PRESET_OUTREACH_TEMPLATES } from '@/lib/server/outreach-templates';
-import { createEmailCampaignAction, importCampaignContactsAction } from './actions';
+import { createAuditEmailCampaignAction, createEmailCampaignAction, importCampaignContactsAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -160,6 +160,26 @@ export default async function EmailCampaignsPage({
           </form>
         </div>
       </details>
+
+      {composer.campaigns.find((campaign) => campaign.role === 'primary') ? (
+        <section className="rounded-2xl border border-primary/25 bg-primary/5 p-5 md:p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Prepared-audit pilot</p>
+          <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Create the personalized 10-page audit campaign</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">Uses each recipient’s completed scan, website hero, brand colour, first name, and signed full-report link. The pilot is capped at two recipients.</p>
+          <form action={createAuditEmailCampaignAction} className="mt-4 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="campaignId" value={composer.campaigns.find((campaign) => campaign.role === 'primary')!.id} />
+            <label className="min-w-72 flex-1 text-sm font-semibold text-on-background">
+              Qualified contact segment
+              <select name="segment" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm">
+                {campaignSegments('msp_it_services', composer.segments).map((segment) => (
+                  <option key={segment.segment} value={segment.segment}>{segment.segment} — {segment.eligible} eligible / {segment.total} total</option>
+                ))}
+              </select>
+            </label>
+            <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Create audit campaign</button>
+          </form>
+        </section>
+      ) : null}
 
       <details id="new-campaign" open={Boolean(query.error)} className="group rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
         <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-5 md:p-6">

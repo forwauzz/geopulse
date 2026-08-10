@@ -22,6 +22,7 @@ import {
   selectCampaignAudience,
 } from '@/lib/server/campaign-audience';
 import { structuredLog } from '@/lib/server/structured-log';
+import { buildAuditCampaignContracts } from '@/lib/server/audit-campaign-readiness';
 import {
   applyApolloMspPromotion,
   importContacts,
@@ -32,6 +33,56 @@ import {
 } from '@/lib/server/outreach-contacts';
 
 const CONSOLE_PATH = '/admin/campaigns/email';
+
+export async function createAuditEmailCampaignAction(formData: FormData): Promise<void> {
+  const ctx = await loadAdminActionContext();
+  if (!ctx.ok) return;
+  const campaignId = text(formData, 'campaignId');
+  const segment = text(formData, 'segment');
+  const interventionKey = 'audit-direct-business-2026q3-v1';
+  if (!campaignId || !segment) redirect(`${CONSOLE_PATH}?error=missing_required_fields`);
+
+  const { data: existing } = await ctx.adminDb
+    .from('growth_campaign_interventions')
+    .select('id')
+    .eq('intervention_key', interventionKey)
+    .maybeSingle();
+  let interventionId = existing?.id ? String(existing.id) : null;
+  if (!interventionId) {
+    const { data: inserted, error } = await ctx.adminDb.from('growth_campaign_interventions').insert({
+      campaign_id: campaignId,
+      intervention_key: interventionKey,
+      name: 'Personalized audit pilot',
+      channel: 'email',
+      status: 'planned',
+      hypothesis: 'A prepared, prospect-branded audit with actionable fixes earns a qualified conversation.',
+      meaningful_variable: 'personalized audit-led opening',
+      success_condition: 'A qualified reply or full-report open from the bounded pilot.',
+      stop_condition: 'Stop after the two-contact pilot if neither recipient replies nor opens the full report.',
+      metadata: { owner: 'tamon', one_variable_only: true, bounded_pilot: true },
+    }).select('id').single();
+    if (error || !inserted?.id) redirect(`${CONSOLE_PATH}?error=intervention_create_failed`);
+    interventionId = String(inserted.id);
+  }
+
+  const base = buildAuditCampaignContracts().directBusiness;
+  const contract = createDraftContract({
+    campaignId,
+    interventionId,
+    interventionKey,
+    goal: base.goal,
+    sender: resolveCampaignSender(ctx.env as unknown as Record<string, string | undefined>),
+    segment,
+    content: base.content,
+    tracking: base.tracking,
+    schedule: { ...base.schedule, dailyCap: 2 },
+  });
+  const saved = await saveValidatedEmailCampaign(ctx.adminDb, contract);
+  if (!saved.ok) redirect(`${CONSOLE_PATH}?error=draft_save_failed`);
+  structuredLog('audit_email_campaign_created', { interventionKey, segment }, 'info');
+  revalidatePath(CONSOLE_PATH);
+  redirect(`${CONSOLE_PATH}/${interventionKey}`);
+}
 
 function text(formData: FormData, key: string, fallback = ''): string {
   return String(formData.get(key) ?? '').trim() || fallback;
