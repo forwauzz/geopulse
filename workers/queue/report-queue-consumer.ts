@@ -71,6 +71,21 @@ export function shouldDeliverReportEmail(job: ReportQueueMessage): boolean {
   return !(job.v === 3 && job.deliveryMode === 'campaign_preview');
 }
 
+export function completedDeepAuditScanFields(args: {
+  readonly score: number;
+  readonly letterGrade: string;
+  readonly issues: unknown;
+  readonly fullResults: unknown;
+}) {
+  return {
+    status: 'complete' as const,
+    score: args.score,
+    letter_grade: args.letterGrade,
+    issues_json: args.issues,
+    full_results_json: args.fullResults,
+  };
+}
+
 function bodyToString(body: string | ArrayBuffer | Uint8Array): string {
   if (typeof body === 'string') return body;
   if (body instanceof ArrayBuffer) return new TextDecoder().decode(body);
@@ -749,12 +764,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
 
   const { error: scanUpdErr } = await supabase
     .from('scans')
-    .update({
+    .update(completedDeepAuditScanFields({
       score: aggregateScore,
-      letter_grade: aggLetter,
-      issues_json: issuesForScan,
-      full_results_json: fullResults,
-    })
+      letterGrade: aggLetter,
+      issues: issuesForScan,
+      fullResults,
+    }))
     .eq('id', job.scanId);
 
   if (scanUpdErr) {

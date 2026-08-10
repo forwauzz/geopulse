@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { planDeepAuditCrawlRecovery, shouldDeliverReportEmail } from './report-queue-consumer';
+import {
+  completedDeepAuditScanFields,
+  planDeepAuditCrawlRecovery,
+  shouldDeliverReportEmail,
+} from './report-queue-consumer';
 
 describe('planDeepAuditCrawlRecovery', () => {
   it('clears stale error-only rows before retrying a failed audit version', () => {
@@ -46,5 +50,22 @@ describe('shouldDeliverReportEmail', () => {
       paymentId: 'payment-1',
       stripeSessionId: 'session-1',
     })).toBe(true);
+  });
+});
+
+describe('completedDeepAuditScanFields', () => {
+  it('makes a generated report discoverable as a completed scan', () => {
+    expect(completedDeepAuditScanFields({
+      score: 84,
+      letterGrade: 'B',
+      issues: [{ check: 'Buyer questions', passed: false }],
+      fullResults: { deepAudit: true },
+    })).toEqual({
+      status: 'complete',
+      score: 84,
+      letter_grade: 'B',
+      issues_json: [{ check: 'Buyer questions', passed: false }],
+      full_results_json: { deepAudit: true },
+    });
   });
 });
