@@ -23,6 +23,7 @@ import {
 } from '@/lib/server/campaign-audience';
 import { structuredLog } from '@/lib/server/structured-log';
 import { buildAuditCampaignContracts } from '@/lib/server/audit-campaign-readiness';
+import { loadCampaignScanContexts } from '@/lib/server/email-campaign-scan-context';
 import {
   applyApolloMspPromotion,
   importContacts,
@@ -458,8 +459,30 @@ export async function freezeEmailCampaignAudienceAction(formData: FormData): Pro
     loadAudienceCandidates(ctx.adminDb, current.audience.segment),
     loadAudienceEvidence(ctx.adminDb),
   ]);
+  let scopedCandidates = candidates;
+  if (current.tracking.tags.includes('audit-led')) {
+    const env = ctx.env as unknown as Record<string, string | undefined>;
+    const auditContexts = await loadCampaignScanContexts({
+      supabase: ctx.adminDb,
+      contacts: candidates.map((candidate) => ({
+        contactId: candidate.contactId,
+        email: candidate.email,
+        name: candidate.name,
+        company: candidate.company,
+        companyDomain: candidate.companyDomain,
+        personalizationReason: null,
+        personalizationSourceUrl: null,
+      })),
+      appUrl: env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com',
+      auditPreview: {
+        secret: env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '',
+        campaignId: current.campaignId,
+      },
+    });
+    scopedCandidates = candidates.filter((candidate) => auditContexts.has(candidate.contactId));
+  }
   const limit = integer(formData, 'recipientCap', current.schedule.dailyCap);
-  const selection = selectCampaignAudience({ candidates, evidence, limit });
+  const selection = selectCampaignAudience({ candidates: scopedCandidates, evidence, limit });
 
   const frozen = await freezeCampaignAudience({
     supabase: ctx.adminDb,

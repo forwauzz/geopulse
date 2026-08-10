@@ -188,7 +188,7 @@ export interface ContractIssue {
  */
 export const SUPPORTED_MERGE_FIELDS: readonly string[] = [
   'name', 'company', 'domain', 'score', 'grade', 'top_issues',
-  'report_url', 'walkthrough_url', 'scan_preview', 'walkthrough_cta',
+  'report_url', 'report_thumbnail', 'walkthrough_url', 'scan_preview', 'walkthrough_cta',
   'personalization_reason', 'personalization_source_url',
 ];
 

@@ -22,6 +22,7 @@ function candidate(overrides: Partial<AudienceCandidate> & { contactId: string; 
   return {
     name: 'Ann Roy',
     company: 'Roy Co',
+    companyDomain: 'royco.ca',
     contactTitle: 'Owner',
     segment: 'agency-ca-qc-montreal-published-2026-08',
     eligibilityStatus: 'eligible',

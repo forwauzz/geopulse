@@ -114,6 +114,10 @@ export function emailShell(input: {
   footerNote?: string;
   unsubscribeUrl?: string;
   pixelUrl?: string;
+  /** Optional human sign-off immediately before the accountable sender signature. */
+  signoff?: string;
+  /** Commercial outreach footer: French first, then English. */
+  confidentialityNotice?: boolean;
 }): string {
   return [
     `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>`,
@@ -137,6 +141,9 @@ export function emailShell(input: {
     // Body card.
     `<tr><td style="padding:12px 32px 24px;font-family:Georgia,serif;color:${EMAIL_COLORS.body};font-size:15px;line-height:1.6;">`,
     input.bodyHtml,
+    input.signoff
+      ? `<p style="margin:22px 0 0;color:${EMAIL_COLORS.body};font-family:Georgia,serif;font-size:15px;line-height:1.6;">${escapeEmailHtml(input.signoff)}</p>`
+      : '',
     agentEmailSignatureHtml(input.sender),
     `</td></tr>`,
     // Editorial footer.
@@ -144,6 +151,9 @@ export function emailShell(input: {
     `<p style="margin:0;color:${EMAIL_COLORS.faint};font-size:12px;font-family:Arial,sans-serif;line-height:1.6;">— GEO-Pulse · AI visibility you can prove, fix, and report<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:${EMAIL_COLORS.faint};">getgeopulse.com</a>${input.footerNote ? `<br/>${escapeEmailHtml(input.footerNote)}` : ''}</p>`,
     input.unsubscribeUrl
       ? `<p style="margin:8px 0 0;color:${EMAIL_COLORS.faint};font-size:11px;font-family:Arial,sans-serif;">No longer want these audits? <a href="${input.unsubscribeUrl}" style="color:${EMAIL_COLORS.faint};">Unsubscribe</a> — one click, effective immediately.</p>`
+      : '',
+    input.confidentialityNotice
+      ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid ${EMAIL_COLORS.track};color:${EMAIL_COLORS.faint};font-family:Arial,sans-serif;font-size:9px;line-height:1.5;"><p style="margin:0 0 7px;"><strong>AVIS DE CONFIDENTIALITÉ</strong> — Ce courriel et ses pièces jointes sont destinés uniquement à leur destinataire et peuvent contenir des renseignements confidentiels. Si vous l’avez reçu par erreur, veuillez en aviser l’expéditeur et le supprimer.</p><p style="margin:0 0 7px;"><strong>CONFIDENTIALITY NOTICE</strong> — This email and any attachments are intended only for the recipient and may contain confidential information. If you received it in error, please notify the sender and delete it.</p><p style="margin:0;"><a href="https://getgeopulse.com/privacy" style="color:${EMAIL_COLORS.faint};">Politique de confidentialité / Privacy policy</a></p></div>`
       : '',
     `</td></tr>`,
     `</table>`,

@@ -151,6 +151,16 @@ export async function loadCampaignScanContext(args: {
   const row = data as ScanRow;
   const context = scanContextFromRow(row, args.appUrl);
   if (!context || !args.auditPreview) return context;
+  const { data: report, error: reportError } = await args.supabase
+    .from('reports')
+    .select('pdf_url')
+    .eq('scan_id', row.id)
+    .eq('type', 'deep_audit')
+    .not('pdf_url', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (reportError || !report?.pdf_url) return null;
   const firstName = campaignGreetingName(args.contact.name) ?? '';
   const company = args.contact.company?.trim() ?? '';
   if (!firstName || !company || args.auditPreview.secret.length < 24) return null;
@@ -167,7 +177,12 @@ export async function loadCampaignScanContext(args: {
     domain,
     campaignId: args.auditPreview.campaignId,
   });
-  return { ...context, reportUrl: `${(args.appUrl ?? 'https://getgeopulse.com').replace(/\/+$/, '')}/api/audit-preview/pdf/${encodeURIComponent(token)}` };
+  const appUrl = (args.appUrl ?? 'https://getgeopulse.com').replace(/\/+$/, '');
+  return {
+    ...context,
+    reportUrl: `${appUrl}/api/audit-preview/pdf/${encodeURIComponent(token)}`,
+    reportThumbnailUrl: `${appUrl}/api/audit-preview/thumbnail/${encodeURIComponent(token)}`,
+  };
 }
 
 export async function loadCampaignScanContexts(args: {

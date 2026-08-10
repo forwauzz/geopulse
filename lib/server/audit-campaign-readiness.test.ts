@@ -7,11 +7,12 @@ describe('audit campaign readiness', () => {
     expect(contracts.directBusiness.goal.buyer).not.toBe(contracts.agencyPartner.goal.buyer);
     expect(contracts.directBusiness.content.bodyTemplate).toContain('10-page');
     expect(contracts.agencyPartner.content.bodyTemplate).toContain('client');
+    expect(contracts.directBusiness.schedule.sequenceDelaysDays).toEqual([0, 4]);
 
     const manifest = buildAuditDryRun({
       contract: contracts.directBusiness,
       recipients: [{ contactId: 'c1', email: 'owner@techehealthservices.com', name: 'Tamon', company: 'Teché Health Services', companyDomain: 'techehealthservices.com', personalizationReason: null, personalizationSourceUrl: null }],
-      scansByContactId: new Map([['c1', { siteUrl: 'https://techehealthservices.com/', score: 74, grade: 'C', topIssues: [{ check: 'Canonical URL', fix: 'Add a canonical.' }, { check: 'Buyer questions', fix: 'Add direct answers.' }], completedAt: '2026-08-09T12:00:00.000Z', passedChecks: 2, totalChecks: 5, eligibleDestinations: 3, testedDestinations: 4, retrievalScore: 80, understandingTrustScore: 69, reportUrl: 'https://getgeopulse.com/preview/token' }]]),
+      scansByContactId: new Map([['c1', { siteUrl: 'https://techehealthservices.com/', score: 74, grade: 'C', topIssues: [{ check: 'Canonical URL', fix: 'Add a canonical.' }, { check: 'Buyer questions', fix: 'Add direct answers.' }], completedAt: '2026-08-09T12:00:00.000Z', passedChecks: 2, totalChecks: 5, eligibleDestinations: 3, testedDestinations: 4, retrievalScore: 80, understandingTrustScore: 69, reportUrl: 'https://getgeopulse.com/preview/token', reportThumbnailUrl: 'https://getgeopulse.com/thumbnail/token' }]]),
       appUrl: 'https://getgeopulse.com',
       campaignFrozen: true,
       reportQaPassed: true,

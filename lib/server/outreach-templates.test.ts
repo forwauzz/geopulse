@@ -136,6 +136,21 @@ describe('renderOutreachTemplate (spec §9)', () => {
     );
     expect(out.html).toContain('GEO-Pulse');
     expect(out.html).toContain('https://x.com/api/outreach/open/abc');
+    expect(out.html).toContain('Regards,');
+    expect(out.html.indexOf('AVIS DE CONFIDENTIALITÉ')).toBeLessThan(out.html.indexOf('CONFIDENTIALITY NOTICE'));
+    expect(out.html).toContain('Politique de confidentialité / Privacy policy');
+  });
+
+  it('renders the report cover as a linked email-safe image', () => {
+    const out = renderOutreachTemplate(
+      { subjectTemplate: 's', bodyFormat: 'html', bodyTemplate: '<p>Hi {{name}},</p>{{report_thumbnail}}' },
+      SAMPLE_TEMPLATE_VARS,
+      'px',
+    );
+    expect(out.html).toContain(`<img src="${SAMPLE_TEMPLATE_VARS.reportThumbnailUrl}"`);
+    expect(out.html).toContain(`href="${SAMPLE_TEMPLATE_VARS.reportUrl}"`);
+    expect(out.html).toContain('Open your private 10-page audit');
+    expect(out.html).not.toContain('{{report_thumbnail}}');
   });
 
   it('carries the CASL unsubscribe link and sender identification in every templated send (issue #97)', () => {
