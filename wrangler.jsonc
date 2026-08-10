@@ -156,6 +156,7 @@
     "DEEP_AUDIT_INTERNAL_REWRITE_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 
     "RESEND_FROM_EMAIL": "reports@getgeopulse.com",
+    "LIFECYCLE_EXCEPTION_TO": "tamonuzziel@gmail.com",
 
     // Loop 5a — autonomous self-improvement (getgeopulse.com audits itself daily → emails the
     // plan). OFF by default: the daily audit runs only when SELF_IMPROVEMENT_ENABLED is truthy

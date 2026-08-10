@@ -52,6 +52,7 @@ import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-st
 import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
 import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
+import { enqueueDailyLifecycleExceptionDigest, enqueueOnboardingReminders, processLifecycleEmailQueue } from '../lib/server/lifecycle-email';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -205,6 +206,20 @@ export default {
         structuredError('distribution_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('lifecycle_email');
+        const date = new Date().toISOString().slice(0, 10);
+        await enqueueDailyLifecycleExceptionDigest({ supabase, env, date });
+        await enqueueOnboardingReminders({ supabase, env });
+        const result = await processLifecycleEmailQueue({ supabase, env });
+        structuredLog('lifecycle_email_sweep', result, result.failed > 0 ? 'warning' : 'info');
+      } catch (err) {
+        structuredError('lifecycle_email_sweep_failed', { error: err instanceof Error ? err.message : 'unknown' });
       }
 
       try {

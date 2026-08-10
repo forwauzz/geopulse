@@ -22,6 +22,7 @@ const ADMIN_NAV: ReadonlyArray<AdminNavSection> = [
     items: [
       { href: '/admin/campaigns', label: 'Campaigns', icon: 'campaign' },
       { href: '/admin/campaigns/email', label: 'Email Campaigns', icon: 'mail' },
+      { href: '/admin/lifecycle-email', label: 'Lifecycle Email', icon: 'mark_email_read' },
       { href: '/admin/growth-calendar', label: 'Growth Calendar', icon: 'calendar_month' },
       { href: '/admin/agents', label: 'Chief of Staff & Agents', icon: 'assistant' },
     ],

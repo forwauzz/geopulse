@@ -41,6 +41,7 @@ import {
 } from '../../lib/server/startup-slack-integration';
 import { formatStartupSlackMessage, type StartupSlackMessagePayload } from '../../lib/server/startup-slack-message';
 import { emitMarketingEvent } from '../../services/marketing-attribution/emit';
+import { enqueueLifecycleEmail } from '../../lib/server/lifecycle-email';
 
 const DLQ_NAME = 'geo-pulse-dlq';
 
@@ -524,6 +525,13 @@ async function handleDlqMessage(rawBody: string, env: CloudflareEnv): Promise<vo
   }
   if (!env.SCAN_QUEUE || !env.SCAN_CACHE) {
     throw new Error('dlq_missing_queue_or_kv');
+  }
+  const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  if (!(job.v === 3 && job.deliveryMode === 'campaign_preview')) {
+    const { data: scan } = await supabase.from('scans').select('domain').eq('id', job.scanId).maybeSingle();
+    await enqueueLifecycleEmail({ supabase, to: job.customerEmail, subjectId: job.scanId,
+      idempotencyKey: `report-delayed/${job.scanId}`, eventType: 'report_delayed', templateKey: 'report_delayed',
+      variables: { domain: scan?.domain ?? 'your website', cta_url: `${env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com'}/dashboard` } });
   }
   await replayReportJobFromDlq(job, { SCAN_QUEUE: env.SCAN_QUEUE, SCAN_CACHE: env.SCAN_CACHE });
 }

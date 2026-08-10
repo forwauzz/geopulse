@@ -14,6 +14,10 @@ const handleMonitorCheckoutCompleted = vi.fn();
 const handleMonitorSubscriptionEvent = vi.fn();
 const handleMonitorInvoiceEvent = vi.fn();
 const markMonitorLeadConverted = vi.fn();
+const enqueueLifecycleEmail = vi.fn(async () => ({ ok: true, status: 'queued' }));
+const setLifecycleEmailSuppression = vi.fn(async () => undefined);
+
+vi.mock('@/lib/server/lifecycle-email', () => ({ enqueueLifecycleEmail, setLifecycleEmailSuppression }));
 
 vi.mock('@/lib/server/cf-env', () => ({
   getPaymentApiEnv,
