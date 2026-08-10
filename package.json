@@ -58,6 +58,7 @@
     "operations:hands-off-audit": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/hands-off-readiness-audit.ts",
     "contacts:intake": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/agency-contact-intake.ts",
     "vci8:acceptance": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/vci8-acceptance-packet.ts",
+    "audit-campaign:acceptance": "tsx scripts/audit-campaign-acceptance.ts",
     "report:layer-one:rewrite-prompt": "node ./node_modules/tsx/dist/cli.mjs scripts/layer-one-report-rewrite-prompt.ts",
     "content:schedule:reconcile": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/reconcile-content-schedule.ts",
     "content:amara:render": "node scripts/render-amara-campaign.mjs"

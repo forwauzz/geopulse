@@ -33,6 +33,16 @@ export interface PreviewContact {
   readonly personalizationSourceUrl: string | null;
 }
 
+/** Reduce a CRM display name to a human greeting without mutating the contact record. */
+export function campaignGreetingName(value: string | null | undefined): string | null {
+  const normalized = value?.trim().replace(/\s+/g, ' ');
+  if (!normalized) return null;
+  const withoutHonorific = normalized.replace(/^(?:mr|mrs|ms|miss|dr|prof)\.?\s+/i, '');
+  const commaParts = withoutHonorific.split(',').map((part) => part.trim()).filter(Boolean);
+  const givenName = commaParts.length > 1 ? commaParts[1] : commaParts[0];
+  return givenName?.split(/\s+/)[0] || null;
+}
+
 export interface PreviewScanContext {
   readonly scanId?: string;
   readonly siteUrl?: string;
@@ -174,7 +184,7 @@ export function renderCampaignPreview(args: {
   const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
 
   const vars: OutreachTemplateVars = {
-    name: args.contact.name,
+    name: campaignGreetingName(args.contact.name),
     company: args.contact.company,
     domain,
     siteUrl: args.scan?.siteUrl ?? null,

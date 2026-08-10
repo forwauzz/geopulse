@@ -1,0 +1,1316 @@
+{
+  "contract": "audit_campaign_acceptance_v1",
+  "generatedAt": "2026-08-09T12:00:00.000Z",
+  "verdict": "campaign_ready_pending_independent_review_and_explicit_activation",
+  "sendsFrozen": true,
+  "providerCalls": 0,
+  "scan": {
+    "fixture": "teche-health-services",
+    "canonicalPayloadVersion": 1,
+    "domain": "techehealthservices.com"
+  },
+  "artifacts": {
+    "fullReport": {
+      "pageCount": 11,
+      "sha256": "75acd9d8bdaf93ff2d0b40b80dd550286207668ccaab8116ac3364f7d80de03e",
+      "path": "full-audit.pdf"
+    },
+    "preview": {
+      "pageCount": 10,
+      "semanticRoles": [
+        "cover",
+        "owner_summary",
+        "scorecard",
+        "priority_fixes",
+        "buyer_questions",
+        "page_patterns",
+        "delegation",
+        "technical_access",
+        "monthly_monitoring",
+        "full_report_cta"
+      ],
+      "sha256": "16bfa845c6ae773275927584acdc64f6a2d75397bc3d44ae8f92a85ab5bce41b",
+      "path": "10-page-preview.pdf",
+      "dynamicRemainingPages": 1,
+      "clientBranding": {
+        "siteName": "TECHÉ Consulting",
+        "primaryHex": "#8FD299",
+        "homepageHeroSha256": "8244174f5b3aa8d1f30dabb3c4cb2b4f53c9ea912283973ece6d740e348ee408"
+      }
+    }
+  },
+  "capabilityChecks": {
+    "valid": true,
+    "tamperedRejected": true,
+    "expiredRejected": true,
+    "wrongAudienceRejected": true
+  },
+  "recurringDelta": {
+    "contract": "audit_delta_v1",
+    "generatedAt": "2026-09-09T12:00:00.000Z",
+    "baseline": false,
+    "counts": {
+      "new": 1,
+      "resolved": 1,
+      "regressed": 0,
+      "unchanged": 106,
+      "notComparable": 0
+    },
+    "actions": [
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/about/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/practice-areas/ehr-implementation/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/practice-areas/it-services/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-1/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-10/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-11/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-12/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-13/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-14/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-15/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-16/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-17/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-18/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-19/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-2/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-20/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-21/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-22/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-23/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-24/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-25/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-26/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-27/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-28/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-29/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-3/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-30/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-31/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-32/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-33/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-34/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-35/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-36/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-37/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-38/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-39/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-4/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-40/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-41/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-42/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-43/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-44/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-45/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-46/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-47/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-48/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-49/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-5/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-50/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-6/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-7/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-8/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "ai-crawler-access",
+        "url": "https://techehealthservices.com/services/qa-service-9/",
+        "previousStatus": "PASS",
+        "currentStatus": "PASS",
+        "owner": "business_owner",
+        "action": "Review the observed check and assign a concrete fix.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "resolved",
+        "checkId": "canonical",
+        "url": "https://techehealthservices.com/",
+        "previousStatus": "FAIL",
+        "currentStatus": "PASS",
+        "owner": "web_developer",
+        "action": "Keep the fix in place and monitor it.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "new",
+        "checkId": "faq",
+        "url": "https://techehealthservices.com/",
+        "previousStatus": null,
+        "currentStatus": "FAIL",
+        "owner": "content",
+        "action": "Add direct answers to the priority buyer questions.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/practice-areas/ehr-implementation/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/practice-areas/it-services/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-1/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-10/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-11/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-12/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-13/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-14/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-15/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-16/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-17/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-18/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-19/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-2/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-20/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-21/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-22/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-23/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-24/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-25/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-26/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-27/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-28/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-29/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-3/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-30/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-31/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-32/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-33/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-34/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-35/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-36/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-37/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-38/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-39/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-4/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-40/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-41/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-42/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-43/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-44/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-45/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-46/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-47/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-48/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-49/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-5/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-50/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-6/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-7/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-8/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      },
+      {
+        "state": "unchanged",
+        "checkId": "llm-qa-pattern",
+        "url": "https://techehealthservices.com/services/qa-service-9/",
+        "previousStatus": "FAIL",
+        "currentStatus": "FAIL",
+        "owner": "business_owner",
+        "action": "Add concise question-led sections to priority service pages.",
+        "verification": "Run a fresh audit after the change and confirm this check passes on the same URL."
+      }
+    ],
+    "primaryCta": "Monitor this website monthly and verify each fix with a fresh audit.",
+    "disclaimer": "Observed website signals only; no ranking, citation, traffic, or revenue outcome is guaranteed."
+  },
+  "campaigns": {
+    "directBusiness": {
+      "contract": "audit_campaign_dry_run_v1",
+      "mode": "dry_run",
+      "ready": true,
+      "providerCalls": 0,
+      "sends": 0,
+      "gate": {
+        "ready": true,
+        "gates": [
+          {
+            "key": "campaign_frozen",
+            "ok": true
+          },
+          {
+            "key": "report_qa_passed",
+            "ok": true
+          },
+          {
+            "key": "preview_and_full_links_valid",
+            "ok": true
+          },
+          {
+            "key": "suppression_evidence_loaded",
+            "ok": true
+          },
+          {
+            "key": "all_personalization_resolved",
+            "ok": true
+          },
+          {
+            "key": "provider_send_disabled",
+            "ok": true
+          }
+        ],
+        "failures": []
+      },
+      "campaignId": "audit-direct-business-v1",
+      "version": 1,
+      "recipients": [
+        {
+          "contactId": "direct-1",
+          "email": "owner@techehealthservices.com",
+          "subject": "Teché Health Services website audit — prepared for Tamon",
+          "contentSha256": "2dd7b5886825aaf1e23aabec5f144754118205aad944616a4cd4f55285d76ae4",
+          "links": [
+            "https://getgeopulse.com/audit-preview/eyJ2IjoiYXVkaXQtZnVsbC12MSIsInNjYW5JZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsInNoYXJlU2x1ZyI6IjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmIiwicmVjaXBpZW50SGFzaCI6Ijk0MjdjZDhiMzFiZmVjOWY5YTYzOWUxNTIzOWY3NTA4Mzc3NjU1MTAyMjcxYTRmMmIyMWQwMzdhNjJiNzI3NTciLCJkb21haW4iOiJ0ZWNoZWhlYWx0aHNlcnZpY2VzLmNvbSIsImNhbXBhaWduSWQiOiJhdWRpdC1kaXJlY3QtYnVzaW5lc3MtdjEiLCJpc3N1ZWRBdCI6MTc4NjI3NjgwMDAwMCwiZXhwaXJlc0F0IjoxNzg4ODY4ODAwMDAwfQ.6WfOUtlz3wJu85Cqnia6bWfGWessKtFPMC70Rxp__fw",
+            "https://getgeopulse.com/team/elena-park.jpg",
+            "https://getgeopulse.com",
+            "https://www.instagram.com/get_geopulse/",
+            "https://getgeopulse.com/branding/email/instagram.png",
+            "https://www.linkedin.com/company/143052018/",
+            "https://getgeopulse.com/branding/email/linkedin.png",
+            "https://getgeopulse.com/api/outreach/unsubscribe/preview-direct-1",
+            "https://getgeopulse.com/api/outreach/open/preview-direct-1"
+          ],
+          "unresolved": []
+        }
+      ],
+      "funnel": {
+        "delivered": "not_available",
+        "previewOpened": "not_available",
+        "fullReportOpened": "not_available",
+        "replied": "not_available",
+        "checkoutStarted": "not_available",
+        "converted": "not_available"
+      }
+    },
+    "agencyPartner": {
+      "contract": "audit_campaign_dry_run_v1",
+      "mode": "dry_run",
+      "ready": true,
+      "providerCalls": 0,
+      "sends": 0,
+      "gate": {
+        "ready": true,
+        "gates": [
+          {
+            "key": "campaign_frozen",
+            "ok": true
+          },
+          {
+            "key": "report_qa_passed",
+            "ok": true
+          },
+          {
+            "key": "preview_and_full_links_valid",
+            "ok": true
+          },
+          {
+            "key": "suppression_evidence_loaded",
+            "ok": true
+          },
+          {
+            "key": "all_personalization_resolved",
+            "ok": true
+          },
+          {
+            "key": "provider_send_disabled",
+            "ok": true
+          }
+        ],
+        "failures": []
+      },
+      "campaignId": "audit-agency-partner-v1",
+      "version": 1,
+      "recipients": [
+        {
+          "contactId": "agency-1",
+          "email": "founder@northstarit.ca",
+          "subject": "A client-ready audit for Northstar IT",
+          "contentSha256": "3b9177040c27fa680c894654d40713d7a2d5c8e7ea70f51bc300fceb3c2c620f",
+          "links": [
+            "https://getgeopulse.com/audit-preview/eyJ2IjoiYXVkaXQtZnVsbC12MSIsInNjYW5JZCI6IjAwMDAwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSIsInNoYXJlU2x1ZyI6IjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmIiwicmVjaXBpZW50SGFzaCI6Ijk0MjdjZDhiMzFiZmVjOWY5YTYzOWUxNTIzOWY3NTA4Mzc3NjU1MTAyMjcxYTRmMmIyMWQwMzdhNjJiNzI3NTciLCJkb21haW4iOiJ0ZWNoZWhlYWx0aHNlcnZpY2VzLmNvbSIsImNhbXBhaWduSWQiOiJhdWRpdC1kaXJlY3QtYnVzaW5lc3MtdjEiLCJpc3N1ZWRBdCI6MTc4NjI3NjgwMDAwMCwiZXhwaXJlc0F0IjoxNzg4ODY4ODAwMDAwfQ.6WfOUtlz3wJu85Cqnia6bWfGWessKtFPMC70Rxp__fw",
+            "https://getgeopulse.com/team/elena-park.jpg",
+            "https://getgeopulse.com",
+            "https://www.instagram.com/get_geopulse/",
+            "https://getgeopulse.com/branding/email/instagram.png",
+            "https://www.linkedin.com/company/143052018/",
+            "https://getgeopulse.com/branding/email/linkedin.png",
+            "https://getgeopulse.com/api/outreach/unsubscribe/preview-agency-1",
+            "https://getgeopulse.com/api/outreach/open/preview-agency-1"
+          ],
+          "unresolved": []
+        }
+      ],
+      "funnel": {
+        "delivered": "not_available",
+        "previewOpened": "not_available",
+        "fullReportOpened": "not_available",
+        "replied": "not_available",
+        "checkoutStarted": "not_available",
+        "converted": "not_available"
+      }
+    }
+  },
+  "apolloIntake": {
+    "contract": "apollo_intake_manifest_v1",
+    "mode": "intake_only",
+    "providerCalls": 0,
+    "enrollments": 0,
+    "sends": 0,
+    "accepted": [
+      {
+        "email": "owner@techehealthservices.com",
+        "companyDomain": "techehealthservices.com",
+        "lane": "direct_business"
+      },
+      {
+        "email": "founder@northstarit.ca",
+        "companyDomain": "northstarit.ca",
+        "lane": "agency_partner"
+      }
+    ],
+    "rejected": [
+      {
+        "email": "owner@techehealthservices.com",
+        "reason": "duplicate"
+      },
+      {
+        "email": "blocked@clinic.ca",
+        "reason": "suppressed"
+      }
+    ]
+  },
+  "activationGate": [
+    "Independent customer-facing review accepted",
+    "Production secret configured",
+    "Live sender authentication passes",
+    "Fresh suppression evidence loaded",
+    "Founder explicitly activates the bounded cohort"
+  ]
+}

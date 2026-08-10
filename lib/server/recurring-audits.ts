@@ -11,6 +11,8 @@ import { ctaButton, emailShell, escapeEmailHtml, scoreBlock } from './email-them
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
+import { parseIssues } from '../../workers/report/deep-audit-report-helpers';
+import { buildAuditDelta, type AuditFindingSnapshot } from './audit-recurring-delta';
 import {
   deliverSelfImprovementFromScan,
   isAutonomyOperator,
@@ -187,6 +189,47 @@ function buildLlm(env: RecurringEnvLike): LLMProvider {
 
 export type RecurringSweepResult = { scanned: number; ran: number; failed: number; fedSelfImprovement: number };
 
+export function findingsForRecurringDelta(url: string, rawIssues: unknown): AuditFindingSnapshot[] {
+  return parseIssues(rawIssues).map((issue) => ({
+    checkId: issue.checkId ?? issue.check ?? 'unknown',
+    url,
+    status: (issue.status ?? (issue.passed === true ? 'PASS' : 'FAIL')) as AuditFindingSnapshot['status'],
+    fix: issue.fix ?? null,
+  }));
+}
+
+export async function recurringDeltaForScan(args: {
+  supabase: SupabaseClient;
+  userId?: string | null;
+  domain: string;
+  runSource?: 'recurring' | 'monitor';
+  originScanId?: string | null;
+  finalUrl: string;
+  issues: unknown;
+  generatedAt: string;
+}) {
+  let query = args.supabase
+    .from('scans')
+    .select('url,issues_json')
+    .eq('domain', args.domain)
+    .eq('run_source', args.runSource ?? 'recurring');
+  if (args.userId) query = query.eq('user_id', args.userId);
+  const { data: previous } = await query
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let baseline = previous ? findingsForRecurringDelta(String(previous.url), previous.issues_json) : [];
+  if (baseline.length === 0 && args.originScanId) {
+    const { data: origin } = await args.supabase.from('scans').select('url,issues_json').eq('id', args.originScanId).maybeSingle();
+    if (origin) baseline = findingsForRecurringDelta(String(origin.url), origin.issues_json);
+  }
+  return buildAuditDelta({
+    baseline,
+    current: findingsForRecurringDelta(args.finalUrl, args.issues),
+    generatedAt: args.generatedAt,
+  });
+}
+
 /**
  * Run all due schedules (enabled + next_run_at <= now). Bounded per tick. Persists a scan and
  * advances the schedule. Safe no-op when nothing is due.
@@ -218,6 +261,7 @@ export async function runDueRecurringAudits(args: {
       const scan = await runFreeScan(s.url, llm);
       if (scan.ok) {
         const shareSlug = mintShareSlug();
+        const auditDelta = await recurringDeltaForScan({ supabase, userId: s.userId, domain: scan.domain, finalUrl: scan.finalUrl, issues: scan.output.issues, generatedAt: nowIso });
         const { data: scanRow } = await supabase
           .from('scans')
           .insert({
@@ -231,6 +275,7 @@ export async function runDueRecurringAudits(args: {
               issues: scan.output.issues,
               categoryScores: scan.output.categoryScores,
               pageSample: scan.textSample.slice(0, 6000),
+              auditDelta,
             },
             user_id: s.userId,
             startup_workspace_id: s.startupWorkspaceId,
@@ -315,6 +360,8 @@ export async function runUserAuditNow(
   if (!scan.ok) return { ok: false, reason: scan.reason };
 
   const shareSlug = mintShareSlug();
+  const nowIso = new Date(nowMs).toISOString();
+  const auditDelta = await recurringDeltaForScan({ supabase, userId: schedule.userId, domain: scan.domain, finalUrl: scan.finalUrl, issues: scan.output.issues, generatedAt: nowIso });
   const { data: scanRow } = await supabase
     .from('scans')
     .insert({
@@ -324,7 +371,7 @@ export async function runUserAuditNow(
       score: scan.output.score,
       letter_grade: scan.output.letterGrade,
       issues_json: scan.output.issues,
-      full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores },
+      full_results_json: { issues: scan.output.issues, categoryScores: scan.output.categoryScores, auditDelta },
       user_id: schedule.userId,
       startup_workspace_id: schedule.startupWorkspaceId,
       run_source: 'recurring',
@@ -334,7 +381,6 @@ export async function runUserAuditNow(
     .select('id')
     .single();
 
-  const nowIso = new Date(nowMs).toISOString();
   await supabase
     .from('recurring_audit_schedules')
     .update({ last_run_at: nowIso, next_run_at: computeNextRun(schedule.cadence, nowMs), last_error: null, updated_at: nowIso })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDraftContract, versionChecksum, type EmailCampaignV1 } from './email-campaign-contract';
 import {
+  campaignGreetingName,
   findLiteralTokens,
   renderCampaignPreview,
   unresolvedMergeFields,
@@ -66,7 +67,8 @@ describe('preview uses the production renderer', () => {
 
   it('substitutes contact values into the subject and body', () => {
     expect(preview.subject).toBe('AI visibility baseline for Roy Co');
-    expect(preview.html).toContain('Ann Roy');
+    expect(preview.html).toContain('Hi Ann,');
+    expect(preview.html).not.toContain('Hi Ann Roy');
   });
 
   it('carries the brand shell, unsubscribe path, and campaign UTM values', () => {
@@ -82,6 +84,15 @@ describe('preview uses the production renderer', () => {
   it('uses preview-scoped identifiers so a preview never allocates a real send', () => {
     expect(preview.unsubscribeUrl).toContain('/preview-c1');
     expect(preview.links.every((link) => !link.includes('/api/outreach/open/') || link.includes('preview-'))).toBe(true);
+  });
+});
+
+describe('campaignGreetingName', () => {
+  it('normalizes common CRM name formats to a first name', () => {
+    expect(campaignGreetingName('Uzziel Tamon')).toBe('Uzziel');
+    expect(campaignGreetingName('Dr. Uzziel Tamon')).toBe('Uzziel');
+    expect(campaignGreetingName('Tamon, Uzziel')).toBe('Uzziel');
+    expect(campaignGreetingName('  Uzziel   Tamon  ')).toBe('Uzziel');
   });
 });
 
