@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fullIssueListFromScan } from './scan-issue-list';
-import type { PreviewContact, PreviewScanContext } from './email-campaign-preview';
+import { campaignGreetingName, type PreviewContact, type PreviewScanContext } from './email-campaign-preview';
 import { issueAuditFullReportCapability } from './audit-report-capability';
 
 type ScanRow = {
@@ -151,7 +151,7 @@ export async function loadCampaignScanContext(args: {
   const row = data as ScanRow;
   const context = scanContextFromRow(row, args.appUrl);
   if (!context || !args.auditPreview) return context;
-  const firstName = args.contact.name?.trim().split(/\s+/)[0] ?? '';
+  const firstName = campaignGreetingName(args.contact.name) ?? '';
   const company = args.contact.company?.trim() ?? '';
   if (!firstName || !company || args.auditPreview.secret.length < 24) return null;
   const nowMs = args.auditPreview.nowMs ?? Date.now();
