@@ -122,7 +122,7 @@ export function buildOwnerPage(input: {
     if (!remedy) continue;
     const s = statusOf(r);
     if (remedy.effortImpact === 'Skip') {
-      deferrals.push(`${nameOf(r)} — deliberately optional; no engine rewards it today.`);
+      deferrals.push(`${nameOf(r)} — deliberately optional and excluded from the current score.`);
     } else if (bucketOf(r.checkId ?? '') === 'hygiene' && (s === 'FAIL' || s === 'WARNING')) {
       deferrals.push(`${nameOf(r)} — worth fixing for general site quality, but it does not affect AI visibility, so it is not in your first 30 days.`);
     }

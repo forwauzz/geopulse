@@ -103,7 +103,7 @@ export const REMEDIATION_CATALOG: readonly RemediationEntry[] = [
     clickPath: 'Edit page → SEO plugin box → Advanced → Canonical URL',
     desiredState: 'Each page\'s canonical URL points to itself (or the one true version of the page).',
     copyPaste:
-      'Our page\'s canonical tag points at the wrong URL, which hands our search credit to a different page. In the SEO plugin\'s Advanced settings, clear the Canonical URL field (it then defaults to the page itself) or set it to the correct https:// URL.',
+      'Our page is missing a self-referencing canonical URL or points at the wrong URL. In the SEO plugin\'s Advanced settings, clear an incorrect Canonical URL field (so the plugin can default to the page itself) or set it to the correct https:// URL.',
     verify: 'View page source: <link rel="canonical"> should match the page\'s own URL.',
     rollback: 'Reversible per page; no side effects when set to the page itself.',
     effortImpact: 'Quick Win',
@@ -255,7 +255,7 @@ export const REMEDIATION_CATALOG: readonly RemediationEntry[] = [
     clickPath: 'Edit page → restructure so the direct answer appears in the first third',
     desiredState: 'Key pages answer the customer\'s question in the first 30% of the page (answer-first, then detail).',
     copyPaste:
-      'Please restructure our key pages answer-first: open with a 2-3 sentence direct answer to what the visitor came for (what we do, for whom, at what price range), then the detail below. Nearly half of AI citations come from the top third of a page.',
+      'Please restructure our key pages answer-first: open with a 2-3 sentence direct answer to what the visitor came for (what we do, for whom, at what price range), then place the supporting detail below.',
     verify: 'Read the first screen of the page — does it answer the core question without scrolling? Re-run the scan.',
     rollback: 'WordPress revisions let you restore the old layout.',
     effortImpact: 'Big Project',

@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { buildDeepAuditPdf, toWinAnsiSafe } from './build-deep-audit-pdf';
+import { credibleCheckCount } from './category-score-truth';
 
 describe('toWinAnsiSafe', () => {
   it('maps arrows and strips non-WinAnsi glyphs instead of letting pdf-lib throw', () => {
     expect(toWinAnsiSafe('SEO plugin → Tools → editor')).toBe('SEO plugin -> Tools -> editor');
-    expect(toWinAnsiSafe('em—dash and … ellipsis stay')).toBe('em—dash and … ellipsis stay');
+    expect(toWinAnsiSafe('em—dash and … ellipsis')).toBe('em-dash and ... ellipsis');
+    expect(toWinAnsiSafe('“curly” • list')).toBe('"curly" - list');
     expect(toWinAnsiSafe('emoji 🚀 goes')).toBe('emoji ? goes');
+    expect(toWinAnsiSafe('Montréal, Québec')).toBe('Montréal, Québec');
+  });
+});
+
+describe('credibleCheckCount', () => {
+  it('accepts catalog-sized counts and rejects legacy weighted denominators', () => {
+    expect(credibleCheckCount('ai_readiness', 8)).toBe(8);
+    expect(credibleCheckCount('trust', 4)).toBe(4);
+    expect(credibleCheckCount('trust', 5)).toBeNull();
+    expect(credibleCheckCount('ai_readiness', 102)).toBeNull();
+    expect(credibleCheckCount('extractability', 3.5)).toBeNull();
   });
 });
 

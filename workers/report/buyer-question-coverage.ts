@@ -54,7 +54,7 @@ export function assessBuyerQuestionCoverage(pages: readonly { url: string; textS
       covered: locationCovered,
       evidence: locationCovered
         ? 'Location/service-area coverage found.'
-        : 'No location or service-area coverage detected — engines cannot answer "near me" questions about you.',
+        : 'No location or service-area coverage was detected in the crawl, leaving no direct site evidence for location-specific answers.',
       action: 'A service-area page per city you serve, with LocalBusiness schema naming the area.',
     },
     {
