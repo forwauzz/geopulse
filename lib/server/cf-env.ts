@@ -117,6 +117,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   SALES_OPERATOR_EMAIL?: string;
   /** Resend webhook signing secret for verified inbound email events. */
   RESEND_INBOUND_WEBHOOK_SECRET?: string;
+  /** Recipient for the daily lifecycle delivery exception digest. */
+  LIFECYCLE_EXCEPTION_TO?: string;
   /** Existing operator digest recipient; also receives requested walkthrough alerts. */
   MARKETING_REPORT_TO?: string;
   ANTHROPIC_API_KEY?: string;

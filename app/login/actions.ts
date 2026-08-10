@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { resolvePostSignupRedirect } from '@/lib/server/billing-onboarding-flow';
+import { enqueueLifecycleEmail } from '@/lib/server/lifecycle-email';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
@@ -194,6 +195,20 @@ export async function signUpWithPassword(
   if (normalizedName) {
     await authAdmin.from('users').update({ full_name: normalizedName }).eq('id', created.user.id);
   }
+
+  await enqueueLifecycleEmail({
+    supabase: authAdmin,
+    idempotencyKey: `account-created/${created.user.id}`,
+    eventType: 'account_created',
+    templateKey: 'account_created',
+    to: normalizedEmail,
+    userId: created.user.id,
+    subjectId: created.user.id,
+    variables: {
+      first_name: normalizedName.split(/\s+/)[0] || 'there',
+      cta_url: `${appUrl}/dashboard`,
+    },
+  });
 
   const nextPath = safeNextPath(parsed.data.next);
   const redirectTarget = resolvePostSignupRedirect({

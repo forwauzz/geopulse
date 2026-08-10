@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { structuredLog } from '@/lib/server/structured-log';
+import { setLifecycleEmailSuppression } from '@/lib/server/lifecycle-email';
 
 export const runtime = 'nodejs';
 
@@ -41,6 +42,7 @@ export async function GET(
     const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
     const nowIso = new Date().toISOString();
+    const { data: prospect } = await supabase.from('outreach_prospects').select('email').eq('id', parsed.data).maybeSingle();
     const { error } = await supabase
       .from('outreach_prospects')
       .update({
@@ -61,6 +63,9 @@ export async function GET(
         .eq('id', parsed.data);
     }
     structuredLog('outreach_unsubscribed', { prospectId: parsed.data }, 'info');
+    if (prospect?.email) {
+      await setLifecycleEmailSuppression({ supabase, email: String(prospect.email), scope: 'marketing', reason: 'unsubscribe', source: 'outreach_unsubscribe' });
+    }
   } catch {
     /* the recipient always gets the confirmation page */
   }

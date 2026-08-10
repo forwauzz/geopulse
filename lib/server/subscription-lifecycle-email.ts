@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ctaButton, emailShell, escapeEmailHtml } from './email-theme';
 import type { LeadEmailEnv } from './lead-email';
+import { enqueueLifecycleEmail } from './lifecycle-email';
 
 type LifecycleEmailEnv = LeadEmailEnv & { readonly NEXT_PUBLIC_APP_URL?: string };
 
@@ -93,16 +94,13 @@ export async function sendSubscriptionWelcome(args: {
 }): Promise<boolean> {
   const to = await userEmail(args.supabase, args.userId);
   if (!to) return false;
-  return sendLifecycleEmail({
-    env: args.env,
-    to,
-    email: buildSubscriptionWelcomeEmail({
-      appUrl: args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
-      bundleKey: args.bundleKey,
-      organizationName: args.organizationName,
-    }),
-    idempotencyKey: `subscription-welcome/${args.subscriptionId}`,
-  });
+  const result = await enqueueLifecycleEmail({ supabase: args.supabase, to, userId: args.userId,
+    subjectId: args.subscriptionId, idempotencyKey: `subscription-welcome/${args.subscriptionId}`,
+    eventType: 'subscription_activated', templateKey: 'subscription_activated', variables: {
+      plan_name: planName(args.bundleKey), organization_name: args.organizationName ?? '',
+      cta_url: `${(args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard`,
+    } });
+  return result.ok;
 }
 
 export async function sendTrialEndingReminder(args: {
@@ -114,13 +112,11 @@ export async function sendTrialEndingReminder(args: {
 }): Promise<boolean> {
   const to = await userEmail(args.supabase, args.userId);
   if (!to) return false;
-  return sendLifecycleEmail({
-    env: args.env,
-    to,
-    email: buildTrialEndingEmail({
-      appUrl: args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
-      bundleKey: args.bundleKey,
-    }),
-    idempotencyKey: `subscription-trial-ending/${args.subscriptionId}`,
-  });
+  const result = await enqueueLifecycleEmail({ supabase: args.supabase, to, userId: args.userId,
+    subjectId: args.subscriptionId, idempotencyKey: `subscription-trial-ending/${args.subscriptionId}`,
+    eventType: 'trial_ending', templateKey: 'trial_ending', variables: {
+      plan_name: planName(args.bundleKey),
+      cta_url: `${(args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard/billing`,
+    } });
+  return result.ok;
 }

@@ -14,6 +14,9 @@ const createUser = vi.fn();
 const updateUserRows = vi.fn();
 const updateUserRowsEq = vi.fn();
 const createServiceRoleClient = vi.fn();
+const enqueueLifecycleEmail = vi.fn(async () => ({ ok: true, status: 'queued' }));
+
+vi.mock('@/lib/server/lifecycle-email', () => ({ enqueueLifecycleEmail }));
 
 vi.mock('@/lib/supabase/server', () => ({
   createSupabaseServerClient: vi.fn(async () => ({
