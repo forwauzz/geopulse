@@ -2,14 +2,11 @@
  * Off-site / local / entity module (spec §2.3 / C8).
  *
  * Different AI engines cite different sources — a one-size "get listed everywhere"
- * recommendation is wrong. Each lever below names the engine(s) it actually helps,
- * with the study behind the claim (spec §7 verified stat pack).
+ * recommendation is wrong. Each lever below names the intended surface and uses
+ * bounded, directional guidance rather than an unsupported numerical promise.
  *
- * Two hard truths this module encodes:
- *   - ChatGPT cannot read Google Business Profile reviews directly — GBP helps Google
- *     surfaces, not ChatGPT. ChatGPT leans on third-party directories (Yelp #1, BBB).
- *   - Reviews are both an eligibility signal (presence/consistency/velocity) and a
- *     qualitative one. Never fabricate or inflate counts.
+ * Guidance is deliberately directional: source selection changes by engine, query,
+ * location, and time. Never fabricate or inflate review counts.
  */
 
 export interface OffsiteLever {
@@ -19,7 +16,6 @@ export interface OffsiteLever {
   ownerRole: string;
   what: string;
   why: string;
-  stat?: { claim: string; source: string };
 }
 
 export const OFFSITE_MODULE: {
@@ -30,9 +26,9 @@ export const OFFSITE_MODULE: {
 } = {
   headline: 'Beyond your website — where AI engines actually look you up',
   intro:
-    'Roughly 86% of AI citations come from brand-managed sources: about 44% from the ' +
-    'brand\'s own site and 42% from listings and directories (Yext). Your website is half ' +
-    'the battle; these levers are the other half — and each engine weighs them differently.',
+    'AI assistants may reuse information from your website, business profiles, and relevant ' +
+    'third-party directories. Keep those sources complete and consistent, then verify changes ' +
+    'with fresh tests because source selection varies by engine, query, location, and time.',
   levers: [
     {
       id: 'yelp-bbb',
@@ -40,11 +36,7 @@ export const OFFSITE_MODULE: {
       engines: ['ChatGPT'],
       ownerRole: 'You',
       what: 'Claim and complete your Yelp and Better Business Bureau profiles: exact business name, address, phone, services, hours, photos.',
-      why: 'ChatGPT\'s local answers lean on third-party directories — and it cannot read Google Business Profile reviews at all. Yelp and BBB are its top sources.',
-      stat: {
-        claim: '~48.7% of ChatGPT citations come from third-party directories; Yelp is cited ~3.4x the #2 platform (BBB)',
-        source: 'Yext (6.8M citations); Foundation/AirOps (28M AI responses)',
-      },
+      why: 'Relevant third-party profiles give search and answer systems another source for confirming business identity and service details.',
     },
     {
       id: 'bing-places',
@@ -52,7 +44,7 @@ export const OFFSITE_MODULE: {
       engines: ['ChatGPT', 'Copilot'],
       ownerRole: 'You',
       what: 'Claim your Bing Places listing (you can import it from Google Business Profile in minutes) and keep it current.',
-      why: 'ChatGPT search still leans on the Bing index, especially for local queries — a missing Bing listing is a missing ChatGPT signal.',
+      why: 'A current Bing listing can improve the business information available to Bing-powered search surfaces.',
     },
     {
       id: 'gbp',
@@ -60,11 +52,7 @@ export const OFFSITE_MODULE: {
       engines: ['Google AI Overviews', 'Gemini'],
       ownerRole: 'Google Business Profile manager',
       what: 'Complete every GBP field: categories, services, service area, hours, photos, Q&A. Post updates monthly.',
-      why: 'GBP powers Google\'s local surfaces and AI Overviews. Note: this helps GOOGLE surfaces — ChatGPT cannot read GBP reviews, so do not expect it to move ChatGPT.',
-      stat: {
-        claim: 'Only ~1.2% of local businesses are recommended by ChatGPT vs ~35.9% in Google\'s local 3-pack — the engines really do diverge',
-        source: 'SOCi 2026 Local Visibility Index (~350k locations)',
-      },
+      why: 'Google Business Profile supplies business information to Google\'s local surfaces. Treat it as a Google lever, not proof of visibility in other assistants.',
     },
     {
       id: 'own-site-schema',
@@ -72,8 +60,7 @@ export const OFFSITE_MODULE: {
       engines: ['Gemini'],
       ownerRole: 'WordPress admin',
       what: 'Keep the site\'s LocalBusiness JSON-LD complete (name, address, phone, areaServed) and build a landing page per service area.',
-      why: 'Gemini favors brand-owned websites over directories — your own pages and schema are the highest-leverage Gemini input.',
-      stat: { claim: '~52% of Gemini citations come from brand-owned sites', source: 'Yext analysis' },
+      why: 'Clear first-party pages and valid schema help systems interpret the business, services, and service area. They do not guarantee selection or citation.',
     },
     {
       id: 'apple-business-connect',
@@ -89,11 +76,7 @@ export const OFFSITE_MODULE: {
       engines: ['Perplexity', 'ChatGPT'],
       ownerRole: 'Marketing/content person',
       what: 'List the business on the directories your industry actually uses (for an MSP: Cloudtango, UpCity, Clutch, local chamber listings).',
-      why: 'Perplexity favors recency, Reddit, and niche/vertical directories over generic ones.',
-      stat: {
-        claim: 'Presence on G2/Capterra/Trustpilot/Yelp correlates with roughly 3x more AI citations',
-        source: '5W synthesis of 9 datasets',
-      },
+      why: 'Relevant vertical profiles can provide independent context about the business. Prioritize directories real buyers use instead of listing everywhere.',
     },
     {
       id: 'nap-consistency',
@@ -101,15 +84,15 @@ export const OFFSITE_MODULE: {
       engines: ['All engines'],
       ownerRole: 'Marketing/content person',
       what: 'Make the business Name, Address, and Phone IDENTICAL everywhere — site footer, schema, GBP, Yelp, BBB, Bing, Apple, directories. Fix old addresses and tracking numbers.',
-      why: 'Engines resolve you as an entity by cross-checking these sources; every mismatch weakens the match and splits your identity.',
+      why: 'Consistent identity details reduce ambiguity when people and automated systems compare sources.',
     },
     {
       id: 'reviews',
       title: 'Review depth and velocity',
       engines: ['All engines'],
       ownerRole: 'You',
-      what: 'Ask every happy customer for a review on the platform that matters for your target engine (Yelp/BBB for ChatGPT, Google for AI Overviews). Respond to every review, good or bad.',
-      why: 'Review presence, recency, and steadiness act as an eligibility signal, and the text itself feeds qualitative judgments about you.',
+      what: 'Ask every happy customer for a review on the credible platform their buyers already use. Respond to every review, good or bad.',
+      why: 'Authentic reviews give prospective buyers useful context and may be available to search surfaces that index the review platform.',
     },
   ],
   reviewsNote:

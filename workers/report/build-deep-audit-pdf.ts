@@ -32,6 +32,7 @@ import { assessBuyerQuestionCoverage } from './buyer-question-coverage';
 import { buildCadencePlan, type CadencePhase } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
 import { formatReportTimestamp } from './report-timestamp';
+import { credibleCheckCount } from './category-score-truth';
 
 /**
  * Map every string onto WinAnsi-encodable characters (Helvetica standard font).
@@ -48,7 +49,12 @@ export function toWinAnsiSafe(text: string): string {
     .replace(/→/g, '->')
     .replace(/[←]/g, '<-')
     .replace(/[↑↓]/g, '-')
-    .replace(/[×✕]/g, 'x')) {
+    .replace(/[×✕]/g, 'x')
+    .replace(/[–—‑]/g, '-')
+    .replace(/…/g, '...')
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/•/g, '-')) {
     const code = ch.codePointAt(0) ?? 0;
     if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || WINANSI_EXTRAS.has(ch)) {
       out += ch;
@@ -222,14 +228,14 @@ class PdfBuilder {
     }
   }
 
-  private drawPageFooter(): void {
+  private drawPageFooter(color: RGB = MUTED): void {
     const y = 25;
-    this.page.drawText(this.footerLeft, { x: MARGIN, y, size: 7, font: this.font, color: MUTED });
+    this.page.drawText(this.footerLeft, { x: MARGIN, y, size: 7, font: this.font, color });
     const numText = `Page ${String(this.pageNum)}`;
     const numW = this.font.widthOfTextAtSize(numText, 7);
-    this.page.drawText(numText, { x: (PAGE_W - numW) / 2, y, size: 7, font: this.font, color: MUTED });
+    this.page.drawText(numText, { x: (PAGE_W - numW) / 2, y, size: 7, font: this.font, color });
     const rW = this.font.widthOfTextAtSize(this.footerRight, 7);
-    this.page.drawText(this.footerRight, { x: PAGE_W - MARGIN - rW, y, size: 7, font: this.font, color: MUTED });
+    this.page.drawText(this.footerRight, { x: PAGE_W - MARGIN - rW, y, size: 7, font: this.font, color });
   }
 
   async embedHeroImage(bytes: Uint8Array): Promise<PDFImage | null> {
@@ -346,7 +352,7 @@ class PdfBuilder {
       this.page.drawText('Powered by GEO-Pulse', { x: MARGIN, y: 66, size: 7, font: this.font, color: muted });
     }
 
-    this.drawPageFooter();
+    this.drawPageFooter(muted);
     this.newPage();
   }
 
@@ -449,7 +455,8 @@ class PdfBuilder {
         if (finding) {
           this.drawText(finding, 8, false, MUTED, 70);
         }
-        this.y -= 4;
+        // Keep the next row's background from covering the wrapped finding above it.
+        this.y -= 12;
       }
     }
     this.y -= 8;
@@ -906,9 +913,6 @@ class PdfBuilder {
       this.drawText(`Owner: ${lever.ownerRole}`, 8, false, MUTED, 12);
       this.drawText(lever.what, 8, false, INK, 12);
       this.drawText(lever.why, 8, false, MUTED, 12);
-      if (lever.stat) {
-        this.drawText(`${lever.stat.claim} — ${lever.stat.source}`, 7, false, MUTED, 12);
-      }
       this.y -= 4;
     }
     this.drawText(OFFSITE_MODULE.reviewsNote, 8, false, MUTED);
@@ -984,10 +988,19 @@ class PdfBuilder {
     // Bars, not a table — the score IS the visual (design agent v2, issue #103).
     for (const cs of cats) {
       const label = labels[cs.category] ?? cs.category;
-      const hasScore = cs.score >= 0 && cs.checkCount > 0;
-      if (!hasScore) continue;
+      const checkCount = credibleCheckCount(cs.category, cs.checkCount);
+      const hasScore = cs.score >= 0 && checkCount !== null;
+      if (!hasScore) {
+        this.drawHBar(label, 0, MUTED, 'Not measured');
+        continue;
+      }
       const fill = cs.score >= 75 ? PASS_GREEN : cs.score >= 45 ? rgb(0.72, 0.53, 0.13) : FAIL_RED;
-      this.drawHBar(`${label} (${String(cs.checkCount)} checks)`, cs.score, fill, `${String(cs.score)} · ${cs.letterGrade}`);
+      this.drawHBar(
+        `${label}${checkCount === null ? '' : ` (${String(checkCount)} checks)`}`,
+        cs.score,
+        fill,
+        `${String(cs.score)} / 100 - ${cs.letterGrade}`,
+      );
     }
     this.y -= 8;
   }
@@ -1066,7 +1079,9 @@ export async function buildDeepAuditPdf(input: {
     .filter((i) => issueStatusLabel(i) !== 'PASS' && issueStatusLabel(i) !== 'NOT_EVALUATED')
     .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0));
   const strongestFailed = failedSorted[0];
-  const topFailed = (highlightedIssues.length > 0 ? highlightedIssues : failedSorted).slice(0, 5);
+  const topFailed = [...(highlightedIssues.length > 0 ? highlightedIssues : failedSorted)]
+    .sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0))
+    .slice(0, 5);
   const topIssueName = topFailed[0]?.check ?? topFailed[0]?.checkId ?? '';
   const firstMove = topFailed[0]?.fix ?? '';
   const crawlTrustNotice = deriveCrawlTrustNotice(input.coverageSummary);
@@ -1143,7 +1158,7 @@ export async function buildDeepAuditPdf(input: {
     counts,
     bucketScores: computeBucketScores(weightedForBuckets),
     topIssue: strongestFailed,
-    firstMove: topFailed[0]?.fix ?? '',
+    firstMove: strongestFailed?.fix ?? '',
   });
   if (input.categoryScores && input.categoryScores.length > 0) {
     pdf.drawCategoryBreakdown(input.categoryScores);
@@ -1200,7 +1215,7 @@ export async function buildDeepAuditPdf(input: {
   pdf.drawTechnicalAppendix(input.technicalAppendix, input.coverageSummary);
 
   // The report ends with the dated plan + re-scan hook (spec C11).
-  pdf.drawCadencePlan(buildCadencePlan(input.generatedAt ?? new Date().toISOString()));
+  pdf.drawCadencePlan(buildCadencePlan(input.generatedAt ?? new Date().toISOString(), allIssues));
 
   pdf.drawDisclaimer();
   return pdf.save();

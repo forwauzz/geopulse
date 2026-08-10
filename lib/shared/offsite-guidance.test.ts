@@ -20,18 +20,18 @@ describe('off-site module (spec §2.3 / C8)', () => {
     }
   });
 
-  it('never sells GBP as a ChatGPT lever (spec §2.3 — ChatGPT cannot read GBP reviews)', () => {
+  it('never sells GBP as a ChatGPT lever', () => {
     const gbp = OFFSITE_MODULE.levers.find((l) => l.id === 'gbp')!;
     expect(gbp.engines).not.toContain('ChatGPT');
-    expect(gbp.why).toContain('ChatGPT cannot read GBP');
+    expect(gbp.why).toContain('Google lever');
     const yelp = OFFSITE_MODULE.levers.find((l) => l.id === 'yelp-bbb')!;
     expect(yelp.engines).toContain('ChatGPT');
   });
 
-  it('routes Gemini to brand-owned site + schema', () => {
+  it('routes Gemini to brand-owned site + schema without a guarantee', () => {
     const own = OFFSITE_MODULE.levers.find((l) => l.id === 'own-site-schema')!;
     expect(own.engines).toContain('Gemini');
-    expect(own.stat?.claim).toContain('52%');
+    expect(own.why).toContain('do not guarantee');
   });
 
   it('never advises faking reviews', () => {
@@ -42,11 +42,9 @@ describe('off-site module (spec §2.3 / C8)', () => {
     expect(reviews.what.toLowerCase()).toContain('happy customer');
   });
 
-  it('every stat carries a named source (spec §7)', () => {
-    for (const lever of OFFSITE_MODULE.levers) {
-      if (lever.stat) {
-        expect(lever.stat.source.length, lever.id).toBeGreaterThan(3);
-      }
-    }
+  it('does not publish unsupported numerical claims or absolute engine behavior', () => {
+    const text = JSON.stringify(OFFSITE_MODULE);
+    expect(text).not.toMatch(/\d+(?:\.\d+)?%|\d+(?:\.\d+)?x/i);
+    expect(text).not.toMatch(/cannot read|top sources|favors/i);
   });
 });
