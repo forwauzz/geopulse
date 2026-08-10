@@ -1,7 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { scanContextFromRow } from './email-campaign-scan-context';
+import { scanContextFromRow, selectCampaignScanCandidate } from './email-campaign-scan-context';
 
 describe('campaign scan context', () => {
+  const completeRow = (id: string, createdAt: string) => ({
+    id,
+    url: 'https://example.com/',
+    domain: 'example.com',
+    score: 76,
+    letter_grade: 'C',
+    created_at: createdAt,
+    issues_json: [],
+    full_results_json: {
+      issues: [
+        { passed: false, check: 'Answer-first content', fix: 'Lead with buyer questions.' },
+        { passed: false, check: 'Business schema', fix: 'Add a specific business type.' },
+      ],
+      bucketScores: [{ bucket: 'eligibility', score: 100 }, { bucket: 'understanding', score: 62 }],
+      accessMatrix: { rows: [{ status: 'eligible' }, { status: 'eligible' }] },
+    },
+  });
+
+  it('selects the newest valid scan that owns a prepared report', () => {
+    const selected = selectCampaignScanCandidate({
+      rows: [completeRow('new-lightweight', '2026-08-10T12:00:00Z'), completeRow('prepared-audit', '2026-08-09T12:00:00Z')],
+      reportScanIds: new Set(['prepared-audit']),
+    });
+    expect(selected?.row.id).toBe('prepared-audit');
+    expect(selected?.context.scanId).toBe('prepared-audit');
+  });
   it('keeps only real failed findings and limits the email preview to two', () => {
     const context = scanContextFromRow({
       id: 'scan-techso',
