@@ -7,7 +7,7 @@ import {
 } from '@/lib/server/email-campaign-console';
 import { resolveCampaignSender } from '@/lib/server/email-campaign-sender';
 import { PRESET_OUTREACH_TEMPLATES } from '@/lib/server/outreach-templates';
-import { createAuditEmailCampaignAction, createEmailCampaignAction, importCampaignContactsAction } from './actions';
+import { createAuditEmailCampaignAction, createEmailCampaignAction, importCampaignContactsAction, prepareApolloCampaignContactsAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +51,14 @@ export default async function EmailCampaignsPage({
     contactsSkipped?: string;
     contactsInvalid?: string;
     contactsError?: string;
+    apolloSearched?: string;
+    apolloCredits?: string;
+    apolloEligible?: string;
+    apolloHeld?: string;
+    apolloAuditsQueued?: string;
+    apolloAuditsReady?: string;
+    apolloAuditFailures?: string;
+    apolloError?: string;
   }>;
 }) {
   const ctx = await loadAdminPageContext('/admin/campaigns/email');
@@ -161,11 +169,49 @@ export default async function EmailCampaignsPage({
         </div>
       </details>
 
+      <section id="apollo-intake" className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Apollo intake</p>
+            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Find, qualify, and prepare report-ready MSP contacts</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
+              Searches Quebec owner-level MSP contacts, reveals verified business email only, applies suppression and fit checks,
+              then queues personalized audits without enrolling or emailing anyone.
+            </p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${env['APOLLO_API_KEY'] ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200' : 'bg-amber-500/10 text-amber-800 dark:text-amber-200'}`}>
+            {env['APOLLO_API_KEY'] ? 'Apollo connected' : 'Apollo key required'}
+          </span>
+        </div>
+        {query.apolloSearched !== undefined ? (
+          <p className="mt-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
+            Searched {query.apolloSearched} candidates · used up to {query.apolloCredits ?? '0'} credits · qualified {query.apolloEligible ?? '0'} · held {query.apolloHeld ?? '0'} · audits queued {query.apolloAuditsQueued ?? '0'} · already ready {query.apolloAuditsReady ?? '0'} · failures {query.apolloAuditFailures ?? '0'}. No enrollment and no send.
+          </p>
+        ) : null}
+        {query.apolloError ? (
+          <p role="alert" className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            Apollo intake needs attention: {query.apolloError.replaceAll('_', ' ')}.
+          </p>
+        ) : null}
+        <form action={prepareApolloCampaignContactsAction} className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="min-w-56 text-sm font-semibold text-on-background">
+            New contacts to prepare
+            <input name="requested" type="number" min="1" max="10" defaultValue="8" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" />
+          </label>
+          <button type="submit" disabled={!env['APOLLO_API_KEY']} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50">
+            Find contacts and queue audits
+          </button>
+          <p className="basis-full text-xs leading-5 text-on-surface-variant">
+            Credit guardrail: at most one email-only enrichment per requested contact; no personal emails, phone numbers, or waterfall providers.
+          </p>
+        </form>
+      </section>
+
       {composer.campaigns.find((campaign) => campaign.role === 'primary') ? (
         <section className="rounded-2xl border border-primary/25 bg-primary/5 p-5 md:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Prepared-audit pilot</p>
           <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Create the personalized 10-page audit campaign</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">Uses each recipient’s completed scan, website hero, brand colour, first name, and signed full-report link. The pilot is capped at two recipients.</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">Uses each recipient’s completed scan, website hero, brand colour, first name, and signed full-report link. Choose a bounded cap after the reports are ready.</p>
           <form action={createAuditEmailCampaignAction} className="mt-4 flex flex-wrap items-end gap-3">
             <input type="hidden" name="campaignId" value={composer.campaigns.find((campaign) => campaign.role === 'primary')!.id} />
             <label className="min-w-72 flex-1 text-sm font-semibold text-on-background">
@@ -175,6 +221,10 @@ export default async function EmailCampaignsPage({
                   <option key={segment.segment} value={segment.segment}>{segment.segment} — {segment.eligible} eligible / {segment.total} total</option>
                 ))}
               </select>
+            </label>
+            <label className="w-36 text-sm font-semibold text-on-background">
+              Recipient cap
+              <input name="recipientCap" type="number" min="1" max="25" defaultValue="10" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
             </label>
             <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Create audit campaign</button>
           </form>

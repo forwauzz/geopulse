@@ -18,7 +18,18 @@ export type ReportQueueMessageV2 = {
   stripeSessionId: string;
 };
 
-export type ReportQueueMessage = ReportQueueMessageV1 | ReportQueueMessageV2;
+/** Internal campaign preparation: generate and persist the report, but never email it. */
+export type ReportQueueMessageV3 = {
+  v: 3;
+  scanId: string;
+  scanRunId: string;
+  customerEmail: string;
+  paymentId: string;
+  stripeSessionId: string;
+  deliveryMode: 'campaign_preview';
+};
+
+export type ReportQueueMessage = ReportQueueMessageV1 | ReportQueueMessageV2 | ReportQueueMessageV3;
 
 export function parseReportQueueMessage(raw: string): ReportQueueMessage | null {
   try {
@@ -36,6 +47,11 @@ export function parseReportQueueMessage(raw: string): ReportQueueMessage | null 
       typeof stripeSessionId !== 'string'
     ) {
       return null;
+    }
+    if (o['v'] === 3) {
+      const scanRunId = o['scanRunId'];
+      if (typeof scanRunId !== 'string' || o['deliveryMode'] !== 'campaign_preview') return null;
+      return { v: 3, scanId, scanRunId, customerEmail, paymentId, stripeSessionId, deliveryMode: 'campaign_preview' };
     }
     if (o['v'] === 2) {
       const scanRunId = o['scanRunId'];
