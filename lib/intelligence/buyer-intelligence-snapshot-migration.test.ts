@@ -8,7 +8,7 @@ describe('buyer intelligence snapshot migration', () => {
   it('creates an append-only service-role repository', () => {
     expect(sql).toContain('CREATE TABLE public.buyer_intelligence_snapshots');
     expect(sql).toContain('ENABLE ROW LEVEL SECURITY');
-    expect(sql).toContain('REVOKE ALL ON public.buyer_intelligence_snapshots FROM PUBLIC, anon, authenticated');
+    expect(sql).toContain('REVOKE ALL ON public.buyer_intelligence_snapshots FROM PUBLIC, anon, authenticated, service_role');
     expect(sql).toContain('GRANT SELECT, INSERT ON public.buyer_intelligence_snapshots TO service_role');
     expect(sql).toContain('BEFORE UPDATE OR DELETE ON public.buyer_intelligence_snapshots');
     expect(sql).toContain('BEFORE INSERT ON public.buyer_intelligence_snapshots');
