@@ -48,6 +48,17 @@ function agencyUserForm(password?: string) {
   return form;
 }
 
+function agencyClientForm(buyerEmail?: string) {
+  const form = new FormData();
+  form.set('agencyAccountId', '11111111-1111-4111-8111-111111111111');
+  form.set('clientKey', 'buyer-co');
+  form.set('name', 'Buyer Co');
+  form.set('websiteDomain', 'buyer.example');
+  form.set('vertical', 'saas');
+  if (buyerEmail) form.set('buyerEmail', buyerEmail);
+  return form;
+}
+
 describe('agency user administration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -120,5 +131,59 @@ describe('agency user administration', () => {
     expect(adminDb.membershipInserts).toEqual([
       expect.objectContaining({ user_id: 'user-new', role: 'owner' }),
     ]);
+  });
+});
+
+describe('agency client administration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('stores a normalized buyer email in the report recipient contract', async () => {
+    const inserted: unknown[] = [];
+    const adminDb = {
+      from(table: string) {
+        return {
+          insert(payload: unknown) {
+            if (table === 'agency_clients') inserted.push(payload);
+            return Promise.resolve({ error: null });
+          },
+        };
+      },
+    };
+    loadAdminActionContext.mockResolvedValue({ ok: true, adminDb, env: {} });
+    const { createAgencyClient } = await import('./actions');
+
+    await expect(createAgencyClient(null, agencyClientForm('Buyer@Example.com'))).resolves.toEqual({
+      ok: true,
+      message: 'Agency client created.',
+    });
+
+    expect(inserted).toEqual([
+      expect.objectContaining({
+        canonical_domain: 'buyer.example',
+        vertical: 'saas',
+        metadata: {
+          source: 'admin_manual',
+          report_recipients: ['buyer@example.com'],
+        },
+      }),
+    ]);
+  });
+
+  it('rejects an invalid buyer email before writing', async () => {
+    const insert = vi.fn();
+    loadAdminActionContext.mockResolvedValue({
+      ok: true,
+      adminDb: { from: () => ({ insert }) },
+      env: {},
+    });
+    const { createAgencyClient } = await import('./actions');
+
+    await expect(createAgencyClient(null, agencyClientForm('not-an-email'))).resolves.toEqual({
+      ok: false,
+      message: 'Enter a valid buyer email.',
+    });
+    expect(insert).not.toHaveBeenCalled();
   });
 });

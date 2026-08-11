@@ -32,6 +32,7 @@ const clientSchema = z.object({
   vertical: z.string().max(80, 'Vertical is too long.').optional(),
   subvertical: z.string().max(80, 'Subvertical is too long.').optional(),
   icpTag: z.string().max(80, 'ICP tag is too long.').optional(),
+  buyerEmail: z.string().trim().email('Enter a valid buyer email.').max(320, 'Buyer email is too long.').optional(),
 });
 
 const flagSchema = z.object({
@@ -144,6 +145,7 @@ export async function createAgencyClient(
     vertical: normalizeText(formData.get('vertical')),
     subvertical: normalizeText(formData.get('subvertical')),
     icpTag: normalizeText(formData.get('icpTag')),
+    buyerEmail: normalizeText(formData.get('buyerEmail')),
   });
 
   if (!parsed.success) {
@@ -160,6 +162,7 @@ export async function createAgencyClient(
         errors['vertical']?.[0] ??
         errors['subvertical']?.[0] ??
         errors['icpTag']?.[0] ??
+        errors['buyerEmail']?.[0] ??
         'Check the agency client values.',
     };
   }
@@ -175,7 +178,12 @@ export async function createAgencyClient(
     vertical: parsed.data.vertical ?? null,
     subvertical: parsed.data.subvertical ?? null,
     icp_tag: parsed.data.icpTag ?? null,
-    metadata: { source: 'admin_manual' },
+    metadata: {
+      source: 'admin_manual',
+      ...(parsed.data.buyerEmail
+        ? { report_recipients: [parsed.data.buyerEmail.toLowerCase()] }
+        : {}),
+    },
   };
 
   const { error } = await context.adminDb.from('agency_clients').insert(payload);
