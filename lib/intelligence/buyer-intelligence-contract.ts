@@ -103,7 +103,7 @@ const unavailableBenchmarkSchema = z.object({
   evidenceIds: z.array(z.never()).max(0),
 }).strict();
 
-const recommendationSchema = z.object({
+export const buyerIntelligenceRecommendationSchema = z.object({
   recommendationId: nonEmpty,
   contextVersion: nonEmpty,
   observationIds: z.array(nonEmpty).min(1),
@@ -127,23 +127,46 @@ const recommendationSchema = z.object({
     kind: z.enum(['audit_check', 'buyer_question', 'benchmark_metric', 'manual_evidence']),
     expectedCondition: nonEmpty,
     lastEvaluatedSnapshotId: nonEmpty.nullable(),
-    result: z.enum(['not_evaluated', 'passed', 'failed', 'inconclusive']),
+    result: z.enum([
+      'pending',
+      'verified_improved',
+      'verified_unchanged',
+      'verified_regressed',
+      'not_verifiable',
+    ]),
+    evidenceIds: z.array(nonEmpty),
+    runIds: z.array(nonEmpty),
+    reason: nonEmpty.nullable(),
   }).strict(),
 }).strict().superRefine((recommendation, context) => {
-  if (recommendation.verification.result === 'not_evaluated'
-    && recommendation.verification.lastEvaluatedSnapshotId !== null) {
+  const verification = recommendation.verification;
+  if (verification.result === 'pending'
+    && (verification.lastEvaluatedSnapshotId !== null
+      || verification.evidenceIds.length > 0
+      || verification.runIds.length > 0
+      || verification.reason !== null)) {
     context.addIssue({
       code: 'custom',
-      path: ['verification', 'lastEvaluatedSnapshotId'],
-      message: 'Unevaluated recommendations cannot reference an evaluation snapshot.',
+      path: ['verification'],
+      message: 'Pending recommendations cannot claim verification evidence or an evaluation snapshot.',
     });
   }
-  if (recommendation.verification.result !== 'not_evaluated'
-    && recommendation.verification.lastEvaluatedSnapshotId === null) {
+  if (verification.result !== 'pending' && verification.lastEvaluatedSnapshotId === null) {
     context.addIssue({
       code: 'custom',
       path: ['verification', 'lastEvaluatedSnapshotId'],
       message: 'Verification results require the snapshot that produced them.',
+    });
+  }
+  if (verification.result === 'not_verifiable' && verification.reason === null) {
+    context.addIssue({ code: 'custom', path: ['verification', 'reason'], message: 'Unverifiable recommendations require a reason.' });
+  }
+  if (verification.result.startsWith('verified_')
+    && (verification.evidenceIds.length === 0 || verification.runIds.length === 0 || verification.reason !== null)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['verification'],
+      message: 'Verified recommendations require evidence and run lineage and cannot carry an unavailable reason.',
     });
   }
 });
@@ -179,7 +202,7 @@ export const buyerIntelligenceSnapshotSchema = z.object({
   }).strict(),
   observations: z.array(observationSchema).min(1),
   benchmark: z.union([eligibleBenchmarkSchema, unavailableBenchmarkSchema]),
-  recommendations: z.array(recommendationSchema),
+  recommendations: z.array(buyerIntelligenceRecommendationSchema),
   change: z.object({
     comparable: z.boolean(),
     reasons: z.array(nonEmpty),
@@ -229,12 +252,14 @@ export const buyerIntelligenceSnapshotSchema = z.object({
   const referencedEvidence = [
     ...snapshot.observations.flatMap((item) => item.evidenceIds),
     ...snapshot.recommendations.flatMap((item) => item.evidenceIds),
+    ...snapshot.recommendations.flatMap((item) => item.verification.evidenceIds),
     ...snapshot.benchmark.evidenceIds,
   ];
   const referencedRuns = [
     ...snapshot.measurement.runIds,
     ...snapshot.measurement.providers.flatMap((item) => item.runIds),
     ...snapshot.observations.flatMap((item) => item.runIds),
+    ...snapshot.recommendations.flatMap((item) => item.verification.runIds),
   ];
   if (snapshot.recommendations.some((item) => item.observationIds.some((id) => !observationIds.has(id)))) {
     context.addIssue({ code: 'custom', path: ['recommendations'], message: 'Recommendations must reference snapshot observations.' });
