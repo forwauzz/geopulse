@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { getAgencyDashboardData } from './agency-dashboard-data';
+import { canRecoverHistoricalScan, getAgencyDashboardData } from './agency-dashboard-data';
+
+describe('historical scan recovery ownership', () => {
+  it('requires an exact agency-account match in addition to the domain match', () => {
+    const client = { agency_account_id: 'account-a' };
+
+    expect(canRecoverHistoricalScan({ agency_account_id: 'account-a' }, client)).toBe(true);
+    expect(canRecoverHistoricalScan({ agency_account_id: 'account-b' }, client)).toBe(false);
+    expect(canRecoverHistoricalScan({ agency_account_id: null }, client)).toBe(false);
+  });
+});
 
 describe('getAgencyDashboardData', () => {
   it('hydrates selected agency context with client-scoped history', async () => {
