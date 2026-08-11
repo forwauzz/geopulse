@@ -4,6 +4,7 @@ import type {
   IntelligenceAlertRow,
   IntelligenceDomainRow,
   IntelligenceEvidenceRow,
+  IntelligenceCommercialReadinessRow,
   IntelligenceLaneRow,
   IntelligenceOverview,
   IntelligencePatternRow,
@@ -155,6 +156,53 @@ export function IntelligenceOverviewView({ overview }: { overview: IntelligenceO
   );
 }
 
+const BLOCKER_LABELS: Record<string, string> = {
+  cohort_below_minimum: 'Fewer than 50 stored businesses',
+  schedule_below_minimum: 'Fewer than 50 businesses enabled for the frozen schedule',
+  no_completed_comparable_domains: 'No businesses completed under the comparable MSP protocol',
+  completed_cohort_below_minimum: 'Fewer than 50 businesses have comparable completed runs',
+  insufficient_repeated_windows: 'Fewer than four eligible windows per completed business',
+  evidence_stale_or_missing: 'Latest eligible evidence is missing or older than 72 hours',
+  mixed_protocol_variants: 'The evidence mixes protocol versions',
+};
+
+export function IntelligenceCommercialReadinessView({
+  readiness,
+}: {
+  readiness: IntelligenceCommercialReadinessRow | null;
+}) {
+  if (!readiness) return <Empty>No MSP readiness row is available yet.</Empty>;
+  const publishable = readiness.assessment.aggregateClaims === 'observational_only';
+  return (
+    <section className="space-y-3 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">MSP commercial evidence</p>
+          <h2 className="mt-1 font-headline text-xl font-semibold text-on-surface">Can we market what the engine learned?</h2>
+        </div>
+        <Badge tone={publishable ? 'good' : 'warn'}>{publishable ? 'Observational claims ready' : 'Aggregate claims blocked'}</Badge>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card label="Stored cohort" value={number(readiness.cohortDomainCount)} note={`${number(readiness.scheduledDomainCount)} scheduled`} />
+        <Card label="Comparable businesses" value={number(readiness.completedDomainCount)} note="50 required before aggregate claims" tone={readiness.completedDomainCount >= 50 ? 'good' : 'warn'} />
+        <Card label="Eligible windows" value={number(readiness.eligibleWindowCount)} note={`${number(readiness.ineligibleWindowCount)} gated`} />
+        <Card label="Protocol variants" value={number(readiness.protocolVariantCount)} note="Exactly one required" tone={readiness.protocolVariantCount === 1 ? 'good' : 'warn'} />
+      </div>
+      <p className="text-sm text-on-surface-variant">{readiness.assessment.safeLanguage}</p>
+      {readiness.assessment.blockers.length ? (
+        <ul className="grid gap-2 text-sm text-on-surface-variant sm:grid-cols-2">
+          {readiness.assessment.blockers.map((blocker) => (
+            <li key={blocker} className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+              {BLOCKER_LABELS[blocker] ?? blocker}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="text-xs text-on-surface-variant">Causal claims remain blocked. Verified before/after observations may support hypotheses, not promises that a change caused an outcome.</p>
+    </section>
+  );
+}
+
 function Empty({ children }: { children: React.ReactNode }) {
   return <div className="rounded-2xl border border-dashed border-outline-variant/30 p-8 text-center text-sm text-on-surface-variant">{children}</div>;
 }
@@ -194,14 +242,14 @@ export function IntelligenceDomainsView({ rows }: { rows: readonly IntelligenceD
 export function IntelligenceLanesView({ rows }: { rows: readonly IntelligenceLaneRow[] }) {
   if (!rows.length) return <Empty>No measurement lanes are indexed yet.</Empty>;
   return (
-    <Table headers={['Lane', 'Provider', 'Model', 'Mode', 'Comparability', 'Drilldown']}>
+    <Table headers={['Lane', 'Provider', 'Model', 'Mode', 'Review', 'Drilldown']}>
       {rows.map((row) => (
         <tr key={row.id}>
-          <Cell><span className="font-mono text-xs">{short(row.lane_key, 28)}</span></Cell>
-          <Cell>{row.provider ?? 'Unknown'}</Cell>
-          <Cell>{row.model_id ?? 'Unknown'}</Cell>
-          <Cell>{row.run_mode ?? 'Unknown'}</Cell>
-          <Cell><Badge tone={row.comparability === 'comparable' ? 'good' : 'warn'}>{row.comparability ?? 'unclassified'}</Badge></Cell>
+          <Cell><span className="font-mono text-xs">{short(row.fingerprint, 28)}</span><div className="text-xs text-on-surface-variant">{row.vertical} · {row.protocol_version}</div></Cell>
+          <Cell>{row.provider}</Cell>
+          <Cell>{row.model_id}</Cell>
+          <Cell>{row.run_mode}</Cell>
+          <Cell><Badge tone={row.review_state === 'verified' ? 'good' : 'warn'}>{row.review_state}</Badge></Cell>
           <Cell><Link className="text-xs font-semibold text-primary hover:underline" href={`/admin/intelligence/windows?lane=${encodeURIComponent(row.id)}`}>View windows →</Link></Cell>
         </tr>
       ))}

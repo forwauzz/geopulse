@@ -3,7 +3,6 @@ import { createServiceRoleClient } from '../lib/supabase/service-role';
 import { METRIC_DICTIONARY_VERSION, ratioMetric } from '../lib/intelligence/metrics';
 
 const PAGE_SIZE = 1_000;
-const REQUIRED_MODES = ['grounded_site', 'ungrounded_inference'] as const;
 type Client = ReturnType<typeof createServiceRoleClient>;
 type Row = Record<string, unknown>;
 
@@ -35,7 +34,7 @@ async function main(): Promise<void> {
   const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
   if (!url || !key) throw new Error('Missing Supabase service-role environment.');
   const client = createServiceRoleClient(url, key);
-  const [groups, runs, citations, domains, pages, recommendations, prRuns, tasks] = await Promise.all([
+  const [groups, runs, citations, domains, pages, recommendations, prRuns, tasks, assessments] = await Promise.all([
     fetchAll(client, 'benchmark_run_groups', 'id,query_set_id,model_set_version,metadata,created_at'),
     fetchAll(client, 'query_runs', 'id,run_group_id,domain_id,query_id,model_id,status,response_text,response_metadata,error_message,created_at,executed_at'),
     fetchAll(client, 'query_citations', 'id,query_run_id,cited_domain,cited_url'),
@@ -44,6 +43,7 @@ async function main(): Promise<void> {
     fetchAll(client, 'startup_recommendations', 'id,startup_workspace_id,status,created_at'),
     fetchAll(client, 'startup_agent_pr_runs', 'id,recommendation_id,status,completed_at'),
     fetchAll(client, 'startup_implementation_plan_tasks', 'id,recommendation_id,task_kind,status,updated_at'),
+    fetchAll(client, 'intelligence_window_quality_assessments', 'source_kind,source_id,eligible,anomaly_codes,assessed_at'),
   ]);
   const groupsById = new Map(groups.map((group) => [String(group['id']), group]));
   const citationsByRun = new Map<string, Row[]>();
@@ -55,7 +55,6 @@ async function main(): Promise<void> {
     String(domain['id']), normalizedHost(text(domain, 'canonical_domain')),
   ]));
   const windowRuns = new Map<string, Row[]>();
-  const windowMetadata = new Map<string, { seriesKey: string; observedAt: string }>();
   for (const run of runs) {
     const group = groupsById.get(String(run['run_group_id']));
     if (!group) continue;
@@ -66,49 +65,22 @@ async function main(): Promise<void> {
     const seriesKey = `${domainId}:${querySetId}:${modelId}`;
     const windowKey = `${metadata['schedule_window_utc'] ?? `legacy:${group['id']}`}:${seriesKey}`;
     windowRuns.set(windowKey, [...(windowRuns.get(windowKey) ?? []), run]);
-    const observedAt = text(group, 'created_at') ?? text(run, 'created_at') ?? '';
-    const prior = windowMetadata.get(windowKey);
-    windowMetadata.set(windowKey, {
-      seriesKey,
-      observedAt: prior && prior.observedAt < observedAt ? prior.observedAt : observedAt,
-    });
   }
-  const eligibleWindows = new Set<string>();
-  let anomalousCompleteWindowCount = 0;
-  const previousRateBySeries = new Map<string, number>();
-  const orderedWindows = [...windowRuns.entries()].sort(([left], [right]) =>
-    (windowMetadata.get(left)?.observedAt ?? '').localeCompare(windowMetadata.get(right)?.observedAt ?? '')
+  const latestAssessments = new Map<string, Row>();
+  for (const assessment of assessments
+    .filter((row) => text(row, 'source_kind') === 'benchmark_measurement_window')
+    .sort((left, right) => (text(left, 'assessed_at') ?? '').localeCompare(text(right, 'assessed_at') ?? ''))) {
+    latestAssessments.set(String(assessment['source_id']), assessment);
+  }
+  const eligibleWindows = new Set(
+    [...latestAssessments.entries()]
+      .filter(([key, row]) => row['eligible'] === true && windowRuns.has(key))
+      .map(([key]) => key)
   );
-  for (const [windowKey, windowRows] of orderedWindows) {
-    const queries = [...new Set(windowRows.map((run) => String(run['query_id'])))];
-    const complete = queries.every((queryId) => REQUIRED_MODES.every((mode) =>
-      windowRows.some((run) => {
-        const group = groupsById.get(String(run['run_group_id']));
-        const runMode = object(run, 'response_metadata')['run_mode'] ?? object(group ?? {}, 'metadata')['run_mode'];
-        return String(run['query_id']) === queryId &&
-          runMode === mode &&
-          text(run, 'status') === 'completed' &&
-          Boolean(text(run, 'response_text')) &&
-          !text(run, 'error_message');
-      })
-    ));
-    const completedRows = windowRows.filter((run) =>
-      text(run, 'status') === 'completed' && Boolean(text(run, 'response_text')) && !text(run, 'error_message')
-    );
-    const allZero = completedRows.length >= 3 && completedRows.every(
-      (run) => (citationsByRun.get(String(run['id']))?.length ?? 0) === 0
-    );
-    const citationRate = completedRows.length
-      ? completedRows.filter((run) => (citationsByRun.get(String(run['id']))?.length ?? 0) > 0).length / completedRows.length
-      : null;
-    const metadata = windowMetadata.get(windowKey);
-    const previousRate = metadata ? previousRateBySeries.get(metadata.seriesKey) : undefined;
-    const discontinuous = citationRate !== null && previousRate !== undefined &&
-      Math.abs(previousRate - citationRate) >= 0.75;
-    if (queries.length && complete && !allZero && !discontinuous) eligibleWindows.add(windowKey);
-    if (queries.length && complete && (allZero || discontinuous)) anomalousCompleteWindowCount += 1;
-    if (citationRate !== null && metadata) previousRateBySeries.set(metadata.seriesKey, citationRate);
-  }
+  const anomalousCompleteWindowCount = [...latestAssessments.values()].filter((row) => {
+    const anomalies = row['anomaly_codes'];
+    return Array.isArray(anomalies) && anomalies.length > 0;
+  }).length;
   const qualifyingRuns = [...eligibleWindows].flatMap((key) => windowRuns.get(key) ?? []).filter(
     (run) => text(run, 'status') === 'completed' && Boolean(text(run, 'response_text')) && !text(run, 'error_message')
   );
