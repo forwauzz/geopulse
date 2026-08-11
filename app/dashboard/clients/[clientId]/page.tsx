@@ -236,6 +236,9 @@ export default async function ClientScorecardPage({
             <Link href={`/dashboard/clients/${client.id}/report-profile`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
               Report profile
             </Link>
+            <Link href={`/dashboard/clients/${client.id}/buyer-intelligence?agencyAccount=${account.id}`} className="inline-flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary">
+              Buyer intelligence assets
+            </Link>
             <Link href={`/dashboard/new-scan?agencyAccount=${account.id}&agencyClient=${client.id}&url=${encodeURIComponent(domain ? `https://${domain}` : '')}`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
               Check again
             </Link>

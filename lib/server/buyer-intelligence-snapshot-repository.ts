@@ -28,6 +28,7 @@ type SnapshotRow = {
 
 type SnapshotPersistence = {
   find(snapshotId: string, owner: SnapshotOwner): Promise<SnapshotRow | null>;
+  list(owner: SnapshotOwner, options: { readonly eligibility?: 'eligible' | 'quarantined'; readonly limit: number }): Promise<SnapshotRow[]>;
   insert(row: SnapshotRow): Promise<void>;
 };
 
@@ -91,6 +92,24 @@ export function createBuyerIntelligenceSnapshotRepositoryFromPersistence(
   auditConflict: (snapshot: BuyerIntelligenceSnapshot) => Promise<void> = async () => undefined,
 ) {
   return {
+    async list(
+      owner: SnapshotOwner,
+      options: { readonly eligibility?: 'eligible' | 'quarantined'; readonly limit?: number } = {},
+    ): Promise<BuyerIntelligenceSnapshot[]> {
+      const limit = Math.max(1, Math.min(options.limit ?? 24, 100));
+      const rows = await persistence.list(owner, {
+        limit,
+        ...(options.eligibility ? { eligibility: options.eligibility } : {}),
+      });
+      return rows.map((row) => {
+        const snapshot = readRow(row);
+        if (snapshot.owner.type !== owner.type || snapshot.owner.id !== owner.id) {
+          throw new Error(`buyer_intelligence_snapshot_owner_mismatch:${snapshot.snapshotId}`);
+        }
+        return snapshot;
+      });
+    },
+
     async load(snapshotId: string, owner: SnapshotOwner): Promise<BuyerIntelligenceSnapshot | null> {
       const row = await persistence.find(snapshotId, owner);
       if (!row) return null;
@@ -142,6 +161,15 @@ export function createBuyerIntelligenceSnapshotRepository(
       const { data, error } = await query.maybeSingle<SnapshotRow>();
       if (error) throw error;
       return data ?? null;
+    },
+    async list(owner, options) {
+      let query = supabase.from('buyer_intelligence_snapshots').select('*')
+        .eq('owner_type', owner.type).order('period_end', { ascending: false }).limit(options.limit);
+      query = owner.id === null ? query.is('owner_id', null) : query.eq('owner_id', owner.id);
+      if (options.eligibility) query = query.eq('report_eligibility', options.eligibility);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as SnapshotRow[];
     },
     async insert(row) {
       const { error } = await supabase.from('buyer_intelligence_snapshots').insert(row);
