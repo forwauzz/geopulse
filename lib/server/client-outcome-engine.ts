@@ -177,6 +177,7 @@ export async function loadClientOutcomeEngine(args: {
   readonly configMetadata?: Record<string, unknown> | null;
   readonly latestScan?: { issues_json?: unknown; full_results_json?: unknown } | null;
   readonly measurementScope?: ClientMeasurementScope;
+  readonly requireMeasurementScope?: boolean;
 }): Promise<OutcomeEngineView> {
   const canonical = canonicalizeDomain(args.domain);
   const eventsRaw = args.configMetadata?.['outcome_action_events'];
@@ -208,6 +209,7 @@ export async function loadClientOutcomeEngine(args: {
   });
 
   const initialActions = buildOutcomeActions({ scan: args.latestScan ?? null, uncitedPrompts: [], events });
+  if (args.requireMeasurementScope && !args.measurementScope) return empty(initialActions);
   if (!canonical) return empty(initialActions);
 
   try {

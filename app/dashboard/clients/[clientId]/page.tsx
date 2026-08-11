@@ -162,6 +162,7 @@ export default async function ClientScorecardPage({
         configMetadata,
         latestScan: latestScanDetail,
         measurementScope,
+        requireMeasurementScope: true,
       })
     : null;
   const { data: currentRunGroups } = configId && querySetId
