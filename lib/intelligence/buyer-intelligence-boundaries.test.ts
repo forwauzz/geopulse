@@ -30,6 +30,8 @@ describe('buyer-intelligence architecture boundaries', () => {
     const contractFiles = [
       join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-contract.ts'),
       join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-projector.ts'),
+      join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-assembler.ts'),
+      join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-snapshot-change.ts'),
       join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-questions.ts'),
       join(ROOT, 'lib', 'connectors', 'crm-contract.ts'),
     ];
