@@ -1,0 +1,3 @@
+-- Ledger reconciliation only.
+-- This remote migration predates the numbered repository history; its durable schema is
+-- represented by the numbered baseline migrations. It is intentionally a local no-op.
