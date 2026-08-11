@@ -104,7 +104,7 @@ CREATE TRIGGER buyer_intelligence_snapshots_immutable
 
 ALTER TABLE public.buyer_intelligence_snapshots ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON public.buyer_intelligence_snapshots FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON public.buyer_intelligence_snapshots FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT, INSERT ON public.buyer_intelligence_snapshots TO service_role;
 
 COMMENT ON TABLE public.buyer_intelligence_snapshots IS
