@@ -56,7 +56,7 @@ const modelPolicySchema = z.object({
 const agencyUserSchema = z.object({
   agencyAccountId: z.string().uuid('Choose a valid agency account.'),
   email: z.string().email('Enter a valid email address.'),
-  password: z.string().min(8, 'Password must be at least 8 characters.'),
+  password: z.string().optional(),
   role: z.enum(['owner', 'manager', 'member', 'viewer']),
 });
 
@@ -356,16 +356,18 @@ export async function createAgencyUser(
 
   let userId = existingUser?.id ?? null;
 
-  if (!context.env.NEXT_PUBLIC_SUPABASE_URL || !context.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, message: 'Authentication admin access is not configured.' };
-  }
-
-  const authAdmin = createServiceRoleClient(
-    context.env.NEXT_PUBLIC_SUPABASE_URL,
-    context.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-
   if (!userId) {
+    if (!parsed.data.password || parsed.data.password.length < 8) {
+      return { ok: false, message: 'Password must be at least 8 characters for a new user.' };
+    }
+    if (!context.env.NEXT_PUBLIC_SUPABASE_URL || !context.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return { ok: false, message: 'Authentication admin access is not configured.' };
+    }
+
+    const authAdmin = createServiceRoleClient(
+      context.env.NEXT_PUBLIC_SUPABASE_URL,
+      context.env.SUPABASE_SERVICE_ROLE_KEY
+    );
     const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
       email: normalizedEmail,
       password: parsed.data.password,
@@ -377,15 +379,6 @@ export async function createAgencyUser(
     }
 
     userId = created.user.id;
-  } else {
-    const { error: updateError } = await authAdmin.auth.admin.updateUserById(userId, {
-      password: parsed.data.password,
-      email_confirm: true,
-    });
-
-    if (updateError) {
-      return { ok: false, message: updateError.message };
-    }
   }
 
   const membershipPayload = {
