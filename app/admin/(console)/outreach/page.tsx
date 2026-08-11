@@ -13,6 +13,10 @@ import {
 } from '@/lib/server/outreach-contacts';
 import { ContactBankBrowser } from './contact-bank-browser';
 import {
+  engagementEvidenceKey,
+  isVerifiedExternalAuditRequest,
+} from '@/lib/server/engagement-evidence';
+import {
   addOutreachProspect,
   addSegmentToSequenceAction,
   assignProspectTemplate,
@@ -81,11 +85,11 @@ export default async function AdminOutreachPage({
   // Load the whole bank once; the browser filters/searches client-side.
   const bankContacts = contactsReady ? await listContacts(ctx.adminDb, null) : [];
 
-  // Funnel signals (issue #116): which delivered scans were VIEWED (served to a
-  // browser) and which converted to a FULL deep-audit report.
+  // Funnel evidence: a serve is only a possible visit, and a generated report is only a buyer
+  // request when its external recipient can be attributed to this prospect.
   const scanIds = prospects.map((p) => p.lastScanId).filter((id): id is string => Boolean(id));
   let viewedScanIds = new Set<string>();
-  let fullAuditScanIds = new Set<string>();
+  let verifiedFullAuditKeys = new Set<string>();
   if (scanIds.length > 0) {
     const [viewsRes, reportsRes] = await Promise.all([
       ctx.adminDb
@@ -96,16 +100,41 @@ export default async function AdminOutreachPage({
         // Every serve logs a row, so heavily-viewed scans can crowd a small cap
         // and hide other prospects' badges. 2000 covers years at current volume.
         .limit(2000),
-      ctx.adminDb.from('reports').select('scan_id').eq('type', 'deep_audit').in('scan_id', scanIds),
+      ctx.adminDb.from('reports').select('scan_id,guest_email,user_id,scan:scans(run_source)').eq('type', 'deep_audit').in('scan_id', scanIds),
     ]);
     viewedScanIds = new Set(
       ((viewsRes.data ?? []) as { data: { scanId?: string } }[])
         .map((r) => r.data?.scanId)
         .filter((id): id is string => Boolean(id))
     );
-    fullAuditScanIds = new Set(
-      ((reportsRes.data ?? []) as { scan_id: string }[]).map((r) => r.scan_id)
-    );
+    type ReportEvidenceRow = {
+      scan_id: string;
+      guest_email: string | null;
+      user_id: string | null;
+      scan?: { run_source?: string } | { run_source?: string }[];
+    };
+    const reportRows = (reportsRes.data ?? []) as ReportEvidenceRow[];
+    const reportUserIds = [...new Set(reportRows.map((row) => row.user_id).filter((id): id is string => Boolean(id)))];
+    const usersRes = reportUserIds.length > 0
+      ? await ctx.adminDb.from('users').select('id,email').in('id', reportUserIds)
+      : { data: [] as { id: string; email: string }[] };
+    const reportUserEmails = new Map(((usersRes.data ?? []) as { id: string; email: string }[]).map((user) => [user.id, user.email]));
+    const keys = new Set<string>();
+    for (const report of reportRows) {
+      const scan = Array.isArray(report.scan) ? report.scan[0] : report.scan;
+      for (const prospect of prospects.filter((item) => item.lastScanId === report.scan_id)) {
+        const reportEmail = report.guest_email ?? (report.user_id ? reportUserEmails.get(report.user_id) : null);
+        if (isVerifiedExternalAuditRequest({
+          domain: prospect.url,
+          runSource: scan?.run_source,
+          reportEmail,
+          prospectEmails: [prospect.email],
+        })) {
+          keys.add(engagementEvidenceKey(report.scan_id, prospect.email));
+        }
+      }
+    }
+    verifiedFullAuditKeys = keys;
   }
   const { data: sendsData } = await ctx.adminDb
     .from('outreach_sends')
@@ -139,14 +168,14 @@ export default async function AdminOutreachPage({
     prospects.filter((p) => subscribedEmails.has(p.email.toLowerCase())).map((p) => p.id)
   );
 
-  // Full funnel roll-up (prospect-level): Sent → Opened → Clicked → Full audit → Subscribed.
+  // Truthful funnel roll-up: provider acceptance → pixel load → possible visit → verified request.
   const flags = prospects.map((p) => {
     const sends = (sendsByProspect.get(p.id) ?? []).filter((send) => send.delivery_status === 'sent');
     return {
       sent: sends.length > 0,
       opened: sends.some((s) => s.opened_at != null),
       clicked: sends.some((s) => s.scan_id != null && viewedScanIds.has(s.scan_id)),
-      fullAudit: sends.some((s) => s.scan_id != null && fullAuditScanIds.has(s.scan_id)),
+      fullAudit: sends.some((s) => s.scan_id != null && verifiedFullAuditKeys.has(engagementEvidenceKey(s.scan_id, p.email))),
       subscribed: subscribedProspectIds.has(p.id),
     };
   });
@@ -159,10 +188,10 @@ export default async function AdminOutreachPage({
     subscribed: flags.filter((f) => f.subscribed).length,
   };
   const funnelStages: { label: string; value: number; color: string }[] = [
-    { label: 'Sent', value: funnel.sent, color: 'text-on-background' },
-    { label: 'Opened', value: funnel.opened, color: 'text-indigo-600 dark:text-indigo-400' },
-    { label: 'Clicked', value: funnel.clicked, color: 'text-sky-600 dark:text-sky-400' },
-    { label: 'Full audit', value: funnel.fullAudit, color: 'text-amber-500 dark:text-amber-400' },
+    { label: 'Provider accepted', value: funnel.sent, color: 'text-on-background' },
+    { label: 'Tracking image', value: funnel.opened, color: 'text-indigo-600 dark:text-indigo-400' },
+    { label: 'Possible visit', value: funnel.clicked, color: 'text-sky-600 dark:text-sky-400' },
+    { label: 'Verified audit request', value: funnel.fullAudit, color: 'text-amber-500 dark:text-amber-400' },
     { label: 'Subscribed', value: funnel.subscribed, color: 'text-emerald-600 dark:text-emerald-400' },
   ];
 
@@ -177,7 +206,7 @@ export default async function AdminOutreachPage({
         </p>
       </header>
 
-      {/* Funnel roll-up — Sent → Opened → Clicked → Full audit → Subscribed, with drop-off %. */}
+      {/* Evidence funnel with measurement limitations visible in the stage names. */}
       <section className="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest p-5 md:p-6">
         <div className="flex items-baseline justify-between">
           <h2 className="font-sans text-lg font-bold text-on-background">Funnel</h2>
@@ -187,8 +216,8 @@ export default async function AdminOutreachPage({
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
           {funnelStages.map((stage, i) => {
-            // Each stage as a share of Sent — open-pixel undercounting means the stages aren't
-            // strictly nested (clicks can exceed opens), so "% of sent" reads honestly.
+            // Each stage as a share of provider-accepted sends. Pixel and serve telemetry are not
+            // strictly nested, so the denominator remains explicit.
             const rate = funnel.sent > 0 ? Math.round((stage.value / funnel.sent) * 100) : 0;
             return (
               <div key={stage.label} className="text-center">
@@ -553,7 +582,7 @@ export default async function AdminOutreachPage({
                   <th className="py-2 pr-3 font-semibold">State</th>
                   <th className="py-2 pr-3 font-semibold">Cadence</th>
                   <th className="py-2 pr-3 font-semibold">Last send</th>
-                  <th className="py-2 pr-3 font-semibold">Opened</th>
+                  <th className="py-2 pr-3 font-semibold">Tracking image</th>
                   <th className="py-2 pr-3 font-semibold">Next run</th>
                   <th className="py-2 pr-3 font-semibold">Actions</th>
                 </tr>
@@ -601,17 +630,17 @@ export default async function AdminOutreachPage({
                                 report
                               </a>
                             ) : null}
-                            {/* Funnel badges (issue #116): served-to-a-browser beats the pixel. */}
+                            {/* These remain conservatively labelled until human identity is proven. */}
                             {prospect.lastScanId && viewedScanIds.has(prospect.lastScanId) && (
                               <span className="ml-2 inline-flex items-center gap-0.5 rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-800 dark:bg-sky-500/15 dark:text-sky-200">
                                 <span className="material-symbols-outlined text-[12px]" aria-hidden>visibility</span>
-                                Viewed
+                                Possible visit
                               </span>
                             )}
-                            {prospect.lastScanId && fullAuditScanIds.has(prospect.lastScanId) && (
+                            {prospect.lastScanId && verifiedFullAuditKeys.has(engagementEvidenceKey(prospect.lastScanId, prospect.email)) && (
                               <span className="ml-1 inline-flex items-center gap-0.5 rounded-md bg-green-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-green-800 dark:bg-green-500/15 dark:text-green-200">
                                 <span className="material-symbols-outlined text-[12px]" aria-hidden>task_alt</span>
-                                Full audit
+                                Verified audit request
                               </span>
                             )}
                             {subscribedProspectIds.has(prospect.id) && (
@@ -631,14 +660,14 @@ export default async function AdminOutreachPage({
                         ) : openedCount > 0 ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800 dark:bg-green-500/15 dark:text-green-200">
                             <span className="material-symbols-outlined text-[13px]" aria-hidden>drafts</span>
-                            {openedCount}/{sends.length} opened
+                            {openedCount}/{sends.length} image loaded
                           </span>
                         ) : (
                           <span
                             className="text-xs text-on-surface-variant"
-                            title="Pixel-based opens undercount when images are blocked — treat as a floor."
+                            title="No tracking-image request was recorded. Image blocking can hide opens; privacy proxies can create false positives."
                           >
-                            no opens recorded
+                            no tracking loads
                           </span>
                         )}
                       </td>
