@@ -1,4 +1,5 @@
 import {
+  IntelligenceCommercialReadinessView,
   IntelligenceOverviewView,
   IntelligencePageFrame,
 } from '@/components/intelligence-admin-view';
@@ -16,16 +17,24 @@ const EMPTY: IntelligenceOverview = {
 
 export default async function AdminIntelligencePage() {
   const context = await loadAdminPageContext('/admin/intelligence');
-  const result = context.ok
-    ? await createIntelligenceAdminData(context.adminDb).getOverview()
-    : { status: 'error' as const, data: EMPTY, message: context.message };
+  const contextMessage = context.ok ? null : context.message;
+  const data = context.ok ? createIntelligenceAdminData(context.adminDb) : null;
+  const [result, readiness] = data
+    ? await Promise.all([data.getOverview(), data.getCommercialReadiness('msp_it')])
+    : [
+        { status: 'error' as const, data: EMPTY, message: contextMessage },
+        { status: 'error' as const, data: null, message: contextMessage },
+      ];
+  const status = result.status === 'ready' ? readiness.status : result.status;
+  const message = result.message ?? readiness.message;
   return (
     <IntelligencePageFrame
       title="Intelligence control room"
       description="One internal view of what GEO-Pulse is collecting, what is analytically safe, and how every derived claim traces back to source evidence."
-      status={result.status}
-      message={result.message}
+      status={status}
+      message={message}
     >
+      <IntelligenceCommercialReadinessView readiness={readiness.data} />
       <IntelligenceOverviewView overview={result.data} />
     </IntelligencePageFrame>
   );

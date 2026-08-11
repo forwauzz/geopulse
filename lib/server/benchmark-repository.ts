@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { benchmarkVerticalAliases } from '../intelligence/commercial-readiness';
 import {
   deriveBenchmarkDomainIdentity,
   type BenchmarkDomainIdentity,
@@ -200,7 +201,7 @@ export function createBenchmarkRepository(supabase: SupabaseLike) {
         .limit(fetchLimit);
 
       if (vertical) {
-        query = query.eq('vertical', vertical);
+        query = query.in('vertical', benchmarkVerticalAliases(vertical));
       }
 
       if (canonicalDomains.length > 0) {

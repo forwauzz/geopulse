@@ -1,4 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  assessCommercialReadiness,
+  type CommercialReadiness,
+  type CommercialReadinessInput,
+} from './commercial-readiness';
 
 export type IntelligenceAdminStatus = 'ready' | 'migration_pending' | 'error';
 
@@ -34,12 +39,21 @@ export type IntelligenceDomainRow = {
 
 export type IntelligenceLaneRow = {
   readonly id: string;
-  readonly lane_key: string;
-  readonly provider: string | null;
-  readonly model_id: string | null;
-  readonly run_mode: string | null;
-  readonly comparability: string | null;
+  readonly fingerprint: string;
+  readonly protocol_version: string;
+  readonly frame_kind: string;
+  readonly vertical: string;
+  readonly subvertical: string;
+  readonly provider: string;
+  readonly model_id: string;
+  readonly run_mode: string;
+  readonly review_state: string;
   readonly created_at: string;
+};
+
+export type IntelligenceCommercialReadinessRow = CommercialReadinessInput & {
+  readonly assessment: CommercialReadiness;
+  readonly latestCompletedObservedAt: string | null;
 };
 
 export type IntelligenceWindowRow = {
@@ -219,9 +233,44 @@ export function createIntelligenceAdminData(db: SupabaseClient) {
       return rows<IntelligenceLaneRow>(
         db,
         'intelligence_measurement_lanes',
-        'id,lane_key,provider,model_id,run_mode,comparability,created_at',
+        'id,fingerprint,protocol_version,frame_kind,vertical,subvertical,provider,model_id,run_mode,review_state,created_at',
         (query) => query.order('created_at', { ascending: false }).limit(Math.min(limit, 250))
       );
+    },
+
+    async getCommercialReadiness(
+      vertical = 'msp_it'
+    ): Promise<IntelligenceAdminResult<IntelligenceCommercialReadinessRow | null>> {
+      const response = await db
+        .from('intelligence_commercial_readiness_v1')
+        .select('canonical_vertical,cohort_domain_count,scheduled_domain_count,completed_domain_count,eligible_window_count,ineligible_window_count,latest_eligible_observed_at,protocol_variant_count,verified_intervention_count,latest_completed_observed_at')
+        .eq('canonical_vertical', vertical)
+        .maybeSingle() as {
+          data: Record<string, unknown> | null;
+          error: { code?: string; message: string } | null;
+        };
+      if (response.error) return resultFromError(response.error, null);
+      if (!response.data) return ready(null);
+      const input: CommercialReadinessInput = {
+        canonicalVertical: vertical === 'msp_it' ? 'msp_it' : 'unknown',
+        cohortDomainCount: Number(response.data['cohort_domain_count'] ?? 0),
+        scheduledDomainCount: Number(response.data['scheduled_domain_count'] ?? 0),
+        completedDomainCount: Number(response.data['completed_domain_count'] ?? 0),
+        eligibleWindowCount: Number(response.data['eligible_window_count'] ?? 0),
+        ineligibleWindowCount: Number(response.data['ineligible_window_count'] ?? 0),
+        latestEligibleObservedAt: typeof response.data['latest_eligible_observed_at'] === 'string'
+          ? response.data['latest_eligible_observed_at']
+          : null,
+        protocolVariantCount: Number(response.data['protocol_variant_count'] ?? 0),
+        verifiedInterventionCount: Number(response.data['verified_intervention_count'] ?? 0),
+      };
+      return ready({
+        ...input,
+        assessment: assessCommercialReadiness(input),
+        latestCompletedObservedAt: typeof response.data['latest_completed_observed_at'] === 'string'
+          ? response.data['latest_completed_observed_at']
+          : null,
+      });
     },
 
     getWindows(laneId?: string): Promise<IntelligenceAdminResult<IntelligenceWindowRow[]>> {

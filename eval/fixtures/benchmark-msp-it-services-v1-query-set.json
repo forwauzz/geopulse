@@ -7,7 +7,14 @@
   "metadata": {
     "owner": "internal",
     "source": "msp_pilot_mipsmedia_v1",
-    "target_subcohort": "smb_managed_it_montreal"
+    "target_subcohort": "smb_managed_it_montreal",
+    "methodology_version": "msp-commercial-v1",
+    "commercial_readiness_policy": "commercial-readiness-v1",
+    "frozen": true,
+    "minimum_comparable_domains": 50,
+    "minimum_eligible_windows_per_domain": 4,
+    "maximum_evidence_age_hours": 72,
+    "claim_scope": "observational_only"
   },
   "queries": [
     {

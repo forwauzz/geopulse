@@ -77,4 +77,35 @@ describe('intelligence admin data contract', () => {
     expect(result.data[0]?.causality_label).toContain('not_causation');
     expect(result.data[0]?.citation_rate_delta).toBeNull();
   });
+
+  it('turns aggregate MSP counts into a fail-closed claim decision', async () => {
+    const row = {
+      canonical_vertical: 'msp_it',
+      cohort_domain_count: 127,
+      scheduled_domain_count: 0,
+      completed_domain_count: 0,
+      eligible_window_count: 0,
+      ineligible_window_count: 0,
+      latest_eligible_observed_at: null,
+      protocol_variant_count: 0,
+      verified_intervention_count: 0,
+      latest_completed_observed_at: null,
+    };
+    const db = {
+      from() {
+        return {
+          select() {
+            return {
+              eq() { return this; },
+              maybeSingle() { return Promise.resolve({ data: row, error: null }); },
+            };
+          },
+        };
+      },
+    };
+    const result = await createIntelligenceAdminData(db as any).getCommercialReadiness();
+    expect(result.status).toBe('ready');
+    expect(result.data?.assessment.aggregateClaims).toBe('blocked');
+    expect(result.data?.assessment.internalEvidence).toBe('available');
+  });
 });

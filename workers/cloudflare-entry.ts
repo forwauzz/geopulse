@@ -713,12 +713,29 @@ export default {
           auth: { persistSession: false, autoRefreshToken: false },
         });
         stage('benchmark');
-        await runScheduledBenchmarkSweep({
+        const benchmarkResult = await runScheduledBenchmarkSweep({
           supabase,
           env,
           adapter: createBenchmarkExecutionAdapter(env),
           triggerSource: 'worker_cron',
         });
+        if (benchmarkResult.launchedRuns > 0) {
+          const qualityRefresh = await supabase.rpc('refresh_recent_benchmark_intelligence_quality', {
+            p_recent_hours: 72,
+          });
+          if (qualityRefresh.error) {
+            structuredError('intelligence_quality_after_benchmark_error', {
+              error: qualityRefresh.error.message,
+            });
+          }
+          const learningResult = await runIntelligenceLearningLoop(supabase);
+          structuredLog('intelligence_learning_after_benchmark', {
+            benchmark_launched_runs: benchmarkResult.launchedRuns,
+            benchmark_failed_runs: benchmarkResult.failedRuns,
+            benchmark_quality_refresh: qualityRefresh.error ? 'failed_closed' : qualityRefresh.data,
+            ...learningResult,
+          }, learningResult.criticalQuarantined > 0 ? 'warning' : 'info');
+        }
       } catch (err) {
         structuredError('benchmark_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
