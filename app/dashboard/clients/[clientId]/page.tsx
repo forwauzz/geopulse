@@ -187,7 +187,10 @@ export default async function ClientScorecardPage({
   const gpmReports = (storedGpmReports ?? [])
     .filter((report: { metadata: Record<string, unknown> | null }) => !isReportQuarantined(report.metadata))
     .slice(0, 6);
-  const reportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
+  const configuredReportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
+  const reportRecipients = configuredReportRecipients.length > 0
+    ? configuredReportRecipients
+    : recipientsFromMetadata(null, clientMetadata);
   const latestGpmReport = gpmReports?.[0] ?? null;
   const baselineStatus = typeof configMetadata['onboarding_loop_status'] === 'string'
     ? String(configMetadata['onboarding_loop_status'])
@@ -568,7 +571,7 @@ export default async function ClientScorecardPage({
                 <textarea name="competitorList" rows={3} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
               </label>
               <label className="block text-sm text-on-surface-variant">Send reports to
-                <textarea name="reportEmail" required rows={3} defaultValue={user.email ?? ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                <textarea name="reportEmail" required rows={3} defaultValue={reportRecipients.join('\n') || user.email || ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
                 <span className="mt-1 block text-xs">Up to 5 emails, one per line.</span>
               </label>
               <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">
