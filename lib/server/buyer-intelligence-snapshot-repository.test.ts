@@ -62,6 +62,13 @@ function memoryPersistence() {
         const row = rows.get(id) ?? null;
         return row?.owner_type === owner.type && row?.owner_id === owner.id ? row : null;
       },
+      async list(owner: BuyerIntelligenceSnapshot['owner'], options: { eligibility?: 'eligible' | 'quarantined'; limit: number }) {
+        return [...rows.values()]
+          .filter((row) => row.owner_type === owner.type && row.owner_id === owner.id)
+          .filter((row) => !options.eligibility || row.report_eligibility === options.eligibility)
+          .sort((left, right) => Date.parse(right.period_end) - Date.parse(left.period_end))
+          .slice(0, options.limit);
+      },
       async insert(row: any) {
         if (rows.has(row.snapshot_id)) throw new Error('unique_violation');
         rows.set(row.snapshot_id, structuredClone(row));
@@ -77,6 +84,16 @@ describe('buyer intelligence snapshot repository', () => {
     const source = snapshot();
     await expect(repository.store(source)).resolves.toEqual({ snapshot: source, created: true });
     await expect(repository.load(source.snapshotId, source.owner)).resolves.toEqual(source);
+  });
+
+  it('lists only the requested owner and eligibility in newest-first order', async () => {
+    const memory = memoryPersistence();
+    const repository = createBuyerIntelligenceSnapshotRepositoryFromPersistence(memory.persistence);
+    const source = snapshot();
+    await repository.store(source);
+    await expect(repository.list(source.owner, { eligibility: 'eligible' })).resolves.toEqual([source]);
+    await expect(repository.list({ ...source.owner, id: '33333333-3333-4333-8333-333333333333' }))
+      .resolves.toEqual([]);
   });
 
   it('makes identical writes idempotent', async () => {
