@@ -25,12 +25,17 @@ export const dynamic = 'force-dynamic';
 
 async function enqueueBillingEmail(args: { adminDb: ReturnType<typeof createServiceRoleClient>; env: Awaited<ReturnType<typeof getPaymentApiEnv>>; eventId: string; templateKey: LifecycleTemplateKey; subscriptionId: string; userId?: string | null; email?: string | null }): Promise<void> {
   let to = args.email?.trim() ?? '';
-  if (!to && args.userId) {
-    const { data } = await args.adminDb.from('users').select('email').eq('id', args.userId).maybeSingle();
+  let userId = args.userId ?? null;
+  if (!to && !userId) {
+    const { data } = await args.adminDb.from('user_subscriptions').select('user_id').eq('stripe_subscription_id', args.subscriptionId).maybeSingle();
+    userId = data?.user_id ?? null;
+  }
+  if (!to && userId) {
+    const { data } = await args.adminDb.from('users').select('email').eq('id', userId).maybeSingle();
     to = data?.email ?? '';
   }
-  if (!to) return;
-  const result = await enqueueLifecycleEmail({ supabase: args.adminDb, to, userId: args.userId ?? null,
+  if (!to) throw new Error('lifecycle_recipient_missing');
+  const result = await enqueueLifecycleEmail({ supabase: args.adminDb, to, userId,
     subjectId: args.subscriptionId, idempotencyKey: `stripe/${args.eventId}/${args.templateKey}`,
     eventType: args.templateKey, templateKey: args.templateKey,
     variables: { cta_url: `${(args.env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard/billing` } });
@@ -110,6 +115,7 @@ export async function POST(request: Request): Promise<Response> {
           if (!monitor.handled) await handleInvoicePaid(adminDb, invoice);
           if ((invoice.attempt_count ?? 1) > 1) {
             const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id ?? '';
+            if (!subId) break;
             const { data: monitorRow } = await adminDb.from('monitoring_subscriptions').select('email').eq('stripe_subscription_id', subId).maybeSingle();
             const { data: subRow } = await adminDb.from('user_subscriptions').select('user_id').eq('stripe_subscription_id', subId).maybeSingle();
             await enqueueBillingEmail({ adminDb, env, eventId: event.id, templateKey: 'payment_recovered', subscriptionId: subId, userId: subRow?.user_id ?? null, email: monitorRow?.email ?? null });
@@ -122,6 +128,7 @@ export async function POST(request: Request): Promise<Response> {
           const monitor = await handleMonitorInvoiceEvent({ supabase: adminDb, invoice, paid: false, nowMs });
           if (!monitor.handled) await handleInvoiceFailed(adminDb, invoice);
           const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id ?? '';
+          if (!subId) break;
           const { data: monitorRow } = await adminDb.from('monitoring_subscriptions').select('email').eq('stripe_subscription_id', subId).maybeSingle();
           const { data: subRow } = await adminDb.from('user_subscriptions').select('user_id').eq('stripe_subscription_id', subId).maybeSingle();
           await enqueueBillingEmail({ adminDb, env, eventId: event.id, templateKey: 'payment_failed', subscriptionId: subId, userId: subRow?.user_id ?? null, email: monitorRow?.email ?? null });
@@ -141,7 +148,7 @@ export async function POST(request: Request): Promise<Response> {
                 bundleKey,
               })
             : false;
-          // 3-day warning before trial ends. Log only — email reminders are future work.
+          if (!emailed) throw new Error('trial_ending_enqueue_failed');
           structuredLog('subscription_trial_will_end', {
             stripeEventId: event.id,
             subscriptionId: sub.id,
@@ -230,7 +237,8 @@ export async function POST(request: Request): Promise<Response> {
         amount_cents: sessionObj.amount_total ?? 0,
       },
     });
-    if (email) {
+    if (!email) return new Response('Lifecycle recipient missing', { status: 500 });
+    {
       const lifecycle = await enqueueLifecycleEmail({ supabase: adminDb, to: email, userId,
       subjectId: sessionObj.id, idempotencyKey: `monitoring-activated/${sessionObj.id}`,
       eventType: 'monitoring_activated', templateKey: 'monitoring_activated', variables: {
@@ -240,7 +248,7 @@ export async function POST(request: Request): Promise<Response> {
       } });
       if (!lifecycle.ok) return new Response('Lifecycle enqueue failed', { status: 500 });
     }
-    if (email) await setLifecycleEmailSuppression({ supabase: adminDb, email, scope: 'marketing', reason: 'conversion', source: 'stripe_webhook' });
+    await setLifecycleEmailSuppression({ supabase: adminDb, email, scope: 'marketing', reason: 'conversion', source: 'stripe_webhook' });
     structuredLog('monitor_checkout_seeded', {
       stripeEventId: event.id,
       sessionId: sessionObj.id,
@@ -249,10 +257,31 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(null, { status: 200 });
   }
 
-  // Subscription-mode checkouts (BILL stream) only have bundle_key + user_id in metadata.
-  // Workspace provisioning is handled by customer.subscription.created — skip here.
+  // Subscription-mode checkouts are acknowledged immediately. Workspace provisioning and the
+  // separate activation message remain authoritative on customer.subscription.created.
   if (sessionObj.mode === 'subscription') {
-    structuredLog('stripe_subscription_checkout_completed_skipped', {
+    if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+      return new Response('Misconfigured', { status: 503 });
+    }
+    const adminDb = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+    const email = sessionObj.customer_details?.email ?? sessionObj.customer_email ?? null;
+    if (!email) return new Response('Lifecycle recipient missing', { status: 500 });
+    const lifecycle = await enqueueLifecycleEmail({
+      supabase: adminDb,
+      to: email,
+      userId: sessionObj.metadata?.['user_id'] ?? null,
+      subjectId: sessionObj.id,
+      idempotencyKey: `checkout-received/${sessionObj.id}`,
+      eventType: 'checkout_received',
+      templateKey: 'checkout_received',
+      variables: {
+        domain: sessionObj.metadata?.['organization_name'] ?? sessionObj.metadata?.['website_url'] ?? 'your workspace',
+        cta_url: `${(env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard/billing`,
+      },
+    });
+    if (!lifecycle.ok) return new Response('Lifecycle enqueue failed', { status: 500 });
+    await setLifecycleEmailSuppression({ supabase: adminDb, email, scope: 'marketing', reason: 'conversion', source: 'stripe_webhook' });
+    structuredLog('stripe_subscription_checkout_acknowledged', {
       stripeEventId: event.id,
       sessionId: sessionObj.id,
       bundleKey: sessionObj.metadata?.['bundle_key'] ?? '',
@@ -309,7 +338,8 @@ export async function POST(request: Request): Promise<Response> {
       amount_cents: session.amount_total ?? 0,
     },
   });
-  if (email) {
+  if (!email) return new Response('Lifecycle recipient missing', { status: 500 });
+  {
     const lifecycle = await enqueueLifecycleEmail({ supabase, to: email,
     subjectId: session.id, idempotencyKey: `checkout-received/${session.id}`,
     eventType: 'checkout_received', templateKey: 'checkout_received', variables: {
@@ -318,7 +348,7 @@ export async function POST(request: Request): Promise<Response> {
     } });
     if (!lifecycle.ok) return new Response('Lifecycle enqueue failed', { status: 500 });
   }
-  if (email) await setLifecycleEmailSuppression({ supabase, email, scope: 'marketing', reason: 'conversion', source: 'stripe_webhook' });
+  await setLifecycleEmailSuppression({ supabase, email, scope: 'marketing', reason: 'conversion', source: 'stripe_webhook' });
 
   return new Response(null, { status: 200 });
 }

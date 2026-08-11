@@ -4,6 +4,8 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { resolvePostSignupRedirect } from '@/lib/server/billing-onboarding-flow';
 import { linkGuestPurchasesToUser } from '@/lib/server/link-guest-purchases';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { enqueueLifecycleEmail } from '@/lib/server/lifecycle-email';
+import { structuredLogWithClientAndWait } from '@/lib/server/structured-log';
 
 type CookieRow = { name: string; value: string; options: CookieOptions };
 
@@ -145,13 +147,36 @@ export async function GET(request: NextRequest) {
 
     const { data: userRow } = await admin
       .from('users')
-      .select('created_at, plan')
+      .select('created_at, plan, full_name, email')
       .eq('id', user.id)
       .maybeSingle();
 
     const isNewUser =
       userRow != null &&
       Date.now() - new Date(userRow.created_at as string).getTime() < 90_000;
+
+    if (isNewUser) {
+      const fullName = nameParam || userRow.full_name || String(user.user_metadata?.['full_name'] ?? '');
+      const welcome = await enqueueLifecycleEmail({
+        supabase: admin,
+        idempotencyKey: `account-created/${user.id}`,
+        eventType: 'account_created',
+        templateKey: 'account_created',
+        to: userRow.email || user.email,
+        userId: user.id,
+        subjectId: user.id,
+        variables: {
+          first_name: fullName.trim().split(/\s+/)[0] || 'there',
+          cta_url: `${appUrl.replace(/\/$/, '')}/dashboard`,
+        },
+      });
+      if (!welcome.ok) {
+        await structuredLogWithClientAndWait(admin, 'account_created_lifecycle_enqueue_failed', {
+          user_id: user.id,
+          reason: welcome.reason ?? 'unknown',
+        }, 'error');
+      }
+    }
 
     const redirectPath = resolvePostSignupRedirect({
       nextParam: searchParams.get('next'),

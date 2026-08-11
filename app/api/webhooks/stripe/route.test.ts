@@ -219,7 +219,7 @@ describe('POST /api/webhooks/stripe', () => {
     expect(handleInvoiceFailed).not.toHaveBeenCalled();
   });
 
-  it('skips subscription-mode checkout completions', async () => {
+  it('records a durable acknowledgement for subscription-mode checkout completions', async () => {
     getPaymentApiEnv.mockResolvedValue({
       STRIPE_SECRET_KEY: 'sk_test',
       STRIPE_WEBHOOK_SECRET: 'whsec_test',
@@ -233,6 +233,7 @@ describe('POST /api/webhooks/stripe', () => {
         object: {
           id: 'cs_sub',
           mode: 'subscription',
+          customer_email: 'buyer@example.com',
           metadata: { bundle_key: 'startup_dev', user_id: 'user-1' },
         },
       },
@@ -250,6 +251,17 @@ describe('POST /api/webhooks/stripe', () => {
     expect(response.status).toBe(200);
     expect(handleCheckoutSessionCompleted).not.toHaveBeenCalled();
     expect(retrieveSession).not.toHaveBeenCalled();
+    expect(enqueueLifecycleEmail).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: 'checkout-received/cs_sub',
+      templateKey: 'checkout_received',
+      to: 'buyer@example.com',
+      userId: 'user-1',
+    }));
+    expect(setLifecycleEmailSuppression).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'buyer@example.com',
+      scope: 'marketing',
+      reason: 'conversion',
+    }));
   });
 
   it('handles checkout.session.completed after verified signature', async () => {

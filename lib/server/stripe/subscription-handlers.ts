@@ -52,7 +52,7 @@ export async function handleSubscriptionUpserted(
       hasUserId: Boolean(userId),
       hasBundleKey: Boolean(bundleKey),
     }, 'warning');
-    return; // Not our subscription (e.g. one-time checkout from old path) — skip silently
+    throw new Error('subscription_metadata_missing');
   }
 
   const status = mapStripeStatus(subscription.status);
@@ -106,7 +106,7 @@ export async function handleSubscriptionUpserted(
       bundleKey,
       error: upsertErr.message,
     });
-    return;
+    throw new Error(`subscription_upsert_failed:${upsertErr.message}`);
   }
 
   await syncUserPlanFromSubscriptions({ supabase, userId });
@@ -146,7 +146,7 @@ export async function handleSubscriptionUpserted(
       agencyAccountId: provisioned.agencyAccountId ?? '',
     }, 'info');
     if (env) {
-      await sendSubscriptionWelcome({
+      const queued = await sendSubscriptionWelcome({
         supabase,
         env,
         userId,
@@ -154,6 +154,7 @@ export async function handleSubscriptionUpserted(
         bundleKey,
         organizationName: organizationName || null,
       });
+      if (!queued) throw new Error('subscription_welcome_enqueue_failed');
     }
   } else {
     structuredLog('subscription_upserted', {
@@ -189,7 +190,7 @@ export async function handleSubscriptionCancelled(
       subscriptionId: subscription.id,
       error: error.message,
     });
-    return;
+    throw new Error(`subscription_cancel_update_failed:${error.message}`);
   }
 
   const userId = subscription.metadata?.['user_id'];
@@ -251,7 +252,7 @@ export async function handleInvoicePaid(
       invoiceId: invoice.id ?? '',
       error: error.message,
     });
-    return;
+    throw new Error(`invoice_paid_update_failed:${error.message}`);
   }
 
   const userId = subRow?.user_id ?? null;
@@ -301,7 +302,7 @@ export async function handleInvoiceFailed(
       invoiceId: invoice.id ?? '',
       error: error.message,
     });
-    return;
+    throw new Error(`invoice_failed_update_failed:${error.message}`);
   }
 
   const userId = subRow?.user_id ?? null;

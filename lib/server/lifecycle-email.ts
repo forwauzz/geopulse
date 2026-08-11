@@ -20,12 +20,63 @@ type DeliveryRow = {
   attempts: number; max_attempts: number; idempotency_key: string;
 };
 
+type EligibilityReason = 'template_disabled' | 'transactional_preference_disabled' | 'marketing_preference_disabled' | 'recipient_suppressed';
+
 const TOKEN = /{{\s*([a-z0-9_]+)\s*}}/gi;
 export function renderLifecycleTemplate(template: string, variables: Record<string, unknown>): string {
   return template.replace(TOKEN, (_match, key: string) => String(variables[key] ?? ''));
 }
 
 function normalizedEmail(value: string): string { return value.trim().toLowerCase(); }
+
+export function lifecycleEligibilityReason(args: {
+  category: LifecycleCategory;
+  templateEnabled: boolean;
+  transactionalEnabled?: boolean;
+  marketingEnabled?: boolean;
+  suppressionScopes?: string[];
+}): EligibilityReason | null {
+  if (!args.templateEnabled) return 'template_disabled';
+  if (args.category === 'transactional' && args.transactionalEnabled === false) return 'transactional_preference_disabled';
+  if (args.category === 'marketing' && args.marketingEnabled === false) return 'marketing_preference_disabled';
+  if ((args.suppressionScopes ?? []).some(scope => scope === 'all' || (args.category === 'marketing' && scope === 'marketing'))) {
+    return 'recipient_suppressed';
+  }
+  return null;
+}
+
+async function deliveryEligibility(args: {
+  supabase: SupabaseClient;
+  email: string;
+  category: LifecycleCategory;
+  templateEnabled: boolean;
+}): Promise<{ allowed: true } | { allowed: false; reason: EligibilityReason }> {
+  const [{ data: preference }, { data: suppressions }] = await Promise.all([
+    args.supabase.from('lifecycle_email_preferences').select('transactional_enabled,marketing_enabled').eq('email', args.email).maybeSingle(),
+    args.supabase.from('lifecycle_email_suppressions').select('scope').eq('email', args.email).eq('active', true),
+  ]);
+  const reason = lifecycleEligibilityReason({
+    category: args.category,
+    templateEnabled: args.templateEnabled,
+    transactionalEnabled: preference?.transactional_enabled,
+    marketingEnabled: preference?.marketing_enabled,
+    suppressionScopes: (suppressions ?? []).map((row: { scope: string }) => row.scope),
+  });
+  if (reason) return { allowed: false, reason };
+  return { allowed: true };
+}
+
+export function resolveLifecycleProviderStatus(currentStatus: string, eventType: string): {
+  nextStatus: 'delivered' | 'bounced' | 'complained' | null;
+  ignored: boolean;
+} {
+  const nextStatus = eventType === 'email.delivered' ? 'delivered'
+    : eventType === 'email.bounced' ? 'bounced'
+      : eventType === 'email.complained' ? 'complained'
+        : null;
+  const ignored = nextStatus === 'delivered' && (currentStatus === 'bounced' || currentStatus === 'complained');
+  return { nextStatus, ignored };
+}
 
 export async function setLifecycleEmailSuppression(args: { supabase: SupabaseClient; email: string; scope: 'all' | 'marketing'; reason: 'bounce' | 'complaint' | 'unsubscribe' | 'cancellation' | 'conversion' | 'operator'; source: string; active?: boolean }): Promise<void> {
   const email = normalizedEmail(args.email); if (!email.includes('@')) return;
@@ -49,17 +100,12 @@ export async function enqueueLifecycleEmail(args: {
 }): Promise<{ ok: boolean; id?: string; status?: string; reason?: string }> {
   const email = normalizedEmail(args.to);
   if (!email.includes('@')) return { ok: false, reason: 'invalid_email' };
-  const [{ data: template }, { data: preference }, { data: suppressions }] = await Promise.all([
-    args.supabase.from('lifecycle_email_templates').select('template_key,category,enabled').eq('template_key', args.templateKey).maybeSingle(),
-    args.supabase.from('lifecycle_email_preferences').select('transactional_enabled,marketing_enabled').eq('email', email).maybeSingle(),
-    args.supabase.from('lifecycle_email_suppressions').select('scope,reason').eq('email', email).eq('active', true),
-  ]);
+  const { data: template } = await args.supabase.from('lifecycle_email_templates')
+    .select('template_key,category,enabled').eq('template_key', args.templateKey).maybeSingle();
   if (!template) return { ok: false, reason: 'template_missing' };
   const category = String(template.category) as LifecycleCategory;
-  const suppressed = !template.enabled
-    || (category === 'marketing' && preference?.marketing_enabled === false)
-    || (category === 'transactional' && preference?.transactional_enabled === false)
-    || (suppressions ?? []).some((row: { scope: string }) => row.scope === 'all' || (category === 'marketing' && row.scope === 'marketing'));
+  const eligibility = await deliveryEligibility({ supabase: args.supabase, email, category, templateEnabled: Boolean(template.enabled) });
+  const suppressed = !eligibility.allowed;
   const status = suppressed ? 'suppressed' : 'queued';
   const { data, error } = await args.supabase.from('lifecycle_email_deliveries').upsert({
     idempotency_key: args.idempotencyKey, event_type: args.eventType, template_key: args.templateKey,
@@ -89,21 +135,42 @@ function retryAt(attempt: number): string {
 
 export async function processLifecycleEmailQueue(args: { supabase: SupabaseClient; env: LifecycleEmailEnv; limit?: number }): Promise<{ claimed: number; sent: number; failed: number }> {
   const now = new Date().toISOString();
+  const leaseExpiredAt = new Date(Date.now() - 5 * 60_000).toISOString();
+  const { data: recovered } = await args.supabase.from('lifecycle_email_deliveries')
+    .update({ status: 'retrying', next_attempt_at: now, last_error: 'delivery_lease_expired', updated_at: now })
+    .eq('status', 'sending').lte('updated_at', leaseExpiredAt).select('id');
+  for (const row of recovered ?? []) {
+    await appendEvent(args.supabase, row.id as string, 'lease_recovered', { lease_expired_at: leaseExpiredAt });
+  }
   const { data } = await args.supabase.from('lifecycle_email_deliveries')
     .select('id,template_key,recipient_email,variables,attempts,max_attempts,idempotency_key')
     .in('status', ['queued', 'retrying']).lte('next_attempt_at', now).order('created_at').limit(args.limit ?? 20);
   const rows = (data ?? []) as DeliveryRow[];
-  let sent = 0; let failed = 0;
+  let claimedCount = 0; let sent = 0; let failed = 0;
   for (const row of rows) {
     const attempt = row.attempts + 1;
     const { data: claimed } = await args.supabase.from('lifecycle_email_deliveries')
       .update({ status: 'sending', attempts: attempt, updated_at: now }).eq('id', row.id)
       .in('status', ['queued', 'retrying']).select('id').maybeSingle();
     if (!claimed) continue;
+    claimedCount += 1;
     try {
       const { data: template } = await args.supabase.from('lifecycle_email_templates')
         .select('template_key,category,enabled,subject_template,body_template').eq('template_key', row.template_key).single();
-      if (!template?.enabled) throw new Error('template_disabled');
+      if (!template) throw new Error('template_missing');
+      const eligibility = await deliveryEligibility({
+        supabase: args.supabase,
+        email: row.recipient_email,
+        category: template.category as LifecycleCategory,
+        templateEnabled: Boolean(template.enabled),
+      });
+      if (!eligibility.allowed) {
+        await args.supabase.from('lifecycle_email_deliveries').update({
+          status: 'suppressed', last_error: eligibility.reason, updated_at: now,
+        }).eq('id', row.id);
+        await appendEvent(args.supabase, row.id, 'suppressed_before_send', { reason: eligibility.reason, attempt });
+        continue;
+      }
       const built = buildHtml(template as TemplateRow, row.variables ?? {});
       const key = args.env.RESEND_API_KEY?.trim(); const from = args.env.RESEND_FROM_EMAIL?.trim();
       if (!key || !from) throw new Error('resend_not_configured');
@@ -121,17 +188,21 @@ export async function processLifecycleEmailQueue(args: { supabase: SupabaseClien
       await appendEvent(args.supabase, row.id, terminal ? 'failed' : 'retry_scheduled', { attempt, error: message.slice(0, 200) }); failed += 1;
     }
   }
-  return { claimed: rows.length, sent, failed };
+  return { claimed: claimedCount, sent, failed };
 }
 
 export async function reconcileResendLifecycleEvent(args: { supabase: SupabaseClient; providerEventId: string; type: string; messageId: string; to?: string }): Promise<boolean> {
-  const { data: delivery } = await args.supabase.from('lifecycle_email_deliveries').select('id,recipient_email').eq('provider_message_id', args.messageId).maybeSingle();
+  const { data: delivery } = await args.supabase.from('lifecycle_email_deliveries').select('id,recipient_email,status').eq('provider_message_id', args.messageId).maybeSingle();
   if (!delivery?.id) return false;
-  const status = args.type === 'email.delivered' ? 'delivered' : args.type === 'email.bounced' ? 'bounced' : args.type === 'email.complained' ? 'complained' : null;
+  const transition = resolveLifecycleProviderStatus(delivery.status, args.type);
+  const status = transition.nextStatus;
   if (!status) return false;
   const now = new Date().toISOString();
-  await args.supabase.from('lifecycle_email_deliveries').update({ status, ...(status === 'delivered' ? { delivered_at: now } : {}), updated_at: now }).eq('id', delivery.id);
-  await appendEvent(args.supabase, delivery.id as string, status, {}, args.providerEventId);
+  const ignored = transition.ignored;
+  if (!ignored) {
+    await args.supabase.from('lifecycle_email_deliveries').update({ status, ...(status === 'delivered' ? { delivered_at: now } : {}), updated_at: now }).eq('id', delivery.id);
+  }
+  await appendEvent(args.supabase, delivery.id as string, ignored ? 'delivered_ignored_after_terminal_event' : status, {}, args.providerEventId);
   if (status === 'bounced' || status === 'complained') {
     await setLifecycleEmailSuppression({ supabase: args.supabase, email: args.to ?? delivery.recipient_email, scope: 'all', reason: status === 'bounced' ? 'bounce' : 'complaint', source: 'resend_webhook' });
   }
@@ -165,6 +236,38 @@ export async function enqueueOnboardingReminders(args: { supabase: SupabaseClien
       subjectId: user.id, idempotencyKey: `onboarding/${user.id}/${stage}`, eventType: 'onboarding_incomplete',
       templateKey: 'onboarding_reminder', variables: { first_name: user.full_name?.split(/\s+/)[0] ?? 'there',
         cta_url: `${args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com'}/dashboard` } });
+    if (result.status === 'queued') queued += 1;
+  }
+  return queued;
+}
+
+export async function enqueueMissingAccountCreatedEmails(args: { supabase: SupabaseClient; env: LifecycleEmailEnv; now?: Date }): Promise<number> {
+  const now = args.now ?? new Date();
+  const cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60_000).toISOString();
+  const { data: users } = await args.supabase.from('users').select('id,email,full_name,created_at')
+    .gte('created_at', cutoff).order('created_at', { ascending: false }).limit(100);
+  const candidates = (users ?? []) as Array<{ id: string; email: string; full_name: string | null; created_at: string }>;
+  if (candidates.length === 0) return 0;
+  const ids = candidates.map(user => user.id);
+  const { data: existing } = await args.supabase.from('lifecycle_email_deliveries').select('user_id')
+    .eq('event_type', 'account_created').in('user_id', ids);
+  const recorded = new Set((existing ?? []).map((row: { user_id: string | null }) => row.user_id).filter(Boolean));
+  let queued = 0;
+  for (const user of candidates) {
+    if (recorded.has(user.id)) continue;
+    const result = await enqueueLifecycleEmail({
+      supabase: args.supabase,
+      idempotencyKey: `account-created/${user.id}`,
+      eventType: 'account_created',
+      templateKey: 'account_created',
+      to: user.email,
+      userId: user.id,
+      subjectId: user.id,
+      variables: {
+        first_name: user.full_name?.trim().split(/\s+/)[0] || 'there',
+        cta_url: `${(args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard`,
+      },
+    });
     if (result.status === 'queued') queued += 1;
   }
   return queued;
