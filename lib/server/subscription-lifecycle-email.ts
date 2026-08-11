@@ -57,28 +57,6 @@ export function buildTrialEndingEmail(args: {
   };
 }
 
-async function sendLifecycleEmail(args: {
-  env: LifecycleEmailEnv;
-  to: string;
-  email: { subject: string; html: string };
-  idempotencyKey: string;
-}): Promise<boolean> {
-  const key = args.env.RESEND_API_KEY?.trim();
-  const from = args.env.RESEND_FROM_EMAIL?.trim();
-  if (!key || !from) return false;
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-      'Idempotency-Key': args.idempotencyKey,
-    },
-    body: JSON.stringify({ from, to: args.to, ...args.email }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  return response.ok;
-}
-
 async function userEmail(supabase: SupabaseClient, userId: string): Promise<string | null> {
   const { data } = await supabase.from('users').select('email').eq('id', userId).maybeSingle();
   return typeof data?.email === 'string' ? data.email : null;

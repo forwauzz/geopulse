@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
+import { enqueueLifecycleEmail, type LifecycleTemplateKey } from '@/lib/server/lifecycle-email';
 
 const PATH = '/admin/lifecycle-email';
 
@@ -31,8 +32,24 @@ export async function updateLifecycleTemplate(formData: FormData): Promise<void>
 export async function resendLifecycleDelivery(formData: FormData): Promise<void> {
   const ctx = await db(); if (!ctx) return;
   const id = String(formData.get('delivery_id') ?? '');
-  await ctx.db.from('lifecycle_email_deliveries').update({ status: 'queued', attempts: 0, next_attempt_at: new Date().toISOString(), last_error: null, escalated_at: null, updated_at: new Date().toISOString() }).eq('id', id);
-  await ctx.db.from('lifecycle_email_delivery_events').insert({ delivery_id: id, event_type: 'operator_requeued', detail: { user_id: ctx.userId } });
+  const { data: original } = await ctx.db.from('lifecycle_email_deliveries')
+    .select('event_type,template_key,recipient_email,variables,user_id,subject_id').eq('id', id).maybeSingle();
+  if (!original) return;
+  const resend = await enqueueLifecycleEmail({
+    supabase: ctx.db,
+    idempotencyKey: `operator-resend/${id}/${crypto.randomUUID()}`,
+    eventType: original.event_type,
+    templateKey: original.template_key as LifecycleTemplateKey,
+    to: original.recipient_email,
+    variables: original.variables ?? {},
+    userId: original.user_id,
+    subjectId: original.subject_id,
+  });
+  await ctx.db.from('lifecycle_email_delivery_events').insert({
+    delivery_id: id,
+    event_type: 'operator_resend_requested',
+    detail: { user_id: ctx.userId, new_delivery_id: resend.id ?? null, result: resend.status ?? resend.reason ?? 'unknown' },
+  });
   revalidatePath(PATH);
 }
 

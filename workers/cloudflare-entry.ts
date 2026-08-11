@@ -52,7 +52,7 @@ import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-st
 import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
 import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
-import { enqueueDailyLifecycleExceptionDigest, enqueueOnboardingReminders, processLifecycleEmailQueue } from '../lib/server/lifecycle-email';
+import { enqueueDailyLifecycleExceptionDigest, enqueueMissingAccountCreatedEmails, enqueueOnboardingReminders, processLifecycleEmailQueue } from '../lib/server/lifecycle-email';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -215,6 +215,7 @@ export default {
         stage('lifecycle_email');
         const date = new Date().toISOString().slice(0, 10);
         await enqueueDailyLifecycleExceptionDigest({ supabase, env, date });
+        await enqueueMissingAccountCreatedEmails({ supabase, env });
         await enqueueOnboardingReminders({ supabase, env });
         const result = await processLifecycleEmailQueue({ supabase, env });
         structuredLog('lifecycle_email_sweep', result, result.failed > 0 ? 'warning' : 'info');
