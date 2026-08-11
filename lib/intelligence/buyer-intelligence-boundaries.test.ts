@@ -29,6 +29,8 @@ describe('buyer-intelligence architecture boundaries', () => {
   it('keeps pure contracts independent of server, worker, app, and provider implementations', () => {
     const contractFiles = [
       join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-contract.ts'),
+      join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-projector.ts'),
+      join(ROOT, 'lib', 'intelligence', 'buyer-intelligence-questions.ts'),
       join(ROOT, 'lib', 'connectors', 'crm-contract.ts'),
     ];
     const violations = contractFiles.flatMap((file) =>
