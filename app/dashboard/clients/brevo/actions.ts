@@ -9,6 +9,7 @@ import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { createBrevoConnectorRepository } from '@/lib/server/brevo-connector-repository';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
+import { ensureAgencyClientBuyerIntelligenceSnapshot } from '@/lib/server/buyer-intelligence-snapshot-assembly';
 
 const contextSchema = z.object({ agencyAccountId: z.string().uuid() });
 
@@ -100,4 +101,49 @@ export async function createBrevoHeldBatchAction(formData: FormData): Promise<vo
     revalidatePath('/dashboard/clients/brevo');
     redirect(`/dashboard/clients/brevo?agencyAccount=${parsed.data.agencyAccountId}&brevo=batch-held`);
   }
+}
+
+export async function prepareBrevoProspectPreviewAction(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    agencyAccountId: z.string().uuid(), batchId: z.string().uuid(),
+    providerContactId: z.string().trim().min(1).max(80),
+  }).safeParse({
+    agencyAccountId: formData.get('agencyAccountId'), batchId: formData.get('batchId'),
+    providerContactId: formData.get('providerContactId'),
+  });
+  if (!parsed.success) return;
+  const context = await authorizedContext(parsed.data.agencyAccountId);
+  if (!context) return;
+  const repository = createBrevoConnectorRepository(context.workspace.admin);
+  let previewPath = '';
+  try {
+    const contact = await repository.loadHeldContact(parsed.data);
+    if (!contact) throw new Error('brevo_held_contact_not_found');
+    const { data: client } = await context.workspace.admin.from('agency_clients')
+      .select('id,canonical_domain').eq('agency_account_id', parsed.data.agencyAccountId)
+      .eq('canonical_domain', contact.canonicalDomain).eq('status', 'active').maybeSingle();
+    if (!client?.id || client.canonical_domain !== contact.canonicalDomain) {
+      throw new Error('brevo_prospect_client_not_ready');
+    }
+    const result = await ensureAgencyClientBuyerIntelligenceSnapshot({
+      supabase: context.workspace.admin as never,
+      agencyAccountId: parsed.data.agencyAccountId,
+      agencyClientId: String(client.id),
+      canonicalDomain: contact.canonicalDomain,
+    });
+    structuredLog('brevo_prospect_preview_prepared', {
+      agency_account_id: parsed.data.agencyAccountId, batch_id: parsed.data.batchId,
+      provider_contact_id: parsed.data.providerContactId, agency_client_id: String(client.id),
+      snapshot_id: result.snapshot.snapshotId, created: result.created, user_id: context.user.id,
+    });
+    previewPath = `/dashboard/clients/${client.id}/buyer-intelligence?agencyAccount=${parsed.data.agencyAccountId}&snapshot=${encodeURIComponent(result.snapshot.snapshotId)}&view=prospect_preview`;
+  } catch (error) {
+    structuredError('brevo_prospect_preview_failed', {
+      agency_account_id: parsed.data.agencyAccountId, batch_id: parsed.data.batchId,
+      provider_contact_id: parsed.data.providerContactId,
+      error_message: error instanceof Error ? error.message : 'unknown',
+    });
+    redirect(`/dashboard/clients/brevo?agencyAccount=${parsed.data.agencyAccountId}&brevo=preview-failed`);
+  }
+  redirect(previewPath);
 }

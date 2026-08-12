@@ -5,7 +5,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { createBrevoConnectorRepository, type HeldBatch } from '@/lib/server/brevo-connector-repository';
-import { createBrevoHeldBatchAction, disconnectBrevoAction } from './actions';
+import { createBrevoHeldBatchAction, disconnectBrevoAction, prepareBrevoProspectPreviewAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +20,7 @@ const STATUS_COPY: Record<string, string> = {
   'connection-failed': 'Brevo could not be connected. Please retry.',
   'configuration-error': 'Brevo OAuth is not configured for this environment.',
   'selection-invalid': 'Choose between 1 and 10 eligible contacts.',
+  'preview-failed': 'The preview could not be prepared. Verify that this domain has a completed baseline, then retry.',
 };
 
 export default async function BrevoPartnerPage({ searchParams }: {
@@ -164,7 +165,19 @@ export default async function BrevoPartnerPage({ searchParams }: {
           <article key={batch.id} className="rounded-xl border border-outline-variant/20 p-4">
             <div className="flex justify-between gap-3"><strong>{batch.contacts.length} contact{batch.contacts.length === 1 ? '' : 's'}</strong><span className="text-xs uppercase tracking-wide text-primary">{batch.status}</span></div>
             <p className="mt-1 text-xs text-on-surface-variant">{new Date(batch.createdAt).toLocaleString('en-CA')}</p>
-            <ul className="mt-3 grid gap-2 md:grid-cols-2">{batch.contacts.map((contact) => <li key={contact.providerContactId} className="rounded-lg bg-surface-container-low p-3 text-sm"><span className="block font-semibold">{contact.companyName}</span><span className="text-xs text-on-surface-variant">{contact.firstName ?? 'Contact'} · {contact.canonicalDomain}</span></li>)}</ul>
+            <ul className="mt-3 grid gap-2 md:grid-cols-2">{batch.contacts.map((contact) => {
+              const client = account.clients.find((item) => item.canonicalDomain === contact.canonicalDomain);
+              return <li key={contact.providerContactId} className="rounded-lg bg-surface-container-low p-3 text-sm">
+                <span className="block font-semibold">{contact.companyName}</span>
+                <span className="text-xs text-on-surface-variant">{contact.firstName ?? 'Contact'} · {contact.canonicalDomain}</span>
+                {client ? <form action={prepareBrevoProspectPreviewAction} className="mt-3">
+                  <input type="hidden" name="agencyAccountId" value={account.id} />
+                  <input type="hidden" name="batchId" value={batch.id} />
+                  <input type="hidden" name="providerContactId" value={contact.providerContactId} />
+                  <button className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary">Prepare prospect preview</button>
+                </form> : <span className="mt-2 block text-xs text-error">Create or verify this client baseline before preparing a preview.</span>}
+              </li>;
+            })}</ul>
           </article>
         )) : <p className="rounded-xl bg-surface-container-low p-4 text-sm text-on-surface-variant">No held Brevo contacts yet.</p>}</div>
       </section>

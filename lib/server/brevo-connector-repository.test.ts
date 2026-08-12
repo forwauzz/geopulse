@@ -11,6 +11,24 @@ function query(result: unknown) {
 }
 
 describe('brevo connector repository', () => {
+  it('loads a held contact only through its tenant and batch lineage', async () => {
+    const row = {
+      batch_id: '00000000-0000-4000-8000-000000000010',
+      provider_contact_id: '1592', first_name: 'Uzziel', company_name: 'Alie',
+      canonical_domain: 'alie.app', email: 'uzziel.tamon@alie.app',
+    };
+    const supabase = { from: () => query({ data: row, error: null }) };
+    const contact = await createBrevoConnectorRepository(supabase).loadHeldContact({
+      agencyAccountId: '00000000-0000-4000-8000-000000000002',
+      batchId: row.batch_id,
+      providerContactId: row.provider_contact_id,
+    });
+    expect(contact).toEqual({
+      providerContactId: '1592', firstName: 'Uzziel', companyName: 'Alie',
+      canonicalDomain: 'alie.app', email: 'uzziel.tamon@alie.app',
+    });
+  });
+
   it('normalizes Postgres offset timestamps at the connector boundary', async () => {
     const account = {
       id: '00000000-0000-4000-8000-000000000001',
