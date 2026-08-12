@@ -76,6 +76,18 @@ export type AgencyClientBaselineResult = {
   readonly reason: string | null;
 };
 
+export function organizationContextMarketLabel(context: {
+  readonly market: {
+    readonly locality: string | null;
+    readonly serviceAreas: readonly string[];
+    readonly countryCode: string;
+  };
+}): string {
+  return context.market.locality?.trim()
+    || context.market.serviceAreas.find((area) => area.trim())?.trim()
+    || context.market.countryCode.trim();
+}
+
 export type AgencyBaselineSweepResult = {
   readonly eligible: number;
   readonly attempted: number;
@@ -279,7 +291,7 @@ export async function completeAgencyClientBaseline(args: {
     };
   }
 
-  const clientLocation = typeof client.metadata?.['location'] === 'string'
+  const legacyClientLocation = typeof client.metadata?.['location'] === 'string'
     ? String(client.metadata['location'])
     : null;
   const existingLocation = typeof existingConfig?.location === 'string'
@@ -290,7 +302,7 @@ export async function completeAgencyClientBaseline(args: {
   const profile = clientProfile({
     vertical: client.vertical,
     subvertical: client.subvertical,
-    location: clientLocation || existingLocation,
+    location: organizationContextMarketLabel(organizationContext),
   });
   const discovery = resolveDiscoveryMode(args.env) === 'gemini'
     ? await discoverCompetitorsLive(args.env, profile, domain)
@@ -301,7 +313,7 @@ export async function completeAgencyClientBaseline(args: {
     ? existingConfig.competitor_list.filter((item: unknown): item is string => typeof item === 'string')
     : [];
   const market = resolveClientMarketContext({
-    clientLocation,
+    clientLocation: organizationContextMarketLabel(organizationContext) || legacyClientLocation,
     existingLocation,
     clientCategory: client.subvertical || client.vertical,
     existingCategory: existingConfig?.topic || existingDomain?.subvertical || existingDomain?.vertical,
