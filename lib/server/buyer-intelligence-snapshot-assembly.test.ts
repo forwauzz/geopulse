@@ -46,6 +46,24 @@ describe('buyer intelligence snapshot assembly', () => {
     expect(store).toHaveBeenCalledOnce();
   });
 
+  it('normalizes a Postgres offset timestamp before assembling the snapshot', async () => {
+    list.mockResolvedValue([]);
+    store.mockImplementation(async (snapshot) => ({ snapshot, created: true }));
+    const result = await ensureAgencyClientBuyerIntelligenceSnapshot({
+      supabase: { from: () => scanQuery({
+        id: 'scan-offset-1', created_at: '2026-08-12T01:35:48.661165+00:00', score: 42,
+        issues_json: [{ checkId: 'title-tag', check: 'Title tag', status: 'FAIL', fix: 'Add a concise title.' }],
+        full_results_json: {},
+      }) } as never,
+      agencyAccountId: '11111111-1111-4111-8111-111111111111',
+      agencyClientId: '22222222-2222-4222-8222-222222222222',
+      canonicalDomain: 'northstar.example',
+    });
+    expect(result.snapshot.period.start).toBe('2026-08-12T01:35:48.661Z');
+    expect(result.snapshot.period.end).toBe('2026-08-12T01:35:48.662Z');
+    expect(result.snapshot.observations[0]?.collectedAt).toBe('2026-08-12T01:35:48.661Z');
+  });
+
   it('reuses the snapshot already attached to the latest scan', async () => {
     const existing = { provenance: { runIds: ['scan-alie-1'] } };
     list.mockResolvedValue([existing]);

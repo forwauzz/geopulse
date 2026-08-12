@@ -54,10 +54,14 @@ function issueStatus(value: unknown): ProjectedStatus {
   return 'NOT_EVALUATED';
 }
 
-function isoAfter(value: string): string {
+function canonicalDatetime(value: string): string {
   const milliseconds = Date.parse(value);
   if (!Number.isFinite(milliseconds)) throw new Error('buyer_intelligence_scan_timestamp_invalid');
-  return new Date(milliseconds + 1).toISOString();
+  return new Date(milliseconds).toISOString();
+}
+
+function isoAfter(value: string): string {
+  return new Date(Date.parse(canonicalDatetime(value)) + 1).toISOString();
 }
 
 /** Project the latest readiness scan into the canonical, deterministic snapshot contract. */
@@ -110,7 +114,11 @@ export async function ensureAgencyClientBuyerIntelligenceSnapshot(args: {
       contextVersion: context.contextVersion,
     }];
   });
-  const generatedAt = isoAfter(scan.created_at);
+  // Postgres/Supabase timestamps commonly include a numeric offset. The canonical
+  // intelligence contracts deliberately require RFC 3339 UTC datetimes, so normalize
+  // the storage representation before it reaches Zod or a persisted snapshot.
+  const collectedAt = canonicalDatetime(scan.created_at);
+  const generatedAt = isoAfter(collectedAt);
   const projection = projectBuyerIntelligenceEvidence({
     context: { contextVersion: context.contextVersion, status: 'confirmed' },
     generatedAt,
@@ -119,7 +127,7 @@ export async function ensureAgencyClientBuyerIntelligenceSnapshot(args: {
       runId: scan.id,
       contextVersion: context.contextVersion,
       qualityState: 'valid',
-      collectedAt: scan.created_at,
+      collectedAt,
       issues: projectedIssues,
     },
     benchmark: null,
@@ -152,7 +160,7 @@ export async function ensureAgencyClientBuyerIntelligenceSnapshot(args: {
   const snapshot = assembleBuyerIntelligenceSnapshot({
     context,
     projection,
-    period: { start: scan.created_at, end: generatedAt },
+    period: { start: collectedAt, end: generatedAt },
     measurement: {
       querySetId: 'buyer-readiness-checks',
       querySetVersion: catalogVersion,
