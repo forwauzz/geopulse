@@ -39,12 +39,15 @@ export default async function ClientsPage({
           <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Clients</h1>
           <p className="mt-2 text-on-surface-variant">Open a client to see what AI recommends, compare competitors, and share a report.</p>
         </div>
-        <Link
-          href={`/dashboard/clients?agencyAccount=${account.id}&manage=1`}
-          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"
-        >
-          <span aria-hidden>+</span> Add client
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href={`/dashboard/clients/brevo?agencyAccount=${account.id}`} className="inline-flex items-center gap-2 rounded-xl border border-primary/30 px-4 py-2.5 text-sm font-semibold text-primary">Import from Brevo</Link>
+          <Link
+            href={`/dashboard/clients?agencyAccount=${account.id}&manage=1`}
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary"
+          >
+            <span aria-hidden>+</span> Add client
+          </Link>
+        </div>
       </header>
 
       <section className="overflow-hidden rounded-2xl border border-outline-variant/10 bg-surface-container-lowest shadow-float">
