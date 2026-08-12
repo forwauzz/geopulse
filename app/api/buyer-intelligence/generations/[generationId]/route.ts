@@ -36,10 +36,11 @@ export async function GET(request: Request, context: { params: Promise<{ generat
   const bucket = await resolveReportFilesBucket();
   const artifact = bucket ? await bucket.get(generation.artifactR2Key) : null;
   if (!artifact) return Response.json({ error: 'not_found' }, { status: 404 });
+  const download = new URL(request.url).searchParams.get('download') === '1';
   return new Response(await artifact.arrayBuffer(), {
     headers: {
       'content-type': 'application/pdf',
-      'content-disposition': `attachment; filename="buyer-intelligence-${generation.viewKind.replaceAll('_', '-')}.pdf"`,
+      'content-disposition': `${download ? 'attachment' : 'inline'}; filename="buyer-intelligence-${generation.viewKind.replaceAll('_', '-')}.pdf"`,
       'cache-control': 'private, no-store',
       'x-content-type-options': 'nosniff',
     },

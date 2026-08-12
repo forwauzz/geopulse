@@ -14,7 +14,7 @@ test('authorized partner can inspect all three artifact policies', async ({ page
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /turn one verified snapshot/i })).toBeVisible();
   await expect(page.getByText('Northstar Technology Services').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /generate and download pdf/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /generate pdf in new tab/i })).toBeVisible();
   await expect(page.getByText(/no artifacts generated yet/i)).toBeVisible();
 
   await page.getByLabel('Artifact').selectOption('full_baseline');
@@ -34,7 +34,7 @@ test('partner workspace stays usable on a mobile viewport', async ({ page }) => 
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page);
   await page.goto(`/dashboard/clients/${CLIENT_ID}/buyer-intelligence?agencyAccount=${ACCOUNT_ID}`, { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('button', { name: /generate and download pdf/i })).toBeVisible();
+  await expect(page.getByRole('button', { name: /generate pdf in new tab/i })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
 });

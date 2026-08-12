@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { listBrevoContacts, listBrevoLists, type BrevoContactCandidate, type BrevoList } from '@/lib/connectors/providers/brevo';
+import { BREVO_SCOPES, listBrevoContacts, listBrevoLists, type BrevoContactCandidate, type BrevoList } from '@/lib/connectors/providers/brevo';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
@@ -80,7 +80,7 @@ export default async function BrevoPartnerPage({ searchParams }: {
       <header className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-white to-tertiary/10 p-6 shadow-float md:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Prospect source</p>
         <h1 className="mt-2 font-headline text-3xl font-bold text-on-background">Bring prospects in from Brevo</h1>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">Connect with read-only access, choose up to 10 eligible contacts, and hold them for review. GEO-Pulse does not edit Brevo or send email from this screen.</p>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-on-surface-variant">Choose eligible contacts and hold them for review. A report is written back or delivered by Brevo only after you approve that exact contact from its preview.</p>
       </header>
 
       {sp.brevo && STATUS_COPY[sp.brevo] ? (
@@ -95,10 +95,13 @@ export default async function BrevoPartnerPage({ searchParams }: {
             <p className="mt-1 text-sm text-on-surface-variant">{connection ? `${connection.account.status} · scope: ${connection.account.scopes.join(', ')}` : 'Not connected'}</p>
           </div>
           {connection?.account.status === 'connected' ? (
+            <div className="flex flex-wrap gap-2">
+            {BREVO_SCOPES.some((scope) => !connection.account.scopes.includes(scope)) ? <a href={`/api/connectors/brevo/start?${queryBase}`} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">Reconnect for report delivery</a> : null}
             <form action={disconnectBrevoAction}>
               <input type="hidden" name="agencyAccountId" value={account.id} />
               <button className="rounded-xl border border-outline-variant/40 px-4 py-2 text-sm font-semibold text-on-background">Disconnect</button>
             </form>
+            </div>
           ) : (
             <a href={`/api/connectors/brevo/start?${queryBase}`} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">Connect Brevo</a>
           )}

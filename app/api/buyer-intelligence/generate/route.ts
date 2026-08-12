@@ -88,7 +88,7 @@ export async function POST(request: Request): Promise<Response> {
       status: 200,
       headers: {
         'content-type': 'application/pdf',
-        'content-disposition': `attachment; filename="${filePart(client.name)}-${input.viewKind.replaceAll('_', '-')}.pdf"`,
+        'content-disposition': `inline; filename="${filePart(client.name)}-${input.viewKind.replaceAll('_', '-')}.pdf"`,
         'cache-control': 'private, no-store',
         'x-content-type-options': 'nosniff',
         'x-generation-id': result.generation.id,

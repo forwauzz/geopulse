@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { contactProjectionSchema, type ContactProjection } from '../crm-contract';
 
-export const BREVO_SCOPE = 'contacts:read';
+export const BREVO_SCOPES = ['contacts:read', 'contacts:write', 'transactional.email:write'] as const;
+export const BREVO_SCOPE = BREVO_SCOPES.join(' ');
 export const BREVO_SOURCE_VERSION = 'brevo-contact-v1';
 export const BREVO_AUTHORIZE_URL = 'https://oauth.brevo.com/realms/partner/oauth/authorize';
 export const BREVO_TOKEN_URL = 'https://oauth.brevo.com/realms/partner/oauth/token';
@@ -61,6 +62,13 @@ export type BrevoContactCandidate = {
 
 type Fetcher = typeof fetch;
 
+export class BrevoApiError extends Error {
+  constructor(readonly status: number) {
+    super(`brevo_api_http_${String(status)}`);
+    this.name = 'BrevoApiError';
+  }
+}
+
 function scopes(raw: string): string[] {
   return Array.from(new Set(raw.split(/\s+/).map((value) => value.trim()).filter(Boolean)));
 }
@@ -95,7 +103,7 @@ async function exchange(body: URLSearchParams, fetcher: Fetcher): Promise<BrevoT
   if (!response.ok) throw new Error(`brevo_token_http_${response.status}`);
   const parsed = tokenSchema.parse(await readJson(response));
   const granted = scopes(parsed.scope);
-  if (!granted.includes(BREVO_SCOPE)) throw new Error('brevo_scope_missing');
+  if (BREVO_SCOPES.some((scope) => !granted.includes(scope))) throw new Error('brevo_scope_missing');
   const subject = decodeJwtSubject(parsed.access_token);
   if (!subject) throw new Error('brevo_token_subject_missing');
   return {
@@ -151,8 +159,90 @@ async function brevoGet(path: string, accessToken: string, fetcher: Fetcher): Pr
     headers: { accept: 'application/json', authorization: `Bearer ${accessToken}` },
     cache: 'no-store',
   });
-  if (!response.ok) throw new Error(`brevo_api_http_${response.status}`);
+  if (!response.ok) throw new BrevoApiError(response.status);
   return readJson(response);
+}
+
+async function brevoWrite(
+  path: string,
+  accessToken: string,
+  method: 'POST' | 'PUT',
+  payload: Record<string, unknown>,
+  fetcher: Fetcher,
+): Promise<unknown> {
+  const response = await fetcher(`${API_BASE}${path}`, {
+    method,
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${accessToken}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new BrevoApiError(response.status);
+  if (response.status === 204) return {};
+  return readJson(response);
+}
+
+const REPORT_ATTRIBUTES = [
+  ['GEOPULSE_REPORT_URL', 'text'],
+  ['GEOPULSE_REPORT_THUMBNAIL', 'text'],
+  ['GEOPULSE_REPORT_STATUS', 'text'],
+  ['GEOPULSE_REPORT_GENERATED_AT', 'date'],
+] as const;
+
+export async function syncBrevoReportProjection(args: {
+  readonly accessToken: string;
+  readonly providerContactId: string;
+  readonly reportUrl: string;
+  readonly thumbnailUrl: string;
+  readonly generatedAt: string;
+  readonly fetcher?: Fetcher;
+}): Promise<void> {
+  const fetcher = args.fetcher ?? fetch;
+  const raw = z.object({ attributes: z.array(z.object({ name: z.string() }).passthrough()) })
+    .parse(await brevoGet('/contacts/attributes', args.accessToken, fetcher));
+  const existing = new Set(raw.attributes.map((attribute) => attribute.name.toUpperCase()));
+  for (const [name, type] of REPORT_ATTRIBUTES) {
+    if (existing.has(name)) continue;
+    await brevoWrite(`/contacts/attributes/normal/${name}`, args.accessToken, 'POST', { type }, fetcher);
+  }
+  await brevoWrite(
+    `/contacts/${encodeURIComponent(args.providerContactId)}?identifierType=contact_id`,
+    args.accessToken,
+    'PUT',
+    {
+      attributes: {
+        GEOPULSE_REPORT_URL: z.string().url().parse(args.reportUrl),
+        GEOPULSE_REPORT_THUMBNAIL: z.string().url().parse(args.thumbnailUrl),
+        GEOPULSE_REPORT_STATUS: 'READY',
+        GEOPULSE_REPORT_GENERATED_AT: new Date(args.generatedAt).toISOString().slice(0, 10),
+      },
+    },
+    fetcher,
+  );
+}
+
+export async function sendBrevoTransactionalEmail(args: {
+  readonly accessToken: string;
+  readonly sender: { readonly email: string; readonly name: string };
+  readonly replyTo?: { readonly email: string; readonly name?: string };
+  readonly recipient: { readonly email: string; readonly name: string };
+  readonly subject: string;
+  readonly htmlContent: string;
+  readonly fetcher?: Fetcher;
+}): Promise<string> {
+  const response = z.object({ messageId: z.string().min(1) }).parse(await brevoWrite(
+    '/smtp/email', args.accessToken, 'POST', {
+      sender: args.sender,
+      ...(args.replyTo ? { replyTo: args.replyTo } : {}),
+      to: [args.recipient],
+      subject: args.subject,
+      htmlContent: args.htmlContent,
+    }, args.fetcher ?? fetch,
+  ));
+  return response.messageId;
 }
 
 export async function listBrevoLists(args: {
@@ -240,6 +330,20 @@ export async function listBrevoContacts(args: {
     .parse(await brevoGet(`/contacts/lists/${encodeURIComponent(args.listId)}/contacts?${params}`, args.accessToken, args.fetcher ?? fetch));
   const now = args.now ?? new Date().toISOString();
   return { contacts: raw.contacts.map((contact) => toCandidate(contact, args.listId, now)), count: raw.count };
+}
+
+export async function getBrevoContact(args: {
+  readonly accessToken: string;
+  readonly providerContactId: string;
+  readonly selectedListId: string;
+  readonly fetcher?: Fetcher;
+  readonly now?: string;
+}): Promise<BrevoContactCandidate> {
+  const raw = contactSchema.parse(await brevoGet(
+    `/contacts/${encodeURIComponent(args.providerContactId)}?identifierType=contact_id`,
+    args.accessToken, args.fetcher ?? fetch,
+  ));
+  return toCandidate(raw, args.selectedListId, args.now ?? new Date().toISOString());
 }
 
 export function toContactProjection(args: {
