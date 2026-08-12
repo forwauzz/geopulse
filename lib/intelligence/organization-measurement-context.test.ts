@@ -47,9 +47,26 @@ describe('organization measurement context', () => {
     const first = deriveOrganizationMeasurementBinding(confirmedContext());
     const second = deriveOrganizationMeasurementBinding(confirmedContext());
     expect(first).toEqual(second);
-    expect(first.ok && first.binding.querySetVersion).toMatch(/^oqs1-[0-9a-f]{8}-g1$/);
+    expect(first.ok && first.binding.querySetVersion).toMatch(/^oqs1-[0-9a-f]{8}-g2$/);
     expect(first.ok && first.binding.competitorCohortVersion).toMatch(/^occ1-[0-9a-f]{8}$/);
     expect(first.ok && first.binding.languages).toEqual(['en-CA', 'fr-CA']);
+  });
+
+  it('versions a service or buyer edit as a new measurement context', () => {
+    const originalContext = confirmedContext();
+    const original = deriveOrganizationMeasurementBinding(originalContext);
+    const edited = deriveOrganizationMeasurementBinding(confirmedContext({
+      organization: {
+        ...originalContext.organization,
+        services: ['medical chronology automation', 'source-linked evidence extraction'],
+      },
+      market: { ...originalContext.market, buyer: 'legal teams' },
+    }));
+    expect(original.ok && edited.ok).toBe(true);
+    if (!original.ok || !edited.ok) return;
+    expect(edited.binding.querySetVersion).not.toBe(original.binding.querySetVersion);
+    expect(edited.binding.services).toContain('medical chronology automation');
+    expect(edited.binding.buyer).toBe('legal teams');
   });
 
   it('rejects detected context and a tampered context version before measurement', () => {
