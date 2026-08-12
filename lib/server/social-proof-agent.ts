@@ -44,6 +44,7 @@ import { structuredLogWithClientAndWait } from './structured-log';
 import {
   buildJordanReelScript,
   chooseJordanReelSource,
+  JORDAN_REEL_VALIDATION_VERSION,
   jordanReelSlotKey,
   resolveJordanReelConfig,
   shouldPlanJordanReel,
@@ -178,12 +179,26 @@ export function remainingDailyAssetCapacity(
   assets: readonly Pick<DistributionAssetRow, 'created_at' | 'metadata'>[],
   now: Date,
   dailyCap: number,
+  timezone = 'UTC',
 ): number {
-  const day = now.toISOString().slice(0, 10);
-  const createdToday = assets.filter((asset) =>
-    asset.created_at.slice(0, 10) === day
-    && asset.metadata['created_by_agent'] === 'jordan'
-  ).length;
+  const localDay = (value: Date): string => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(value);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((candidate) => candidate.type === type)?.value ?? '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  };
+  const day = localDay(now);
+  const createdToday = assets.filter((asset) => {
+    const created = new Date(asset.created_at);
+    return Number.isFinite(created.getTime())
+      && localDay(created) === day
+      && asset.metadata['created_by_agent'] === 'jordan';
+  }).length;
   return Math.max(0, dailyCap - createdToday);
 }
 
@@ -1194,14 +1209,16 @@ export async function runSocialProofAgent(args: {
       categories: config.reelCategories,
       publishMode: config.reelPublishMode,
     };
-    const reelSource =
-      account?.provider_name === 'instagram' &&
-      shouldPlanJordanReel({
+    const reelPlanEligible = account?.provider_name === 'instagram'
+      ? shouldPlanJordanReel({
         now,
         timezone: config.timezone,
         config: reelConfig,
         existingAssets,
       })
+      : false;
+    const reelSource =
+      reelPlanEligible
         ? chooseJordanReelSource(baseOrderedCandidates, config.reelCategories)
         : null;
     const reelCandidate: SocialProofCandidate | null = reelSource
@@ -1231,7 +1248,12 @@ export async function runSocialProofAgent(args: {
     let assetsCreated = 0;
     let jobsCreated = 0;
     const queuedContentItemIds: string[] = [];
-    const dailyCapacity = remainingDailyAssetCapacity(existingAssets, now, config.dailyCap);
+    const dailyCapacity = remainingDailyAssetCapacity(
+      existingAssets,
+      now,
+      config.dailyCap,
+      config.timezone,
+    );
 
     for (const rawCandidate of orderedCandidates) {
       if (assetsCreated >= dailyCapacity) break;
@@ -1316,7 +1338,7 @@ export async function runSocialProofAgent(args: {
           reel_render_status:
             candidate.assetType === 'short_video_post' ? 'pending' : null,
           reel_validation_version:
-            candidate.assetType === 'short_video_post' ? 'jordan-reel-v1' : null,
+            candidate.assetType === 'short_video_post' ? JORDAN_REEL_VALIDATION_VERSION : null,
           industry_humor_enabled: config.industryHumorEnabled,
           trend_research_enabled: config.trendResearchEnabled,
           learning_enabled: config.learningEnabled,
@@ -1456,6 +1478,15 @@ export async function runSocialProofAgent(args: {
         performance_checked: performanceLearning.checked,
         performance_updated: performanceLearning.updated,
         performance_failed: performanceLearning.failed,
+        reel_plan_eligible: reelPlanEligible,
+        reel_plan_decision:
+          account?.provider_name !== 'instagram'
+            ? 'instagram_account_unavailable'
+            : !reelPlanEligible
+              ? 'schedule_or_inventory_gate'
+              : reelSource
+                ? 'planned'
+                : 'no_grounded_source',
       },
       'info'
     );

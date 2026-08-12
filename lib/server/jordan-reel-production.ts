@@ -135,7 +135,6 @@ export function shouldPlanJordanReel(args: {
 }): boolean {
   if (!args.config.enabled) return false;
   const local = localDateParts(args.now, args.timezone);
-  if (!args.config.daysLocal.includes(local.weekday)) return false;
   const slotKey = jordanReelSlotKey(args.now, args.timezone);
   if (args.existingAssets.some((asset) => asset.metadata['reel_slot_key'] === slotKey)) {
     return false;
@@ -150,7 +149,15 @@ export function shouldPlanJordanReel(args: {
     const created = new Date(asset.created_at);
     return Number.isFinite(created.getTime()) && created >= start;
   }).length;
-  return producedThisWeek < args.config.reelsPerWeek;
+  if (producedThisWeek >= args.config.reelsPerWeek) return false;
+
+  const staleBefore = args.now.getTime() - (14 * 24 * 60 * 60 * 1000);
+  const hasRecentReel = args.existingAssets.some((asset) => {
+    if (asset.asset_type !== 'short_video_post') return false;
+    const created = new Date(asset.created_at).getTime();
+    return Number.isFinite(created) && created >= staleBefore;
+  });
+  return !hasRecentReel || args.config.daysLocal.includes(local.weekday);
 }
 
 function cleanLine(value: string, max: number): string {

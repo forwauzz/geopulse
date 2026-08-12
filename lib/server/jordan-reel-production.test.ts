@@ -67,7 +67,7 @@ describe('Jordan autonomous Reel production', () => {
     })).toBe(false);
   });
 
-  it('does not plan on disabled days or above the weekly cap', () => {
+  it('catches up stale Reel inventory off-schedule but still enforces the weekly cap', () => {
     const config = resolveJordanReelConfig({
       reels_enabled: true,
       reels_per_week: 1,
@@ -78,7 +78,7 @@ describe('Jordan autonomous Reel production', () => {
       timezone: 'America/Toronto',
       config,
       existingAssets: [],
-    })).toBe(false);
+    })).toBe(true);
     expect(shouldPlanJordanReel({
       now: new Date('2026-07-26T14:00:00.000Z'),
       timezone: 'America/Toronto',
@@ -86,6 +86,22 @@ describe('Jordan autonomous Reel production', () => {
       existingAssets: [asset({
         created_at: '2026-07-25T14:00:00.000Z',
         metadata: { reel_slot_key: '2026-07-25-d6' },
+      })],
+    })).toBe(false);
+  });
+
+  it('keeps normal weekday scheduling when Reel inventory is recent', () => {
+    const config = resolveJordanReelConfig({
+      reels_enabled: true,
+      reel_days_local: [0, 2],
+    });
+    expect(shouldPlanJordanReel({
+      now: new Date('2026-07-27T14:00:00.000Z'),
+      timezone: 'America/Toronto',
+      config,
+      existingAssets: [asset({
+        created_at: '2026-07-20T14:00:00.000Z',
+        metadata: { reel_slot_key: '2026-07-20-d1' },
       })],
     })).toBe(false);
   });
