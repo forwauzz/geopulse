@@ -9,7 +9,7 @@ import { loadEngineCitationMetrics, type EngineKey } from '@/lib/server/dashboar
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
-import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, releaseClientSharingHold, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
+import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, releaseClientSharingHold, runClientVisibilityCheck, saveClientMonitoring, sendClientReportNow, updateOutcomeActionStatus } from './actions';
 import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
 import { isClientReportSharingHeld, isReportDeliveryHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
@@ -35,11 +35,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string; reportDelivery?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string; reportDelivery?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -179,7 +179,7 @@ export default async function ClientScorecardPage({
   const { data: storedGpmReports } = configId && currentRunGroupIds.length > 0
     ? await admin
         .from('gpm_reports')
-        .select('id,pdf_url,generated_at,platform,metadata')
+        .select('id,pdf_url,pdf_r2_key,generated_at,platform,metadata')
         .eq('config_id', configId)
         .in('run_group_id', currentRunGroupIds)
         .order('generated_at', { ascending: false })
@@ -220,6 +220,9 @@ export default async function ClientScorecardPage({
     && latestReportEmailStatus === 'held_client_review'
     && latestReportMetadata['delivery_block_reason'] === 'client_report_sharing_held';
   const latestReportHeld = isReportDeliveryHeld(latestReportMetadata, clientMetadata);
+  const latestReportDownloadUrl = latestGpmReport?.pdf_r2_key && shareToken
+    ? `/api/client-reports/${latestGpmReport.id}/download?share=${encodeURIComponent(shareToken)}`
+    : null;
   const activationReport = sp.activation === '1'
     ? await loadLatestAgencyReport({ supabase: admin, agencyClientId: client.id })
     : null;
@@ -515,6 +518,11 @@ export default async function ClientScorecardPage({
                 <p className="mt-1">Tracking: {platformsEnabled.map((platform) => platform === 'chatgpt' ? 'ChatGPT' : platform === 'gemini' ? 'Gemini' : platform).join(' + ') || 'Not configured'}</p>
               </div>
               <div className="rounded-xl bg-surface-container-low p-3 text-sm">
+                {sp.reportDelivery ? (
+                  <p className={`mb-3 rounded-lg px-3 py-2 text-xs font-semibold ${sp.reportDelivery === 'sent' ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error'}`}>
+                    {sp.reportDelivery === 'sent' ? 'Report email sent.' : sp.reportDelivery === 'blocked' ? 'Delivery is blocked until the report, recipient, and client share link are ready.' : 'Report email failed. Try again or check delivery operations.'}
+                  </p>
+                ) : null}
                 {latestGpmReport ? (
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -523,7 +531,18 @@ export default async function ClientScorecardPage({
                         {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(latestGpmReport.generated_at))} · {ENGINE_LABEL[String(latestGpmReport.platform) as EngineKey] ?? String(latestGpmReport.platform)}
                       </p>
                     </div>
-                    {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">{latestReportHeld ? 'Held for review' : clientReviewHoldReleased ? 'Ready in client scorecard' : latestReportEmailStatus === 'sent' ? 'Sent by email' : 'Generated'}</span>}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {latestReportDownloadUrl ? <Link href={latestReportDownloadUrl} target="_blank" className="font-semibold text-primary hover:underline">Download PDF</Link> : latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : null}
+                      {!reportSharingHeld && latestReportEmailStatus !== 'sent' ? (
+                        <form action={sendClientReportNow}>
+                          <input type="hidden" name="clientId" value={client.id} />
+                          <input type="hidden" name="agencyAccountId" value={account.id} />
+                          <input type="hidden" name="configId" value={configId ?? ''} />
+                          <input type="hidden" name="reportId" value={latestGpmReport.id} />
+                          <button className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary">Send report now</button>
+                        </form>
+                      ) : <span className="text-xs text-on-surface-variant">{latestReportEmailStatus === 'sent' ? 'Sent by email' : latestReportHeld ? 'Held for review' : clientReviewHoldReleased ? 'Ready in client scorecard' : 'Generated'}</span>}
+                    </div>
                   </div>
                 ) : <p className="text-on-surface-variant">The first report will appear after a visibility check.</p>}
                 {(gpmReports ?? []).length > 0 ? (
