@@ -143,6 +143,25 @@ describe('Organization Context projection', () => {
     expect(result.context.organization.aliases).not.toContainEqual(expect.objectContaining({ host: 'sanomed.co.uk' }));
   });
 
+  it('accepts a tenant-confirmed category that refines the shared domain classification', () => {
+    const base = projectionRows();
+    const result = projectOrganizationContext(projectionRows({
+      domain: { ...base.domain, subvertical: 'saas' },
+      owner: {
+        ...base.owner,
+        metadata: {
+          organization_context: { ...confirmedContext, category: 'b2b_saas' },
+        },
+      },
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.context.organization.category).toBe('b2b_saas');
+    expect(result.context.status).toBe('confirmed');
+    expect(result.context.conflicts).toEqual([]);
+  });
+
   it('keeps the tenant-confirmed Canadian value but fails closed on UK evidence', () => {
     const result = projectOrganizationContext(projectionRows({
       evidence: [{
