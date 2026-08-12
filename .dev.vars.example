@@ -42,6 +42,7 @@ STARTUP_SLACK_CLIENT_SECRET=your-slack-client-secret
 # Production callback: https://getgeopulse.com/api/connectors/brevo/callback
 # BREVO_OAUTH_CLIENT_ID=
 # BREVO_OAUTH_CLIENT_SECRET=
+# BREVO_PARTNER_TEST_RECIPIENTS=founder-controlled-test@example.com
 # DISTRIBUTION_TOKEN_ENCRYPTION_KEY=
 
 # Google Gemini API

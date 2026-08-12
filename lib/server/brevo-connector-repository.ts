@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { connectorAccountSchema, type ConnectorAccount, type ContactProjection } from '@/lib/connectors/crm-contract';
-import { BREVO_SCOPE, refreshBrevoToken, type BrevoToken } from '@/lib/connectors/providers/brevo';
+import { refreshBrevoToken, type BrevoToken } from '@/lib/connectors/providers/brevo';
 import {
   decryptDistributionToken,
   encryptDistributionToken,
@@ -35,6 +35,7 @@ type BatchContactRow = {
   readonly company_name: string;
   readonly canonical_domain: string;
   readonly email: string;
+  readonly source_list_ids: string[];
 };
 
 function isoTimestamp(value: string): string {
@@ -58,6 +59,7 @@ export type HeldBatch = {
     readonly companyName: string;
     readonly canonicalDomain: string;
     readonly email: string;
+    readonly sourceListIds: readonly string[];
   }[];
 };
 
@@ -91,7 +93,7 @@ export function createBrevoConnectorRepository(supabase: Supabase) {
       readonly agencyAccountId: string; readonly batchId: string; readonly providerContactId: string;
     }): Promise<HeldBatch['contacts'][number] | null> {
       const { data, error } = await supabase.from('crm_prospect_batch_contacts')
-        .select('batch_id,provider_contact_id,first_name,company_name,canonical_domain,email')
+        .select('batch_id,provider_contact_id,first_name,company_name,canonical_domain,email,source_list_ids')
         .eq('agency_account_id', args.agencyAccountId).eq('batch_id', args.batchId)
         .eq('provider_contact_id', args.providerContactId).maybeSingle();
       if (error) throw error;
@@ -100,6 +102,7 @@ export function createBrevoConnectorRepository(supabase: Supabase) {
       return {
         providerContactId: row.provider_contact_id, firstName: row.first_name,
         companyName: row.company_name, canonicalDomain: row.canonical_domain, email: row.email,
+        sourceListIds: row.source_list_ids,
       };
     },
 
@@ -280,7 +283,7 @@ export function createBrevoConnectorRepository(supabase: Supabase) {
       const ids = (batches ?? []).map((batch: { id: string }) => batch.id);
       if (ids.length === 0) return [];
       const { data: contacts, error: contactError } = await supabase.from('crm_prospect_batch_contacts')
-        .select('batch_id,provider_contact_id,first_name,company_name,canonical_domain,email')
+        .select('batch_id,provider_contact_id,first_name,company_name,canonical_domain,email,source_list_ids')
         .eq('agency_account_id', agencyAccountId).in('batch_id', ids);
       if (contactError) throw contactError;
       const contactRows = (contacts ?? []) as BatchContactRow[];
@@ -290,7 +293,7 @@ export function createBrevoConnectorRepository(supabase: Supabase) {
           .map((contact) => ({
             providerContactId: String(contact.provider_contact_id), firstName: contact.first_name,
             companyName: String(contact.company_name), canonicalDomain: String(contact.canonical_domain),
-            email: String(contact.email),
+            email: String(contact.email), sourceListIds: contact.source_list_ids,
           })),
       }));
     },

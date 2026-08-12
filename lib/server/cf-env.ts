@@ -70,6 +70,8 @@ export type ScanApiEnv = {
   /** Read-only partner CRM OAuth. Secret remains server-side. */
   BREVO_OAUTH_CLIENT_ID?: string;
   BREVO_OAUTH_CLIENT_SECRET?: string;
+  /** Dedicated founder-canary allowlist for partner CRM delivery. */
+  BREVO_PARTNER_TEST_RECIPIENTS?: string;
   /** AES-GCM key for distribution account access and refresh tokens. */
   DISTRIBUTION_TOKEN_ENCRYPTION_KEY?: string;
   TURNSTILE_SECRET_KEY: string;
@@ -285,6 +287,7 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     LINKEDIN_OAUTH_CLIENT_ID: String(e['LINKEDIN_OAUTH_CLIENT_ID'] ?? ''),
     BREVO_OAUTH_CLIENT_ID: String(e['BREVO_OAUTH_CLIENT_ID'] ?? ''),
     BREVO_OAUTH_CLIENT_SECRET: String(e['BREVO_OAUTH_CLIENT_SECRET'] ?? ''),
+    BREVO_PARTNER_TEST_RECIPIENTS: String(e['BREVO_PARTNER_TEST_RECIPIENTS'] ?? ''),
     DISTRIBUTION_TOKEN_ENCRYPTION_KEY: String(
       e['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? ''
     ),
@@ -372,6 +375,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       LINKEDIN_OAUTH_CLIENT_ID: process.env['LINKEDIN_OAUTH_CLIENT_ID'] ?? '',
       BREVO_OAUTH_CLIENT_ID: process.env['BREVO_OAUTH_CLIENT_ID'] ?? '',
       BREVO_OAUTH_CLIENT_SECRET: process.env['BREVO_OAUTH_CLIENT_SECRET'] ?? '',
+      BREVO_PARTNER_TEST_RECIPIENTS: process.env['BREVO_PARTNER_TEST_RECIPIENTS'] ?? '',
       DISTRIBUTION_TOKEN_ENCRYPTION_KEY:
         process.env['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? '',
       TURNSTILE_SECRET_KEY: process.env['TURNSTILE_SECRET_KEY'] ?? '',

@@ -11,6 +11,9 @@ import { resolveReportBrand } from '@workers/report/resolve-report-brand';
 import { isE2EAuthEnabled } from '@/lib/supabase/e2e-auth';
 import { buyerIntelligenceFixtureSnapshot } from '@/lib/intelligence/testing/buyer-intelligence-fixtures';
 import { readBuyerIntelligenceHeroRef } from '@/lib/server/buyer-intelligence-hero';
+import { createBrevoConnectorRepository } from '@/lib/server/brevo-connector-repository';
+import { createBrevoReportDeliveryRepository } from '@/lib/server/brevo-report-delivery';
+import { sendBrevoReportCanaryAction, syncBrevoReportAction } from '../../brevo/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,11 +29,11 @@ function hexChannel(value: number): string {
 
 export default async function BuyerIntelligenceWorkspacePage({ params, searchParams }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; snapshot?: string; view?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; snapshot?: string; view?: string; batch?: string; contact?: string; brevoDelivery?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; snapshot?: string; view?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; snapshot?: string; view?: string; batch?: string; contact?: string; brevoDelivery?: string }),
   ]);
   const session = await createSupabaseServerClient();
   const { data: { user } } = await session.auth.getUser();
@@ -75,6 +78,27 @@ export default async function BuyerIntelligenceWorkspacePage({ params, searchPar
   const idempotencyKey = selectedSnapshot
     ? `partner:${clientId}:${viewKind}:${selectedSnapshot.snapshotId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 72)}`.slice(0, 160)
     : '';
+  const deliveryGeneration = selectedSnapshot
+    ? history.find((item) => item.status === 'succeeded' && item.viewKind === 'prospect_preview' && item.snapshotId === selectedSnapshot.snapshotId) ?? null
+    : null;
+  const heldContact = sp.batch && sp.contact
+    ? await createBrevoConnectorRepository(workspace.admin).loadHeldContact({ agencyAccountId: account.id, batchId: sp.batch, providerContactId: sp.contact })
+    : null;
+  const delivery = heldContact && deliveryGeneration && sp.batch && sp.contact
+    ? await createBrevoReportDeliveryRepository(workspace.admin).load({ agencyAccountId: account.id, batchId: sp.batch, providerContactId: sp.contact, generationId: deliveryGeneration.id })
+    : null;
+  const deliveryStatusCopy: Record<string, string> = {
+    synced: 'The private report link and cover thumbnail were synced to the Alie contact in Brevo.',
+    delivered: 'Brevo accepted the one Alie canary email. Duplicate delivery is now locked.',
+    'reconnect-required': 'Reconnect Brevo to approve report-field write access and transactional delivery.',
+    'allowlist-failed': 'Delivery stopped because the contact is not the sole configured canary recipient.',
+    'sync-failed': 'Brevo did not accept the report fields. Nothing was sent.',
+    'send-failed': 'Brevo rejected the message before acceptance. You can retry after correcting the sender or permission.',
+    'send-uncertain': 'Delivery could not be confirmed. Automatic retry is disabled to prevent a duplicate.',
+    suppressed: 'Delivery stopped because Brevo now marks this contact unavailable or suppressed.',
+    'duplicate-blocked': 'A concurrent or previous delivery already claimed this message.',
+    'sync-required': 'Sync the report fields to Brevo before delivery.',
+  };
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 py-4">
@@ -114,15 +138,41 @@ export default async function BuyerIntelligenceWorkspacePage({ params, searchPar
 
           <section className="sticky bottom-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/20 bg-white/95 p-4 shadow-float backdrop-blur">
             <div><p className="font-semibold text-on-background">Preview approved?</p><p className="text-xs text-on-surface-variant">The PDF uses this same snapshot, section policy, and branding.</p></div>
-            <form method="post" action="/api/buyer-intelligence/generate">
+            <form method="post" action="/api/buyer-intelligence/generate" target="_blank">
               <input type="hidden" name="agencyAccountId" value={account.id} />
               <input type="hidden" name="agencyClientId" value={clientId} />
               <input type="hidden" name="snapshotId" value={selectedSnapshot.snapshotId} />
               <input type="hidden" name="viewKind" value={viewKind} />
               <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
-              <button className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary">Generate and download PDF</button>
+              <button className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-on-primary">Generate PDF in new tab</button>
             </form>
           </section>
+
+          {heldContact ? (
+            <section className="rounded-2xl border border-primary/20 bg-white p-5 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Brevo delivery canary</p>
+              <h2 className="mt-2 font-headline text-xl font-bold text-on-background">Prepared only for {heldContact.firstName ?? 'this contact'} at {heldContact.companyName}</h2>
+              <p className="mt-2 text-sm text-on-surface-variant">Recipient: {heldContact.email}. No other held contact can use these controls.</p>
+              {sp.brevoDelivery && deliveryStatusCopy[sp.brevoDelivery] ? <p role="status" className="mt-4 rounded-xl bg-surface-container-low p-3 text-sm">{deliveryStatusCopy[sp.brevoDelivery]}</p> : null}
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {deliveryGeneration ? <>
+                  <form action={syncBrevoReportAction}>
+                    <input type="hidden" name="agencyAccountId" value={account.id} /><input type="hidden" name="agencyClientId" value={clientId} />
+                    <input type="hidden" name="batchId" value={sp.batch} /><input type="hidden" name="providerContactId" value={sp.contact} />
+                    <input type="hidden" name="generationId" value={deliveryGeneration.id} />
+                    <button disabled={delivery?.status === 'delivered'} className="rounded-xl border border-primary/30 px-4 py-2.5 text-sm font-semibold text-primary disabled:opacity-50">{delivery?.status === 'synced' || delivery?.status === 'delivered' ? 'Report fields synced' : 'Sync report fields to Brevo'}</button>
+                  </form>
+                  <form action={sendBrevoReportCanaryAction}>
+                    <input type="hidden" name="agencyAccountId" value={account.id} /><input type="hidden" name="agencyClientId" value={clientId} />
+                    <input type="hidden" name="batchId" value={sp.batch} /><input type="hidden" name="providerContactId" value={sp.contact} />
+                    <input type="hidden" name="generationId" value={deliveryGeneration.id} />
+                    <button disabled={!delivery || !['synced', 'failed'].includes(delivery.status)} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary disabled:opacity-50">{delivery?.status === 'delivered' ? 'Delivered by Brevo' : delivery?.status === 'failed' ? 'Retry Alie canary' : 'Send one Alie canary'}</button>
+                  </form>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Status: {delivery?.status ?? 'prepared locally'}</span>
+                </> : <p className="text-sm text-on-surface-variant">Generate the prospect-preview PDF first; then refresh this page to enable Brevo sync.</p>}
+              </div>
+            </section>
+          ) : null}
         </>
       ) : (
         <section className="rounded-2xl border border-amber-300/50 bg-amber-50 p-6">
@@ -139,7 +189,7 @@ export default async function BuyerIntelligenceWorkspacePage({ params, searchPar
           <table className="w-full min-w-[680px] text-left text-sm">
             <thead className="border-b border-outline-variant/20 text-xs uppercase tracking-wide text-on-surface-variant"><tr><th className="py-2">Created</th><th>Artifact</th><th>Status</th><th>Attempts</th><th>Snapshot</th><th>File</th></tr></thead>
             <tbody>{history.length ? history.map((item) => (
-              <tr key={item.id} className="border-b border-outline-variant/10 last:border-0"><td className="py-3">{new Date(item.createdAt).toLocaleString('en-CA')}</td><td>{VIEW_LABELS[item.viewKind]}</td><td><span className="rounded-full bg-surface-container px-2.5 py-1 text-xs font-semibold">{item.status}</span></td><td>{item.attempts}</td><td className="max-w-[260px] truncate font-mono text-xs">{item.snapshotId}</td><td>{item.status === 'succeeded' ? <a className="font-semibold text-primary" href={`/api/buyer-intelligence/generations/${item.id}?agencyAccount=${account.id}&client=${clientId}`}>Download</a> : '—'}</td></tr>
+              <tr key={item.id} className="border-b border-outline-variant/10 last:border-0"><td className="py-3">{new Date(item.createdAt).toLocaleString('en-CA')}</td><td>{VIEW_LABELS[item.viewKind]}</td><td><span className="rounded-full bg-surface-container px-2.5 py-1 text-xs font-semibold">{item.status}</span></td><td>{item.attempts}</td><td className="max-w-[260px] truncate font-mono text-xs">{item.snapshotId}</td><td>{item.status === 'succeeded' ? <span className="flex gap-3"><a className="font-semibold text-primary" target="_blank" rel="noreferrer" href={`/api/buyer-intelligence/generations/${item.id}?agencyAccount=${account.id}&client=${clientId}`}>Open</a><a className="font-semibold text-primary" href={`/api/buyer-intelligence/generations/${item.id}?agencyAccount=${account.id}&client=${clientId}&download=1`}>Download</a></span> : '—'}</td></tr>
             )) : <tr><td colSpan={6} className="py-6 text-center text-on-surface-variant">No artifacts generated yet.</td></tr>}</tbody>
           </table>
         </div>
