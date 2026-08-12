@@ -495,6 +495,7 @@ export default async function ClientScorecardPage({
               <input type="hidden" name="clientId" value={client.id} />
               <input type="hidden" name="agencyAccountId" value={account.id} />
               <input type="hidden" name="configId" value={configId} />
+              <input type="hidden" name="reportId" value={latestGpmReport?.id ?? ''} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm text-on-surface-variant">Schedule
                   <select name="cadence" defaultValue={cadence ?? 'monthly'} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background">
@@ -534,13 +535,7 @@ export default async function ClientScorecardPage({
                     <div className="flex flex-wrap items-center gap-3">
                       {latestReportDownloadUrl ? <Link href={latestReportDownloadUrl} target="_blank" className="font-semibold text-primary hover:underline">Download PDF</Link> : latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : null}
                       {!reportSharingHeld && latestReportEmailStatus !== 'sent' ? (
-                        <form action={sendClientReportNow}>
-                          <input type="hidden" name="clientId" value={client.id} />
-                          <input type="hidden" name="agencyAccountId" value={account.id} />
-                          <input type="hidden" name="configId" value={configId ?? ''} />
-                          <input type="hidden" name="reportId" value={latestGpmReport.id} />
-                          <button className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary">Send report now</button>
-                        </form>
+                        <button formAction={sendClientReportNow} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary">Send report now</button>
                       ) : <span className="text-xs text-on-surface-variant">{latestReportEmailStatus === 'sent' ? 'Sent by email' : latestReportHeld ? 'Held for review' : clientReviewHoldReleased ? 'Ready in client scorecard' : 'Generated'}</span>}
                     </div>
                   </div>
