@@ -18,11 +18,30 @@ export type AutonomousEditorialEnv = {
   readonly EDITORIAL_HERO_PUBLIC_BASE?: string;
   readonly EDITORIAL_WRITER_MODEL?: string;
   readonly EDITORIAL_REVIEWER_MODEL?: string;
+  readonly NEXT_PUBLIC_APP_URL?: string;
   readonly REPORT_FILES?: R2Bucket;
 };
 
 export const CLEAN_EDITORIAL_HERO_ALT =
   'Editorial collage of documents, evidence, and connected systems on warm paper';
+
+export const DETERMINISTIC_EDITORIAL_HERO_PATH = '/images/blog/ai-search-readiness-audit.png';
+
+function deterministicHero(env: AutonomousEditorialEnv, providerFailure: string) {
+  const base = (env.NEXT_PUBLIC_APP_URL?.trim() || 'https://getgeopulse.com').replace(/\/+$/, '');
+  return {
+    url: `${base}${DETERMINISTIC_EDITORIAL_HERO_PATH}`,
+    alt: CLEAN_EDITORIAL_HERO_ALT,
+    provider: 'deterministic' as const,
+    providerFailure,
+  };
+}
+
+function safeProviderCode(value: unknown): string {
+  return typeof value === 'string'
+    ? value.toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80)
+    : '';
+}
 
 function jsonFromModel(text: string): Record<string, unknown> | null {
   try { const value = JSON.parse(text); return value && typeof value === 'object' ? value as Record<string, unknown> : null; } catch { return null; }
@@ -45,16 +64,28 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
       const sources = Array.isArray(json?.sources) ? json.sources.filter((v): v is string => typeof v === 'string' && /^https:\/\//.test(v)) : [];
       return { title, markdown, sources };
     },
-    async hero({ title, markdown }) {
+    async hero({ title, allowGenerated }) {
       const key = env.OPENAI_API_KEY?.trim(); const base = env.EDITORIAL_HERO_PUBLIC_BASE?.replace(/\/$/, ''); const bucket = env.REPORT_FILES;
-      if (!key || !base || !bucket) return null;
-      const response = await fetchImpl('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ model: env.OPENAI_IMAGE_MODEL || 'gpt-image-1', size: '1024x1024', n: 1, output_format: 'jpeg', quality: 'high', prompt: `Square editorial image that works as both a blog hero and an Instagram feed post. Keep the full visual idea inside the central 80% safe area so no important element is cropped. No text, no letters, no logos, no robots, and no glowing AI icons. Warm off-white paper, charcoal ink, restrained antique gold, sophisticated magazine collage. Topic: ${title}. Show the idea through clear documents, systems, or evidence.` }), signal: AbortSignal.timeout(60_000) });
-      if (!response.ok) return null;
-      const payload = await response.json() as { data?: Array<{ b64_json?: string }> }; const encoded = payload.data?.[0]?.b64_json;
-      if (!encoded) return null;
-      const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0)); const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 80);
-      const objectKey = `editorial-heroes/${slug}-${Date.now()}.jpg`; await bucket.put(objectKey, bytes.buffer, { httpMetadata: { contentType: 'image/jpeg' } });
-      return { url: `${base}/${objectKey}`, alt: CLEAN_EDITORIAL_HERO_ALT };
+      if (!allowGenerated) return deterministicHero(env, env.OPENAI_API_KEY ? 'openai_spend_cap' : 'openai_not_configured');
+      if (!key || !base || !bucket) return deterministicHero(env, 'openai_not_configured');
+      try {
+        const response = await fetchImpl('https://api.openai.com/v1/images/generations', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ model: env.OPENAI_IMAGE_MODEL || 'gpt-image-1', size: '1024x1024', n: 1, output_format: 'jpeg', quality: 'high', prompt: `Square editorial image that works as both a blog hero and an Instagram feed post. Keep the full visual idea inside the central 80% safe area so no important element is cropped. No text, no letters, no logos, no robots, and no glowing AI icons. Warm off-white paper, charcoal ink, restrained antique gold, sophisticated magazine collage. Topic: ${title}. Show the idea through clear documents, systems, or evidence.` }), signal: AbortSignal.timeout(60_000) });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { error?: { code?: unknown; type?: unknown } } | null;
+          const providerCode = safeProviderCode(payload?.error?.code ?? payload?.error?.type);
+          return deterministicHero(env, `openai_http_${response.status}${providerCode ? `_${providerCode}` : ''}`);
+        }
+        const payload = await response.json() as { data?: Array<{ b64_json?: string }> }; const encoded = payload.data?.[0]?.b64_json;
+        if (!encoded) return deterministicHero(env, 'openai_missing_image_payload');
+        const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0)); const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 80);
+        const objectKey = `editorial-heroes/${slug}-${Date.now()}.jpg`; await bucket.put(objectKey, bytes.buffer, { httpMetadata: { contentType: 'image/jpeg' } });
+        return { url: `${base}/${objectKey}`, alt: CLEAN_EDITORIAL_HERO_ALT, provider: 'openai' as const };
+      } catch (error) {
+        const reason = error instanceof DOMException && error.name === 'TimeoutError'
+          ? 'timeout'
+          : error instanceof Error ? safeProviderCode(error.name) || 'request_failed' : 'request_failed';
+        return deterministicHero(env, `openai_${reason}`);
+      }
     },
     async review({ title, markdown, sources, hero }) {
       if (!hero.url.startsWith('https://') || /\b(ai|robot|future|innovation)\b/i.test(hero.alt) || sources.length === 0) return { approved: false, reasons: ['hero or sources fail policy'] };

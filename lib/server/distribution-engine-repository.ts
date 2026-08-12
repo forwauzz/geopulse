@@ -123,6 +123,8 @@ export type DistributionAssetRow = {
   readonly caption_text: string | null;
   readonly status: DistributionAssetStatus;
   readonly cta_url: string | null;
+  readonly growth_campaign_id?: string | null;
+  readonly growth_intervention_id?: string | null;
   readonly metadata: Record<string, unknown>;
   readonly created_by_user_id: string | null;
   readonly approved_by_user_id: string | null;
@@ -209,6 +211,8 @@ export type DistributionAssetUpsertInput = {
   readonly captionText?: string | null;
   readonly status?: DistributionAssetStatus;
   readonly ctaUrl?: string | null;
+  readonly growthCampaignId?: string | null;
+  readonly growthInterventionId?: string | null;
   readonly metadata?: Record<string, unknown>;
   readonly createdByUserId?: string | null;
   readonly approvedByUserId?: string | null;
@@ -283,7 +287,7 @@ const ACCOUNT_SELECT =
 const ACCOUNT_TOKEN_SELECT =
   'id,distribution_account_id,token_type,access_token_encrypted,refresh_token_encrypted,expires_at,scopes,metadata,created_at,updated_at';
 const ASSET_SELECT =
-  'id,asset_id,content_item_id,source_type,source_key,asset_type,provider_family,title,body_markdown,body_plaintext,caption_text,status,cta_url,metadata,created_by_user_id,approved_by_user_id,approved_at,created_at,updated_at';
+  'id,asset_id,content_item_id,source_type,source_key,asset_type,provider_family,title,body_markdown,body_plaintext,caption_text,status,cta_url,growth_campaign_id,growth_intervention_id,metadata,created_by_user_id,approved_by_user_id,approved_at,created_at,updated_at';
 const ASSET_MEDIA_SELECT =
   'id,distribution_asset_id,media_kind,storage_url,mime_type,alt_text,caption,sort_order,provider_ready_status,metadata,created_at,updated_at';
 const JOB_SELECT =
@@ -507,6 +511,8 @@ export function createDistributionEngineRepository(supabase: SupabaseLike) {
             caption_text: input.captionText ?? null,
             status: input.status ?? existing?.status ?? 'draft',
             cta_url: input.ctaUrl?.trim() || null,
+            growth_campaign_id: input.growthCampaignId ?? existing?.growth_campaign_id ?? null,
+            growth_intervention_id: input.growthInterventionId ?? existing?.growth_intervention_id ?? null,
             metadata: mergeMetadata(existing?.metadata, input.metadata),
             created_by_user_id: input.createdByUserId ?? existing?.created_by_user_id ?? null,
             approved_by_user_id: input.approvedByUserId ?? existing?.approved_by_user_id ?? null,

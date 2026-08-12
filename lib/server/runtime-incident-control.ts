@@ -10,6 +10,7 @@ export type RuntimeIncidentDefinition = {
   readonly failureEvents: readonly string[];
   readonly successEvents: readonly string[];
   readonly nextAction: string;
+  readonly activationThreshold?: number;
 };
 
 export type RuntimeIncidentSignal = {
@@ -31,10 +32,12 @@ const DEFINITIONS: readonly RuntimeIncidentDefinition[] = [
     failureEvents: [
       'social_proof_agent_run',
       'jordan_media_render_failed',
+      'autonomous_campaign_execution',
       'autonomous_campaign_execution_error',
     ],
     successEvents: ['social_proof_agent_run', 'autonomous_campaign_execution'],
-    nextAction: 'Retry the bounded production run, repair the render or runtime contract if it repeats, and verify a new asset or a clean no-op.',
+    nextAction: 'Retry the bounded production run, repair the missing format or render contract, and verify both the inventory horizon and a replacement output signal.',
+    activationThreshold: 2,
   },
   {
     key: 'gpm-monitoring',
@@ -98,9 +101,10 @@ const DEFINITIONS: readonly RuntimeIncidentDefinition[] = [
     campaignLane: 'competitors',
     owner: 'Marcus',
     title: 'Repair the autonomous SEO runtime',
-    failureEvents: ['seo_agent_failed', 'seo_agent_worker_error', 'seo_editorial_cron_error'],
+    failureEvents: ['seo_agent_failed', 'seo_agent_worker_error', 'seo_editorial_cron_error', 'seo_editorial_cron_run'],
     successEvents: ['seo_agent_completed', 'seo_editorial_cron_run'],
     nextAction: 'Repair the SEO execution path and verify the next discovery or editorial run.',
+    activationThreshold: 2,
   },
 ] as const;
 
@@ -119,6 +123,23 @@ function failure(row: Row, definition: RuntimeIncidentDefinition): boolean {
   if (!definition.failureEvents.includes(String(row.event))) return false;
   if (row.level === 'error') return true;
   const payload = data(row);
+  if (
+    definition.key === 'social-production'
+    && row.event === 'social_proof_agent_run'
+    && payload.status === 'noop'
+    && Number(payload.candidates ?? 0) === 0
+    && payload.inventory_healthy !== true
+  ) return true;
+  if (
+    definition.key === 'social-production'
+    && row.event === 'autonomous_campaign_execution'
+    && payload.inventoryHealthy === false
+  ) return true;
+  if (
+    definition.key === 'seo-runtime'
+    && row.event === 'seo_editorial_cron_run'
+    && payload.status === 'rejected'
+  ) return true;
   return payload.status === 'failed'
     || Number(payload.failed ?? payload.errors ?? 0) > 0
     || String(row.event).includes('with_errors')
@@ -130,12 +151,25 @@ function success(row: Row, definition: RuntimeIncidentDefinition): boolean {
   if (!definition.successEvents.includes(String(row.event))) return false;
   if (row.level === 'error') return false;
   const status = String(data(row).status ?? '');
+  const payload = data(row);
+  if (
+    definition.key === 'social-production'
+    && row.event === 'social_proof_agent_run'
+    && status === 'noop'
+    && Number(payload.candidates ?? 0) === 0
+  ) return payload.inventory_healthy === true;
+  if (
+    definition.key === 'social-production'
+    && row.event === 'autonomous_campaign_execution'
+    && payload.inventoryHealthy === false
+  ) return false;
+  if (definition.key === 'seo-runtime' && status === 'rejected') return false;
   return status !== 'failed';
 }
 
 function reason(row: Row | undefined): string | null {
   const payload = data(row);
-  for (const key of ['reason', 'error', 'message', 'failed_stage']) {
+  for (const key of ['reason', 'inventoryReason', 'inventory_reason', 'error', 'message', 'failed_stage']) {
     const value = payload[key];
     if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 500);
   }
@@ -155,14 +189,28 @@ export function classifyRuntimeIncidents(
       .sort((left, right) => time(right) - time(left));
     const latestFailure = relevant.find((row) => failure(row, definition));
     const latestSuccess = relevant.find((row) => success(row, definition));
-    const active = Boolean(latestFailure) && time(latestFailure) > time(latestSuccess);
     let consecutiveFailures = 0;
-    if (active) {
+    if (latestFailure && time(latestFailure) > time(latestSuccess)) {
       for (const row of relevant) {
         if (success(row, definition)) break;
         if (failure(row, definition)) consecutiveFailures += 1;
       }
     }
+    const criticalLatestFailure = Boolean(
+      latestFailure
+      && (
+        latestFailure.level === 'error'
+        || data(latestFailure).status === 'failed'
+        || (
+          definition.key === 'social-production'
+          && latestFailure.event === 'autonomous_campaign_execution'
+          && data(latestFailure).inventoryHealthy === false
+        )
+      ),
+    );
+    const active = Boolean(latestFailure)
+      && time(latestFailure) > time(latestSuccess)
+      && (criticalLatestFailure || consecutiveFailures >= (definition.activationThreshold ?? 1));
     return {
       definition,
       active,

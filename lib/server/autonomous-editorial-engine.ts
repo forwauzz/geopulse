@@ -21,11 +21,22 @@ export type EditorialProvider = {
     readonly estimatedCostUsd: number;
   };
   draft(input: { topic: string; existingTitles: string[] }): Promise<{ title: string; markdown: string; sources: string[] }>;
-  hero(input: { title: string; markdown: string }): Promise<{ url: string; alt: string } | null>;
+  hero(input: { title: string; markdown: string; allowGenerated: boolean }): Promise<{
+    url: string;
+    alt: string;
+    provider: 'openai' | 'deterministic';
+    providerFailure?: string;
+  } | null>;
   review(input: { title: string; markdown: string; sources: string[]; hero: { url: string; alt: string } }): Promise<{ approved: boolean; reasons: string[] }>;
 };
 
-export type EditorialRunResult = { status: 'created' | 'skipped' | 'rejected' | 'failed'; reason?: string; contentId?: string };
+export type EditorialRunResult = {
+  status: 'created' | 'skipped' | 'rejected' | 'failed';
+  reason?: string;
+  contentId?: string;
+  heroProvider?: 'openai' | 'deterministic';
+  heroProviderFailure?: string;
+};
 
 export function mergeEditorialCandidates(
   retryRows: readonly any[],
@@ -121,6 +132,7 @@ export async function runAutonomousEditorialEngine(args: {
   const draft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
   if (!draft.title || !draft.markdown || draft.sources.length === 0) return { status: 'rejected', reason: 'incomplete_draft' };
 
+  let allowGeneratedHero = false;
   if (args.provider.heroSpend) {
     const reserved = await reserveProviderSpend({
       db: args.supabase,
@@ -130,15 +142,19 @@ export async function runAutonomousEditorialEngine(args: {
       estimatedCostUsd: args.provider.heroSpend.estimatedCostUsd,
       metadata: { content_id: candidate.content_id, topic: candidate.topic_cluster },
     });
-    if (!reserved) return { status: 'skipped', reason: 'openai_spend_cap' };
+    allowGeneratedHero = reserved;
   }
-  const hero = await args.provider.hero({ title: draft.title, markdown: draft.markdown });
+  const hero = await args.provider.hero({
+    title: draft.title,
+    markdown: draft.markdown,
+    allowGenerated: allowGeneratedHero,
+  });
   if (!hero?.url || !hero.alt) return { status: 'rejected', reason: 'missing_clean_hero' };
 
   const review = await args.provider.review({ title: draft.title, markdown: draft.markdown, sources: draft.sources, hero });
   if (!review.approved) return { status: 'rejected', reason: review.reasons.join('; ') || 'review_failed' };
 
-  const metadata = { ...(candidate.metadata ?? {}), editorial_retry_required: false, autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: 'generated' }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
+  const metadata = { ...(candidate.metadata ?? {}), editorial_retry_required: false, autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: hero.provider, hero_provider_failure: hero.providerFailure ?? null }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
   const checks = evaluateContentPublishChecks({
     ...candidate,
     content_type: 'article',
@@ -181,5 +197,10 @@ export async function runAutonomousEditorialEngine(args: {
   }
   await reconcileContentLoops(args.supabase, now);
   await closeSatisfiedSeoParents(args.supabase, now);
-  return { status: 'created', contentId: candidate.content_id };
+  return {
+    status: 'created',
+    contentId: candidate.content_id,
+    heroProvider: hero.provider,
+    ...(hero.providerFailure ? { heroProviderFailure: hero.providerFailure } : {}),
+  };
 }

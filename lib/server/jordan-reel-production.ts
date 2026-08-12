@@ -76,7 +76,9 @@ export function resolveJordanReelConfig(config: Record<string, unknown>): Jordan
     );
 
   return {
-    enabled: bool(config['reels_enabled'], false),
+    // Reel brief creation is part of the normal production mix. Rendering and
+    // publication still remain fail-closed behind the validation and provider gates.
+    enabled: bool(config['reels_enabled'], true),
     reelsPerWeek: int(config['reels_per_week'], 4, 7),
     daysLocal: daysLocal.length > 0 ? daysLocal : DEFAULT_REEL_DAYS_LOCAL,
     categories: categories.length > 0

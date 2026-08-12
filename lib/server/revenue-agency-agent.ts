@@ -589,9 +589,10 @@ export async function runRevenueAgency(args: {
           supabase: args.supabase,
           appUrl: args.appUrl,
           env: args.env,
-          now,
-          campaignOnly: true,
-        })
+           now,
+           campaignOnly: true,
+           campaignScopeRequired: true,
+         })
         : undefined;
     const nurture =
       config.nurtureEnabled && mode === 'autonomous' && judge.allowNurture

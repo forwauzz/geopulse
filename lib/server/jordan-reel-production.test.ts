@@ -34,6 +34,11 @@ const source = {
 };
 
 describe('Jordan autonomous Reel production', () => {
+  it('enables brief creation by default while preserving an explicit kill switch', () => {
+    expect(resolveJordanReelConfig({}).enabled).toBe(true);
+    expect(resolveJordanReelConfig({ reels_enabled: false }).enabled).toBe(false);
+  });
+
   it('defaults to four weekly slots without changing the four-post daily schedule', () => {
     const config = resolveJordanReelConfig({ reels_enabled: true });
     expect(config).toMatchObject({
