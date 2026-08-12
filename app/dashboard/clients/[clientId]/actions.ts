@@ -78,7 +78,7 @@ async function authorizedAdmin(args: {
   const env = await getScanApiEnv();
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return null;
   const admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  const [{ data: membership }, { data: client }] = await Promise.all([
+  const [{ data: membership }, { data: client }, { data: account }] = await Promise.all([
     admin
       .from('agency_users')
       .select('role')
@@ -93,9 +93,21 @@ async function authorizedAdmin(args: {
       .eq('agency_account_id', args.agencyAccountId)
       .eq('status', 'active')
       .maybeSingle(),
+    admin
+      .from('agency_accounts')
+      .select('metadata')
+      .eq('id', args.agencyAccountId)
+      .maybeSingle(),
   ]);
   if (!membership || membership.role === 'viewer' || !client) return null;
-  return { admin, user, role: String(membership.role) };
+  return {
+    admin,
+    user,
+    role: String(membership.role),
+    accountMetadata: account?.metadata && typeof account.metadata === 'object'
+      ? account.metadata as Record<string, unknown>
+      : {},
+  };
 }
 
 /**
@@ -116,7 +128,8 @@ export async function sendClientReportNow(formData: FormData): Promise<void> {
   });
   if (!parsed.success) return;
   const auth = await authorizedAdmin(parsed.data);
-  if (!auth || !SHARING_RELEASE_ROLES.has(auth.role)) return;
+  const memberDeliveryEnabled = auth?.accountMetadata['member_report_delivery_enabled'] === true;
+  if (!auth || (!SHARING_RELEASE_ROLES.has(auth.role) && !memberDeliveryEnabled)) return;
 
   const { admin, user } = auth;
   const [latest, clientResult, configResult, reportResult] = await Promise.all([
