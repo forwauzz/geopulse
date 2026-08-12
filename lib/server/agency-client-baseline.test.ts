@@ -4,7 +4,7 @@ vi.mock('./organization-measurement-context', () => ({
   loadConfirmedOrganizationContextByHost: vi.fn().mockResolvedValue(null),
 }));
 
-import { completeAgencyClientBaseline } from './agency-client-baseline';
+import { canReuseRecentClientScan, completeAgencyClientBaseline } from './agency-client-baseline';
 
 function clientOnlySupabase() {
   const client = {
@@ -41,5 +41,37 @@ describe('agency client baseline context gate', () => {
       launchedPlatforms: [],
       reason: 'organization_context_confirmation_required',
     });
+  });
+});
+
+describe('agency client baseline scan reuse', () => {
+  const scope = {
+    agencyAccountId: '00000000-0000-4000-8000-000000000201',
+    clientId: '00000000-0000-4000-8000-000000000202',
+    domain: 'client.example',
+  };
+
+  it('reuses a recent scan only when account, client, and domain all match', () => {
+    expect(canReuseRecentClientScan({
+      agency_account_id: scope.agencyAccountId,
+      agency_client_id: scope.clientId,
+      domain: scope.domain,
+    }, scope)).toBe(true);
+
+    expect(canReuseRecentClientScan({
+      agency_account_id: '00000000-0000-4000-8000-000000000999',
+      agency_client_id: scope.clientId,
+      domain: scope.domain,
+    }, scope)).toBe(false);
+    expect(canReuseRecentClientScan({
+      agency_account_id: scope.agencyAccountId,
+      agency_client_id: '00000000-0000-4000-8000-000000000999',
+      domain: scope.domain,
+    }, scope)).toBe(false);
+    expect(canReuseRecentClientScan({
+      agency_account_id: scope.agencyAccountId,
+      agency_client_id: scope.clientId,
+      domain: 'other.example',
+    }, scope)).toBe(false);
   });
 });
