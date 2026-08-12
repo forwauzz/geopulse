@@ -22,6 +22,7 @@ import {
 import { persistConfirmedOrganizationContext } from '@/lib/server/organization-context-repository';
 import { resolveValueFirstOnboardingProposal } from '@/lib/server/value-first-onboarding';
 import { recordActivationEvent } from '@/lib/server/activation-events';
+import { loadConfirmedOrganizationContextByHost } from '@/lib/server/organization-measurement-context';
 
 export async function signOut(): Promise<void> {
   const supabase = await createSupabaseServerClient();
@@ -114,6 +115,8 @@ const agencyClientSchema = z.object({
   marketScope: z.enum(['local', 'regional', 'national', 'online', 'global']).optional(),
   languages: z.string().trim().max(160).optional(),
   timezone: z.string().trim().max(80).optional(),
+  services: z.string().trim().max(1200).optional(),
+  buyer: z.string().trim().max(240).optional(),
 });
 
 /** Same confirmation fields as onboarding, addressed to a client that already exists. */
@@ -248,6 +251,8 @@ export async function createAgencyClientFromDashboard(
     marketScope: normalizeText(formData.get('marketScope')),
     languages: normalizeText(formData.get('languages')),
     timezone: normalizeText(formData.get('timezone')),
+    services: normalizeText(formData.get('services')),
+    buyer: normalizeText(formData.get('buyer')),
   });
 
   if (!parsed.success) {
@@ -509,6 +514,8 @@ export async function confirmAgencyClientMarket(
     marketScope: normalizeText(formData.get('marketScope')),
     languages: normalizeText(formData.get('languages')),
     timezone: normalizeText(formData.get('timezone')),
+    services: normalizeText(formData.get('services')),
+    buyer: normalizeText(formData.get('buyer')),
   });
   if (!parsed.success) {
     return { status: 'error', message: 'Confirm the client name and market to continue.' };
@@ -554,7 +561,13 @@ export async function confirmAgencyClientMarket(
   const clientMetadata = client.metadata && typeof client.metadata === 'object'
     ? client.metadata as Record<string, unknown>
     : {};
-  const proposal = proposalWithLegacyHints(detected.proposal, {
+  const existingContext = await loadConfirmedOrganizationContextByHost({
+    supabase: context.adminDb,
+    ownerType: 'agency_client',
+    ownerId: String(client.id),
+    canonicalDomain: storedDomain,
+  }).catch(() => null);
+  const detectedWithLegacyHints = proposalWithLegacyHints(detected.proposal, {
     category: typeof client.subvertical === 'string' && client.subvertical.trim()
       ? client.subvertical
       : typeof client.vertical === 'string' ? client.vertical : null,
@@ -562,6 +575,21 @@ export async function confirmAgencyClientMarket(
       ? String(clientMetadata['location'])
       : null,
   });
+  const proposal = existingContext ? {
+    ...detectedWithLegacyHints,
+    displayName: existingContext.organization.displayName,
+    category: existingContext.organization.category,
+    services: existingContext.organization.services,
+    buyer: existingContext.market.buyer,
+    marketScope: existingContext.market.scope,
+    countryCode: existingContext.market.countryCode,
+    subdivisionCode: existingContext.market.subdivisionCode,
+    locality: existingContext.market.locality,
+    serviceAreas: existingContext.market.serviceAreas,
+    languages: existingContext.market.languages,
+    timezone: existingContext.market.timezone,
+    missingFields: [],
+  } : detectedWithLegacyHints;
   if (parsed.data.confirmed !== '1') {
     return {
       status: 'needs_confirmation',
@@ -633,11 +661,34 @@ export async function confirmAgencyClientMarket(
     context_version: organizationContext.contextVersion,
   });
 
+  // Re-provision only the deterministic inputs here. This creates a new versioned
+  // query set from the confirmed profile without calling an answer engine or
+  // spending against the monthly measurement cap. The explicit baseline button
+  // remains the point where provider work begins.
+  const reprovisioned = await provisionCustomerVisibilityBaseline(context.adminDb, {
+    agencyAccountId: parsed.data.agencyAccountId,
+    domain: storedDomain,
+    companyName: confirmed.displayName,
+    vertical: typeof client.vertical === 'string' ? client.vertical : null,
+    subvertical: confirmed.category,
+    location: confirmed.locality ?? confirmed.countryCode,
+    explicitCompetitors: approvedCompetitorDomains,
+    organizationContext,
+    source: 'agency_client_profile_update',
+  });
+  if (!reprovisioned.ok) {
+    return {
+      status: 'error',
+      message: 'The business profile was saved, but its buyer questions could not be rebuilt. Try again before running a new baseline.',
+      draft: { intent: 'agency', name: confirmed.displayName, website: storedDomain },
+    };
+  }
+
   revalidatePath('/dashboard/clients');
   revalidatePath('/dashboard/visibility');
   revalidatePath(`/dashboard/clients/${client.id}`);
-  // The baseline is deliberately not run here. It spends against the GPM cap, so
-  // it stays an explicit action on the client page.
+  // Provider measurement is deliberately not run here. It spends against the GPM
+  // cap, so it stays an explicit action on the client page.
   redirect(
     `/dashboard/clients/${client.id}?agencyAccount=${parsed.data.agencyAccountId}&market=confirmed`
   );

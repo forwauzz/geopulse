@@ -72,6 +72,23 @@ describe('customer visibility baseline prompts', () => {
     expect(prompts).toHaveLength(10);
     expect(prompts.join(' ')).toContain('English and French');
   });
+
+  it('uses confirmed buyer and service context without naming the measured brand', () => {
+    const prompts = buildBaselineBuyerPrompts({
+      vertical: 'software',
+      subvertical: 'medical legal evidence software',
+      location: 'Canada',
+      buyer: 'plaintiff and defence legal teams',
+      services: ['medical chronology automation', 'source-linked evidence extraction'],
+    });
+    const joined = prompts.join(' ');
+    expect(prompts).toHaveLength(10);
+    expect(new Set(prompts).size).toBe(10);
+    expect(joined).toContain('plaintiff and defence legal teams');
+    expect(joined).toContain('medical chronology automation');
+    expect(joined).toContain('source linked evidence extraction');
+    expect(joined.toLowerCase()).not.toContain('alie');
+  });
 });
 
 describe('approved customer query-set preservation', () => {

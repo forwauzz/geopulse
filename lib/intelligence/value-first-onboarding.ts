@@ -70,6 +70,8 @@ export type OnboardingConfirmationInput = {
   readonly marketScope?: string | null;
   readonly languages?: string | null;
   readonly timezone?: string | null;
+  readonly services?: string | null;
+  readonly buyer?: string | null;
 };
 
 export type LegacyOnboardingHints = {
@@ -351,6 +353,10 @@ export function confirmOrganizationOnboarding(
     ? rawScope as OnboardingMarketScope
     : null;
   const languages = normalizeLanguages(input.languages ?? proposal.languages.join(', '), countryCode ?? '');
+  const services = input.services === undefined || input.services === null
+    ? proposal.services
+    : unique(input.services.split(/[\r\n,]+/).map((value) => value.trim()).filter(Boolean));
+  const buyer = clean(input.buyer) ?? proposal.buyer;
 
   // A blank time zone the market already settles is not a question worth asking.
   // A wrong one is: silently replacing it would report a client's schedule in a
@@ -406,8 +412,8 @@ export function confirmOrganizationOnboarding(
       canonicalDomain: proposal.canonicalDomain,
       displayName: displayName!,
       category: category!,
-      services: proposal.services,
-      buyer: proposal.buyer,
+      services,
+      buyer,
       marketScope: marketScope!,
       countryCode: countryCode!,
       subdivisionCode,

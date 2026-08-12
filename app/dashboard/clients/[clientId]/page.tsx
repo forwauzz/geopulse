@@ -372,6 +372,24 @@ export default async function ClientScorecardPage({
                 confirmationPendingLabel="Saving the confirmed market…"
               />
             </div>
+          ) : organizationContextLookup.context ? (
+            <details className="mt-5 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-on-background">Update what this business sells and who buys it</summary>
+              <div className="mt-4">
+                <ValueFirstOnboardingForm
+                  action={confirmAgencyClientMarket}
+                  fixedIntent="agency"
+                  defaultName={client.name}
+                  defaultWebsite={domain ?? ''}
+                  hiddenFields={{ agencyAccountId: account.id, agencyClientId: String(client.id) }}
+                  eyebrow="Measurement profile"
+                  title="Keep buyer questions specific"
+                  description="Confirm the category, products or services, primary buyer, and market. Saving creates a new versioned question set; historical reports stay unchanged and no email is sent."
+                  confirmationLabel="Save profile and rebuild questions"
+                  confirmationPendingLabel="Rebuilding the buyer questionsâ€¦"
+                />
+              </div>
+            </details>
           ) : null}
         </div>
         ) : null}

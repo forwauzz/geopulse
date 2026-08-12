@@ -308,6 +308,25 @@ describe('value-first onboarding contract', () => {
     });
   });
 
+  it('keeps explicit buyer and service edits in the confirmed profile', () => {
+    const proposal = buildOrganizationOnboardingProposal({
+      intent: 'agency',
+      submittedName: 'Evidence Product',
+      submittedWebsite: 'evidence.example',
+      resolution: resolution(),
+    });
+    expect(confirmOrganizationOnboarding(proposal, {
+      buyer: 'plaintiff and defence legal teams',
+      services: 'medical chronology automation\nsource-linked evidence extraction',
+    })).toMatchObject({
+      ok: true,
+      value: {
+        buyer: 'plaintiff and defence legal teams',
+        services: ['medical chronology automation', 'source-linked evidence extraction'],
+      },
+    });
+  });
+
   it('fails closed on a malformed province code or time zone', () => {
     const proposal = buildOrganizationOnboardingProposal({
       intent: 'business',

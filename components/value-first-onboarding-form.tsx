@@ -177,6 +177,26 @@ function ConfirmationStep({
         <summary className="cursor-pointer text-sm font-semibold text-on-background">Edit detected details</summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {optionalEdits.map((field) => <ConfirmationField key={field} field={field} proposal={proposal} required={false} />)}
+          <label className="block text-sm text-on-background sm:col-span-2">
+            <span className="font-medium">Products or services</span>
+            <textarea
+              name="services"
+              defaultValue={proposal.services.join('\n')}
+              rows={3}
+              placeholder={'Medical chronology automation\nSource-linked evidence extraction'}
+              className="mt-2 w-full rounded-xl border border-outline-variant/25 bg-surface-container-low px-3 py-2.5 text-sm text-on-background outline-none focus:border-primary"
+            />
+            <span className="mt-1 block text-xs text-on-surface-variant">One per line. These make the recurring buyer questions specific to what the business actually sells.</span>
+          </label>
+          <label className="block text-sm text-on-background sm:col-span-2">
+            <span className="font-medium">Primary buyer</span>
+            <input
+              name="buyer"
+              defaultValue={proposal.buyer ?? ''}
+              placeholder="e.g. Plaintiff and defence legal teams"
+              className="mt-2 w-full rounded-xl border border-outline-variant/25 bg-surface-container-low px-3 py-2.5 text-sm text-on-background outline-none focus:border-primary"
+            />
+          </label>
         </div>
       </details>
       <SubmitButton
