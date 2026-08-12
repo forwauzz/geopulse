@@ -37,6 +37,12 @@ type BatchContactRow = {
   readonly email: string;
 };
 
+function isoTimestamp(value: string): string {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) throw new Error('brevo_invalid_database_timestamp');
+  return timestamp.toISOString();
+}
+
 export type BrevoConnection = {
   readonly account: ConnectorAccount;
   readonly lastErrorCode: string | null;
@@ -60,8 +66,9 @@ function fromAccountRow(row: AccountRow, expiresAt: string | null): ConnectorAcc
     contractVersion: 'crm-connector-account-v1', accountId: row.id,
     tenant: { type: 'agency_account', id: row.agency_account_id }, provider: 'brevo',
     externalAccountId: row.external_account_id, credentialRef: row.credential_ref,
-    scopes: row.scopes, status: row.status, connectedAt: row.connected_at,
-    expiresAt, disconnectedAt: row.disconnected_at,
+    scopes: row.scopes, status: row.status, connectedAt: isoTimestamp(row.connected_at),
+    expiresAt: expiresAt ? isoTimestamp(expiresAt) : null,
+    disconnectedAt: row.disconnected_at ? isoTimestamp(row.disconnected_at) : null,
   });
 }
 
