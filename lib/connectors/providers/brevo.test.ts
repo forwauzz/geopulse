@@ -33,12 +33,14 @@ describe('Brevo provider adapter', () => {
 
   it('fails closed for unsubscribed and incomplete contacts', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ contacts: [
-      { id: 1, email: 'ana@northstar.ca', attributes: { FIRSTNAME: 'Ana', COMPANY: 'Northstar', WEBSITE: 'https://northstar.ca' }, listIds: [8], listUnsubscribed: [] },
+      { id: 1, email: 'ana@northstar.ca', attributes: { FIRSTNAME: 'Ana', COMPANY: 'Northstar', WEBSITE: 'https://northstar.ca' }, listIds: [8], listUnsubscribed: [], modifiedAt: '2026-08-12T08:00:00+00:00' },
       { id: 2, email: 'blocked@clinic.ca', attributes: { COMPANY: 'Clinic', WEBSITE: 'clinic.ca' }, listIds: [8], listUnsubscribed: [8] },
       { id: 3, email: 'person@gmail.com', attributes: { COMPANY: 'No Site' }, listIds: [8] },
     ], count: 3 }), { status: 200 }));
     const result = await listBrevoContacts({ accessToken: 'token', listId: '8', fetcher, now: '2026-08-12T12:00:00.000Z' });
-    expect(result.contacts[0]).toMatchObject({ canonicalDomain: 'northstar.ca', selectionBlockReason: null });
+    expect(result.contacts[0]).toMatchObject({
+      canonicalDomain: 'northstar.ca', observedAt: '2026-08-12T08:00:00.000Z', selectionBlockReason: null,
+    });
     expect(result.contacts[1]).toMatchObject({ suppressionState: 'unsubscribed', selectionBlockReason: expect.any(String) });
     expect(result.contacts[2]).toMatchObject({ canonicalDomain: null, selectionBlockReason: 'Company website is missing' });
     expect(toContactProjection({ accountId: ACCOUNT_ID, agencyAccountId: AGENCY_ID, candidate: result.contacts[0]! }))

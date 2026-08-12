@@ -197,6 +197,12 @@ function canonicalDomain(value: string | null): string | null {
   }
 }
 
+function isoTimestamp(value: string): string {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) throw new Error('brevo_invalid_contact_timestamp');
+  return timestamp.toISOString();
+}
+
 function toCandidate(raw: z.infer<typeof contactSchema>, selectedListId: string, now: string): BrevoContactCandidate {
   const email = raw.email?.trim().toLowerCase() || null;
   const explicitDomain = canonicalDomain(textAttribute(raw.attributes, ['WEBSITE', 'DOMAIN', 'COMPANY_WEBSITE', 'URL']));
@@ -217,7 +223,7 @@ function toCandidate(raw: z.infer<typeof contactSchema>, selectedListId: string,
   return {
     providerContactId: String(raw.id), firstName, companyName: company,
     canonicalDomain: domain, email, listIds, suppressionState,
-    observedAt: raw.modifiedAt ?? raw.createdAt ?? now, selectionBlockReason,
+    observedAt: isoTimestamp(raw.modifiedAt ?? raw.createdAt ?? now), selectionBlockReason,
   };
 }
 
