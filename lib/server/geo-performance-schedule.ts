@@ -436,7 +436,11 @@ export async function executeGpmClientRun(args: {
             estimated_cost_usd: estimatedCostUsd,
             spend_estimate_version: 'gpm-conservative-v1',
             prompt_count_budgeted: configuredPromptCount,
-            query_execution_delay_ms: platform === 'gemini' ? 1_500 : 0,
+            // Gemini and Perplexity both enforce burst limits. Running a client
+            // cohort in parallel makes the adapter retries line up and repeat
+            // the same 429. Pace those providers so retries remain exceptional.
+            query_execution_delay_ms:
+              platform === 'gemini' || platform === 'perplexity' ? 1_500 : 0,
           },
         },
         args.adapter
@@ -488,7 +492,10 @@ export async function executeGpmClientRun(args: {
 
   // Generate one canonical artifact after every provider has settled. Completed existing runs are
   // valid sources, so this also repairs a missing artifact without paying for another measurement.
-  if (args.reportEnv) {
+  const completeProviderSet =
+    platformResults.length === args.config.platforms_enabled.length &&
+    platformResults.every((item) => item.runGroupId && item.status !== 'failed');
+  if (args.reportEnv && completeProviderSet) {
     const platformRuns = platformResults.flatMap((item) =>
       item.runGroupId && item.status !== 'failed'
         ? [{ platform: item.platform as GpmReportPlatform, runGroupId: item.runGroupId }]
