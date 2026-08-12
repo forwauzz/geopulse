@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mergeEditorialCandidates, runAutonomousEditorialEngine } from './autonomous-editorial-engine';
+import {
+  ensureEditorialInternalBlogLink,
+  mergeEditorialCandidates,
+  runAutonomousEditorialEngine,
+} from './autonomous-editorial-engine';
 
 const row = { content_id: 'content-1', slug: 'useful-page', title: 'Brief', topic_cluster: 'ai_search_readiness', status: 'brief', metadata: {} };
 function db() {
@@ -34,6 +38,15 @@ function db() {
 }
 
 describe('autonomous editorial engine', () => {
+  it('adds the verified readiness guide when a provider omits internal links', () => {
+    const markdown = ensureEditorialInternalBlogLink('# Useful answer\n\n## What to do\n\nStart with observable evidence.');
+
+    expect(markdown).toContain(
+      '[an AI-search readiness audit](/blog/ai-search-readiness-audit)'
+    );
+    expect(ensureEditorialInternalBlogLink(markdown)).toBe(markdown);
+  });
+
   it('puts review retries ahead of the normal limited backlog without duplicates', () => {
     expect(mergeEditorialCandidates(
       [{ content_id: 'retry' }],
