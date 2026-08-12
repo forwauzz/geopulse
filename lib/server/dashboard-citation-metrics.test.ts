@@ -59,6 +59,25 @@ describe('loadEngineCitationMetrics', () => {
     expect(metrics).toEqual({});
   });
 
+  it('does not publish a metric from an incomplete provider denominator', async () => {
+    const supabase = fakeSupabase({
+      domainId: 'd-1',
+      metricRows: [{
+        model_id: 'sonar',
+        citation_rate: 0,
+        metrics: {
+          run_mode: 'blind_discovery',
+          scheduled_runs: 10,
+          completed_runs: 2,
+          failed_runs: 8,
+        },
+        computed_at: '2026-08-12T02:02:00Z',
+      }],
+    });
+
+    expect(await loadEngineCitationMetrics({ supabase, domain: 'example.com' })).toEqual({});
+  });
+
   it('prefers blind discovery over every assisted mode', async () => {
     const supabase = fakeSupabase({
       domainId: 'd-1',
@@ -66,19 +85,19 @@ describe('loadEngineCitationMetrics', () => {
         {
           model_id: 'gpt-4o-mini',
           citation_rate: 0.9,
-          metrics: { run_mode: 'ungrounded_inference' },
+          metrics: { run_mode: 'ungrounded_inference', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-20T12:00:00Z',
         },
         {
           model_id: 'gpt-4o-mini',
           citation_rate: 0,
-          metrics: { run_mode: 'blind_discovery' },
+          metrics: { run_mode: 'blind_discovery', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-20T11:00:00Z',
         },
         {
           model_id: 'gpt-4o-mini',
           citation_rate: 1,
-          metrics: { run_mode: 'grounded_site' },
+          metrics: { run_mode: 'grounded_site', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-20T13:00:00Z',
         },
       ],
@@ -97,25 +116,25 @@ describe('loadEngineCitationMetrics', () => {
         {
           model_id: 'gemini-2.5-flash-lite',
           citation_rate: 0.9,
-          metrics: { run_mode: 'grounded_site' },
+          metrics: { run_mode: 'grounded_site', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-19T00:00:00Z',
         },
         {
           model_id: 'gemini-2.5-flash-lite',
           citation_rate: 0.4,
-          metrics: { run_mode: 'ungrounded_inference' },
+          metrics: { run_mode: 'ungrounded_inference', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-18T00:00:00Z',
         },
         {
           model_id: 'gemini-2.5-flash-lite',
           citation_rate: 0.2,
-          metrics: { run_mode: 'ungrounded_inference' },
+          metrics: { run_mode: 'ungrounded_inference', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-10T00:00:00Z',
         },
         {
           model_id: 'gpt-4o-mini',
           citation_rate: 0.6,
-          metrics: { run_mode: 'ungrounded_inference' },
+          metrics: { run_mode: 'ungrounded_inference', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-18T00:00:00Z',
         },
       ],
@@ -135,7 +154,7 @@ describe('loadEngineCitationMetrics', () => {
         {
           model_id: 'gemini-2.5-flash-lite',
           citation_rate: 0.88,
-          metrics: { run_mode: 'grounded_site' },
+          metrics: { run_mode: 'grounded_site', scheduled_runs: 10, completed_runs: 10 },
           computed_at: '2026-07-19T00:00:00Z',
         },
       ],
@@ -155,9 +174,9 @@ describe('loadEngineCitationMetrics', () => {
         { id: 'chatgpt-old', query_set_id: 'uk-set', agency_account_id: 'lifter', 'metadata->>domain_id': 'sano-domain', 'metadata->>organization_context_version': 'ocv1-old', status: 'completed', started_at: '2026-08-01' },
       ],
       benchmark_domain_metrics: [
-        { run_group_id: 'gemini-current', domain_id: 'sano-domain', model_id: 'gemini-3.5-flash-lite', citation_rate: 0, metrics: { run_mode: 'blind_discovery' }, computed_at: '2026-08-02' },
-        { run_group_id: 'perplexity-current', domain_id: 'sano-domain', model_id: 'sonar', citation_rate: 0.9, metrics: { run_mode: 'blind_discovery' }, computed_at: '2026-08-02' },
-        { run_group_id: 'chatgpt-old', domain_id: 'sano-domain', model_id: 'gpt-4o-mini', citation_rate: 0, metrics: { run_mode: 'blind_discovery' }, computed_at: '2026-08-01' },
+        { run_group_id: 'gemini-current', domain_id: 'sano-domain', model_id: 'gemini-3.5-flash-lite', citation_rate: 0, metrics: { run_mode: 'blind_discovery', scheduled_runs: 10, completed_runs: 10 }, computed_at: '2026-08-02' },
+        { run_group_id: 'perplexity-current', domain_id: 'sano-domain', model_id: 'sonar', citation_rate: 0.9, metrics: { run_mode: 'blind_discovery', scheduled_runs: 10, completed_runs: 10 }, computed_at: '2026-08-02' },
+        { run_group_id: 'chatgpt-old', domain_id: 'sano-domain', model_id: 'gpt-4o-mini', citation_rate: 0, metrics: { run_mode: 'blind_discovery', scheduled_runs: 10, completed_runs: 10 }, computed_at: '2026-08-01' },
       ],
     };
     const supabase = {

@@ -101,6 +101,46 @@ describe('GPM agency artifact schedule', () => {
     expect(mocks.store.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.run.mock.invocationCallOrder.at(-1)!);
   });
 
+  it('does not store a customer report when any configured provider is incomplete', async () => {
+    mocks.run.mockImplementation(async (_supabase, input: { modelId: string }) => ({
+      runGroupId: input.modelId.includes('gemini') ? 'run-gemini' : 'run-perplexity',
+      completedQueryCount: input.modelId.includes('gemini') ? 2 : 1,
+    }));
+    const organizationContext = context();
+    const derived = deriveOrganizationMeasurementBinding(organizationContext);
+    expect(derived.ok).toBe(true);
+    if (!derived.ok) return;
+    const measurementMetadata = organizationMeasurementMetadata(derived.binding);
+    mocks.querySet = { version: derived.binding.querySetVersion, metadata: measurementMetadata };
+
+    const result = await executeGpmClientRun({
+      supabase: {},
+      config: {
+        id: 'config-1', startup_workspace_id: null, agency_account_id: 'agency-1', benchmark_domain_id: 'domain-1',
+        topic: 'specialist care', location: 'Toronto', query_set_id: 'set-1', competitor_list: [], cadence: 'monthly',
+        platforms_enabled: ['gemini', 'perplexity'], report_email: null,
+        metadata: { prompt_count: 2, ...measurementMetadata },
+        created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z',
+      },
+      entitlement: {
+        enabled: true, tier: 'agency_pro', maxPromptsPerRun: null, allowedCadences: ['monthly'],
+        deliverySurfaces: ['email'], platformsAllowed: ['gemini', 'perplexity'], source: 'bundle_service',
+      },
+      platformModelMap: { chatgpt: 'gpt-test', gemini: 'gemini-test', perplexity: 'sonar-test' },
+      adapter: {} as never,
+      reportEnv: { GPM_REPORT_DELIVERY_ENABLED: 'false' },
+      organizationContext,
+    });
+
+    expect(result.platformResults).toEqual(expect.arrayContaining([
+      expect.objectContaining({ platform: 'gemini', status: 'launched' }),
+      expect.objectContaining({ platform: 'perplexity', status: 'failed' }),
+    ]));
+    expect(mocks.run.mock.calls.map((call) => call[1].runMetadata.query_execution_delay_ms))
+      .toEqual([1_500, 1_500]);
+    expect(mocks.store).not.toHaveBeenCalled();
+  });
+
   it('fails closed before provider work when the active context is not confirmed', async () => {
     const detected = { ...context(), status: 'detected' as const, confirmation: null };
     const result = await executeGpmClientRun({
