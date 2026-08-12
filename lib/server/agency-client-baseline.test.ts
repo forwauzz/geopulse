@@ -4,7 +4,11 @@ vi.mock('./organization-measurement-context', () => ({
   loadConfirmedOrganizationContextByHost: vi.fn().mockResolvedValue(null),
 }));
 
-import { canReuseRecentClientScan, completeAgencyClientBaseline } from './agency-client-baseline';
+import {
+  canReuseRecentClientScan,
+  completeAgencyClientBaseline,
+  organizationContextMarketLabel,
+} from './agency-client-baseline';
 
 function clientOnlySupabase() {
   const client = {
@@ -26,6 +30,21 @@ function clientOnlySupabase() {
 }
 
 describe('agency client baseline context gate', () => {
+  it('uses the confirmed context country for an online business without a locality', () => {
+    expect(organizationContextMarketLabel({
+      market: { locality: null, serviceAreas: [], countryCode: 'CA' },
+    })).toBe('CA');
+  });
+
+  it('prefers the confirmed locality or service area when available', () => {
+    expect(organizationContextMarketLabel({
+      market: { locality: 'Montreal', serviceAreas: ['Quebec'], countryCode: 'CA' },
+    })).toBe('Montreal');
+    expect(organizationContextMarketLabel({
+      market: { locality: null, serviceAreas: ['Quebec'], countryCode: 'CA' },
+    })).toBe('Quebec');
+  });
+
   it('fails closed before provider work when the client has no confirmed Organization Context', async () => {
     const result = await completeAgencyClientBaseline({
       supabase: clientOnlySupabase() as never,
