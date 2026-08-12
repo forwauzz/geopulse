@@ -256,7 +256,7 @@ describe('Social Proof Agent safeguards', () => {
     ).toBe('2026-07-23T23:00:00.000Z');
   });
 
-  it('enforces the creative cap across the UTC day instead of once per hourly run', () => {
+  it('enforces the creative cap across the configured local day instead of once per hourly run', () => {
     const asset = (created_at: string, createdBy = 'jordan') => ({
       id: created_at,
       asset_id: created_at,
@@ -277,10 +277,15 @@ describe('Social Proof Agent safeguards', () => {
     });
 
     expect(remainingDailyAssetCapacity([
+      asset('2026-07-27T05:00:00.000Z'),
+      asset('2026-07-27T06:00:00.000Z'),
+      asset('2026-07-27T07:00:00.000Z', 'manual'),
+      asset('2026-07-27T03:00:00.000Z'),
+    ], new Date('2026-07-27T08:00:00.000Z'), 4, 'America/Toronto')).toBe(2);
+
+    expect(remainingDailyAssetCapacity([
       asset('2026-07-27T01:00:00.000Z'),
-      asset('2026-07-27T02:00:00.000Z'),
-      asset('2026-07-27T03:00:00.000Z', 'manual'),
-      asset('2026-07-26T23:00:00.000Z'),
-    ], new Date('2026-07-27T08:00:00.000Z'), 4)).toBe(2);
+      asset('2026-07-27T05:00:00.000Z'),
+    ], new Date('2026-07-27T03:30:00.000Z'), 4, 'America/Toronto')).toBe(3);
   });
 });
