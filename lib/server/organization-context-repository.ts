@@ -225,7 +225,13 @@ function contextFactCandidates(rows: OrganizationContextProjectionRows): Organiz
     factCandidate({ field: 'approved_competitors', value: list(ownerContext['approvedCompetitorDomains'] ?? ownerContext['approved_competitor_domains']), sourceTier: ownerTier, confidence: ownerConfirmed ? 1 : 0.7 }),
     factCandidate({ field: 'display_name', value: clean(domainContext['displayName'] ?? domainContext['display_name'] ?? rows.domain.display_name), sourceTier: 'structured_website', confidence: 0.8 }),
     factCandidate({ field: 'canonical_domain', value: rows.domain.normalized_host, sourceTier: 'structured_website', confidence: 1 }),
-    factCandidate({ field: 'category', value: first(domainContext['category'], rows.domain.subvertical, rows.domain.vertical), sourceTier: 'structured_website', confidence: 0.8 }),
+    // A canonical domain can be shared by multiple owners and can carry a broader
+    // classification than a tenant's confirmed measurement category (for example,
+    // `saas` globally and `b2b_saas` for one client). Once the tenant confirms its
+    // category, the shared domain hint must not turn that valid refinement into a
+    // material conflict. Evidence-backed category facts below still participate in
+    // conflict detection.
+    factCandidate({ field: 'category', value: ownerConfirmed ? null : first(domainContext['category'], rows.domain.subvertical, rows.domain.vertical), sourceTier: 'structured_website', confidence: 0.8 }),
     factCandidate({ field: 'services', value: list(domainContext['services']), sourceTier: 'exact_official_website', confidence: 0.9 }),
     factCandidate({ field: 'buyer', value: clean(domainContext['buyer'] ?? domainContext['audience']), sourceTier: 'exact_official_website', confidence: 0.9 }),
     factCandidate({ field: 'market_scope', value: first(domainContext['marketScope'], domainContext['market_scope'], geography['scope']), sourceTier: 'structured_website', confidence: 0.8 }),
