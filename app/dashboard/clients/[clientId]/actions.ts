@@ -13,9 +13,13 @@ import { parsePromptCsv } from '@/lib/server/prompt-csv';
 import { parseReportRecipients } from '@/lib/shared/report-recipients';
 import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
-import { isClientReportSharingHeld, releaseClientReportHold } from '@/lib/server/report-quarantine';
+import { isClientReportSharingHeld, isReportQuarantined, releaseClientReportHold } from '@/lib/server/report-quarantine';
+import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
 import { syncConfirmedCompetitorCohort } from '@/lib/server/organization-context-repository';
 import { structuredError, structuredLog } from '@/lib/server/structured-log';
+import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
+import { resolveReportBrand } from '@/workers/report/resolve-report-brand';
+import { sendAgencyReportEmail } from '@/workers/report/agency-report-email-delivery';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -101,6 +105,82 @@ async function authorizedAdmin(args: {
  * workspace.
  */
 const SHARING_RELEASE_ROLES = new Set(['owner', 'admin']);
+
+export async function sendClientReportNow(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    clientId: z.string().uuid(), agencyAccountId: z.string().uuid(),
+    configId: z.string().uuid(), reportId: z.string().uuid(),
+  }).safeParse({
+    clientId: formData.get('clientId'), agencyAccountId: formData.get('agencyAccountId'),
+    configId: formData.get('configId'), reportId: formData.get('reportId'),
+  });
+  if (!parsed.success) return;
+  const auth = await authorizedAdmin(parsed.data);
+  if (!auth || !SHARING_RELEASE_ROLES.has(auth.role)) return;
+
+  const { admin, user } = auth;
+  const [latest, clientResult, configResult, reportResult] = await Promise.all([
+    loadLatestAgencyReport({ supabase: admin, agencyClientId: parsed.data.clientId }),
+    admin.from('agency_clients').select('id,metadata')
+      .eq('id', parsed.data.clientId).eq('agency_account_id', parsed.data.agencyAccountId).maybeSingle(),
+    admin.from('client_benchmark_configs').select('id,startup_workspace_id,agency_account_id,report_email,metadata')
+      .eq('id', parsed.data.configId).eq('agency_account_id', parsed.data.agencyAccountId).maybeSingle(),
+    admin.from('gpm_reports').select('id,config_id,agency_client_id,metadata')
+      .eq('id', parsed.data.reportId).eq('config_id', parsed.data.configId)
+      .eq('agency_client_id', parsed.data.clientId).eq('platform', 'combined')
+      .eq('report_payload_version', '2').maybeSingle(),
+  ]);
+  const client = clientResult.data;
+  const config = configResult.data;
+  const storedReport = reportResult.data;
+  const clientMetadata = client?.metadata && typeof client.metadata === 'object'
+    ? client.metadata as Record<string, unknown> : {};
+  const configMetadata = config?.metadata && typeof config.metadata === 'object'
+    ? config.metadata as Record<string, unknown> : {};
+  const reportMetadata = storedReport?.metadata && typeof storedReport.metadata === 'object'
+    ? storedReport.metadata as Record<string, unknown> : {};
+  if (!client || !config || !storedReport || latest?.reportId !== parsed.data.reportId
+    || isClientReportSharingHeld(clientMetadata) || isReportQuarantined(reportMetadata)) {
+    redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&reportDelivery=blocked`);
+  }
+  const shareToken = typeof clientMetadata['client_summary_share_token'] === 'string'
+    ? clientMetadata['client_summary_share_token'].trim() : '';
+  const recipients = recipientsFromMetadata(config.report_email, configMetadata);
+  if (!shareToken || recipients.length === 0) {
+    redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&reportDelivery=blocked`);
+  }
+
+  const env = await getPaymentApiEnv();
+  const brand = await resolveReportBrand({
+    supabase: admin as never,
+    scan: {
+      agency_client_id: parsed.data.clientId,
+      agency_account_id: parsed.data.agencyAccountId,
+      startup_workspace_id: typeof config.startup_workspace_id === 'string' ? config.startup_workspace_id : null,
+    },
+    bucket: null,
+  });
+  const secureReportUrl = `${env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, '')}/client-summary/${encodeURIComponent(parsed.data.clientId)}?share=${encodeURIComponent(shareToken)}`;
+  const sentAt = new Date().toISOString();
+  const result = await sendAgencyReportEmail({
+    apiKey: env.RESEND_API_KEY, from: env.RESEND_FROM_EMAIL, recipients,
+    replyTo: brand.brand.replyToEmail, brand: brand.brand, snapshot: latest.snapshot,
+    secureReportUrl, idempotencyKey: `agency-report-manual/${parsed.data.reportId}`,
+  });
+  const emailStatus = result.ok ? 'sent' : 'failed';
+  await admin.from('gpm_reports').update({ metadata: {
+    ...reportMetadata, email_status: emailStatus, email_status_at: sentAt,
+    delivery_trigger: 'partner_manual', delivered_by_user_id: user.id,
+    delivery_recipient_count: recipients.length,
+    ...(result.ok ? {} : { delivery_error: result.message }),
+  } }).eq('id', parsed.data.reportId);
+  structuredLog('agency_report_manual_delivery', {
+    agency_account_id: parsed.data.agencyAccountId, agency_client_id: parsed.data.clientId,
+    report_id: parsed.data.reportId, recipient_count: recipients.length, email_status: emailStatus,
+  });
+  revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
+  redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&reportDelivery=${emailStatus}`);
+}
 
 export async function saveClientMonitoring(formData: FormData): Promise<void> {
   const parsed = schema.safeParse({

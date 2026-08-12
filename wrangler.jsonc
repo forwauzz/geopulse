@@ -204,8 +204,9 @@
     "GPM_NARRATIVE_GEMINI_MODEL": "gemini-3.5-flash-lite",
     "GPM_PROMPT_BUILDER_MODEL": "claude-haiku-4-5-20251001",
     "GPM_REPORT_R2_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
-    // Client delivery is fail-closed while agency report v2 is being verified in production.
-    // Turn on only after the canonical snapshot, secure share route, and recipient preview pass.
+    // Global automatic delivery remains fail-closed until every existing
+    // configured recipient is reviewed. Partners can send a verified report
+    // explicitly from the tenant-scoped client UI.
     "GPM_REPORT_DELIVERY_ENABLED": "false",
 
     // Optional destination/provider defaults.
