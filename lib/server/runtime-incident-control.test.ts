@@ -37,7 +37,7 @@ describe('runtime incident control', () => {
         event: 'social_proof_agent_run',
         level: 'info',
         created_at: '2026-07-27T11:00:00.000Z',
-        data: { status: 'noop' },
+        data: { status: 'noop', inventory_healthy: true },
       },
       {
         event: 'social_proof_agent_run',
@@ -81,5 +81,65 @@ describe('runtime incident control', () => {
       },
     ]);
     expect(social?.active).toBe(false);
+  });
+
+  it('surfaces two consecutive zero-candidate noops', () => {
+    const [social] = classifyRuntimeIncidents([
+      {
+        event: 'social_proof_agent_run',
+        level: 'info',
+        created_at: '2026-08-12T02:00:00.000Z',
+        data: { status: 'noop', candidates: 0 },
+      },
+      {
+        event: 'social_proof_agent_run',
+        level: 'info',
+        created_at: '2026-08-12T01:00:00.000Z',
+        data: { status: 'noop', candidates: 0 },
+      },
+    ]);
+    expect(social).toMatchObject({ active: true, consecutiveFailures: 2 });
+  });
+
+  it('surfaces an inventory or required-format gap immediately', () => {
+    const [social] = classifyRuntimeIncidents([{
+      event: 'autonomous_campaign_execution',
+      level: 'info',
+      created_at: '2026-08-12T02:00:00.000Z',
+      data: {
+        inventoryHealthy: false,
+        inventoryReason: 'missing_required_formats:instagram:short_video_post',
+      },
+    }]);
+    expect(social).toMatchObject({
+      active: true,
+      reason: 'missing_required_formats:instagram:short_video_post',
+    });
+  });
+
+  it('surfaces repeated editorial rejection without treating one rejection as an outage', () => {
+    const once = classifyRuntimeIncidents([{
+      event: 'seo_editorial_cron_run',
+      level: 'warning',
+      created_at: '2026-08-12T01:00:00.000Z',
+      data: { status: 'rejected', reason: 'missing_clean_hero' },
+    }]).find((signal) => signal.definition.key === 'seo-runtime');
+    expect(once?.active).toBe(false);
+
+    const twice = classifyRuntimeIncidents([
+      {
+        event: 'seo_editorial_cron_run',
+        level: 'warning',
+        created_at: '2026-08-12T02:00:00.000Z',
+        data: { status: 'rejected', reason: 'missing_clean_hero' },
+      },
+      {
+        event: 'seo_editorial_cron_run',
+        level: 'warning',
+        created_at: '2026-08-12T01:00:00.000Z',
+        data: { status: 'rejected', reason: 'missing_clean_hero' },
+      },
+    ]).find((signal) => signal.definition.key === 'seo-runtime');
+    expect(twice).toMatchObject({ active: true, consecutiveFailures: 2 });
   });
 });

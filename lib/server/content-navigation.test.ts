@@ -5,6 +5,8 @@ import {
   getArticlesForTopic,
   getRelatedArticles,
   groupArticlesByTopic,
+  normalizeTopicSlug,
+  resolveTopicRoute,
 } from './content-navigation';
 import type { PublicContentListRow } from './public-content-data';
 
@@ -60,13 +62,15 @@ describe('content navigation helpers', () => {
   it('groups articles by topic cluster', () => {
     expect(groupArticlesByTopic(ARTICLES)).toEqual([
       {
-        topicKey: 'ai_search_readiness',
+        topicKey: 'ai-search-readiness',
         topicLabel: 'Ai Search Readiness',
+        sourceTopics: ['ai_search_readiness'],
         articles: [ARTICLES[0], ARTICLES[1]],
       },
       {
-        topicKey: 'citation_readiness',
+        topicKey: 'citation-readiness',
         topicLabel: 'Citation Readiness',
+        sourceTopics: ['citation_readiness'],
         articles: [ARTICLES[2]],
       },
     ]);
@@ -78,14 +82,28 @@ describe('content navigation helpers', () => {
   });
 
   it('builds topic hrefs', () => {
-    expect(buildTopicHref('ai_search_readiness')).toBe('/blog/topic/ai_search_readiness');
+    expect(buildTopicHref('ai_search_readiness')).toBe('/blog/topic/ai-search-readiness');
     expect(buildTopicHref(null)).toBe('/blog/topic/general');
     expect(buildTopicHref('AI visibility reporting for agencies')).toBe(
-      '/blog/topic/AI%20visibility%20reporting%20for%20agencies'
+      '/blog/topic/ai-visibility-reporting-for-agencies'
     );
     expect(buildTopicHref('What evidence should an MSP website provide for AI-assisted buyer questions?')).toBe(
-      '/blog/topic/What%20evidence%20should%20an%20MSP%20website%20provide%20for%20AI-assisted%20buyer%20questions%3F'
+      '/blog/topic/what-evidence-should-an-msp-website-provide-for-ai-assisted-buyer-questions'
     );
+  });
+
+  it('keeps database labels separate from stable canonical topic slugs', () => {
+    expect(normalizeTopicSlug('Crème & AI visibility?')).toBe('creme-ai-visibility');
+    const groups = groupArticlesByTopic(ARTICLES);
+    expect(resolveTopicRoute(groups, 'ai-search-readiness')).toMatchObject({
+      group: { topicKey: 'ai-search-readiness' },
+      redirectRequired: false,
+    });
+    expect(resolveTopicRoute(groups, 'ai_search_readiness')).toMatchObject({
+      group: { topicKey: 'ai-search-readiness' },
+      redirectRequired: true,
+    });
+    expect(resolveTopicRoute(groups, 'unknown legacy topic')).toBeNull();
   });
 
   it('selects related articles from the same topic first', () => {

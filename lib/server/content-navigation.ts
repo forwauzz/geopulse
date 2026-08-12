@@ -1,8 +1,10 @@
 import type { PublicContentListRow } from './public-content-data';
 
 export type TopicGroup = {
+  /** Stable public URL key; database labels never become paths directly. */
   readonly topicKey: string;
   readonly topicLabel: string;
+  readonly sourceTopics: readonly string[];
   readonly articles: PublicContentListRow[];
 };
 
@@ -14,41 +16,63 @@ export function formatTopicLabel(value: string | null): string {
     .join(' ');
 }
 
-function slugify(value: string): string {
+export function normalizeTopicSlug(value: string | null): string {
+  if (!value?.trim()) return 'general';
   return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-') || 'general';
 }
 
 export function buildTopicAnchor(topic: string | null): string {
-  return topic ? `topic-${slugify(formatTopicLabel(topic))}` : 'topic-general';
+  return `topic-${normalizeTopicSlug(topic)}`;
 }
 
 export function buildTopicHref(topic: string | null): string {
-  const topicSegment = topic?.trim() || 'general';
-  return `/blog/topic/${encodeURIComponent(topicSegment)}`;
+  return `/blog/topic/${encodeURIComponent(normalizeTopicSlug(topic))}`;
 }
 
 export function groupArticlesByTopic(articles: PublicContentListRow[]): TopicGroup[] {
-  const groups = new Map<string, PublicContentListRow[]>();
+  const groups = new Map<string, { label: string; sourceTopics: Set<string>; articles: PublicContentListRow[] }>();
 
   for (const article of articles) {
-    const key = article.topic_cluster?.trim() || 'general';
-    const existing = groups.get(key) ?? [];
-    existing.push(article);
+    const sourceTopic = article.topic_cluster?.trim() || 'general';
+    const key = normalizeTopicSlug(sourceTopic);
+    const existing = groups.get(key) ?? {
+      label: formatTopicLabel(sourceTopic === 'general' ? null : sourceTopic),
+      sourceTopics: new Set<string>(),
+      articles: [],
+    };
+    existing.sourceTopics.add(sourceTopic);
+    existing.articles.push(article);
     groups.set(key, existing);
   }
 
   return Array.from(groups.entries())
-    .map(([topicKey, groupedArticles]) => ({
+    .map(([topicKey, group]) => ({
       topicKey,
-      topicLabel: formatTopicLabel(topicKey === 'general' ? null : topicKey),
-      articles: groupedArticles,
+      topicLabel: group.label,
+      sourceTopics: [...group.sourceTopics].sort(),
+      articles: group.articles,
     }))
     .sort((a, b) => a.topicLabel.localeCompare(b.topicLabel));
+}
+
+/** Resolve a legacy database-label path only when it has one canonical equivalent. */
+export function resolveTopicRoute(
+  groups: readonly TopicGroup[],
+  routeSegment: string,
+): { readonly group: TopicGroup; readonly redirectRequired: boolean } | null {
+  const decoded = routeSegment.trim();
+  const direct = groups.find((group) => group.topicKey === decoded);
+  if (direct) return { group: direct, redirectRequired: false };
+  const legacyMatches = groups.filter((group) => group.sourceTopics.includes(decoded));
+  if (legacyMatches.length !== 1) return null;
+  return { group: legacyMatches[0]!, redirectRequired: true };
 }
 
 export function getRelatedArticles(
@@ -72,6 +96,6 @@ export function getArticlesForTopic(
   articles: PublicContentListRow[],
   topic: string | null
 ): PublicContentListRow[] {
-  const normalized = topic?.trim() || 'general';
-  return articles.filter((article) => (article.topic_cluster?.trim() || 'general') === normalized);
+  const normalized = normalizeTopicSlug(topic);
+  return articles.filter((article) => normalizeTopicSlug(article.topic_cluster) === normalized);
 }

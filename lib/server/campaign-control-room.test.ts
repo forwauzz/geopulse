@@ -110,6 +110,26 @@ describe('summarizeCampaignHealth', () => {
 });
 
 describe('summarizeRuntimeHealth', () => {
+  it('counts zero-output noops as failures unless inventory is already healthy', () => {
+    const zeroOutput = {
+      event: 'social_proof_agent_run',
+      level: 'info',
+      created_at: '2026-08-12T01:00:00.000Z',
+      data: { status: 'noop', candidates: 0 },
+    };
+    expect(summarizeRuntimeHealth([zeroOutput], 'social_proof_agent_run')).toMatchObject({
+      consecutiveFailures: 1,
+      lastStatus: 'failed',
+    });
+    expect(summarizeRuntimeHealth([{
+      ...zeroOutput,
+      data: { ...zeroOutput.data, inventory_healthy: true },
+    }], 'social_proof_agent_run')).toMatchObject({
+      consecutiveFailures: 0,
+      lastStatus: 'success',
+    });
+  });
+
   it('keeps consecutive runtime failures visible even when inventory still exists', () => {
     const logs = [
       {

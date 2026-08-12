@@ -14,6 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 import { reserveProviderSpend } from './provider-spend-control';
+import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
 import { loadAutomationSetting } from './automation-settings';
 import {
   createDistributionEngineRepository,
@@ -150,6 +151,8 @@ type AssignedSocialRow = {
   readonly brief_markdown: string | null;
   readonly metadata: Record<string, unknown> | null;
   readonly created_at: string;
+  readonly growth_campaign_id: string | null;
+  readonly growth_intervention_id: string | null;
 };
 
 const CAMPAIGN_SOCIAL_VERTICALS = new Set([
@@ -226,6 +229,12 @@ function assignedSocialCandidate(
       intelligence_evidence_ids: Array.isArray(metadata['intelligence_evidence_ids'])
         ? metadata['intelligence_evidence_ids']
         : [],
+      growth_campaign_id: item.growth_campaign_id ?? metadata['growth_campaign_id'] ?? null,
+      growth_intervention_id:
+        item.growth_intervention_id ?? metadata['growth_intervention_id'] ?? null,
+      campaign_key: metadata['campaign_key'] ?? null,
+      campaign_role: metadata['campaign_role'] ?? null,
+      campaign_vertical: metadata['campaign_vertical'] ?? null,
     },
     safeForAutonomousPublish: true,
   };
@@ -971,6 +980,8 @@ export async function runSocialProofAgent(args: {
   readonly force?: boolean;
   readonly now?: Date;
   readonly campaignOnly?: boolean;
+  /** Scheduled production must never create an unscoped asset. */
+  readonly campaignScopeRequired?: boolean;
 }): Promise<SocialProofAgentResult> {
   const setting = await loadAutomationSetting(args.supabase, 'social_proof_agent');
   const config = resolveSocialProofAgentConfig(setting.config, setting.enabled, setting.killSwitch);
@@ -990,7 +1001,7 @@ export async function runSocialProofAgent(args: {
   try {
     const repo = createDistributionEngineRepository(args.supabase as never);
     const now = args.now ?? new Date();
-    const [scanResult, contentResult, assignedSocialResult, accounts, existingAssets] = await Promise.all([
+    const [scanResult, contentResult, assignedSocialResult, accounts, existingAssets, activeCampaigns] = await Promise.all([
       args.supabase
         .from('scans')
         .select('id,domain,score,letter_grade,issues_json,run_source,created_at')
@@ -1005,7 +1016,7 @@ export async function runSocialProofAgent(args: {
         .limit(25),
       args.supabase
         .from('content_items')
-        .select('id,content_id,title,brief_markdown,metadata,created_at')
+        .select('id,content_id,title,brief_markdown,metadata,created_at,growth_campaign_id,growth_intervention_id')
         .eq('content_type', 'social_post')
         .in('status', ['idea', 'brief', 'draft', 'approved'])
         .eq('metadata->>proposed_by', 'seo_agent')
@@ -1013,6 +1024,7 @@ export async function runSocialProofAgent(args: {
         .limit(10),
       repo.listAccounts({ status: 'connected' }),
       repo.listAssets({ providerFamily: 'instagram' }),
+      args.campaignScopeRequired ? loadActiveGrowthCampaigns(args.supabase as any) : Promise.resolve([]),
     ]);
     if (scanResult.error) throw scanResult.error;
     if (contentResult.error) throw contentResult.error;
@@ -1038,6 +1050,9 @@ export async function runSocialProofAgent(args: {
     const assignedSocial = args.campaignOnly
       ? filterCampaignAssignedSocial(allAssignedSocial) : allAssignedSocial;
     const candidates: SocialProofCandidate[] = [];
+    const primaryCampaign: GrowthCampaign | null = activeCampaigns.find(
+      (campaign) => campaign.role === 'primary',
+    ) ?? null;
     const opportunityIds = assignedSocial
       .map((item) => item.metadata?.['seo_opportunity_id'])
       .filter((value): value is string => typeof value === 'string' && Boolean(value));
@@ -1225,6 +1240,12 @@ export async function runSocialProofAgent(args: {
       // rendering so retries never spend Browser Run time on an existing post.
       if (await repo.getAssetByAssetId(assetId)) continue;
       let candidate = rawCandidate;
+      const explicitCampaignId = readString(candidate.evidence['growth_campaign_id']);
+      const campaign = activeCampaigns.find((item) => item.id === explicitCampaignId)
+        ?? (args.campaignScopeRequired ? primaryCampaign : null);
+      if (args.campaignScopeRequired && !campaign) continue;
+      const growthCampaignId = explicitCampaignId || campaign?.id || null;
+      const growthInterventionId = readString(candidate.evidence['growth_intervention_id']) || null;
       if (account?.provider_name === 'instagram' && args.env) {
         try {
           candidate = await materializeCandidateMedia({
@@ -1265,6 +1286,8 @@ export async function runSocialProofAgent(args: {
             ? 'review'
             : assetStatusForMode(mode),
         ctaUrl: trackedProviderCta(candidate.ctaUrl, account?.provider_name ?? 'social', candidate.key),
+        growthCampaignId,
+        growthInterventionId,
         metadata: {
           created_by_agent: 'jordan',
           researched_by_agent:
@@ -1272,6 +1295,12 @@ export async function runSocialProofAgent(args: {
           proof_kind: candidate.kind,
           evidence: candidate.evidence,
           claim_boundary: 'observed_or_directional_no_ranking_guarantee',
+          growth_campaign_id: growthCampaignId,
+          growth_intervention_id: growthInterventionId,
+          campaign_key: candidate.evidence['campaign_key'] ?? campaign?.campaign_key ?? null,
+          campaign_role: candidate.evidence['campaign_role'] ?? campaign?.role ?? null,
+          campaign_vertical:
+            candidate.evidence['campaign_vertical'] ?? campaign?.vertical ?? null,
           client_safe: true,
           client_proof_enabled: config.clientProofEnabled,
           audit_screenshots_enabled: config.auditScreenshotsEnabled,

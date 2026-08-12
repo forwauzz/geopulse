@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   CLEAN_EDITORIAL_HERO_ALT,
+  DETERMINISTIC_EDITORIAL_HERO_PATH,
   createAutonomousEditorialProvider,
 } from './autonomous-editorial-providers';
 
@@ -27,10 +28,12 @@ describe('autonomous editorial hero', () => {
     const hero = await provider.hero({
       title: 'AI Search Readiness Without Generic AI Buzzwords',
       markdown: 'Source-backed article body.',
+      allowGenerated: true,
     });
 
     expect(hero).toMatchObject({
       alt: CLEAN_EDITORIAL_HERO_ALT,
+      provider: 'openai',
     });
     expect(hero?.alt).not.toMatch(/\b(ai|robot|future|innovation)\b/i);
     expect(hero?.url).toMatch(
@@ -47,6 +50,44 @@ describe('autonomous editorial hero', () => {
       httpMetadata: { contentType: 'image/jpeg' },
     });
     expect(put).toHaveBeenCalledOnce();
+  });
+
+  it('returns a branded deterministic hero and a safe provider code when image credit is unavailable', async () => {
+    const provider = createAutonomousEditorialProvider({
+      NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com/',
+    });
+    const hero = await provider.hero({
+      title: 'MSP proof buyers can verify',
+      markdown: 'Source-backed article body.',
+      allowGenerated: false,
+    });
+
+    expect(hero).toEqual({
+      url: `https://getgeopulse.com${DETERMINISTIC_EDITORIAL_HERO_PATH}`,
+      alt: CLEAN_EDITORIAL_HERO_ALT,
+      provider: 'deterministic',
+      providerFailure: 'openai_not_configured',
+    });
+  });
+
+  it('falls back without exposing provider response text', async () => {
+    const provider = createAutonomousEditorialProvider(
+      {
+        OPENAI_API_KEY: 'test-key',
+        EDITORIAL_HERO_PUBLIC_BASE: 'https://media.example.com',
+        NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com',
+        REPORT_FILES: { put: vi.fn() },
+      },
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        error: { code: 'insufficient_quota', message: 'secret provider detail' },
+      }), { status: 429 }))
+    );
+    const hero = await provider.hero({ title: 'MSP evidence', markdown: 'Body', allowGenerated: true });
+    expect(hero).toMatchObject({
+      provider: 'deterministic',
+      providerFailure: 'openai_http_429_insufficient_quota',
+    });
+    expect(JSON.stringify(hero)).not.toContain('secret provider detail');
   });
 
   it('rejects geographic SEO when GEO should mean generative engine optimization', async () => {

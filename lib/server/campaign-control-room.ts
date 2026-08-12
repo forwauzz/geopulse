@@ -235,7 +235,14 @@ export function summarizeRuntimeHealth(
   }
   let consecutiveFailures = 0;
   for (const row of matches) {
-    const failed = text(row, 'level') === 'error' || text(object(row, 'data'), 'status') === 'failed';
+    const payload = object(row, 'data');
+    const zeroOutput = event === 'social_proof_agent_run'
+      && text(payload, 'status') === 'noop'
+      && metric(payload['candidates']) === 0
+      && payload['inventory_healthy'] !== true;
+    const failed = text(row, 'level') === 'error'
+      || text(payload, 'status') === 'failed'
+      || zeroOutput;
     if (!failed) break;
     consecutiveFailures += 1;
   }

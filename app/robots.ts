@@ -1,9 +1,10 @@
 import type { MetadataRoute } from 'next';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import { canonicalPublicOrigin } from '@/lib/server/public-indexing';
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
   const env = await getPaymentApiEnv();
-  const baseUrl = (env.NEXT_PUBLIC_APP_URL || 'https://getgeopulse.com/').replace(/\/+$/, '');
+  const baseUrl = canonicalPublicOrigin(env.NEXT_PUBLIC_APP_URL);
 
   return {
     rules: [
