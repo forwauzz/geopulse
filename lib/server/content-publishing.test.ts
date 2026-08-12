@@ -318,6 +318,49 @@ This method is guaranteed rankings for every site.
     );
   });
 
+  it('blocks promotional outcome claims, unknown product routes, and lookalike source domains', () => {
+    const issues = getContentPublishIssues({
+      content_type: 'article',
+      slug: 'msp-ai-visibility',
+      title: 'How MSPs can improve public evidence',
+      status: 'approved',
+      topic_cluster: 'msp_ai_visibility',
+      cta_goal: 'free_scan',
+      source_type: 'autonomous_editorial',
+      source_links: ['https://www.geopulse.com/blog/not-our-site'],
+      draft_markdown: `# Article
+
+This approach can make or break an MSP's online presence and attract new clients.
+
+## What evidence should an MSP publish?
+
+- One
+- Two
+- Three
+
+## How should the team verify it?
+
+Read [topic context](/blog/topic/msp-ai-visibility) and [scan now](/geopulse).
+`,
+      canonical_url: null,
+      metadata: {
+        author_name: 'Geo Team',
+        author_role: 'Editorial Team',
+        hero_image_url: 'https://cdn.example.com/hero.png',
+        hero_image_alt: 'Editorial evidence collage',
+      },
+      published_at: null,
+    });
+
+    expect(issues).toContain(
+      'Remove absolute performance claims; keep recommendation language bounded to evidence.'
+    );
+    expect(issues).toContain('Replace unknown relative links with a verified GEO-Pulse route.');
+    expect(issues).toContain(
+      'Remove geopulse.com sources; that domain is not getgeopulse.com or an approved GEO-Pulse source.'
+    );
+  });
+
   it('returns structured checks for operator-facing publish review', () => {
     const checks = evaluateContentPublishChecks({
       content_type: 'article',
