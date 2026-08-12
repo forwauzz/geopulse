@@ -49,6 +49,17 @@ export function mergeEditorialCandidates(
   ];
 }
 
+const EDITORIAL_FALLBACK_INTERNAL_LINK =
+  '\n\n## Establish an evidence baseline\n\nUse [an AI-search readiness audit](/blog/ai-search-readiness-audit) to identify the public evidence gaps worth fixing first.';
+
+export function ensureEditorialInternalBlogLink(markdown: string): string {
+  const hasInternalBlogLink = [...markdown.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].some((match) => {
+    const href = match[1]?.trim() ?? '';
+    return href.startsWith('/blog/') || href.startsWith('https://getgeopulse.com/blog/');
+  });
+  return hasInternalBlogLink ? markdown : `${markdown.trimEnd()}${EDITORIAL_FALLBACK_INTERNAL_LINK}`;
+}
+
 export async function runAutonomousEditorialEngine(args: {
   supabase: Db;
   provider: EditorialProvider;
@@ -129,7 +140,13 @@ export async function runAutonomousEditorialEngine(args: {
   if (!candidate?.content_id || !candidate.topic_cluster) return { status: 'skipped', reason: 'no_candidate' };
 
   const { data: existing } = await args.supabase.from('content_items').select('title').eq('content_type', 'article').limit(250);
-  const draft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
+  const providerDraft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
+  const draft = {
+    ...providerDraft,
+    markdown: providerDraft.markdown
+      ? ensureEditorialInternalBlogLink(providerDraft.markdown)
+      : providerDraft.markdown,
+  };
   if (!draft.title || !draft.markdown || draft.sources.length === 0) return { status: 'rejected', reason: 'incomplete_draft' };
 
   let allowGeneratedHero = false;
