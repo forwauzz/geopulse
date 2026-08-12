@@ -73,7 +73,7 @@ export default async function BuyerIntelligenceWorkspacePage({ params, searchPar
   }) : null;
   const queryBase = `agencyAccount=${encodeURIComponent(account.id)}`;
   const idempotencyKey = selectedSnapshot
-    ? `partner:${viewKind}:${selectedSnapshot.snapshotId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 72)}:${crypto.randomUUID()}`.slice(0, 160)
+    ? `partner:${clientId}:${viewKind}:${selectedSnapshot.snapshotId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 72)}`.slice(0, 160)
     : '';
 
   return (

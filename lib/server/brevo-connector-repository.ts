@@ -87,6 +87,22 @@ export function createBrevoConnectorRepository(supabase: Supabase) {
   }
 
   return {
+    async loadHeldContact(args: {
+      readonly agencyAccountId: string; readonly batchId: string; readonly providerContactId: string;
+    }): Promise<HeldBatch['contacts'][number] | null> {
+      const { data, error } = await supabase.from('crm_prospect_batch_contacts')
+        .select('batch_id,provider_contact_id,first_name,company_name,canonical_domain,email')
+        .eq('agency_account_id', args.agencyAccountId).eq('batch_id', args.batchId)
+        .eq('provider_contact_id', args.providerContactId).maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const row = data as BatchContactRow;
+      return {
+        providerContactId: row.provider_contact_id, firstName: row.first_name,
+        companyName: row.company_name, canonicalDomain: row.canonical_domain, email: row.email,
+      };
+    },
+
     async saveOAuthState(args: {
       readonly stateHash: string; readonly agencyAccountId: string;
       readonly userId: string; readonly expiresAt: string;
