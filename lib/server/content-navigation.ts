@@ -67,7 +67,14 @@ export function resolveTopicRoute(
   groups: readonly TopicGroup[],
   routeSegment: string,
 ): { readonly group: TopicGroup; readonly redirectRequired: boolean } | null {
-  const decoded = routeSegment.trim();
+  const trimmed = routeSegment.trim();
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch {
+    // Malformed encodings must not invent a redirect target.
+    return null;
+  }
   const direct = groups.find((group) => group.topicKey === decoded);
   if (direct) return { group: direct, redirectRequired: false };
   const legacyMatches = groups.filter((group) => group.sourceTopics.includes(decoded));
