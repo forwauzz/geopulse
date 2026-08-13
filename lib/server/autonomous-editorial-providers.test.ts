@@ -2,8 +2,44 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   CLEAN_EDITORIAL_HERO_ALT,
   DETERMINISTIC_EDITORIAL_HERO_PATH,
+  TRUSTED_EDITORIAL_SOURCES,
   createAutonomousEditorialProvider,
+  normalizeGeneratedEditorialMarkdown,
 } from './autonomous-editorial-providers';
+
+describe('autonomous editorial draft safety', () => {
+  it('removes invented routes and sources while appending verified sources and CTA', () => {
+    const markdown = normalizeGeneratedEditorialMarkdown(`# Answer
+
+Read [the wrong brand](https://www.geopulse.com/blog/fake), [a fake first-party article](https://getgeopulse.com/blog/fake), and [a made-up route](/features/ai-rankings).
+
+## What should a business verify?
+
+Check [the readiness guide](/blog/ai-search-readiness-audit).`);
+
+    expect(markdown).not.toContain('geopulse.com');
+    expect(markdown).not.toContain('getgeopulse.com/blog/fake');
+    expect(markdown).not.toContain('/features/ai-rankings');
+    expect(markdown).toContain('](/blog/ai-search-readiness-audit)');
+    expect(markdown).toContain(`](${TRUSTED_EDITORIAL_SOURCES[0].url})`);
+    expect(markdown).toContain(`](${TRUSTED_EDITORIAL_SOURCES[1].url})`);
+    expect(markdown).toContain('[free AI-search readiness scan](/)');
+  });
+
+  it('ignores model-provided source URLs and gives the reviewer only verified sources', async () => {
+    const run = vi.fn().mockResolvedValue({ response: JSON.stringify({
+      title: 'What should a business verify before changing its website?',
+      markdown: '# Direct answer\n\n## What should a business verify?\n\nRead [bad](https://www.geopulse.com/fake).',
+      sources: ['https://www.geopulse.com/fake'],
+    }) });
+    const provider = createAutonomousEditorialProvider({ AI: { run } });
+    const draft = await provider.draft({ topic: 'ai_search_monitoring', existingTitles: [] });
+
+    expect(draft.sources).toEqual(TRUSTED_EDITORIAL_SOURCES.map((source) => source.url));
+    expect(draft.markdown).not.toContain('geopulse.com');
+    expect(String((run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[0]?.content)).toContain('Do not invent');
+  });
+});
 
 describe('autonomous editorial hero', () => {
   it('uses a clean descriptive alt independent of AI terms in the article title', async () => {

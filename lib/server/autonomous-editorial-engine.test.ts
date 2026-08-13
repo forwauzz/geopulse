@@ -54,6 +54,46 @@ describe('autonomous editorial engine', () => {
     ).map((row) => row.content_id)).toEqual(['retry', 'normal']);
   });
 
+  it('allows a quarantined SEO draft marked for editorial retry to re-enter the full pipeline', async () => {
+    const supabase = db();
+    const retryRow = {
+      ...row,
+      status: 'draft',
+      metadata: { proposed_by: 'seo_agent', editorial_retry_required: true },
+    };
+    supabase.from = vi.fn((table: string) => ({
+      select: vi.fn((columns: string) => {
+        if (table === 'automation_settings') {
+          return { eq: vi.fn(() => ({ maybeSingle: vi.fn(async () => ({ data: { feature:'marketing_autopilot', enabled:true, kill_switch:false, config:{} }, error:null })) })) };
+        }
+        if (table === 'agent_work_loops') {
+          return { eq: vi.fn(() => ({ in: vi.fn(() => ({ limit: vi.fn(async () => ({ data: [] })) })) })) };
+        }
+        if (columns === 'id') {
+          const chain: any = {};
+          chain.eq = vi.fn(() => chain); chain.gte = vi.fn(() => chain); chain.limit = vi.fn(async () => ({ data: [] }));
+          return chain;
+        }
+        if (columns === 'title') return { eq: vi.fn(() => ({ limit: vi.fn(async () => ({ data: [], error:null })) })) };
+        const chain: any = {};
+        chain.eq = vi.fn(() => chain); chain.in = vi.fn(() => chain); chain.order = vi.fn(() => chain);
+        chain.limit = vi.fn(async () => ({ data: [retryRow], error:null }));
+        return chain;
+      }),
+      update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+    })) as any;
+    const hero = vi.fn(async () => null);
+
+    const result = await runAutonomousEditorialEngine({ supabase, provider: {
+      draft: async () => ({ title:'Retry article', markdown:'# Answer\n\n## What should a business verify?\n\nRead [audit](/blog/ai-search-readiness-audit).', sources:['https://example.com'] }),
+      hero,
+      review: async () => ({ approved:true, reasons:[] }),
+    }});
+
+    expect(result).toEqual({ status: 'rejected', reason: 'missing_clean_hero' });
+    expect(hero).toHaveBeenCalledOnce();
+  });
+
   it('never writes a draft without a clean hero', async () => {
     const supabase = db();
     const result = await runAutonomousEditorialEngine({ supabase, provider: {
