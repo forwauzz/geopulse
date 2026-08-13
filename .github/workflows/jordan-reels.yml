@@ -28,7 +28,7 @@ jobs:
           ffmpeg -version
           ffprobe -version
       - name: Ensure HyperFrames browser
-        run: npx --yes hyperframes@0.7.71 browser ensure
+        run: npx --yes hyperframes@0.7.107 browser ensure
       - name: Render next approved Reel brief
         env:
           JORDAN_REEL_ENDPOINT: https://getgeopulse.com/api/internal/jordan-reels
