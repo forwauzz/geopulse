@@ -495,7 +495,12 @@ export async function executeGpmClientRun(args: {
   const completeProviderSet =
     platformResults.length === args.config.platforms_enabled.length &&
     platformResults.every((item) => item.runGroupId && item.status !== 'failed');
-  if (args.reportEnv && completeProviderSet) {
+  // This is a quarantined compatibility artifact path. Production recurring delivery uses the
+  // canonical buyer-intelligence snapshot/generation sweep. It must never run merely because a
+  // report environment object exists.
+  const legacyArtifactDeliveryEnabled =
+    args.reportEnv?.GPM_REPORT_DELIVERY_ENABLED?.trim().toLowerCase() === 'true';
+  if (args.reportEnv && legacyArtifactDeliveryEnabled && completeProviderSet) {
     const platformRuns = platformResults.flatMap((item) =>
       item.runGroupId && item.status !== 'failed'
         ? [{ platform: item.platform as GpmReportPlatform, runGroupId: item.runGroupId }]

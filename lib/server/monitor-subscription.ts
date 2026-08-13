@@ -18,6 +18,7 @@ import { randomUUID } from 'node:crypto';
 import { ctaButton, emailShell, escapeEmailHtml, scoreBlock } from './email-theme';
 import { mintShareSlug, recurringDeltaForScan, type RecurringEnvLike } from './recurring-audits';
 import { fetchLatestVisibilityForDomain, renderVisibilitySummary } from './visibility-report';
+import { loadCanonicalMonitorSummary } from './monitor-buyer-intelligence-summary';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
@@ -437,8 +438,14 @@ export async function runDueMonitorAudits(args: {
 
       // Display-only visibility (free path): include the AI Visibility Performance block when the
       // domain already has benchmark data. Reads existing metrics — runs no new benchmark.
-      const vis = await fetchLatestVisibilityForDomain(supabase, scan.domain);
-      const visibilityHtml = vis ? renderVisibilitySummary({ domain: scan.domain, metrics: vis }).html : '';
+      const canonicalSummary = await loadCanonicalMonitorSummary({
+        supabase,
+        userId: owner?.id ?? null,
+        domain: scan.domain,
+      });
+      const vis = canonicalSummary ? null : await fetchLatestVisibilityForDomain(supabase, scan.domain);
+      const visibilityHtml = canonicalSummary
+        ?? (vis ? renderVisibilitySummary({ domain: scan.domain, metrics: vis }).html : '');
       const delivered = await sendMonitorAuditEmail(
         env,
         sub.email,
