@@ -44,6 +44,7 @@ export type CampaignSend = (
   html: string,
   idempotencyKey: string,
   identity: { readonly from: string; readonly replyTo: string },
+  unsubscribeUrl: string,
 ) => Promise<{ ok: true; providerMessageId: string | null } | { ok: false; detail: string }>;
 
 export function campaignSendKey(args: {
@@ -280,6 +281,7 @@ export async function runEmailCampaignDelivery(args: {
       rendered.html,
       sendKey,
       { from: sender.resolvedFromAddress, replyTo: sender.resolvedReplyToAddress },
+      rendered.unsubscribeUrl,
     );
   }
 
