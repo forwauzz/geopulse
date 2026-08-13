@@ -131,6 +131,28 @@ describe('assembleBuyerIntelligenceSnapshot', () => {
     });
   });
 
+  it('retains prior recommendation lineage when the triggering issue is no longer emitted', () => {
+    const baseline = assembleBuyerIntelligenceSnapshot(input());
+    const next = input();
+    next.previousSnapshot = baseline;
+    next.recommendations = [];
+    next.generatedAt = '2026-08-21T12:00:00.000Z';
+    next.period = { start: '2026-08-11T00:00:00.000Z', end: '2026-08-21T00:00:00.000Z' };
+    next.projection = {
+      ...next.projection,
+      observations: next.projection.observations.map((observation) =>
+        observation.buyerQuestionKey === 'agent_access'
+          ? { ...observation, state: 'supported', answerSummary: 'Public retrieval is now supported.', confidence: 0.9 }
+          : observation),
+    };
+    const current = assembleBuyerIntelligenceSnapshot(next);
+    expect(current.recommendations).toHaveLength(1);
+    expect(current.recommendations[0]).toMatchObject({
+      recommendationId: 'rec-agent-access',
+      verification: { result: 'verified_improved' },
+    });
+  });
+
   it('fails closed on mixed context and incompatible prior measurements', () => {
     const mixed = input();
     mixed.context.contextVersion = 'context-v2';

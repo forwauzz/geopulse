@@ -17,6 +17,7 @@ import { runScheduledStartupSlackAutoPost } from '../lib/server/startup-slack-sc
 import { runGpmScheduledSweep } from '../lib/server/geo-performance-schedule';
 import { buildGpmEntitlementsMap } from '../lib/server/geo-performance-entitlements';
 import { runAgencyBaselineCompletionSweep } from '../lib/server/agency-client-baseline';
+import { runMonthlyBuyerIntelligenceSweep } from '../lib/server/monthly-buyer-intelligence';
 import {
   fetchAndBuildBenchmarkDailyRecap,
   sendBenchmarkDailyRecap,
@@ -408,6 +409,17 @@ export default {
           triggerSource: 'worker_cron',
           reportBucket: (env as any).REPORT_FILES,
         });
+        if ((env as any).REPORT_FILES) {
+          const monthly = await runMonthlyBuyerIntelligenceSweep({
+            supabase,
+            env: env as unknown as Parameters<typeof runMonthlyBuyerIntelligenceSweep>[0]['env'],
+            reportBucket: (env as any).REPORT_FILES,
+            limit: 1,
+          });
+          if (monthly.eligible > 0) {
+            structuredLog('monthly_buyer_intelligence_tick', monthly, monthly.failed > 0 ? 'warning' : 'info');
+          }
+        }
       } catch (err) {
         structuredError('gpm_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',

@@ -68,6 +68,16 @@ export default async function BuyerIntelligenceWorkspacePage({ params, searchPar
   });
   const brand = brandResolution.brand;
   const hero = readBuyerIntelligenceHeroRef(clientRow.data?.metadata);
+  const canonicalDomain = client.canonicalDomain;
+  const { data: benchmarkDomain } = canonicalDomain
+    ? await workspace.admin.from('benchmark_domains').select('id')
+      .eq('canonical_domain', canonicalDomain).maybeSingle()
+    : { data: null };
+  const { data: monthlyConfig } = benchmarkDomain?.id
+    ? await workspace.admin.from('client_benchmark_configs').select('metadata,report_email')
+      .eq('agency_account_id', account.id).eq('benchmark_domain_id', benchmarkDomain.id).maybeSingle()
+    : { data: null };
+  const monthlyState = (monthlyConfig?.metadata ?? {}) as Record<string, unknown>;
   const accentColor = `#${hexChannel(brand.primary.r)}${hexChannel(brand.primary.g)}${hexChannel(brand.primary.b)}`;
   const model = selectedSnapshot ? buildBuyerIntelligenceView({
     kind: viewKind,
@@ -111,6 +121,13 @@ export default async function BuyerIntelligenceWorkspacePage({ params, searchPar
 
       {model && selectedSnapshot ? (
         <>
+          <section className="grid gap-3 rounded-2xl border border-outline-variant/20 bg-white p-5 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div><p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Latest snapshot</p><p className="mt-1 truncate font-mono text-xs text-on-background">{String(monthlyState['buyer_intelligence_last_snapshot_id'] ?? selectedSnapshot.snapshotId)}</p></div>
+            <div><p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Next run</p><p className="mt-1 font-semibold text-on-background">{typeof monthlyState['buyer_intelligence_next_at'] === 'string' ? new Date(monthlyState['buyer_intelligence_next_at']).toLocaleString('en-CA') : 'Awaiting first monthly cycle'}</p></div>
+            <div><p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Comparison</p><p className="mt-1 font-semibold text-on-background">{selectedSnapshot.change.comparable ? `${selectedSnapshot.change.changes.filter((item) => item.direction === 'improved').length} improved · ${selectedSnapshot.change.changes.filter((item) => item.direction === 'regressed').length} regressed` : 'Baseline — comparison starts next cycle'}</p></div>
+            <div><p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Verified fixes</p><p className="mt-1 font-semibold text-on-background">{selectedSnapshot.recommendations.filter((item) => item.verification.result === 'verified_improved').length} evidence-backed</p></div>
+            {typeof monthlyState['buyer_intelligence_last_error'] === 'string' && monthlyState['buyer_intelligence_last_error'] ? <p role="alert" className="sm:col-span-2 lg:col-span-4 rounded-xl bg-red-50 p-3 text-sm text-red-900">Automatic monthly run will retry: {monthlyState['buyer_intelligence_last_error']}</p> : null}
+          </section>
           <section className="grid min-w-0 gap-4 overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 md:grid-cols-[1fr_1fr_auto] md:items-end">
             <form method="get" className="contents">
               <input type="hidden" name="agencyAccount" value={account.id} />

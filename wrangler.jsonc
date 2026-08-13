@@ -186,6 +186,9 @@
     // GEO Performance Monitoring scheduled sweep.
     // Runtime defaults live here; provider API keys remain secrets.
     "GPM_SCHEDULE_ENABLED": "true",
+    // Canonical monthly reports are canary-only until the two-run production proof is complete.
+    // Recipient scope reuses the secret BREVO_PARTNER_TEST_RECIPIENTS allowlist.
+    "MONTHLY_BUYER_INTELLIGENCE_ENABLED": "true",
     // Platform feature flag: only funded, production-healthy providers run. ChatGPT is
     // temporarily excluded after the provider returned credit_balance_exhausted; reports
     // disclose unavailable assistants instead of retrying a known-unavailable lane.
