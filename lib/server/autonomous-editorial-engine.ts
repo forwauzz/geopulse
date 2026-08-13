@@ -15,6 +15,7 @@ import {
 import { reserveProviderSpend } from './provider-spend-control';
 
 type Db = { from(table: string): any; rpc?(name: string, args: Record<string, unknown>): any };
+export const AUTONOMOUS_EDITORIAL_SOURCE_TYPE = 'internal_plus_research' as const;
 export type EditorialProvider = {
   readonly heroSpend?: {
     readonly provider: 'openai';
@@ -182,7 +183,7 @@ export async function runAutonomousEditorialEngine(args: {
     source_links: draft.sources,
     canonical_url: candidate.slug ? `/blog/${candidate.slug}` : null,
     cta_goal: 'free_scan',
-    source_type: 'autonomous_editorial',
+    source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
     metadata,
     published_at: null,
   });
@@ -196,11 +197,11 @@ export async function runAutonomousEditorialEngine(args: {
     source_links: draft.sources,
     canonical_url: candidate.slug ? `/blog/${candidate.slug}` : null,
     cta_goal: 'free_scan',
-    source_type: 'autonomous_editorial',
+    source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
     metadata,
     published_at: null,
   });
-  const { error: updateError } = await args.supabase.from('content_items').update({ title: draft.title, draft_markdown: draft.markdown, source_links: draft.sources, status: 'published', canonical_url: publish.canonicalUrl, published_at: publish.publishedAt, metadata }).eq('content_id', candidate.content_id);
+  const { error: updateError } = await args.supabase.from('content_items').update({ title: draft.title, draft_markdown: draft.markdown, source_links: draft.sources, source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE, status: 'published', canonical_url: publish.canonicalUrl, published_at: publish.publishedAt, metadata }).eq('content_id', candidate.content_id);
   if (updateError) return { status: 'failed', reason: updateError.message };
   const opportunityId = String(candidate.metadata?.seo_opportunity_id ?? '');
   if (opportunityId && publish.canonicalUrl) {
