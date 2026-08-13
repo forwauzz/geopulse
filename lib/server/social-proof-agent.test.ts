@@ -4,6 +4,7 @@ import {
   buildBeforeAfterCandidate,
   buildEducationalCandidate,
   buildIndustryHumorCandidate,
+  buildProductDemoCandidate,
   filterCampaignAssignedSocial,
   instagramScheduleSlot,
   orderAutonomousCandidates,
@@ -27,6 +28,16 @@ function scan(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Social Proof Agent safeguards', () => {
+  it('keeps a first-party grounded Reel source when trend providers are unavailable', () => {
+    const candidate = buildProductDemoCandidate('https://getgeopulse.com/');
+    expect(candidate.evidence).toMatchObject({
+      source_url: 'https://getgeopulse.com/methodology/ai-search-readiness-audit',
+      source_type: 'first_party_methodology',
+      product_truth: true,
+      claim_boundary: 'observable_readiness_signals_no_ranking_guarantee',
+    });
+  });
+
   it('keeps autonomous social candidates inside the active vertical campaigns', () => {
     const items = [
       { id: 'msp', metadata: { growth_campaign_id: 'msp-1', campaign_vertical: 'msp_it_services' } },
