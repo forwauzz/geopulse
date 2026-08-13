@@ -3,7 +3,11 @@ import { parseReportQueueMessage } from '../../lib/queue/report-job';
 import { rewriteLayerOneReportInternal } from '../../lib/server/layer-one-report-internal-rewrite';
 import { createServiceRoleClient } from '../../lib/supabase/service-role';
 import { writeGeneratedReportEval } from '../../lib/server/report-eval-writer';
-import { structuredLog } from '../../lib/server/structured-log';
+import {
+  structuredLog,
+  structuredLogAndWait,
+  structuredLogWithClientAndWait,
+} from '../../lib/server/structured-log';
 import { getMarketPosition } from '../../lib/server/market-position';
 import { buildDeepAuditMarkdown } from '../report/build-deep-audit-markdown';
 import { buildDeepAuditPdfFromPayload } from '../report/build-deep-audit-pdf';
@@ -26,7 +30,7 @@ import { bucketOf } from '../scan-engine/check-catalog';
 import { deriveCheckCounts } from '../report/check-counts';
 import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../report/report-qa-gate';
 import { buildCoverDesign } from '../report/design-agent';
-import { replayReportJobFromDlq } from './dlq-replay';
+import { replayReportJobFromDlq, reportDlqReplayKey } from './dlq-replay';
 import { resolveStartupRolloutFlagsFromMetadata } from '../../lib/server/startup-rollout-flags';
 import { resolveStartupWorkspaceBundleKey } from '../../lib/server/startup-github-integration';
 import { resolveServiceEntitlement } from '../../lib/server/service-entitlements';
@@ -44,9 +48,11 @@ import { emitMarketingEvent } from '../../services/marketing-attribution/emit';
 import { enqueueLifecycleEmail } from '../../lib/server/lifecycle-email';
 
 const DLQ_NAME = 'geo-pulse-dlq';
+const REPORT_QUEUE_MAX_ATTEMPTS = 3;
 
 type QueueMessage = {
   readonly body: string | ArrayBuffer | Uint8Array;
+  readonly attempts?: number;
   ack(): void;
   retry(): void;
 };
@@ -56,6 +62,49 @@ export type ReportQueueBatch = {
   readonly queue: string;
   readonly messages: readonly QueueMessage[];
 };
+
+async function persistReportJobFailure(args: {
+  readonly rawBody: string;
+  readonly message: QueueMessage;
+  readonly error: unknown;
+  readonly env: CloudflareEnv;
+}): Promise<void> {
+  const job = parseReportQueueMessage(args.rawBody);
+  const attempts = args.message.attempts ?? null;
+  let replayedFromDlq = false;
+  if (job && args.env.SCAN_CACHE) {
+    try {
+      replayedFromDlq = Boolean(await args.env.SCAN_CACHE.get(reportDlqReplayKey(job.paymentId)));
+    } catch {
+      // Failure logging must not replace the original queue retry with a KV error.
+    }
+  }
+  const terminal = Boolean(
+    replayedFromDlq && attempts !== null && attempts >= REPORT_QUEUE_MAX_ATTEMPTS
+  );
+  const event = terminal ? 'report_job_terminal_failure' : 'report_job_failed';
+  const errorName = args.error instanceof Error ? args.error.name : 'UnknownError';
+  const errorMessage = args.error instanceof Error ? args.error.message : 'unknown';
+  const data = {
+    scanId: job?.scanId ?? null,
+    paymentId: job?.paymentId ?? null,
+    errorName,
+    message: errorMessage.slice(0, 500),
+    attempts,
+    replayedFromDlq,
+    terminal,
+  };
+
+  if (args.env.NEXT_PUBLIC_SUPABASE_URL && args.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const supabase = createServiceRoleClient(
+      args.env.NEXT_PUBLIC_SUPABASE_URL,
+      args.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+    await structuredLogWithClientAndWait(supabase, event, data, 'error');
+    return;
+  }
+  await structuredLogAndWait(event, data, 'error');
+}
 
 export function planDeepAuditCrawlRecovery(
   fetchedPageCount: number,
@@ -505,13 +554,12 @@ export async function dispatchQueueBatch(batch: ReportQueueBatch, env: Cloudflar
   }
 
   for (const m of batch.messages) {
+    const rawBody = bodyToString(m.body);
     try {
-      await processReportJob(bodyToString(m.body), env);
+      await processReportJob(rawBody, env);
       m.ack();
     } catch (err) {
-      structuredLog('report_job_failed', {
-        message: err instanceof Error ? err.message.slice(0, 200) : 'unknown',
-      });
+      await persistReportJobFailure({ rawBody, message: m, error: err, env });
       m.retry();
     }
   }
