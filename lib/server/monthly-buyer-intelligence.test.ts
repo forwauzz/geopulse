@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   monthlyBuyerIntelligenceDue,
   isMonthlyBuyerIntelligenceCandidate,
+  isBlockedMonthlyMeasurement,
   runMonthlyBuyerIntelligenceSweep,
 } from './monthly-buyer-intelligence';
 
@@ -25,6 +26,12 @@ describe('monthlyBuyerIntelligenceDue', () => {
     expect(monthlyBuyerIntelligenceDue({
       buyer_intelligence_next_at: 'invalid',
     }, now)).toBe(true);
+  });
+
+  it('classifies only the fail-closed scan eligibility result as an access block', () => {
+    expect(isBlockedMonthlyMeasurement('buyer_intelligence_scan_ineligible')).toBe(true);
+    expect(isBlockedMonthlyMeasurement('monthly_intelligence_scan_failed')).toBe(false);
+    expect(isBlockedMonthlyMeasurement('monthly_intelligence_scope_unavailable')).toBe(false);
   });
 
   it('fails closed before touching storage when the production lane is disabled', async () => {

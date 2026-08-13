@@ -10,6 +10,7 @@ import { structuredError, structuredLog } from './structured-log';
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 const RETRY_MS = 24 * 60 * 60 * 1000;
+const BLOCKED_SCAN_ERROR = 'buyer_intelligence_scan_ineligible';
 
 type MonthlyEnv = LifecycleEmailEnv & {
   readonly MONTHLY_BUYER_INTELLIGENCE_ENABLED?: string;
@@ -71,6 +72,10 @@ function nextAt(now: Date, delayMs = MONTH_MS): string {
   return new Date(now.getTime() + delayMs).toISOString();
 }
 
+export function isBlockedMonthlyMeasurement(message: string): boolean {
+  return message === BLOCKED_SCAN_ERROR;
+}
+
 async function updateState(args: {
   supabase: SupabaseClient<any, 'public', any>;
   config: ConfigRow;
@@ -126,6 +131,9 @@ export async function runMonthlyBuyerIntelligenceSweep(args: {
   for (const config of eligible.slice(0, limit)) {
     attempted += 1;
     const agencyClientId = text(config.metadata?.['agency_client_id'])!;
+    let clientDomain: string | null = null;
+    let clientUserId: string | null = null;
+    let attemptedScanId: string | null = null;
     try {
       const [{ data: client }, { data: members }] = await Promise.all([
         args.supabase.from('agency_clients')
@@ -141,6 +149,8 @@ export async function runMonthlyBuyerIntelligenceSweep(args: {
       if (!client?.id || !domain || !userId) {
         throw new Error('monthly_intelligence_scope_unavailable');
       }
+      clientDomain = domain;
+      clientUserId = userId;
 
       const scan = await runAndPersistReadinessScan({
         supabase: args.supabase,
@@ -151,6 +161,7 @@ export async function runMonthlyBuyerIntelligenceSweep(args: {
         domain,
       });
       if (!scan?.id) throw new Error('monthly_intelligence_scan_failed');
+      attemptedScanId = scan.id;
       const { snapshot } = await ensureAgencyClientBuyerIntelligenceSnapshot({
         supabase: args.supabase,
         agencyAccountId: config.agency_account_id,
@@ -243,6 +254,28 @@ export async function runMonthlyBuyerIntelligenceSweep(args: {
     } catch (cause) {
       failed += 1;
       const message = cause instanceof Error ? cause.message : 'unknown_error';
+      const blocked = isBlockedMonthlyMeasurement(message);
+      const recipient = text(config.report_email);
+      const delayed = blocked && recipient && clientDomain && clientUserId
+        ? await enqueueLifecycleEmail({
+            supabase: args.supabase,
+            idempotencyKey: `monthly-intelligence-blocked/${agencyClientId}/${attemptedScanId ?? now.toISOString().slice(0, 10)}`,
+            eventType: 'monthly_intelligence_blocked',
+            templateKey: 'monthly_intelligence_blocked',
+            to: recipient,
+            userId: clientUserId,
+            subjectId: agencyClientId,
+            variables: {
+              domain: clientDomain,
+              cta_url: `${(args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard/clients/${agencyClientId}/buyer-intelligence?agencyAccount=${config.agency_account_id}`,
+            },
+          }).catch((error) => ({
+            ok: false,
+            id: undefined,
+            status: 'queue_failed',
+            reason: error instanceof Error ? error.message : 'queue_failed',
+          }))
+        : null;
       await updateState({
         supabase: args.supabase,
         config,
@@ -251,11 +284,17 @@ export async function runMonthlyBuyerIntelligenceSweep(args: {
           buyer_intelligence_last_attempt_at: now.toISOString(),
           buyer_intelligence_next_at: nextAt(now, RETRY_MS),
           buyer_intelligence_last_error: message.slice(0, 200),
+          buyer_intelligence_last_error_class: blocked ? 'access_blocked' : 'execution_failed',
+          buyer_intelligence_last_scan_id: attemptedScanId,
+          buyer_intelligence_delivery_id: delayed?.id ?? null,
+          buyer_intelligence_delivery_status: delayed?.status ?? delayed?.reason ?? null,
         },
       }).catch(() => undefined);
       structuredError('monthly_buyer_intelligence_failed', {
         config_id: config.id,
         reason: message,
+        error_class: blocked ? 'access_blocked' : 'execution_failed',
+        delivery_status: delayed?.status ?? delayed?.reason ?? null,
       });
     }
   }
