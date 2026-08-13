@@ -77,7 +77,7 @@ try {
     process.platform === 'win32' ? 'npx.cmd' : 'npx',
     [
       '--yes',
-      'hyperframes@0.7.71',
+      'hyperframes@0.7.107',
       'check',
       '--at-transitions',
       '--frame-check=severity=error;seek=.2,.5,.8;tol=2',
@@ -91,7 +91,7 @@ try {
     process.platform === 'win32' ? 'npx.cmd' : 'npx',
     [
       '--yes',
-      'hyperframes@0.7.71',
+      'hyperframes@0.7.107',
       'render',
       '--strict',
       '--strict-variables',
