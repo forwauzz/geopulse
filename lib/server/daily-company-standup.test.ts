@@ -225,7 +225,7 @@ describe('daily company standup', () => {
   it('keeps role rubrics explicit and changes the verdict only for verified recurring revenue', () => {
     expect(Object.keys(DEPARTMENT_RUBRICS)).toHaveLength(8);
     expect(DEPARTMENT_RUBRICS.maya).toContain(
-      'Sends one complete daily company standup.'
+      'Records one complete daily company standup and sends only qualifying exceptions.'
     );
     const report = buildDailyCompanyStandup({
       snapshot,
