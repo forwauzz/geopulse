@@ -5,7 +5,7 @@ Status: MBI-1 implementation contract
 Parent issue: #423
 
 Implementation issue: #424
-Last verified: 2026-08-11
+Last verified: 2026-08-13
 
 ## Decision
 
@@ -67,17 +67,31 @@ or renderer implementations.
 
 | Path | Current reason it exists | Target |
 | --- | --- | --- |
-| `agencySnapshotToGpmPayload` in `agency-report-snapshot.ts` | Converts snapshot v2 back into the older GPM delivery payload. | Retire in MBI-4 after schedule/email/preview consumers accept the canonical view projection. |
-| `geo-performance-report-payload.ts` | Older per-engine/combined presentation payload. | Compatibility-only in MBI-3; retire or reduce to an external adapter in MBI-4/10. |
-| `geo-performance-report-pdf.ts` and `geo-performance-report-store.ts` | Legacy GPM artifact path. | Route every active consumer to the exact canonical renderer, then remove in MBI-4/10. |
-| `report-preview-payload.ts` | Directly queries latest scans and benchmark metrics for a settings preview. | Retire in MBI-4. It is an approximate second projection and can invent zero-like combined values for unmeasured engines. |
-| `organization-context-capabilities.ts` preview fallback | Calls the approximate preview when no exact report exists. | Replace with snapshot eligibility/explicit empty state in MBI-4. |
-| `visibility-report.ts` and its `monitor-subscription.ts` consumer | Builds a separate lightweight visibility summary for monitoring email. | Replace with the monthly view from the canonical snapshot in MBI-9; retire in MBI-10. |
-| `geo-performance-schedule.ts` conversion call | Delivers the older payload from a stored agency snapshot. | Move to canonical view delivery in MBI-4; remove conversion after compatibility window. |
+| `agencySnapshotToGpmPayload` in `agency-report-snapshot.ts` | Converts snapshot v2 back into the older GPM delivery payload. | Inactive in production. Retained only inside the explicitly disabled `GPM_REPORT_DELIVERY_ENABLED` rollback path. |
+| `geo-performance-report-payload.ts` | Older per-engine/combined presentation payload. | Inactive production compatibility adapter; no canonical preview, monthly, Brevo, or customer route imports it. |
+| `geo-performance-report-pdf.ts` and `geo-performance-report-store.ts` | Legacy GPM artifact path. | Inactive in production behind `GPM_REPORT_DELIVERY_ENABLED=false`; operating report counts any reactivation as a legacy consumer. |
+| `report-preview-payload.ts` | Previously queried latest scans and benchmark metrics as an approximate second projection. | Removed in MBI-10. Preview capability now requires an eligible canonical snapshot or returns unavailable. |
+| `organization-context-capabilities.ts` preview fallback | Previously called the approximate preview when no exact report existed. | Migrated to `buyer_intelligence_snapshot_v1` plus the canonical prospect-preview view. |
+| `visibility-report.ts` and its `monitor-subscription.ts` consumer | Builds a lightweight visibility summary for monitoring email. | Bounded fallback only when the recipient has no tenant-authorized canonical agency client; canonical monthly view is preferred. |
+| `geo-performance-schedule.ts` conversion call | Delivers the older payload from a stored agency snapshot. | Quarantined rollback path only; canonical monthly generation is the active recurring customer path. |
 
 Compatibility code is not deleted until its consumers are migrated, affected tests pass, production
 browser/PDF evidence is fresh, and rollback is preserved. New features must not add consumers to a
 path listed for retirement.
+
+## MBI-10 operating decisions
+
+- The deep site audit remains a diagnostic input and separately purchasable full audit. It is not a
+  buyer-intelligence renderer or recurring report authority.
+- `/admin/intelligence` exposes a read-only monthly operating report: canonical jobs, failures,
+  retries, snapshot/artifact counts, estimated provider spend, active legacy consumer count, and
+  bounded exceptions. It emits no customer payload, email, token, signed URL, or storage key.
+- Brevo is **REVISE**: the founder Alie canary proved the connector and one-contact delivery
+  contract; scaling waits for repeat use by a real external partner.
+- HubSpot is **DEFER**: no code is justified until an external partner explicitly requires it or
+  Brevo demonstrates repeated paid use.
+- Parent #423 remains commercially open until one external recurring customer is attributable to
+  this path. Founder canaries do not satisfy that gate.
 
 ## Buyer intelligence snapshot boundary
 

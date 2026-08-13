@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -51,5 +51,19 @@ describe('buyer-intelligence architecture boundaries', () => {
         .map((value) => `${relative(ROOT, file)} -> ${value}`)
     );
     expect(violations).toEqual([]);
+  });
+
+  it('retired the approximate report preview and keeps compatibility paths explicitly bounded', () => {
+    expect(existsSync(join(ROOT, 'lib', 'server', 'report-preview-payload.ts'))).toBe(false);
+    const capabilities = readFileSync(join(ROOT, 'lib', 'server', 'organization-context-capabilities.ts'), 'utf8');
+    expect(capabilities).toContain('createBuyerIntelligenceSnapshotRepository');
+    expect(capabilities).toContain("kind: 'prospect_preview'");
+    expect(capabilities).not.toContain('loadReportPreviewPayload');
+
+    const schedule = readFileSync(join(ROOT, 'lib', 'server', 'geo-performance-schedule.ts'), 'utf8');
+    expect(schedule).toContain('legacyArtifactDeliveryEnabled');
+    expect(schedule).toContain('GPM_REPORT_DELIVERY_ENABLED');
+    const monitor = readFileSync(join(ROOT, 'lib', 'server', 'monitor-subscription.ts'), 'utf8');
+    expect(monitor.indexOf('loadCanonicalMonitorSummary')).toBeLessThan(monitor.indexOf('fetchLatestVisibilityForDomain(supabase'));
   });
 });

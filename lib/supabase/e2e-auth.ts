@@ -273,6 +273,12 @@ export function buildE2EAdminDb() {
     platform_admin_users: [
       { id: '00000000-0000-4000-8000-000000000501', user_id: E2E_ADMIN_USER_ID },
     ],
+    buyer_intelligence_generations: [
+      { status: 'succeeded', attempts: 1, artifact_r2_key: 'e2e/private.pdf', created_at: runGroupCreatedAt },
+    ],
+    buyer_intelligence_snapshots: [
+      { snapshot_id: 'e2e-snapshot', created_at: runGroupCreatedAt },
+    ],
   };
 
   return {
@@ -290,6 +296,8 @@ function createE2EAdminQueryBuilder(seedRows: unknown[]) {
     order: (column: string, options?: { ascending?: boolean }) => typeof builder;
     limit: (count: number) => typeof builder;
     eq: (column: string, value: unknown) => typeof builder;
+    gte: (column: string, value: unknown) => typeof builder;
+    is: (column: string, value: unknown) => typeof builder;
     in: (column: string, values: unknown[]) => typeof builder;
     maybeSingle: () => Promise<{ data: unknown; error: null }>;
     single: () => Promise<{ data: unknown; error: null }>;
@@ -322,6 +330,17 @@ function createE2EAdminQueryBuilder(seedRows: unknown[]) {
       return builder;
     },
     eq(column: string, value: unknown) {
+      rows = rows.filter((row) => (row as Record<string, unknown>)[column] === value);
+      return builder;
+    },
+    gte(column: string, value: unknown) {
+      rows = rows.filter((row) => {
+        const candidate = (row as Record<string, unknown>)[column];
+        return candidate != null && String(candidate) >= String(value);
+      });
+      return builder;
+    },
+    is(column: string, value: unknown) {
       rows = rows.filter((row) => (row as Record<string, unknown>)[column] === value);
       return builder;
     },

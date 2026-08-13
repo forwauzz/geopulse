@@ -12,6 +12,7 @@ import type {
   IntelligenceRunRow,
   IntelligenceWindowRow,
 } from '@/lib/intelligence/admin-data';
+import type { BuyerIntelligenceOperatingReport } from '@/lib/server/buyer-intelligence-operations';
 
 const NAV = [
   ['/admin/intelligence', 'Overview'],
@@ -153,6 +154,42 @@ export function IntelligenceOverviewView({ overview }: { overview: IntelligenceO
         </Link>
       </section>
     </>
+  );
+}
+
+export function BuyerIntelligenceOperationsView({ report }: { report: BuyerIntelligenceOperatingReport | null }) {
+  if (!report) return <Empty>Buyer-intelligence operating data is temporarily unavailable.</Empty>;
+  const legacyTone = report.legacyConsumerCount === 0 ? 'good' : 'warn';
+  return (
+    <section className="space-y-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Monthly operating burden</p>
+          <h2 className="mt-1 font-headline text-xl font-semibold text-on-surface">Buyer intelligence product health</h2>
+        </div>
+        <Badge tone={legacyTone}>{report.legacyConsumerCount === 0 ? 'No active legacy artifact consumers' : `${report.legacyConsumerCount} legacy consumer(s)`}</Badge>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card label="Generation jobs" value={number(report.jobs.total)} note={`${number(report.jobs.succeeded)} succeeded · ${number(report.jobs.failed)} failed · ${number(report.jobs.retrying)} retrying`} tone={report.jobs.failed ? 'warn' : 'good'} />
+        <Card label="Stored artifacts" value={number(report.artifacts.stored)} note={`${number(report.artifacts.snapshots)} canonical snapshots this month`} />
+        <Card label="Estimated provider spend" value={`$${report.estimatedProviderSpendUsd.toFixed(2)}`} note="Current UTC month · estimates only" />
+        <Card label="Legacy consumers" value={number(report.legacyConsumerCount)} note="Active compatibility artifact paths" tone={legacyTone} />
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl border border-outline-variant/20 p-4">
+          <div className="flex items-center justify-between gap-2"><h3 className="font-semibold text-on-surface">Brevo pilot</h3><Badge tone="warn">REVISE</Badge></div>
+          <p className="mt-2 text-sm text-on-surface-variant">{report.connectorDecisions.brevo.evidence}</p>
+          <p className="mt-2 text-xs font-semibold text-on-surface">Next gate: {report.connectorDecisions.brevo.nextGate}</p>
+        </div>
+        <div className="rounded-xl border border-outline-variant/20 p-4">
+          <div className="flex items-center justify-between gap-2"><h3 className="font-semibold text-on-surface">HubSpot connector</h3><Badge>DEFER</Badge></div>
+          <p className="mt-2 text-sm text-on-surface-variant">{report.connectorDecisions.hubspot.evidence}</p>
+          <p className="mt-2 text-xs font-semibold text-on-surface">Next gate: {report.connectorDecisions.hubspot.nextGate}</p>
+        </div>
+      </div>
+      {report.boundedExceptions.length ? <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">Bounded exceptions</p><ul className="mt-2 space-y-1 text-xs text-on-surface-variant">{report.boundedExceptions.map((item) => <li key={item}>· {item}</li>)}</ul></div> : null}
+      <p className="text-[11px] text-on-surface-variant">Generated {new Date(report.generatedAt).toLocaleString()} · No customer payloads, emails, tokens, signed URLs, or storage keys are included.</p>
+    </section>
   );
 }
 

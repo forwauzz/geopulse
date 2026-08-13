@@ -85,7 +85,7 @@ describe('GPM agency artifact schedule', () => {
       platformModelMap: { chatgpt: 'gpt-test', gemini: 'gemini-test', perplexity: 'sonar-test' },
       adapter: {} as never,
       now: new Date('2026-08-01T12:00:00.000Z'),
-      reportEnv: { GPM_REPORT_DELIVERY_ENABLED: 'false' },
+      reportEnv: { GPM_REPORT_DELIVERY_ENABLED: 'true' },
       organizationContext,
     });
 
@@ -99,6 +99,32 @@ describe('GPM agency artifact schedule', () => {
       ],
     }));
     expect(mocks.store.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.run.mock.invocationCallOrder.at(-1)!);
+  });
+
+  it('does not create the legacy artifact when compatibility delivery is disabled', async () => {
+    mocks.run.mockResolvedValue({ runGroupId: 'run-gemini', completedQueryCount: 2 });
+    const organizationContext = context();
+    const derived = deriveOrganizationMeasurementBinding(organizationContext);
+    expect(derived.ok).toBe(true);
+    if (!derived.ok) return;
+    const measurementMetadata = organizationMeasurementMetadata(derived.binding);
+    mocks.querySet = { version: derived.binding.querySetVersion, metadata: measurementMetadata };
+    const config = {
+      id: 'config-1', startup_workspace_id: null, agency_account_id: 'agency-1', benchmark_domain_id: 'domain-1',
+      topic: 'specialist care', location: 'Toronto', query_set_id: 'set-1', competitor_list: [], cadence: 'monthly' as const,
+      platforms_enabled: ['gemini'], report_email: null, metadata: { prompt_count: 2, ...measurementMetadata },
+      created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z',
+    };
+    await executeGpmClientRun({
+      supabase: {}, config,
+      entitlement: { enabled: true, tier: 'agency_pro', maxPromptsPerRun: null, allowedCadences: ['monthly'], deliverySurfaces: [], platformsAllowed: ['gemini'], source: 'bundle_service' },
+      platformModelMap: { chatgpt: 'gpt-test', gemini: 'gemini-test', perplexity: 'sonar-test' },
+      adapter: {} as never,
+      reportEnv: { GPM_REPORT_DELIVERY_ENABLED: 'false' },
+      organizationContext,
+    });
+    expect(mocks.run).toHaveBeenCalledOnce();
+    expect(mocks.store).not.toHaveBeenCalled();
   });
 
   it('does not store a customer report when any configured provider is incomplete', async () => {
