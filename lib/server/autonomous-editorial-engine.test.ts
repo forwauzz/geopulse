@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
   ensureEditorialInternalBlogLink,
   mergeEditorialCandidates,
   runAutonomousEditorialEngine,
@@ -38,6 +39,10 @@ function db() {
 }
 
 describe('autonomous editorial engine', () => {
+  it('uses a source type permitted by the production content_items contract', () => {
+    expect(['internal_product', 'external_research', 'internal_plus_research', 'founder_input'])
+      .toContain(AUTONOMOUS_EDITORIAL_SOURCE_TYPE);
+  });
   it('adds the verified readiness guide when a provider omits internal links', () => {
     const markdown = ensureEditorialInternalBlogLink('# Useful answer\n\n## What to do\n\nStart with observable evidence.');
 
