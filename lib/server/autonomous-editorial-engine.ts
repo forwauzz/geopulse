@@ -131,6 +131,7 @@ export async function runAutonomousEditorialEngine(args: {
   });
   const candidate = orderedCandidates.find((row: any) =>
     row?.status === 'brief' ||
+    row?.metadata?.editorial_retry_required === true ||
     row?.metadata?.proposed_by === 'marketing_autopilot' ||
     // The registry cleanup predates the metadata marker on some rows. An archived article with
     // a topic is still safe to re-enter only through this full draft → hero → review → publish
