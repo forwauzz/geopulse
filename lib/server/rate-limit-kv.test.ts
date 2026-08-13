@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkSessionEventRateLimit } from './rate-limit-kv';
+import { checkSessionEventRateLimit, checkUnsubscribeRateLimit } from './rate-limit-kv';
 
 /** In-memory KV stub good enough for the counter logic (ignores TTL). */
 function fakeKv() {
@@ -33,5 +33,20 @@ describe('checkSessionEventRateLimit', () => {
     for (let i = 0; i < 30; i += 1) await checkSessionEventRateLimit(kv, 'a');
     expect((await checkSessionEventRateLimit(kv, 'a')).ok).toBe(false);
     expect((await checkSessionEventRateLimit(kv, 'b')).ok).toBe(true);
+  });
+});
+
+describe('checkUnsubscribeRateLimit', () => {
+  it('limits repeated posts per recipient and network without blocking another recipient', async () => {
+    const kv = fakeKv();
+    for (let i = 0; i < 5; i += 1) {
+      expect((await checkUnsubscribeRateLimit(kv, 'prospect-a', '1.2.3.4')).ok).toBe(true);
+    }
+    expect(await checkUnsubscribeRateLimit(kv, 'prospect-a', '1.2.3.4')).toEqual({
+      ok: false,
+      code: 'ip',
+      retryAfterSec: 60,
+    });
+    expect((await checkUnsubscribeRateLimit(kv, 'prospect-b', '1.2.3.4')).ok).toBe(true);
   });
 });
