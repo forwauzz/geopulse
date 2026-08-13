@@ -112,7 +112,7 @@ export const DEPARTMENT_RUBRICS: Readonly<Record<DepartmentId, readonly string[]
     'Every open item has one owner, next action, deadline, and closure condition.',
     'Accepts completion only when evidence verifies the outcome.',
     'Escalates only genuine founder decisions.',
-    'Sends one complete daily company standup.',
+    'Records one complete daily company standup and sends only qualifying exceptions.',
   ],
   noah: [
     'Moves real signups through onboarding to a visible useful baseline.',

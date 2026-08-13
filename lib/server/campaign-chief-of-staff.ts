@@ -5,14 +5,20 @@ import {
   syncCampaignActionLoops,
 } from './agent-loop-control';
 import { loadCampaignControlRoom } from './campaign-control-room';
-import { agentEmailSignatureHtml } from './email-theme';
 import { structuredLogWithClientAndWait } from './structured-log';
 import { syncRuntimeIncidentLoops } from './runtime-incident-control';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 import {
   loadDailyCompanyStandup,
-  renderDailyCompanyStandupHtml,
 } from './daily-company-standup';
+import { enqueueLifecycleEmail } from './lifecycle-email';
+import {
+  classifyFounderExceptions,
+  founderExceptionSummary,
+  unseenFounderExceptions,
+  type FounderPurchase,
+  type FounderQualifiedReply,
+} from './founder-exception-notifications';
 
 export async function runCampaignChiefOfStaffCheck(args: {
   readonly supabase: SupabaseClient<any, 'public', any>;
@@ -86,50 +92,115 @@ export async function runCampaignChiefOfStaffCheck(args: {
     || args.env['BENCHMARK_DAILY_RECAP_TO']?.trim()
     || args.env['SELF_IMPROVEMENT_REPORT_TO']?.trim()
     || '';
-  const resendKey = args.env['RESEND_API_KEY']?.trim() ?? '';
-  const resendFrom = args.env['RESEND_FROM_EMAIL']?.trim() ?? '';
-  if (now.getUTCHours() >= 12 && recipient && resendKey && resendFrom) {
+  if (now.getUTCHours() >= 12 && recipient) {
     const dayStart = new Date(now);
     dayStart.setUTCHours(0, 0, 0, 0);
-    const { count } = await args.supabase
-      .from('app_logs')
-      .select('id', { count: 'exact', head: true })
-      .eq('event', 'chief_of_staff_daily_standup_sent')
-      .gte('created_at', dayStart.toISOString());
-    if ((count ?? 0) === 0) {
-      const standup = await loadDailyCompanyStandup({
+    const standup = await loadDailyCompanyStandup({
+      supabase: args.supabase,
+      agents,
+      now,
+    });
+    const purchaseCutoff = new Date(now.getTime() - 48 * 60 * 60_000).toISOString();
+    const signalCutoff = new Date(now.getTime() - 90 * 86_400_000).toISOString();
+    const [
+      { data: purchaseRows },
+      { data: recordedRows },
+      { data: replyRows },
+      { count: digestCount },
+      { count: standupCount },
+    ] = await Promise.all([
+      args.supabase.from('payments').select('id,amount_cents,currency,type')
+        .eq('status', 'complete').gte('created_at', purchaseCutoff).limit(100),
+      args.supabase.from('app_logs').select('data')
+        .eq('event', 'chief_of_staff_exception_signal_recorded')
+        .gte('created_at', signalCutoff).order('created_at', { ascending: false }).limit(1000),
+      args.supabase.from('app_logs').select('data')
+        .eq('event', 'outreach_reply_received')
+        .gte('created_at', purchaseCutoff).order('created_at', { ascending: false }).limit(100),
+      args.supabase.from('app_logs').select('id', { count: 'exact', head: true })
+        .eq('event', 'chief_of_staff_exception_digest_queued')
+        .gte('created_at', dayStart.toISOString()),
+      args.supabase.from('app_logs').select('id', { count: 'exact', head: true })
+        .eq('event', 'chief_of_staff_daily_standup_recorded')
+        .gte('created_at', dayStart.toISOString()),
+    ]);
+    if ((standupCount ?? 0) === 0) {
+      await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_daily_standup_recorded', {
+        verdict: standup.verdict,
+        department_heads: standup.departments.length,
+        verified_recurring_customers: standup.verifiedRecurringCustomers,
+        completed_past_24h: standup.activity.completedPast24h,
+        open_work: standup.activity.open,
+        overdue_work: standup.activity.overdue,
+        exhausted_work: standup.activity.exhausted,
+        founder_actions: standup.founderDecisions.length,
+        notification_policy: 'exception_only_v1',
+        standup_json: JSON.stringify(standup),
+      }, 'info');
+    }
+    const purchases = ((purchaseRows ?? []) as Array<{
+      id: string; amount_cents: number; currency: string; type: string;
+    }>).map((row): FounderPurchase => ({
+      id: row.id,
+      amountCents: Number(row.amount_cents),
+      currency: row.currency,
+      type: row.type,
+    }));
+    const recordedKeys = new Set(((recordedRows ?? []) as Array<{
+      data: Record<string, unknown> | null;
+    }>).flatMap((row) => typeof row.data?.['signal_key'] === 'string'
+      ? [String(row.data['signal_key'])]
+      : []));
+    const qualifiedReplies = ((replyRows ?? []) as Array<{
+      data: Record<string, unknown> | null;
+    }>).flatMap((row): FounderQualifiedReply[] => {
+      const data = row.data ?? {};
+      return data['classification'] === 'positive'
+        && data['matched'] === true
+        && typeof data['provider_event_id'] === 'string'
+        ? [{ providerEventId: String(data['provider_event_id']), forwarded: data['forwarded'] === true }]
+        : [];
+    });
+    for (const reply of qualifiedReplies) {
+      if (reply.forwarded) recordedKeys.add(`qualified_reply:${reply.providerEventId}`);
+    }
+    const signals = unseenFounderExceptions(classifyFounderExceptions({
+      actions: room.actions,
+      standup,
+      purchases,
+      qualifiedReplies,
+    }), recordedKeys);
+    if (signals.length > 0 && (digestCount ?? 0) === 0) {
+      const queued = await enqueueLifecycleEmail({
         supabase: args.supabase,
-        agents,
-        now,
+        idempotencyKey: `founder-exceptions/${dayStart.toISOString().slice(0, 10)}`,
+        eventType: 'founder_exception_digest',
+        templateKey: 'founder_exception_digest',
+        to: recipient,
+        variables: {
+          date: standup.reportDate,
+          summary: founderExceptionSummary(signals),
+          cta_url: `${(args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com').replace(/\/$/, '')}/admin/campaigns#loop-control`,
+        },
       });
-      const response = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from: resendFrom,
-          to: [recipient],
-          subject: `Maya: Daily company standup | ${standup.verdict}`,
-          html: `${renderDailyCompanyStandupHtml(standup)}${agentEmailSignatureHtml('maya')}`,
-        }),
-      });
-      if (response.ok) {
+      if (queued.ok && queued.status === 'queued') {
         digestSent = true;
-        await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_daily_standup_sent', {
-          recipient,
-          verdict: standup.verdict,
-          department_heads: standup.departments.length,
-          verified_recurring_customers: standup.verifiedRecurringCustomers,
-          completed_past_24h: standup.activity.completedPast24h,
-          open_work: standup.activity.open,
-          overdue_work: standup.activity.overdue,
-          exhausted_work: standup.activity.exhausted,
-          founder_actions: standup.founderDecisions.length,
+        for (const signal of signals) {
+          await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_exception_signal_recorded', {
+            signal_key: signal.signalKey,
+            kind: signal.kind,
+            delivery_id: queued.id ?? null,
+          }, 'info');
+        }
+        await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_exception_digest_queued', {
+          delivery_id: queued.id ?? null,
+          signal_count: signals.length,
+          kinds: [...new Set(signals.map((signal) => signal.kind))].join(','),
         }, 'info');
       } else {
-        await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_campaign_digest_failed', {
-          recipient,
-          urgent_actions: urgent,
-          status: response.status,
+        await structuredLogWithClientAndWait(args.supabase, 'chief_of_staff_exception_digest_failed', {
+          reason: queued.reason ?? queued.status ?? 'queue_failed',
+          signal_count: signals.length,
         }, 'error');
       }
     }
