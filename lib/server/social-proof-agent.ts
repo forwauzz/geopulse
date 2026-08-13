@@ -620,6 +620,8 @@ export function buildProductDemoCandidate(appUrl: string): SocialProofCandidate 
     assetType: 'single_image_post',
     evidence: {
       source_label: 'GEO-Pulse product behavior',
+      source_url: `${appUrl.replace(/\/+$/, '')}/methodology/ai-search-readiness-audit`,
+      source_type: 'first_party_methodology',
       product_truth: true,
       claim_boundary: 'observable_readiness_signals_no_ranking_guarantee',
     },
