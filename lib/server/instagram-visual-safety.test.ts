@@ -103,6 +103,33 @@ describe('Instagram visual safety', () => {
     ).toEqual({ safe: true });
   });
 
+  it('accepts the 26–30 second pacing contract produced by the Jordan CI renderer', () => {
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({
+          ...completeMetadata,
+          duration_seconds: 28,
+          meta_preview_approved: false,
+          meta_preview_approved_at: '',
+          renderer: 'github_actions_hyperframes',
+          reels_preview_safe: true,
+          crop_safe_zone_checked: true,
+          automated_crop_suite_approved: true,
+          automated_crop_suite_version: 'jordan-crop-suite-v2',
+          production_validation_version: 'jordan-reel-v2',
+        }),
+      ])
+    ).toEqual({ safe: true });
+  });
+
+  it('does not extend the manual Reel pacing window without the CI attestation', () => {
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [
+        reel({ ...completeMetadata, duration_seconds: 28 }),
+      ])
+    ).toEqual({ safe: false, reason: 'reel_pacing_unverified' });
+  });
+
   it('does not treat a generic automated renderer claim as Meta approval', () => {
     expect(
       validateInstagramVisualSafety(asset('short_video_post'), [

@@ -66,7 +66,13 @@ export function validateInstagramVisualSafety(
     return { safe: false, reason: 'reel_audio_required' };
   }
   const durationSeconds = numberFrom(video.metadata['duration_seconds']);
-  if (!durationSeconds || durationSeconds < 14 || durationSeconds > 20) {
+  // Manual Reels retain the tighter editorial window. Jordan's deterministic
+  // production contract deliberately renders a 26–30 second diagnostic and
+  // proves pacing as part of the same CI attestation used above. Keep the
+  // publisher aligned with that upstream contract instead of rejecting a
+  // render that already passed it.
+  const maximumDurationSeconds = automatedCropSuiteApproved ? 30 : 20;
+  if (!durationSeconds || durationSeconds < 14 || durationSeconds > maximumDurationSeconds) {
     return { safe: false, reason: 'reel_pacing_unverified' };
   }
   if (
