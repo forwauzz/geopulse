@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ReportQueueMessageV1 } from '../../lib/queue/report-job';
-import { replayReportJobFromDlq } from './dlq-replay';
+import { replayReportJobFromDlq, reportDlqReplayKey } from './dlq-replay';
 
 const job: ReportQueueMessageV1 = {
   v: 1,
@@ -11,6 +11,9 @@ const job: ReportQueueMessageV1 = {
 };
 
 describe('replayReportJobFromDlq', () => {
+  it('uses one stable replay marker key across the queue lifecycle', () => {
+    expect(reportDlqReplayKey('pay-1')).toBe('report:dlq-replay:pay-1');
+  });
   it('sends to main queue and sets KV when not yet replayed', async () => {
     const send = vi.fn().mockResolvedValue(undefined);
     const get = vi.fn().mockResolvedValue(null);

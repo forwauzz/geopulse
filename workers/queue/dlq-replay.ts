@@ -9,12 +9,16 @@ type DlqReplayEnv = {
   SCAN_CACHE: KVNamespace;
 };
 
+export function reportDlqReplayKey(paymentId: string): string {
+  return `${DLQ_REPLAY_KV_PREFIX}${paymentId}`;
+}
+
 /**
  * After max_retries on the main queue, one guarded replay to the primary queue.
  * KV ensures we do not loop forever if the job is poisoned.
  */
 export async function replayReportJobFromDlq(job: ReportQueueMessage, env: DlqReplayEnv): Promise<void> {
-  const kvKey = `${DLQ_REPLAY_KV_PREFIX}${job.paymentId}`;
+  const kvKey = reportDlqReplayKey(job.paymentId);
   const already = await env.SCAN_CACHE.get(kvKey);
   if (already) {
     structuredLog('dlq_replay_suppressed_already_replayed', {
