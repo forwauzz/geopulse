@@ -152,7 +152,7 @@ async function recentClientScan(
     : null;
 }
 
-async function runAndPersistReadinessScan(args: {
+export async function runAndPersistReadinessScan(args: {
   supabase: SupabaseClient<any, 'public', any>;
   env: BaselineEnv;
   clientId: string;

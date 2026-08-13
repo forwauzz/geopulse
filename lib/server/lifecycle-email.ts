@@ -5,7 +5,8 @@ export type LifecycleCategory = 'transactional' | 'marketing';
 export type LifecycleTemplateKey =
   | 'account_created' | 'checkout_received' | 'monitoring_activated' | 'subscription_activated'
   | 'trial_ending' | 'payment_failed' | 'payment_recovered' | 'subscription_cancelled'
-  | 'report_delayed' | 'onboarding_reminder' | 'internal_exception_digest';
+  | 'report_delayed' | 'onboarding_reminder' | 'internal_exception_digest'
+  | 'monthly_intelligence_ready';
 
 export type LifecycleEmailEnv = {
   readonly RESEND_API_KEY?: string;

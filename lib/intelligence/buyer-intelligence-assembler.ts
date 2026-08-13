@@ -126,13 +126,39 @@ export function assembleBuyerIntelligenceSnapshot(rawInput: BuyerIntelligenceAss
   if (input.projection.provenance.runIds.length === 0) throw new Error('projection_run_lineage_missing');
 
   const previousSnapshotId = input.previousSnapshot?.snapshotId ?? null;
+  const currentRecommendationIds = new Set(input.recommendations.map((item) => item.recommendationId));
+  const carriedRecommendations: BuyerIntelligenceAssemblyInput['recommendations'] =
+    input.previousSnapshot?.recommendations.flatMap((item) => {
+      if (currentRecommendationIds.has(item.recommendationId)) return [];
+      const priorObservationIds = new Set(item.observationIds);
+      const buyerQuestionKeys = input.previousSnapshot!.observations
+        .filter((observation) => priorObservationIds.has(observation.observationId))
+        .map((observation) => observation.buyerQuestionKey);
+      if (buyerQuestionKeys.length === 0) return [];
+      return [{
+        recommendationId: item.recommendationId,
+        buyerQuestionKeys: unique(buyerQuestionKeys),
+        title: item.title,
+        action: item.action,
+        ownerClass: item.ownerClass,
+        priority: item.priority,
+        effort: item.effort,
+        state: item.state,
+        ruleVersion: item.verification.ruleVersion,
+        kind: item.verification.kind,
+        expectedCondition: item.verification.expectedCondition,
+      }];
+    }) ?? [];
+  // Preserve unresolved recommendation lineage even when the triggering check now passes. Without
+  // this bridge, a successful fix disappears before the comparable run can verify the improvement.
+  const recommendationDefinitions = [...input.recommendations, ...carriedRecommendations];
   const assemblyFingerprint = fingerprint({
     contextVersion: input.context.contextVersion,
     contextHash: input.context.contentHash,
     projection: input.projection,
     period: input.period,
     measurement: input.measurement,
-    recommendations: input.recommendations,
+    recommendations: recommendationDefinitions,
     previousSnapshotId,
     generatedAt: input.generatedAt,
     assemblerVersion: BUYER_INTELLIGENCE_ASSEMBLER_VERSION,
@@ -168,7 +194,7 @@ export function assembleBuyerIntelligenceSnapshot(rawInput: BuyerIntelligenceAss
     reportEligibility: input.projection.reportEligibility,
   };
   const change = evaluateBuyerIntelligenceChange(input.previousSnapshot, current, previousSnapshotId);
-  const recommendations = [...input.recommendations]
+  const recommendations = recommendationDefinitions
     .sort((left, right) => left.recommendationId.localeCompare(right.recommendationId))
     .flatMap((definition) => {
       const observations = current.observations.filter((item) => definition.buyerQuestionKeys.includes(item.buyerQuestionKey));
