@@ -77,19 +77,36 @@ describe('dispatchDistributionJobs', () => {
     expect(
       canDispatchApprovedManualInstagramAsset(
         { provider_name: 'instagram' },
-        { source_type: 'manual', provider_family: 'instagram', status: 'approved' }
+        { source_type: 'manual', provider_family: 'instagram', status: 'approved', approved_at: null }
+      )
+    ).toBe(true);
+    expect(
+      canDispatchApprovedManualInstagramAsset(
+        { provider_name: 'instagram' },
+        {
+          source_type: 'manual',
+          provider_family: 'instagram',
+          status: 'scheduled',
+          approved_at: '2026-08-09T14:58:39.334Z',
+        }
       )
     ).toBe(true);
     expect(
       canDispatchApprovedManualInstagramAsset(
         { provider_name: 'x' },
-        { source_type: 'manual', provider_family: 'x', status: 'approved' }
+        { source_type: 'manual', provider_family: 'x', status: 'approved', approved_at: null }
       )
     ).toBe(false);
     expect(
       canDispatchApprovedManualInstagramAsset(
         { provider_name: 'instagram' },
-        { source_type: 'manual', provider_family: 'instagram', status: 'review' }
+        { source_type: 'manual', provider_family: 'instagram', status: 'review', approved_at: null }
+      )
+    ).toBe(false);
+    expect(
+      canDispatchApprovedManualInstagramAsset(
+        { provider_name: 'instagram' },
+        { source_type: 'manual', provider_family: 'instagram', status: 'scheduled', approved_at: null }
       )
     ).toBe(false);
   });
