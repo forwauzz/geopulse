@@ -321,6 +321,12 @@ describe('benchmark schedule helpers', () => {
       expect.objectContaining({
         runMetadata: expect.objectContaining({
           trigger_source: 'manual_run_now',
+          cohort_definition_version: 'query-set-v1',
+          schedule_subvertical: 'not_applicable',
+          model_snapshot: 'gemini-2.5-flash-lite',
+          prompt_version: 'benchmark-prompt-v1',
+          citation_parser_version: 'benchmark-citation-parser-v1',
+          metric_definition_version: 'benchmark-metrics-v2',
         }),
       }),
       {}
