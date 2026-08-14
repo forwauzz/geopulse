@@ -6,6 +6,7 @@ export type BenchmarkAdminFilters = {
   readonly domainId?: string | null;
   readonly querySetId?: string | null;
   readonly modelId?: string | null;
+  readonly scheduleVersion?: string | null;
   readonly status?: string | null;
 };
 
@@ -132,14 +133,16 @@ export function createBenchmarkAdminData(supabase: SupabaseLike) {
         .select(
           'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,started_at,completed_at,created_at'
         )
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .order('created_at', { ascending: false });
 
       if (filters.querySetId) query = query.eq('query_set_id', filters.querySetId);
       if (filters.modelId) query = query.eq('model_set_version', filters.modelId);
+      if (filters.scheduleVersion) {
+        query = query.contains('metadata', { schedule_version: filters.scheduleVersion });
+      }
       if (filters.status) query = query.eq('status', filters.status);
 
-      const { data: runGroups, error: runGroupError } = await query;
+      const { data: runGroups, error: runGroupError } = await query.limit(100);
       if (runGroupError) throw runGroupError;
 
       const rows = (runGroups ?? []) as Array<{

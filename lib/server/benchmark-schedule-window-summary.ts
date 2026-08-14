@@ -59,6 +59,21 @@ export type BenchmarkScheduleMultiWindowSummary = {
   readonly domains: readonly BenchmarkScheduleMultiWindowDomainSummary[];
 };
 
+function matchesScheduledProtocol(
+  row: BenchmarkRunListRow,
+  args: {
+    readonly modelId: string;
+    readonly scheduleVersion: string;
+    readonly windowDate: string;
+  }
+): boolean {
+  if (row.model_set_version !== args.modelId) return false;
+  if (row.run_scope !== 'scheduled_internal_benchmark') return false;
+  if (readText(row.metadata, 'schedule_version') !== args.scheduleVersion) return false;
+  if (readText(row.metadata, 'schedule_window_utc') !== args.windowDate) return false;
+  return true;
+}
+
 function readText(metadata: Record<string, unknown>, key: string): string | null {
   const value = metadata[key];
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
@@ -67,6 +82,12 @@ function readText(metadata: Record<string, unknown>, key: string): string | null
 function readNumber(metadata: Record<string, unknown>, key: string): number | null {
   const value = metadata[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function hasCompletedBenchmarkEvidence(row: BenchmarkRunListRow): boolean {
+  const completedQueries = readNumber(row.metadata, 'completed_query_count');
+  if (completedQueries !== null) return completedQueries > 0;
+  return typeof row.query_coverage === 'number' && row.query_coverage > 0;
 }
 
 function readRunMode(row: BenchmarkRunListRow): BenchmarkRunMode | null {
@@ -82,11 +103,10 @@ export function buildBenchmarkScheduleWindowSummary(args: {
   readonly windowDate: string;
 }): BenchmarkScheduleWindowSummary {
   const filtered = args.runs.filter((row) => {
-    if (row.query_set_id !== args.querySetId) return false;
-    if (row.model_set_version !== args.modelId) return false;
-    if (row.run_scope !== 'scheduled_internal_benchmark') return false;
-    if (readText(row.metadata, 'schedule_version') !== args.scheduleVersion) return false;
-    if (readText(row.metadata, 'schedule_window_utc') !== args.windowDate) return false;
+    // The configured query set is a fallback. A scheduled domain may deliberately substitute its
+    // own frozen query set, so schedule version + model + window are the protocol identity.
+    if (!matchesScheduledProtocol(row, args)) return false;
+    if (!hasCompletedBenchmarkEvidence(row)) return false;
     return readRunMode(row) !== null;
   });
 

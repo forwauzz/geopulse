@@ -43,8 +43,8 @@ async function main(): Promise<void> {
   const supabase = createServiceRoleClient(url, key);
   const adminData = createBenchmarkAdminData(supabase as any);
   const runs = await adminData.getRunGroups({
-    querySetId: config.querySetId,
     modelId: config.modelId,
+    scheduleVersion: config.scheduleVersion,
   });
   const summary = buildBenchmarkScheduleWindowSummary({
     runs,

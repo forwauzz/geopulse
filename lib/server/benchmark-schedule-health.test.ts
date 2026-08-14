@@ -76,6 +76,10 @@ describe('benchmark schedule health', () => {
         domainCount: 0,
         pairedDomainCount: 0,
         runCount: 0,
+        evidenceRunCount: 0,
+        completedQueryCount: 0,
+        failedQueryCount: 0,
+        skippedQueryCount: 0,
         triggerSources: [],
         statuses: [],
         latestCreatedAt: null,
@@ -86,6 +90,10 @@ describe('benchmark schedule health', () => {
         domainCount: 1,
         pairedDomainCount: 1,
         runCount: 2,
+        evidenceRunCount: 2,
+        completedQueryCount: 0,
+        failedQueryCount: 0,
+        skippedQueryCount: 0,
         triggerSources: ['worker_cron'],
         statuses: ['completed'],
         latestCreatedAt: '2026-03-31T00:00:00.000Z',
@@ -96,11 +104,97 @@ describe('benchmark schedule health', () => {
         domainCount: 1,
         pairedDomainCount: 1,
         runCount: 2,
+        evidenceRunCount: 2,
+        completedQueryCount: 0,
+        failedQueryCount: 0,
+        skippedQueryCount: 0,
         triggerSources: ['manual_run_now'],
         statuses: ['completed'],
         latestCreatedAt: '2026-03-30T12:00:00.000Z',
         missing: false,
       },
     ]);
+  });
+
+  it('follows the active protocol when a domain substitutes its frozen query set', () => {
+    const ungrounded = makeRun(
+      'run-domain-set-1',
+      '2026-03-31T12',
+      'ungrounded_inference',
+      'worker_cron'
+    );
+    const grounded = makeRun(
+      'run-domain-set-2',
+      '2026-03-31T12',
+      'grounded_site',
+      'worker_cron'
+    );
+    const unrelated = makeRun(
+      'run-unrelated',
+      '2026-03-31T12',
+      'grounded_site',
+      'worker_cron'
+    );
+    const runs = [
+      { ...ungrounded, query_set_id: 'domain-frozen-set' },
+      { ...grounded, query_set_id: 'domain-frozen-set' },
+      {
+        ...unrelated,
+        query_set_id: 'other-set',
+        metadata: { ...unrelated.metadata, schedule_version: 'other-protocol' },
+      },
+    ];
+
+    const summary = buildBenchmarkScheduleHealthSummary({
+      runs,
+      querySetId: 'configured-fallback-set',
+      modelId: 'gemini-2.5-flash-lite',
+      scheduleVersion: 'law-firms-business-counsel-v1',
+      windowHours: 12,
+      windowDates: ['2026-03-31T12'],
+    });
+
+    expect(summary.windows[0]).toMatchObject({
+      domainCount: 1,
+      pairedDomainCount: 1,
+      runCount: 2,
+      missing: false,
+    });
+  });
+
+  it('does not treat completed run-group shells with skipped cells as evidence', () => {
+    const skipped = makeRun(
+      'run-skipped',
+      '2026-03-31T12',
+      'ungrounded_inference',
+      'manual_run_now'
+    );
+    const summary = buildBenchmarkScheduleHealthSummary({
+      runs: [{
+        ...skipped,
+        query_coverage: null,
+        metadata: {
+          ...skipped.metadata,
+          completed_query_count: 0,
+          failed_query_count: 0,
+          skipped_query_count: 10,
+        },
+      }],
+      querySetId: 'set-1',
+      modelId: 'gemini-2.5-flash-lite',
+      scheduleVersion: 'law-firms-business-counsel-v1',
+      windowHours: 12,
+      windowDates: ['2026-03-31T12'],
+    });
+
+    expect(summary.windows[0]).toMatchObject({
+      runCount: 1,
+      evidenceRunCount: 0,
+      completedQueryCount: 0,
+      skippedQueryCount: 10,
+      domainCount: 0,
+      pairedDomainCount: 0,
+      missing: true,
+    });
   });
 });
