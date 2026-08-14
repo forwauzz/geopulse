@@ -540,7 +540,8 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
 
         if (!response.ok) {
           const responseBody = await readResponseTextSafely(response);
-          const retryable = OPENAI_TRANSIENT_STATUSES.has(response.status);
+          const quotaDepleted = response.status === 429 && isQuotaDepletedResponse(responseBody);
+          const retryable = OPENAI_TRANSIENT_STATUSES.has(response.status) && !quotaDepleted;
           const hasRetry = attempt < OPENAI_MAX_ATTEMPTS;
           if (retryable && hasRetry) {
             const delayMs = OPENAI_RETRY_DELAYS_MS[attempt - 1] ?? 1200;
@@ -562,6 +563,7 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
               response_body: responseBody,
               attempts: attempt,
               retryable,
+              quota_state: quotaDepleted ? 'depleted' : 'available_or_unknown',
             },
             errorMessage: `benchmark_${provider}_http_${String(response.status)}`,
             executedAt,

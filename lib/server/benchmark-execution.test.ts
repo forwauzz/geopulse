@@ -652,6 +652,31 @@ describe('OpenAiCompatibleBenchmarkExecutionAdapter — openai', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('fails fast when an OpenAI-compatible 429 reports depleted credits', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => JSON.stringify({
+        error: { message: 'You have no credits remaining.', type: 'insufficient_quota', code: 'credit_balance_exhausted' },
+      }),
+    });
+    const adapter = new OpenAiCompatibleBenchmarkExecutionAdapter(
+      'openai',
+      openaiConfig,
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, openaiContext);
+
+    expect(result.status).toBe('failed');
+    expect(result.responseMetadata).toMatchObject({
+      attempts: 1,
+      retryable: false,
+      quota_state: 'depleted',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('fails with openai-prefixed error message on http error', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
