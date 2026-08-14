@@ -54,8 +54,8 @@ async function main(): Promise<void> {
   const supabase = createServiceRoleClient(url, key);
   const adminData = createBenchmarkAdminData(supabase as any);
   const runs = await adminData.getRunGroups({
-    querySetId: config.querySetId,
     modelId: config.modelId,
+    scheduleVersion: config.scheduleVersion,
   });
   const summary = buildBenchmarkScheduleHealthSummary({
     runs,
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   console.log('windows:');
   for (const window of summary.windows) {
     console.log(
-      `  - ${window.windowDate} | runs ${window.runCount} | paired_domains ${window.pairedDomainCount}/${window.domainCount} | triggers ${window.triggerSources.join(',') || '-'} | statuses ${window.statuses.join(',') || '-'} | latest_created_at ${window.latestCreatedAt ?? '-'} | missing ${window.missing ? 'yes' : 'no'}`
+      `  - ${window.windowDate} | runs ${window.runCount} | evidence_runs ${window.evidenceRunCount} | query_cells completed ${window.completedQueryCount} / failed ${window.failedQueryCount} / skipped ${window.skippedQueryCount} | paired_domains ${window.pairedDomainCount}/${window.domainCount} | triggers ${window.triggerSources.join(',') || '-'} | statuses ${window.statuses.join(',') || '-'} | latest_created_at ${window.latestCreatedAt ?? '-'} | missing ${window.missing ? 'yes' : 'no'}`
     );
   }
 }
