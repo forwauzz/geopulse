@@ -25,6 +25,7 @@ type ScheduleEnvLike = {
   readonly BENCHMARK_SCHEDULE_MAX_FAILURES?: string;
   readonly BENCHMARK_SCHEDULE_WINDOW_HOURS?: string;
   readonly BENCHMARK_SCHEDULE_VERSION?: string;
+  readonly BENCHMARK_SCHEDULE_QUERY_DELAY_MS?: string;
 };
 
 type ScheduledRunConfig = {
@@ -43,6 +44,7 @@ type ScheduledRunConfig = {
   readonly maxFailures: number;
   readonly windowHours: number;
   readonly scheduleVersion: string;
+  readonly queryExecutionDelayMs?: number;
 };
 
 type BenchmarkScheduleRepo = ReturnType<typeof createBenchmarkRepository>;
@@ -95,6 +97,13 @@ function parsePositiveInt(raw: string | null, fallback: number): number {
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return parsed;
+}
+
+function parseNonNegativeInt(raw: string | null, fallback = 0): number {
+  if (!raw) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.min(parsed, 5_000);
 }
 
 function parsePositiveIntList(raw: string | null): number[] {
@@ -196,6 +205,9 @@ export function parseBenchmarkScheduleConfig(
     maxFailures: parsePositiveInt(normalizeText(env?.BENCHMARK_SCHEDULE_MAX_FAILURES), 5),
     windowHours: parseWindowHours(normalizeText(env?.BENCHMARK_SCHEDULE_WINDOW_HOURS)),
     scheduleVersion: normalizeText(env?.BENCHMARK_SCHEDULE_VERSION) ?? 'v1',
+    queryExecutionDelayMs: parseNonNegativeInt(
+      normalizeText(env?.BENCHMARK_SCHEDULE_QUERY_DELAY_MS)
+    ),
   };
 }
 
@@ -464,6 +476,7 @@ export async function executeBenchmarkScheduleSweep(args: {
                 prompt_version: BENCHMARK_PROMPT_VERSION,
                 citation_parser_version: BENCHMARK_CITATION_PARSER_VERSION,
                 metric_definition_version: BENCHMARK_METRIC_DEFINITION_VERSION,
+                query_execution_delay_ms: args.config.queryExecutionDelayMs ?? 0,
               },
             },
             args.adapter

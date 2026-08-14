@@ -23,6 +23,7 @@ describe('benchmark schedule helpers', () => {
       BENCHMARK_SCHEDULE_MAX_FAILURES: '4',
       BENCHMARK_SCHEDULE_WINDOW_HOURS: '12',
       BENCHMARK_SCHEDULE_VERSION: 'daily-v1',
+      BENCHMARK_SCHEDULE_QUERY_DELAY_MS: '3500',
     });
 
     expect(config).toEqual({
@@ -39,6 +40,7 @@ describe('benchmark schedule helpers', () => {
       maxFailures: 4,
       windowHours: 12,
       scheduleVersion: 'daily-v1',
+      queryExecutionDelayMs: 3500,
     });
   });
 
@@ -327,6 +329,7 @@ describe('benchmark schedule helpers', () => {
           prompt_version: 'benchmark-prompt-v1',
           citation_parser_version: 'benchmark-citation-parser-v1',
           metric_definition_version: 'benchmark-metrics-v2',
+          query_execution_delay_ms: 0,
         }),
       }),
       {}
