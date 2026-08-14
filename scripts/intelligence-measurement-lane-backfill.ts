@@ -73,10 +73,15 @@ function protocolForRun(run: Row, querySet: Row | undefined): MeasurementLanePro
   return {
     frameKind,
     vertical: text(querySet ?? {}, 'vertical') ?? metadataText(run, 'schedule_vertical') ?? UNKNOWN_PROTOCOL_VALUE,
-    subvertical: metadataText(querySet ?? {}, 'subvertical') ?? (
-      frameKind === 'business_counsel' ? 'business_counsel' : UNKNOWN_PROTOCOL_VALUE
-    ),
-    cohortDefinitionVersion: metadataText(run, 'cohort_definition_version') ?? UNKNOWN_PROTOCOL_VALUE,
+    subvertical:
+      metadataText(querySet ?? {}, 'subvertical') ??
+      metadataText(querySet ?? {}, 'target_subcohort') ??
+      metadataText(run, 'schedule_subvertical') ??
+      (frameKind === 'business_counsel' ? 'business_counsel' : NOT_APPLICABLE_PROTOCOL_VALUE),
+    cohortDefinitionVersion:
+      metadataText(run, 'cohort_definition_version') ??
+      metadataText(querySet ?? {}, 'methodology_version') ??
+      UNKNOWN_PROTOCOL_VALUE,
     querySetId: text(run, 'query_set_id') ?? UNKNOWN_PROTOCOL_VALUE,
     querySetVersion: text(querySet ?? {}, 'version') ?? metadataText(run, 'schedule_query_set_version') ?? UNKNOWN_PROTOCOL_VALUE,
     provider: inferProvider(modelId),

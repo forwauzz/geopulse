@@ -48,6 +48,10 @@ type ScheduledRunConfig = {
 type BenchmarkScheduleRepo = ReturnType<typeof createBenchmarkRepository>;
 export type BenchmarkScheduleTriggerSource = 'worker_cron' | 'manual_run_now';
 
+export const BENCHMARK_PROMPT_VERSION = 'benchmark-prompt-v1';
+export const BENCHMARK_CITATION_PARSER_VERSION = 'benchmark-citation-parser-v1';
+export const BENCHMARK_METRIC_DEFINITION_VERSION = 'benchmark-metrics-v2';
+
 export type BenchmarkScheduleSummary = {
   readonly enabled: boolean;
   readonly querySetId: string | null;
@@ -426,6 +430,13 @@ export async function executeBenchmarkScheduleSweep(args: {
         });
 
         try {
+          const querySetMetadata = (domainQuerySet.metadata ?? {}) as Record<string, unknown>;
+          const methodologyVersion = typeof querySetMetadata['methodology_version'] === 'string'
+            ? querySetMetadata['methodology_version']
+            : `query-set-${domainQuerySet.version}`;
+          const scheduleSubvertical = typeof querySetMetadata['target_subcohort'] === 'string'
+            ? querySetMetadata['target_subcohort']
+            : 'not_applicable';
           await args.runBenchmarkGroup(
             args.supabase,
             {
@@ -447,6 +458,12 @@ export async function executeBenchmarkScheduleSweep(args: {
                 schedule_run_key: scheduleRunKey,
                 schedule_query_set_name: domainQuerySet.name,
                 schedule_query_set_version: domainQuerySet.version,
+                schedule_subvertical: scheduleSubvertical,
+                cohort_definition_version: methodologyVersion,
+                model_snapshot: modelId,
+                prompt_version: BENCHMARK_PROMPT_VERSION,
+                citation_parser_version: BENCHMARK_CITATION_PARSER_VERSION,
+                metric_definition_version: BENCHMARK_METRIC_DEFINITION_VERSION,
               },
             },
             args.adapter
