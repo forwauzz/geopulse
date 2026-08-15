@@ -623,13 +623,19 @@ export async function stopEmailCampaignAction(formData: FormData): Promise<void>
   const detail = await loadEmailCampaignDetail({ supabase: ctx.adminDb, env, interventionKey });
   if (!detail?.contract.audience.audienceId) return;
 
-  await stopCampaign({
+  const outcome = await stopCampaign({
     supabase: ctx.adminDb,
     contract: detail.contract,
     reason,
     nowMs: Date.now(),
     save: async (contract) => saveValidatedEmailCampaign(ctx.adminDb, contract),
   });
+  if (!outcome.ok) {
+    structuredLog('email_campaign_stop_failed', {
+      interventionKey,
+      reason: outcome.reason,
+    }, 'error');
+  }
   revalidatePath(`${CONSOLE_PATH}/${interventionKey}`);
 }
 

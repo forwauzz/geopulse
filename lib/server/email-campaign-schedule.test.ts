@@ -543,4 +543,34 @@ describe('stopping a campaign', () => {
     // Stopping is a lifecycle move on the SAME version, not a fork that would lose the history.
     expect(stopped.version).toBe(1);
   });
+
+  it('fails before mutating delivery state when the stopped contract cannot be saved', async () => {
+    const writes: { table: string; payload: unknown }[] = [];
+    const supabase = {
+      from(table: string) {
+        return {
+          select: () => ({
+            eq: () => ({
+              in: () => Promise.resolve({ data: [{ id: 'e1', prospect_id: 'p1' }], error: null }),
+            }),
+          }),
+          update(payload: unknown) {
+            writes.push({ table, payload });
+            return { eq: () => ({ in: () => Promise.resolve({ error: null }) }), in: () => Promise.resolve({ error: null }) };
+          },
+        };
+      },
+    } as never;
+
+    const result = await stopCampaign({
+      supabase,
+      contract: { ...contract(), state: 'scheduled' },
+      reason: 'zero qualified replies',
+      nowMs: NOW,
+      save: async () => ({ ok: false }),
+    });
+
+    expect(result).toEqual({ ok: false, reason: 'stopped_contract_save_failed' });
+    expect(writes).toEqual([]);
+  });
 });
