@@ -291,4 +291,100 @@ describe('store', () => {
     const result = await saveEmailCampaign(supabase, { ...locked, updatedAt: '2026-09-09T00:00:00.000Z' });
     expect(result).toEqual({ ok: false, reason: 'version_is_locked' });
   });
+
+  it('allows a locked version to move to stopped without changing its immutable campaign payload', async () => {
+    const locked = { ...contract(), state: 'scheduled' as const };
+    const updates: Record<string, unknown>[] = [];
+    const supabase = {
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { id: 'int-1', metadata: { email_campaign: { current: 1, versions: { '1': locked } } } },
+              }),
+            }),
+          }),
+          update(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return { eq: () => Promise.resolve({ error: null }) };
+          },
+        };
+      },
+    } as never;
+
+    const stopped = {
+      ...locked,
+      state: 'stopped' as const,
+      governance: { ...locked.governance, stopReason: 'zero qualified replies' },
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    };
+    const result = await saveEmailCampaign(supabase, stopped);
+
+    expect(result).toEqual({ ok: true });
+    const stored = (updates[0]?.metadata as { email_campaign: { versions: Record<string, EmailCampaignV1> } })
+      .email_campaign.versions['1'];
+    expect(stored?.state).toBe('stopped');
+    expect(stored?.governance.stopReason).toBe('zero qualified replies');
+  });
+
+  it('accepts an idempotent stopped-state save on the current immutable version', async () => {
+    const stopped = {
+      ...contract(),
+      state: 'stopped' as const,
+      governance: { ...contract().governance, stopReason: 'zero qualified replies' },
+    };
+    const updates: Record<string, unknown>[] = [];
+    const supabase = {
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { id: 'int-1', metadata: { email_campaign: { current: 1, versions: { '1': stopped } } } },
+              }),
+            }),
+          }),
+          update(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return { eq: () => Promise.resolve({ error: null }) };
+          },
+        };
+      },
+    } as never;
+
+    const result = await saveEmailCampaign(supabase, {
+      ...stopped,
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    });
+    expect(result).toEqual({ ok: true });
+    expect(updates).toHaveLength(1);
+  });
+
+  it('still rejects a locked lifecycle update that changes internal campaign scope', async () => {
+    const locked = { ...contract(), state: 'scheduled' as const };
+    const supabase = {
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { id: 'int-1', metadata: { email_campaign: { current: 1, versions: { '1': locked } } } },
+              }),
+            }),
+          }),
+          update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+        };
+      },
+    } as never;
+
+    const result = await saveEmailCampaign(supabase, {
+      ...locked,
+      state: 'stopped',
+      goal: { ...locked.goal, buyer: 'a different buyer' },
+      governance: { ...locked.governance, stopReason: 'zero qualified replies' },
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    });
+    expect(result).toEqual({ ok: false, reason: 'version_is_locked' });
+  });
 });

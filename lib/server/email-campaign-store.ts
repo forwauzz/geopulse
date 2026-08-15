@@ -17,6 +17,39 @@ import {
   type EmailCampaignV1,
 } from './email-campaign-contract';
 
+const LOCKED_LIFECYCLE_ORDER: Readonly<Record<EmailCampaignPreparationState, number>> = {
+  draft: -1,
+  audience_ready: -1,
+  content_ready: -1,
+  qa_ready: -1,
+  test_passed: -1,
+  scheduled: 0,
+  running: 1,
+  evaluating: 2,
+  completed: 3,
+  stopped: 3,
+};
+
+function lockedLifecyclePayload(contract: EmailCampaignV1): string {
+  const { state: _state, updatedAt: _updatedAt, governance, ...immutable } = contract;
+  const { stopReason: _stopReason, ...immutableGovernance } = governance;
+  return JSON.stringify({ ...immutable, governance: immutableGovernance });
+}
+
+/** A locked version may advance lifecycle state, but its recipient-visible contract stays immutable. */
+function isAllowedLockedLifecycleUpdate(existing: EmailCampaignV1, incoming: EmailCampaignV1): boolean {
+  if (existing.version !== incoming.version) return false;
+  if (lockedLifecyclePayload(existing) !== lockedLifecyclePayload(incoming)) return false;
+
+  if (existing.state === incoming.state) {
+    return incoming.state === 'stopped' && existing.governance.stopReason === incoming.governance.stopReason;
+  }
+  if (existing.state === 'completed' || existing.state === 'stopped') return false;
+  if (incoming.state === 'stopped') return Boolean(incoming.governance.stopReason?.trim());
+  if (incoming.governance.stopReason !== existing.governance.stopReason) return false;
+  return LOCKED_LIFECYCLE_ORDER[incoming.state] > LOCKED_LIFECYCLE_ORDER[existing.state];
+}
+
 interface StoredEmailCampaign {
   readonly current: number;
   readonly versions: Record<string, EmailCampaignV1>;
@@ -144,7 +177,12 @@ export async function saveEmailCampaign(
   const metadata = ((data as Record<string, unknown>).metadata ?? {}) as Record<string, unknown>;
   const stored = readStored(metadata);
   const existing = stored?.versions[String(contract.version)];
-  if (existing && isLocked(existing) && existing.updatedAt !== contract.updatedAt) {
+  if (
+    existing
+    && isLocked(existing)
+    && existing.updatedAt !== contract.updatedAt
+    && !(stored?.current === contract.version && isAllowedLockedLifecycleUpdate(existing, contract))
+  ) {
     return { ok: false, reason: 'version_is_locked' };
   }
 

@@ -383,17 +383,25 @@ export async function stopCampaign(args: {
 }): Promise<{ ok: true; stoppedProspects: number } | { ok: false; reason: string }> {
   const nowIso = new Date(args.nowMs).toISOString();
 
-  const { data: enrollments } = await args.supabase
+  const { contract } = applyContractEdit(args.contract, {
+    state: 'stopped',
+    governance: { stopReason: args.reason },
+  });
+  const saved = await args.save(contract);
+  if (!saved.ok) return { ok: false, reason: 'stopped_contract_save_failed' };
+
+  const { data: enrollments, error: enrollmentReadError } = await args.supabase
     .from('outreach_campaign_enrollments')
     .select('id,prospect_id')
     .eq('audience_id', args.contract.audience.audienceId)
     .in('status', ['enrolled', 'sending']);
+  if (enrollmentReadError) return { ok: false, reason: `stop_enrollment_read_failed:${enrollmentReadError.message}` };
 
   const rows = (enrollments ?? []) as { id: string; prospect_id: string | null }[];
   const prospectIds = rows.map((row) => row.prospect_id).filter((id): id is string => Boolean(id));
 
   if (prospectIds.length > 0) {
-    await args.supabase
+    const { error: prospectUpdateError } = await args.supabase
       .from('outreach_prospects')
       .update({
         enabled: false,
@@ -403,19 +411,15 @@ export async function stopCampaign(args: {
         updated_at: nowIso,
       })
       .in('id', prospectIds);
+    if (prospectUpdateError) return { ok: false, reason: `stop_prospect_update_failed:${prospectUpdateError.message}` };
   }
 
-  await args.supabase
+  const { error: enrollmentUpdateError } = await args.supabase
     .from('outreach_campaign_enrollments')
     .update({ status: 'stopped', exit_reason: args.reason, exited_at: nowIso, updated_at: nowIso })
     .eq('audience_id', args.contract.audience.audienceId)
     .in('status', ['enrolled', 'sending']);
-
-  const { contract } = applyContractEdit(args.contract, {
-    state: 'stopped',
-    governance: { stopReason: args.reason },
-  });
-  await args.save(contract);
+  if (enrollmentUpdateError) return { ok: false, reason: `stop_enrollment_update_failed:${enrollmentUpdateError.message}` };
 
   structuredLog('email_campaign_stopped', {
     interventionKey: args.contract.interventionKey,
