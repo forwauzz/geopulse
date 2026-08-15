@@ -123,7 +123,7 @@ describe('runtime incident control', () => {
       level: 'warning',
       created_at: '2026-08-12T01:00:00.000Z',
       data: { status: 'rejected', reason: 'missing_clean_hero' },
-    }]).find((signal) => signal.definition.key === 'seo-runtime');
+    }]).find((signal) => signal.definition.key === 'seo-editorial');
     expect(once?.active).toBe(false);
 
     const twice = classifyRuntimeIncidents([
@@ -134,12 +134,40 @@ describe('runtime incident control', () => {
         data: { status: 'rejected', reason: 'missing_clean_hero' },
       },
       {
+        event: 'seo_agent_completed',
+        level: 'info',
+        created_at: '2026-08-12T01:30:00.000Z',
+        data: { status: 'completed' },
+      },
+      {
         event: 'seo_editorial_cron_run',
         level: 'warning',
         created_at: '2026-08-12T01:00:00.000Z',
         data: { status: 'rejected', reason: 'missing_clean_hero' },
       },
-    ]).find((signal) => signal.definition.key === 'seo-runtime');
+    ]).find((signal) => signal.definition.key === 'seo-editorial');
     expect(twice).toMatchObject({ active: true, consecutiveFailures: 2 });
+  });
+
+  it('closes an editorial incident only after a newer published editorial signal', () => {
+    const editorial = classifyRuntimeIncidents([
+      {
+        event: 'seo_editorial_cron_run',
+        level: 'info',
+        created_at: '2026-08-12T03:00:00.000Z',
+        data: { status: 'created', contentId: 'article-1' },
+      },
+      {
+        event: 'seo_editorial_cron_run',
+        level: 'warning',
+        created_at: '2026-08-12T02:00:00.000Z',
+        data: { status: 'rejected', reason: 'incomplete_draft:workers_ai_empty_response' },
+      },
+    ]).find((signal) => signal.definition.key === 'seo-editorial');
+
+    expect(editorial).toMatchObject({
+      active: false,
+      latestSuccessAt: '2026-08-12T03:00:00.000Z',
+    });
   });
 });
