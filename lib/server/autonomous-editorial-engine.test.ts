@@ -109,6 +109,25 @@ describe('autonomous editorial engine', () => {
     expect(result).toEqual({ status:'rejected', reason:'missing_clean_hero' });
   });
 
+  it('preserves a safe writer failure code when the draft is incomplete', async () => {
+    const supabase = db();
+    const result = await runAutonomousEditorialEngine({ supabase, provider: {
+      draft: async () => ({
+        title: '',
+        markdown: '',
+        sources: [],
+        providerFailure: 'workers_ai_empty_response',
+      }),
+      hero: async () => null,
+      review: async () => ({ approved:true, reasons:[] }),
+    }});
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'incomplete_draft:workers_ai_empty_response',
+    });
+  });
+
   it('uses the deterministic hero path when the paid image cap denies generation', async () => {
     const supabase = db();
     supabase.rpc = vi.fn(async () => ({ data: false, error: null }));

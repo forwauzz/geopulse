@@ -101,9 +101,20 @@ const DEFINITIONS: readonly RuntimeIncidentDefinition[] = [
     campaignLane: 'competitors',
     owner: 'Marcus',
     title: 'Repair the autonomous SEO runtime',
-    failureEvents: ['seo_agent_failed', 'seo_agent_worker_error', 'seo_editorial_cron_error', 'seo_editorial_cron_run'],
-    successEvents: ['seo_agent_completed', 'seo_editorial_cron_run'],
-    nextAction: 'Repair the SEO execution path and verify the next discovery or editorial run.',
+    failureEvents: ['seo_agent_failed', 'seo_agent_worker_error'],
+    successEvents: ['seo_agent_completed'],
+    nextAction: 'Repair the SEO discovery execution path and verify the next successful discovery run.',
+    activationThreshold: 2,
+  },
+  {
+    key: 'seo-editorial',
+    lane: 'seo',
+    campaignLane: 'competitors',
+    owner: 'Marcus',
+    title: 'Repair the autonomous editorial runtime',
+    failureEvents: ['seo_editorial_cron_error', 'seo_editorial_cron_run'],
+    successEvents: ['seo_editorial_cron_run'],
+    nextAction: 'Retry the bounded editorial run, repair the writer or quality-gate failure, and verify a source-backed published replacement.',
     activationThreshold: 2,
   },
 ] as const;
@@ -136,7 +147,7 @@ function failure(row: Row, definition: RuntimeIncidentDefinition): boolean {
     && payload.inventoryHealthy === false
   ) return true;
   if (
-    definition.key === 'seo-runtime'
+    definition.key === 'seo-editorial'
     && row.event === 'seo_editorial_cron_run'
     && payload.status === 'rejected'
   ) return true;
@@ -163,7 +174,7 @@ function success(row: Row, definition: RuntimeIncidentDefinition): boolean {
     && row.event === 'autonomous_campaign_execution'
     && payload.inventoryHealthy === false
   ) return false;
-  if (definition.key === 'seo-runtime' && status === 'rejected') return false;
+  if (definition.key === 'seo-editorial' && status === 'rejected') return false;
   return status !== 'failed';
 }
 

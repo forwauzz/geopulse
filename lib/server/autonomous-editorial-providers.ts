@@ -96,6 +96,16 @@ function safeProviderCode(value: unknown): string {
     : '';
 }
 
+function safeWriterProviderFailure(reason: string): string {
+  const normalized = reason.toLowerCase();
+  if (/\b(?:http|status|upstream)[ _-]*429\b/.test(normalized)) return 'workers_ai_http_429';
+  if (/quota|credit|billing|payment/.test(normalized)) return 'workers_ai_quota';
+  if (/timeout|timed out/.test(normalized)) return 'workers_ai_timeout';
+  if (/binding[_ -]missing/.test(normalized)) return 'workers_ai_binding_missing';
+  if (/empty[_ -]response/.test(normalized)) return 'workers_ai_empty_response';
+  return 'workers_ai_request_failed';
+}
+
 function jsonFromModel(text: string): Record<string, unknown> | null {
   try { const value = JSON.parse(text); return value && typeof value === 'object' ? value as Record<string, unknown> : null; } catch { return null; }
 }
@@ -111,13 +121,29 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
       const result = await runWorkersAiPrompt({ ai: env.AI, model: env.EDITORIAL_WRITER_MODEL, maxTokens: 3500,
         system: `You write practical, source-backed GEO-Pulse articles about generative engine optimization (GEO) and AI-search readiness. Use AI-search readiness as the primary term. If GEO appears, write "In this article, GEO means generative engine optimization" once; never use GEO to mean geographic or local-search optimization. Do not introduce AEO, AI SEO, or LLM optimization as aliases. Explain observable website evidence, crawler access, answer clarity, and repeatable measurement. Do not promise or imply rankings, citations, traffic, revenue, or improved visibility. Do not invent statistics, customer results, URLs, product capabilities, or sources. Use only the exact source URLs and exact internal routes supplied by the user. Output JSON only: {"title":"","markdown":""}. Include a direct answer near the start, 2+ concrete question-or-decision H2s, an actionable checklist, at least one supplied internal blog link, and a bounded free-scan CTA.`,
         prompt: `GEO-Pulse product context: GEO-Pulse measures public website readiness signals and helps a business decide what to verify, fix, and remeasure. It does not guarantee inclusion or citations in any AI answer.\nTopic: ${topic}\nApproved internal links (use only these): /blog/ai-search-readiness-audit, /blog/msp-service-claims-verifiable-evidence, /solutions/msps, /\nVerified official sources (cite only factual statements they directly support):\n${trustedSources}\nAvoid duplicate intent with: ${existingTitles.slice(0, 50).join(' | ')}` });
-      if (!result.ok) return { title: '', markdown: '', sources: [] };
+      if (!result.ok) {
+        return {
+          title: '',
+          markdown: '',
+          sources: [],
+          providerFailure: safeWriterProviderFailure(result.reason),
+        };
+      }
       const json = jsonFromModel(result.text);
       const title = typeof json?.title === 'string' ? json.title.trim() : '';
       const markdown = typeof json?.markdown === 'string'
         ? normalizeGeneratedEditorialMarkdown(json.markdown.trim())
         : '';
-      return { title, markdown, sources: TRUSTED_EDITORIAL_SOURCES.map((source) => source.url) };
+      return {
+        title,
+        markdown,
+        sources: TRUSTED_EDITORIAL_SOURCES.map((source) => source.url),
+        ...(!json
+          ? { providerFailure: 'writer_json_parse_failed' }
+          : !title || !markdown
+            ? { providerFailure: 'writer_json_incomplete' }
+            : {}),
+      };
     },
     async hero({ title, allowGenerated }) {
       const key = env.OPENAI_API_KEY?.trim(); const base = env.EDITORIAL_HERO_PUBLIC_BASE?.replace(/\/$/, ''); const bucket = env.REPORT_FILES;

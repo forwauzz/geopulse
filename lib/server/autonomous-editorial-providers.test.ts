@@ -39,6 +39,34 @@ Check [the readiness guide](/blog/ai-search-readiness-audit).`);
     expect(draft.markdown).not.toContain('geopulse.com');
     expect(String((run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[0]?.content)).toContain('Do not invent');
   });
+
+  it('returns a bounded provider code instead of exposing writer failure text', async () => {
+    const run = vi.fn().mockRejectedValue(new Error('Upstream 429: secret provider detail'));
+    const provider = createAutonomousEditorialProvider({ AI: { run } });
+
+    const draft = await provider.draft({ topic: 'msp evidence', existingTitles: [] });
+
+    expect(draft).toEqual({
+      title: '',
+      markdown: '',
+      sources: [],
+      providerFailure: 'workers_ai_http_429',
+    });
+  });
+
+  it('identifies writer JSON failures without retaining the model payload', async () => {
+    const run = vi.fn().mockResolvedValue({ response: 'not-json private model output' });
+    const provider = createAutonomousEditorialProvider({ AI: { run } });
+
+    const draft = await provider.draft({ topic: 'msp evidence', existingTitles: [] });
+
+    expect(draft).toEqual({
+      title: '',
+      markdown: '',
+      sources: TRUSTED_EDITORIAL_SOURCES.map((source) => source.url),
+      providerFailure: 'writer_json_parse_failed',
+    });
+  });
 });
 
 describe('autonomous editorial hero', () => {

@@ -21,7 +21,12 @@ export type EditorialProvider = {
     readonly provider: 'openai';
     readonly estimatedCostUsd: number;
   };
-  draft(input: { topic: string; existingTitles: string[] }): Promise<{ title: string; markdown: string; sources: string[] }>;
+  draft(input: { topic: string; existingTitles: string[] }): Promise<{
+    title: string;
+    markdown: string;
+    sources: string[];
+    providerFailure?: string;
+  }>;
   hero(input: { title: string; markdown: string; allowGenerated: boolean }): Promise<{
     url: string;
     alt: string;
@@ -59,6 +64,12 @@ export function ensureEditorialInternalBlogLink(markdown: string): string {
     return href.startsWith('/blog/') || href.startsWith('https://getgeopulse.com/blog/');
   });
   return hasInternalBlogLink ? markdown : `${markdown.trimEnd()}${EDITORIAL_FALLBACK_INTERNAL_LINK}`;
+}
+
+function safeEditorialFailureCode(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-z0-9_-]{1,80}$/.test(value)
+    ? value
+    : null;
 }
 
 export async function runAutonomousEditorialEngine(args: {
@@ -149,7 +160,13 @@ export async function runAutonomousEditorialEngine(args: {
       ? ensureEditorialInternalBlogLink(providerDraft.markdown)
       : providerDraft.markdown,
   };
-  if (!draft.title || !draft.markdown || draft.sources.length === 0) return { status: 'rejected', reason: 'incomplete_draft' };
+  if (!draft.title || !draft.markdown || draft.sources.length === 0) {
+    const providerFailure = safeEditorialFailureCode(draft.providerFailure);
+    return {
+      status: 'rejected',
+      reason: providerFailure ? `incomplete_draft:${providerFailure}` : 'incomplete_draft',
+    };
+  }
 
   let allowGeneratedHero = false;
   if (args.provider.heroSpend) {
