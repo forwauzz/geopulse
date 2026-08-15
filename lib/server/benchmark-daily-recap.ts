@@ -1,9 +1,9 @@
 /**
  * Daily benchmark recap.
  *
- * Summarizes the last 24h of marketing-firm benchmark runs into a short email
- * digest: how many runs fired, how many succeeded, who got cited, which topics
- * drove citations, and which platforms moved.
+ * Summarizes one vertical's active scheduled protocol over the last 24h into a
+ * short email digest: current run health, answer citation rate, cohort-business
+ * visibility, cited sources, topics, and platform breakdown.
  *
  * Pure analyzer + renderers. The Cloudflare worker fetches the data and calls
  * sendBenchmarkDailyRecap; tests cover the analyzer + HTML/text renderers
@@ -12,9 +12,11 @@
 
 import { inferProviderFromModelId } from './benchmark-metrics';
 import { agentEmailSignatureHtml } from './email-theme';
+import { benchmarkVerticalAliases, canonicalBenchmarkVertical } from '../intelligence/commercial-readiness';
 import type {
   BenchmarkDomainRow,
   BenchmarkQueryRow,
+  BenchmarkRunGroupRow,
   QueryCitationRow,
   QueryRunRow,
 } from './benchmark-repository';
@@ -33,7 +35,7 @@ export type RecapPlatformBreakdown = {
   readonly platform: 'gemini' | 'openai' | 'perplexity' | 'unknown';
   readonly completedRuns: number;
   readonly citedRuns: number;
-  readonly visibilityPct: number;
+  readonly answerCitationRate: number;
 };
 
 export type RecapCitedDomain = {
@@ -55,9 +57,19 @@ export type BenchmarkDailyRecap = {
   readonly windowStart: string;
   readonly windowEnd: string;
   readonly vertical: string;
+  readonly protocol: {
+    readonly scheduleVersion: string;
+    readonly modelSetVersion: string;
+  } | null;
   readonly runStatus: RecapRunStatusCounts;
+  readonly excludedNonActiveRuns: number;
   readonly totalCitations: number;
-  readonly cohortVisibilityPct: number;
+  readonly answerCitationRate: number;
+  readonly cohortBusinessVisibility: {
+    readonly visible: number;
+    readonly tested: number;
+    readonly rate: number;
+  };
   readonly distinctDomainsRun: number;
   readonly distinctDomainsCited: number;
   readonly platformBreakdown: readonly RecapPlatformBreakdown[];
@@ -72,6 +84,7 @@ export type BenchmarkDailyRecapInput = {
   readonly now: Date;
   readonly windowHours?: number;
   readonly seedDomains: readonly BenchmarkDomainRow[];
+  readonly runGroups: readonly BenchmarkRunGroupRow[];
   readonly runs: readonly QueryRunRow[];
   readonly citations: readonly QueryCitationRow[];
   readonly queriesById: ReadonlyMap<string, BenchmarkQueryRow>;
@@ -79,6 +92,8 @@ export type BenchmarkDailyRecapInput = {
   readonly leaderboardLimit?: number;
   readonly topicLimit?: number;
 };
+
+type ActiveProtocol = NonNullable<BenchmarkDailyRecap['protocol']>;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -94,6 +109,48 @@ function escHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+function textMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  key: string
+): string | null {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeDomain(value: string): string {
+  return value.trim().toLowerCase().replace(/^www\./, '');
+}
+
+function activeProtocolForRuns(
+  runGroups: readonly BenchmarkRunGroupRow[],
+  scopedRuns: readonly QueryRunRow[]
+): ActiveProtocol | null {
+  const scopedGroupIds = new Set(scopedRuns.map((run) => run.run_group_id));
+  const scheduledGroups = runGroups
+    .filter((group) => scopedGroupIds.has(group.id))
+    .filter((group) => textMetadata(group.metadata, 'trigger_source') === 'worker_cron')
+    .map((group) => ({
+      group,
+      scheduleVersion: textMetadata(group.metadata, 'schedule_version'),
+    }))
+    .filter(
+      (entry): entry is { group: BenchmarkRunGroupRow; scheduleVersion: string } =>
+        entry.scheduleVersion !== null
+    )
+    .sort((left, right) => {
+      const created = right.group.created_at.localeCompare(left.group.created_at);
+      return created !== 0 ? created : right.scheduleVersion.localeCompare(left.scheduleVersion);
+    });
+
+  const latest = scheduledGroups[0];
+  return latest
+    ? {
+        scheduleVersion: latest.scheduleVersion,
+        modelSetVersion: latest.group.model_set_version,
+      }
+    : null;
+}
+
 // ── Analyzer ─────────────────────────────────────────────────────────────────
 
 export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): BenchmarkDailyRecap {
@@ -103,17 +160,37 @@ export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): Bench
   const leaderboardLimit = input.leaderboardLimit ?? 10;
   const topicLimit = input.topicLimit ?? 5;
 
+  const seedDomainIds = new Set(input.seedDomains.map((domain) => domain.id));
+  const verticalScopedRuns = input.runs.filter((run) => seedDomainIds.has(run.domain_id));
+  const protocol = activeProtocolForRuns(input.runGroups, verticalScopedRuns);
+  const activeGroupIds = new Set(
+    protocol
+      ? input.runGroups
+          .filter(
+            (group) =>
+              textMetadata(group.metadata, 'trigger_source') === 'worker_cron' &&
+              textMetadata(group.metadata, 'schedule_version') === protocol.scheduleVersion &&
+              group.model_set_version === protocol.modelSetVersion
+          )
+          .map((group) => group.id)
+      : []
+  );
+  const runs = protocol
+    ? verticalScopedRuns.filter((run) => activeGroupIds.has(run.run_group_id))
+    : [];
+  const excludedNonActiveRuns = verticalScopedRuns.length - runs.length;
+
   const status: RecapRunStatusCounts = {
-    total: input.runs.length,
-    completed: input.runs.filter((r) => r.status === 'completed').length,
-    failed: input.runs.filter((r) => r.status === 'failed').length,
-    skipped: input.runs.filter((r) => r.status === 'skipped').length,
-    other: input.runs.filter(
+    total: runs.length,
+    completed: runs.filter((r) => r.status === 'completed').length,
+    failed: runs.filter((r) => r.status === 'failed').length,
+    skipped: runs.filter((r) => r.status === 'skipped').length,
+    other: runs.filter(
       (r) => r.status !== 'completed' && r.status !== 'failed' && r.status !== 'skipped'
     ).length,
   };
 
-  const completedRuns = input.runs.filter((r) => r.status === 'completed');
+  const completedRuns = runs.filter((r) => r.status === 'completed');
   const completedRunIds = new Set(completedRuns.map((r) => r.id));
   const completedCitations = input.citations.filter((c) => completedRunIds.has(c.query_run_id));
 
@@ -128,8 +205,32 @@ export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): Bench
   const citedCompletedRuns = completedRuns.filter(
     (r) => (citationsByRun.get(r.id) ?? []).length > 0
   );
-  const cohortVisibilityPct =
+  const answerCitationRate =
     completedRuns.length === 0 ? 0 : citedCompletedRuns.length / completedRuns.length;
+
+  const seedDomainById = new Map(
+    input.seedDomains.map((domain) => [domain.id, normalizeDomain(domain.canonical_domain)])
+  );
+  const testedDomainIds = new Set(completedRuns.map((run) => run.domain_id));
+  const visibleDomainIds = new Set<string>();
+  for (const run of completedRuns) {
+    const ownDomain = seedDomainById.get(run.domain_id);
+    if (!ownDomain) continue;
+    if (
+      (citationsByRun.get(run.id) ?? []).some(
+        (citation) =>
+          typeof citation.cited_domain === 'string' &&
+          normalizeDomain(citation.cited_domain) === ownDomain
+      )
+    ) {
+      visibleDomainIds.add(run.domain_id);
+    }
+  }
+  const cohortBusinessVisibility = {
+    visible: visibleDomainIds.size,
+    tested: testedDomainIds.size,
+    rate: testedDomainIds.size === 0 ? 0 : visibleDomainIds.size / testedDomainIds.size,
+  };
 
   // Platform breakdown.
   const platforms: Array<RecapPlatformBreakdown['platform']> = [
@@ -146,13 +247,13 @@ export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): Bench
         platform,
         completedRuns: runs.length,
         citedRuns: cited,
-        visibilityPct: runs.length === 0 ? 0 : cited / runs.length,
+        answerCitationRate: runs.length === 0 ? 0 : cited / runs.length,
       };
     })
     .filter((p) => p.completedRuns > 0);
 
   // Cited-domain leaderboard.
-  const seedSet = new Set(input.seedDomains.map((d) => d.canonical_domain));
+  const seedSet = new Set(input.seedDomains.map((d) => normalizeDomain(d.canonical_domain)));
   type Agg = { runIds: Set<string> };
   const citedAgg = new Map<string, Agg>();
   for (const c of completedCitations) {
@@ -166,14 +267,14 @@ export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): Bench
     .map(([domain, agg]) => ({
       domain,
       citedRuns: agg.runIds.size,
-      inCohortSeed: seedSet.has(domain),
-      newToday: !input.priorCitedDomains.has(domain),
+      inCohortSeed: seedSet.has(normalizeDomain(domain)),
+      newToday: !input.priorCitedDomains.has(normalizeDomain(domain)),
     }))
     .sort((a, b) => b.citedRuns - a.citedRuns)
     .slice(0, leaderboardLimit);
 
   const newlyCitedDomains = Array.from(citedAgg.keys())
-    .filter((d) => !input.priorCitedDomains.has(d))
+    .filter((d) => !input.priorCitedDomains.has(normalizeDomain(d)))
     .sort();
 
   // Topic breakdown.
@@ -197,12 +298,13 @@ export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): Bench
     .sort((a, b) => b.inclusionRate - a.inclusionRate || b.runs - a.runs)
     .slice(0, topicLimit);
 
-  const distinctDomainsRun = new Set(input.runs.map((r) => r.domain_id)).size;
+  const distinctDomainsRun = new Set(runs.map((r) => r.domain_id)).size;
 
   const headline = buildHeadline({
     completed: status.completed,
     failed: status.failed,
-    cohortVisibilityPct,
+    answerCitationRate,
+    cohortBusinessVisibility,
     newlyCitedCount: newlyCitedDomains.length,
   });
 
@@ -211,9 +313,12 @@ export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): Bench
     windowStart: windowStart.toISOString(),
     windowEnd: windowEnd.toISOString(),
     vertical: input.vertical,
+    protocol,
     runStatus: status,
+    excludedNonActiveRuns,
     totalCitations: completedCitations.length,
-    cohortVisibilityPct,
+    answerCitationRate,
+    cohortBusinessVisibility,
     distinctDomainsRun,
     distinctDomainsCited: citedAgg.size,
     platformBreakdown,
@@ -227,7 +332,8 @@ export function buildBenchmarkDailyRecap(input: BenchmarkDailyRecapInput): Bench
 function buildHeadline(args: {
   readonly completed: number;
   readonly failed: number;
-  readonly cohortVisibilityPct: number;
+  readonly answerCitationRate: number;
+  readonly cohortBusinessVisibility: BenchmarkDailyRecap['cohortBusinessVisibility'];
   readonly newlyCitedCount: number;
 }): string {
   if (args.completed === 0 && args.failed === 0) {
@@ -235,10 +341,13 @@ function buildHeadline(args: {
   }
   const parts: string[] = [];
   parts.push(`${args.completed} completed`);
-  if (args.failed > 0) parts.push(`${args.failed} failed`);
-  parts.push(`${pct(args.cohortVisibilityPct)} cohort visibility`);
+  if (args.failed > 0) parts.push(`${args.failed} active-protocol failed`);
+  parts.push(`${pct(args.answerCitationRate)} answers cited sources`);
+  parts.push(
+    `${args.cohortBusinessVisibility.visible}/${args.cohortBusinessVisibility.tested} cohort businesses visible`
+  );
   if (args.newlyCitedCount > 0) {
-    parts.push(`${args.newlyCitedCount} newly-cited domain${args.newlyCitedCount === 1 ? '' : 's'}`);
+    parts.push(`${args.newlyCitedCount} new source domain${args.newlyCitedCount === 1 ? '' : 's'}`);
   }
   return parts.join(' · ');
 }
@@ -247,8 +356,13 @@ function buildHeadline(args: {
 
 export function renderBenchmarkDailyRecapText(recap: BenchmarkDailyRecap): string {
   const lines: string[] = [];
+  const protocolLabel = recap.protocol
+    ? `${recap.protocol.scheduleVersion} / ${recap.protocol.modelSetVersion}`
+    : 'unavailable';
   lines.push(`GEO Pulse — Daily benchmark recap (${recap.vertical})`);
   lines.push(`Window: ${recap.windowStart} → ${recap.windowEnd}`);
+  lines.push('');
+  lines.push(`Active protocol: ${protocolLabel}`);
   lines.push('');
   lines.push(recap.headline);
   lines.push('');
@@ -258,6 +372,12 @@ export function renderBenchmarkDailyRecapText(recap: BenchmarkDailyRecap): strin
   lines.push(`  failed:    ${recap.runStatus.failed}`);
   lines.push(`  skipped:   ${recap.runStatus.skipped}`);
   lines.push(`  other:     ${recap.runStatus.other}`);
+  lines.push(`  excluded non-active: ${recap.excludedNonActiveRuns}`);
+  lines.push('');
+  lines.push(`Answer citation rate: ${pct(recap.answerCitationRate)}`);
+  lines.push(
+    `Cohort-business visibility: ${recap.cohortBusinessVisibility.visible}/${recap.cohortBusinessVisibility.tested} (${pct(recap.cohortBusinessVisibility.rate)})`
+  );
   lines.push('');
   lines.push(
     `Distinct domains run: ${recap.distinctDomainsRun} · cited: ${recap.distinctDomainsCited} · total citations: ${recap.totalCitations}`
@@ -265,9 +385,11 @@ export function renderBenchmarkDailyRecapText(recap: BenchmarkDailyRecap): strin
   lines.push('');
 
   if (recap.platformBreakdown.length > 0) {
-    lines.push('Visibility by platform:');
+    lines.push('Answer citation rate by platform:');
     for (const p of recap.platformBreakdown) {
-      lines.push(`  ${p.platform}: ${p.citedRuns}/${p.completedRuns} (${pct(p.visibilityPct)})`);
+      lines.push(
+        `  ${p.platform}: ${p.citedRuns}/${p.completedRuns} (${pct(p.answerCitationRate)})`
+      );
     }
     lines.push('');
   }
@@ -293,7 +415,9 @@ export function renderBenchmarkDailyRecapText(recap: BenchmarkDailyRecap): strin
   }
 
   if (recap.newlyCitedDomains.length > 0) {
-    lines.push(`Newly cited (first time in window): ${recap.newlyCitedDomains.join(', ')}`);
+    lines.push(
+      `New source domains (absent from the prior 30-day window under this protocol): ${recap.newlyCitedDomains.join(', ')}`
+    );
   }
 
   return lines.join('\n');
@@ -303,7 +427,7 @@ export function renderBenchmarkDailyRecapHtml(recap: BenchmarkDailyRecap): strin
   const platformRows = recap.platformBreakdown
     .map(
       (p) =>
-        `<tr><td style="padding:4px 8px;font-size:13px;">${escHtml(p.platform)}</td><td style="padding:4px 8px;font-size:13px;text-align:right;">${p.citedRuns}/${p.completedRuns}</td><td style="padding:4px 8px;font-size:13px;text-align:right;font-weight:700;">${pct(p.visibilityPct)}</td></tr>`
+        `<tr><td style="padding:4px 8px;font-size:13px;">${escHtml(p.platform)}</td><td style="padding:4px 8px;font-size:13px;text-align:right;">${p.citedRuns}/${p.completedRuns}</td><td style="padding:4px 8px;font-size:13px;text-align:right;font-weight:700;">${pct(p.answerCitationRate)}</td></tr>`
     )
     .join('');
 
@@ -330,7 +454,7 @@ export function renderBenchmarkDailyRecapHtml(recap: BenchmarkDailyRecap): strin
   const newlyCitedBlock =
     recap.newlyCitedDomains.length === 0
       ? ''
-      : `<tr><td style="padding:8px 32px 16px;"><h3 style="margin:0 0 8px;color:#565E74;font-size:14px;text-transform:uppercase;letter-spacing:1px;">Newly cited</h3><p style="font-size:13px;color:#2C3435;margin:0;">${escHtml(recap.newlyCitedDomains.join(', '))}</p></td></tr>`;
+      : `<tr><td style="padding:8px 32px 16px;"><h3 style="margin:0 0 8px;color:#565E74;font-size:14px;text-transform:uppercase;letter-spacing:1px;">New source domains</h3><p style="font-size:13px;color:#2C3435;margin:0;">Absent from the prior 30-day window under this protocol: ${escHtml(recap.newlyCitedDomains.join(', '))}</p></td></tr>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -345,6 +469,7 @@ export function renderBenchmarkDailyRecapHtml(recap: BenchmarkDailyRecap): strin
   </td></tr>
   <tr><td style="padding:24px 32px 8px;">
     <h2 style="margin:0;color:#2C3435;font-size:18px;">${escHtml(recap.headline)}</h2>
+    <p style="margin:4px 0 0;color:#586162;font-size:12px;">Active protocol: ${escHtml(recap.protocol ? `${recap.protocol.scheduleVersion} / ${recap.protocol.modelSetVersion}` : 'unavailable')}</p>
     <p style="margin:8px 0 0;color:#586162;font-size:12px;">Window: ${escHtml(recap.windowStart)} → ${escHtml(recap.windowEnd)}</p>
   </td></tr>
   <tr><td style="padding:8px 32px 16px;">
@@ -355,19 +480,21 @@ export function renderBenchmarkDailyRecapHtml(recap: BenchmarkDailyRecap): strin
       <strong>${recap.runStatus.skipped}</strong> skipped ·
       total <strong>${recap.runStatus.total}</strong>
     </p>
+    <p style="font-size:13px;color:#586162;margin:4px 0 0;">${recap.excludedNonActiveRuns} non-active run${recap.excludedNonActiveRuns === 1 ? '' : 's'} excluded</p>
     <p style="font-size:13px;color:#586162;margin:4px 0 0;">
       ${recap.distinctDomainsRun} distinct domains run · ${recap.distinctDomainsCited} cited · ${recap.totalCitations} citations
     </p>
+    <p style="font-size:13px;color:#2C3435;margin:8px 0 0;"><strong>Answer citation rate:</strong> ${pct(recap.answerCitationRate)}<br/><strong>Cohort-business visibility:</strong> ${recap.cohortBusinessVisibility.visible}/${recap.cohortBusinessVisibility.tested} (${pct(recap.cohortBusinessVisibility.rate)})</p>
   </td></tr>
   ${
     platformRows
       ? `<tr><td style="padding:8px 32px 16px;">
-    <h3 style="margin:0 0 8px;color:#565E74;font-size:14px;text-transform:uppercase;letter-spacing:1px;">Visibility by platform</h3>
+    <h3 style="margin:0 0 8px;color:#565E74;font-size:14px;text-transform:uppercase;letter-spacing:1px;">Answer citation rate by platform</h3>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #E5E9E9;border-radius:6px;border-collapse:collapse;">
       <tr style="background:#F1F4F4;">
         <th style="padding:6px 8px;text-align:left;font-size:12px;">Platform</th>
         <th style="padding:6px 8px;text-align:right;font-size:12px;">Cited/Completed</th>
-        <th style="padding:6px 8px;text-align:right;font-size:12px;">Visibility</th>
+        <th style="padding:6px 8px;text-align:right;font-size:12px;">Citation rate</th>
       </tr>
       ${platformRows}
     </table>
@@ -458,6 +585,70 @@ type DailyRecapSupabase = {
   from: (table: string) => any;
 };
 
+const RECAP_PAGE_SIZE = 1_000;
+const RECAP_IN_CHUNK_SIZE = 100;
+
+function chunks<T>(values: readonly T[], size = RECAP_IN_CHUNK_SIZE): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
+
+async function fetchPagedRows<T>(
+  label: string,
+  buildPage: (from: number, to: number) => PromiseLike<{
+    data: T[] | null;
+    error: { message: string } | null;
+  }>
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += RECAP_PAGE_SIZE) {
+    const { data, error } = await buildPage(from, from + RECAP_PAGE_SIZE - 1);
+    if (error) throw new Error(`${label} query failed: ${error.message}`);
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < RECAP_PAGE_SIZE) return rows;
+  }
+}
+
+async function fetchRunGroups(
+  supabase: DailyRecapSupabase,
+  groupIds: readonly string[]
+): Promise<BenchmarkRunGroupRow[]> {
+  const rows: BenchmarkRunGroupRow[] = [];
+  for (const groupIdChunk of chunks(Array.from(new Set(groupIds)))) {
+    const { data, error } = await supabase
+      .from('benchmark_run_groups')
+      .select(
+        'id,query_set_id,label,run_scope,model_set_version,status,notes,metadata,startup_workspace_id,agency_account_id,started_at,completed_at,created_at'
+      )
+      .in('id', groupIdChunk);
+    if (error) throw new Error(`benchmark_run_groups query failed: ${error.message}`);
+    rows.push(...((data ?? []) as BenchmarkRunGroupRow[]));
+  }
+  return rows;
+}
+
+async function fetchCitationsForRuns(
+  supabase: DailyRecapSupabase,
+  runIds: readonly string[]
+): Promise<QueryCitationRow[]> {
+  const rows: QueryCitationRow[] = [];
+  for (const runIdChunk of chunks(runIds)) {
+    const { data, error } = await supabase
+      .from('query_citations')
+      .select(
+        'id,query_run_id,cited_domain,cited_url,grounding_evidence_id,grounding_page_url,grounding_page_type,rank_position,citation_type,sentiment,confidence,metadata,created_at'
+      )
+      .in('query_run_id', runIdChunk);
+    if (error) throw new Error(`query_citations query failed: ${error.message}`);
+    rows.push(...((data ?? []) as QueryCitationRow[]));
+  }
+  return rows;
+}
+
 /**
  * Fetches the last `windowHours` of runs/citations + the seed cohort and
  * prior-window cited domains (so "newly cited" is meaningful), then runs the
@@ -469,6 +660,12 @@ export async function fetchAndBuildBenchmarkDailyRecap(args: {
   readonly now: Date;
   readonly windowHours?: number;
 }): Promise<BenchmarkDailyRecap> {
+  const requestedVertical = args.vertical.trim();
+  if (!requestedVertical) throw new Error('benchmark_recap_vertical_required');
+  const canonicalVertical = canonicalBenchmarkVertical(requestedVertical);
+  if (canonicalVertical === 'unknown') {
+    throw new Error(`benchmark_recap_vertical_unknown:${requestedVertical}`);
+  }
   const windowHours = args.windowHours ?? 24;
   const windowEnd = args.now;
   const windowStart = new Date(windowEnd.getTime() - windowHours * 60 * 60 * 1000);
@@ -480,37 +677,52 @@ export async function fetchAndBuildBenchmarkDailyRecap(args: {
     .select(
       'id,domain,canonical_domain,site_url,display_name,vertical,subvertical,geo_region,is_customer,is_competitor,metadata,created_at,updated_at'
     )
-    .eq('vertical', args.vertical);
+    .in('vertical', benchmarkVerticalAliases(canonicalVertical));
   if (domainErr) throw new Error(`benchmark_domains query failed: ${domainErr.message}`);
   const seedDomains = (domainData ?? []) as BenchmarkDomainRow[];
+  const seedDomainIds = seedDomains.map((domain) => domain.id);
 
   // Runs in the recap window.
-  const { data: runData, error: runErr } = await args.supabase
-    .from('query_runs')
-    .select(
-      'id,run_group_id,domain_id,query_id,model_id,auditor_model_id,status,response_text,response_metadata,error_message,executed_at,created_at'
-    )
-    .gte('created_at', windowStart.toISOString())
-    .lt('created_at', windowEnd.toISOString());
-  if (runErr) throw new Error(`query_runs query failed: ${runErr.message}`);
-  const runs = (runData ?? []) as QueryRunRow[];
+  const runs = seedDomainIds.length === 0
+    ? []
+    : await fetchPagedRows<QueryRunRow>('query_runs', (from, to) =>
+        args.supabase
+          .from('query_runs')
+          .select(
+            'id,run_group_id,domain_id,query_id,model_id,auditor_model_id,status,response_text,response_metadata,error_message,executed_at,created_at'
+          )
+          .in('domain_id', seedDomainIds)
+          .gte('created_at', windowStart.toISOString())
+          .lt('created_at', windowEnd.toISOString())
+          .range(from, to)
+      );
+  const runGroups = await fetchRunGroups(
+    args.supabase,
+    runs.map((run) => run.run_group_id)
+  );
+  const activeProtocol = activeProtocolForRuns(runGroups, runs);
+  const activeGroupIds = new Set(
+    activeProtocol
+      ? runGroups
+          .filter(
+            (group) =>
+              textMetadata(group.metadata, 'trigger_source') === 'worker_cron' &&
+              textMetadata(group.metadata, 'schedule_version') === activeProtocol.scheduleVersion &&
+              group.model_set_version === activeProtocol.modelSetVersion
+          )
+          .map((group) => group.id)
+      : []
+  );
+  const activeRuns = runs.filter((run) => activeGroupIds.has(run.run_group_id));
 
   // Citations for those runs.
-  const runIds = runs.map((r) => r.id);
-  let citations: QueryCitationRow[] = [];
-  if (runIds.length > 0) {
-    const { data: citationData, error: citationErr } = await args.supabase
-      .from('query_citations')
-      .select(
-        'id,query_run_id,cited_domain,cited_url,grounding_evidence_id,grounding_page_url,grounding_page_type,rank_position,citation_type,sentiment,confidence,metadata,created_at'
-      )
-      .in('query_run_id', runIds);
-    if (citationErr) throw new Error(`query_citations query failed: ${citationErr.message}`);
-    citations = (citationData ?? []) as QueryCitationRow[];
-  }
+  const citations = await fetchCitationsForRuns(
+    args.supabase,
+    activeRuns.map((run) => run.id)
+  );
 
   // Queries (for topic breakdown).
-  const queryIds = Array.from(new Set(runs.map((r) => r.query_id)));
+  const queryIds = Array.from(new Set(activeRuns.map((r) => r.query_id)));
   const queriesById = new Map<string, BenchmarkQueryRow>();
   if (queryIds.length > 0) {
     const { data: queryData, error: queryErr } = await args.supabase
@@ -521,25 +733,51 @@ export async function fetchAndBuildBenchmarkDailyRecap(args: {
     for (const q of (queryData ?? []) as BenchmarkQueryRow[]) queriesById.set(q.id, q);
   }
 
-  // Prior cited domains: anything cited in the 30 days before the current window.
-  // Used so "newly cited" surfaces a genuine first appearance, not noise.
+  // Prior cited domains are scoped to the same vertical and active protocol.
+  // This makes "new source" a real protocol-local first appearance rather than
+  // a comparison against unrelated verticals, providers, or retired schedules.
   const priorCitedDomains = new Set<string>();
-  const { data: priorCitations, error: priorErr } = await args.supabase
-    .from('query_citations')
-    .select('cited_domain,created_at')
-    .gte('created_at', priorWindowStart.toISOString())
-    .lt('created_at', windowStart.toISOString())
-    .not('cited_domain', 'is', null);
-  if (priorErr) throw new Error(`prior query_citations query failed: ${priorErr.message}`);
-  for (const row of (priorCitations ?? []) as Array<{ cited_domain: string | null }>) {
-    if (row.cited_domain) priorCitedDomains.add(row.cited_domain);
+  if (activeProtocol && seedDomainIds.length > 0) {
+    const priorRuns = await fetchPagedRows<QueryRunRow>('prior query_runs', (from, to) =>
+      args.supabase
+        .from('query_runs')
+        .select(
+          'id,run_group_id,domain_id,query_id,model_id,auditor_model_id,status,response_text,response_metadata,error_message,executed_at,created_at'
+        )
+        .in('domain_id', seedDomainIds)
+        .gte('created_at', priorWindowStart.toISOString())
+        .lt('created_at', windowStart.toISOString())
+        .range(from, to)
+    );
+    const priorRunGroups = await fetchRunGroups(
+      args.supabase,
+      priorRuns.map((run) => run.run_group_id)
+    );
+    const priorActiveGroupIds = new Set(
+      priorRunGroups
+        .filter(
+          (group) =>
+            textMetadata(group.metadata, 'trigger_source') === 'worker_cron' &&
+            textMetadata(group.metadata, 'schedule_version') === activeProtocol.scheduleVersion &&
+            group.model_set_version === activeProtocol.modelSetVersion
+        )
+        .map((group) => group.id)
+    );
+    const priorActiveRunIds = priorRuns
+      .filter((run) => run.status === 'completed' && priorActiveGroupIds.has(run.run_group_id))
+      .map((run) => run.id);
+    const priorCitations = await fetchCitationsForRuns(args.supabase, priorActiveRunIds);
+    for (const row of priorCitations) {
+      if (row.cited_domain) priorCitedDomains.add(normalizeDomain(row.cited_domain));
+    }
   }
 
   return buildBenchmarkDailyRecap({
-    vertical: args.vertical,
+    vertical: canonicalVertical,
     now: windowEnd,
     windowHours,
     seedDomains,
+    runGroups,
     runs,
     citations,
     queriesById,

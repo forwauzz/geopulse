@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildBenchmarkDailyRecap,
+  fetchAndBuildBenchmarkDailyRecap,
   renderBenchmarkDailyRecapHtml,
   renderBenchmarkDailyRecapText,
 } from './benchmark-daily-recap';
 import type {
   BenchmarkDomainRow,
   BenchmarkQueryRow,
+  BenchmarkRunGroupRow,
   QueryCitationRow,
   QueryRunRow,
 } from './benchmark-repository';
@@ -54,6 +56,29 @@ function run(
   };
 }
 
+function runGroup(
+  id: string,
+  scheduleVersion = 'schedule-v1',
+  modelSetVersion = 'single-model:gemini-2.5-flash-lite',
+  createdAt = NOW.toISOString()
+): BenchmarkRunGroupRow {
+  return {
+    id,
+    query_set_id: 'qs-1',
+    label: id,
+    run_scope: 'scheduled_internal_benchmark',
+    model_set_version: modelSetVersion,
+    status: 'completed',
+    notes: null,
+    metadata: { trigger_source: 'worker_cron', schedule_version: scheduleVersion },
+    startup_workspace_id: null,
+    agency_account_id: null,
+    started_at: createdAt,
+    completed_at: createdAt,
+    created_at: createdAt,
+  };
+}
+
 function citation(
   id: string,
   runId: string,
@@ -93,6 +118,7 @@ function query(id: string, topic: string): BenchmarkQueryRow {
 
 describe('buildBenchmarkDailyRecap', () => {
   const seeds = [domain('d1', 'winner.com'), domain('d2', 'midpack.com')];
+  const groups = [runGroup('rg-1')];
   const queriesById = new Map([
     ['q-seo', query('q-seo', 'seo')],
     ['q-ppc', query('q-ppc', 'paid_media')],
@@ -103,6 +129,7 @@ describe('buildBenchmarkDailyRecap', () => {
       vertical: 'marketing_firms',
       now: NOW,
       seedDomains: seeds,
+      runGroups: groups,
       runs: [],
       citations: [],
       queriesById,
@@ -110,7 +137,8 @@ describe('buildBenchmarkDailyRecap', () => {
     });
 
     expect(recap.runStatus.total).toBe(0);
-    expect(recap.cohortVisibilityPct).toBe(0);
+    expect(recap.answerCitationRate).toBe(0);
+    expect(recap.cohortBusinessVisibility).toEqual({ visible: 0, tested: 0, rate: 0 });
     expect(recap.headline).toMatch(/idle/i);
     expect(recap.platformBreakdown).toEqual([]);
     expect(recap.topCitedDomains).toEqual([]);
@@ -129,6 +157,7 @@ describe('buildBenchmarkDailyRecap', () => {
       vertical: 'marketing_firms',
       now: NOW,
       seedDomains: seeds,
+      runGroups: groups,
       runs,
       citations,
       queriesById,
@@ -143,9 +172,67 @@ describe('buildBenchmarkDailyRecap', () => {
       other: 0,
     });
     expect(recap.totalCitations).toBe(2);
-    expect(recap.cohortVisibilityPct).toBe(1); // 2/2 completed runs had citations
+    expect(recap.answerCitationRate).toBe(1); // 2/2 completed answers cited a source
+    expect(recap.cohortBusinessVisibility).toEqual({ visible: 1, tested: 1, rate: 1 });
     expect(recap.distinctDomainsRun).toBe(2);
     expect(recap.distinctDomainsCited).toBe(2);
+  });
+
+  it('excludes other verticals and superseded protocols from current health', () => {
+    const oldGroup = runGroup(
+      'rg-old',
+      'schedule-v0',
+      'single-model:gemini-2.5-flash-lite',
+      '2026-05-27T00:00:00Z'
+    );
+    const activeGroup = runGroup('rg-active', 'schedule-v1', 'single-model:sonar');
+    const otherGroup = runGroup('rg-other', 'schedule-v1', 'single-model:sonar');
+    const otherVertical = { ...domain('d-other', 'clinic.test'), vertical: 'healthcare' };
+    const activeRun = {
+      ...run('r-active', 'd1', 'q-seo', 'completed', 'sonar'),
+      run_group_id: activeGroup.id,
+    };
+    const oldFailure = {
+      ...run('r-old', 'd1', 'q-seo', 'failed'),
+      run_group_id: oldGroup.id,
+    };
+    const unrelatedFailure = {
+      ...run('r-other', otherVertical.id, 'q-seo', 'failed', 'sonar'),
+      run_group_id: otherGroup.id,
+    };
+
+    const recap = buildBenchmarkDailyRecap({
+      vertical: 'msp_it',
+      now: NOW,
+      seedDomains: seeds,
+      runGroups: [oldGroup, activeGroup, otherGroup],
+      runs: [activeRun, oldFailure, unrelatedFailure],
+      citations: [
+        citation('c-active', activeRun.id, 'winner.com'),
+        citation('c-other', unrelatedFailure.id, 'clinic.test'),
+      ],
+      queriesById,
+      priorCitedDomains: new Set(),
+    });
+
+    expect(recap.protocol).toEqual({
+      scheduleVersion: 'schedule-v1',
+      modelSetVersion: 'single-model:sonar',
+    });
+    expect(recap.runStatus).toEqual({ total: 1, completed: 1, failed: 0, skipped: 0, other: 0 });
+    expect(recap.excludedNonActiveRuns).toBe(1);
+    expect(recap.cohortBusinessVisibility).toEqual({ visible: 1, tested: 1, rate: 1 });
+    expect(recap.newlyCitedDomains).toEqual(['winner.com']);
+  });
+
+  it('fails closed before querying when the recap vertical is empty', async () => {
+    await expect(
+      fetchAndBuildBenchmarkDailyRecap({
+        supabase: { from: () => { throw new Error('must not query'); } },
+        vertical: '   ',
+        now: NOW,
+      })
+    ).rejects.toThrow('benchmark_recap_vertical_required');
   });
 
   it('ranks the most-cited domain first and flags seed membership', () => {
@@ -164,6 +251,7 @@ describe('buildBenchmarkDailyRecap', () => {
       vertical: 'marketing_firms',
       now: NOW,
       seedDomains: seeds,
+      runGroups: groups,
       runs,
       citations,
       queriesById,
@@ -193,6 +281,7 @@ describe('buildBenchmarkDailyRecap', () => {
       vertical: 'marketing_firms',
       now: NOW,
       seedDomains: seeds,
+      runGroups: groups,
       runs,
       citations,
       queriesById,
@@ -208,6 +297,7 @@ describe('buildBenchmarkDailyRecap', () => {
     const openai = recap.platformBreakdown.find((p) => p.platform === 'openai');
     expect(gemini?.completedRuns).toBe(2);
     expect(gemini?.citedRuns).toBe(1);
+    expect(gemini?.answerCitationRate).toBe(0.5);
     expect(openai?.completedRuns).toBe(1);
     expect(openai?.citedRuns).toBe(1);
   });
@@ -220,6 +310,7 @@ describe('buildBenchmarkDailyRecap', () => {
       vertical: 'marketing_firms',
       now: NOW,
       seedDomains: seeds,
+      runGroups: groups,
       runs,
       citations,
       queriesById,
@@ -227,9 +318,10 @@ describe('buildBenchmarkDailyRecap', () => {
     });
 
     expect(recap.headline).toContain('1 completed');
-    expect(recap.headline).toContain('1 failed');
-    expect(recap.headline).toContain('100.0%');
-    expect(recap.headline).toContain('1 newly-cited domain');
+    expect(recap.headline).toContain('1 active-protocol failed');
+    expect(recap.headline).toContain('100.0% answers cited sources');
+    expect(recap.headline).toContain('0/1 cohort businesses visible');
+    expect(recap.headline).toContain('1 new source domain');
   });
 
   it('text and html renderers produce output without throwing', () => {
@@ -239,6 +331,7 @@ describe('buildBenchmarkDailyRecap', () => {
       vertical: 'marketing_firms',
       now: NOW,
       seedDomains: seeds,
+      runGroups: groups,
       runs,
       citations,
       queriesById,
@@ -262,6 +355,7 @@ describe('buildBenchmarkDailyRecap', () => {
       vertical: 'marketing_firms',
       now: NOW,
       seedDomains: seeds,
+      runGroups: groups,
       runs,
       citations,
       queriesById,

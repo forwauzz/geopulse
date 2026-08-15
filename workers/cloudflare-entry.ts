@@ -765,7 +765,7 @@ export default {
       const recapHour = Number.parseInt(recapHourRaw ?? '19', 10);
       const recapHourGate = Number.isFinite(recapHour) ? recapHour : 19;
       const recapTimezone = envRecord['BENCHMARK_DAILY_RECAP_TIMEZONE'] ?? 'America/Toronto';
-      const recapVertical = envRecord['BENCHMARK_SCHEDULE_VERTICAL'] ?? 'marketing_firms';
+      const recapVertical = envRecord['BENCHMARK_DAILY_RECAP_VERTICAL']?.trim();
 
       let currentLocalHour: number;
       try {
@@ -782,7 +782,13 @@ export default {
         currentLocalHour = new Date().getUTCHours();
       }
 
-      if (recapTo && resendKey && resendFrom && currentLocalHour === recapHourGate) {
+      if (recapTo && resendKey && resendFrom && currentLocalHour === recapHourGate && !recapVertical) {
+        structuredError('benchmark_daily_recap_configuration_error', {
+          reason: 'BENCHMARK_DAILY_RECAP_VERTICAL is required',
+        });
+      }
+
+      if (recapTo && resendKey && resendFrom && currentLocalHour === recapHourGate && recapVertical) {
         try {
           const supabase = createClient(supaUrl, supaKey, {
             auth: { persistSession: false, autoRefreshToken: false },

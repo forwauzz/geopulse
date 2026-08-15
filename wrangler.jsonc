@@ -139,6 +139,9 @@
     // UTC offsets for America/Toronto. Leave _TO empty to disable. Requires
     // RESEND_API_KEY + RESEND_FROM_EMAIL to actually send.
     "BENCHMARK_DAILY_RECAP_TO": "uzzielt@techehealthservices.com",
+    // Recaps must name one canonical vertical. Never inherit the scheduler's
+    // optional empty vertical, because the scheduler can intentionally span cohorts.
+    "BENCHMARK_DAILY_RECAP_VERTICAL": "msp_it",
     "BENCHMARK_DAILY_RECAP_HOUR_LOCAL": "19",
     "BENCHMARK_DAILY_RECAP_TIMEZONE": "America/Toronto",
 
