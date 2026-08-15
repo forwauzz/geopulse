@@ -52,8 +52,8 @@ function parseArgs(argv: string[]): CliArgs {
     dryRun: flags.has('dry-run'),
     vertical:
       values.get('vertical')?.trim() ||
-      process.env['BENCHMARK_SCHEDULE_VERTICAL']?.trim() ||
-      'marketing_firms',
+      process.env['BENCHMARK_DAILY_RECAP_VERTICAL']?.trim() ||
+      'msp_it',
     to: values.get('to')?.trim() ?? null,
     windowHours: Number.isFinite(windowHours) && windowHours > 0 ? windowHours : 24,
   };

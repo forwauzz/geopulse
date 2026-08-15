@@ -69,8 +69,19 @@ export function canonicalBenchmarkVertical(value: string | null | undefined): Ca
 export function benchmarkVerticalAliases(value: string): readonly string[] {
   const canonical = canonicalBenchmarkVertical(value);
   const aliases: Record<CanonicalBenchmarkVertical, readonly string[]> = {
-    msp_it: ['msp_it', 'msp_it_services', 'MSP / IT services', 'managed_service_providers'],
-    marketing_agencies: ['marketing_agencies', 'Marketing / agencies', 'marketing_firms'],
+    msp_it: [
+      'msp_it',
+      'msp_it_services',
+      'MSP / IT services',
+      'managed_service_providers',
+      'managed_it_services',
+    ],
+    marketing_agencies: [
+      'marketing_agencies',
+      'marketing_agency',
+      'Marketing / agencies',
+      'marketing_firms',
+    ],
     law_firms: ['law_firms', 'Law firms', 'legal_services'],
     healthcare: ['healthcare', 'Healthcare', 'digital_health'],
     tech_startups: ['tech_startups', 'Tech startups', 'technology_startups'],

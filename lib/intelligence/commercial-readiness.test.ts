@@ -19,7 +19,11 @@ describe('commercial intelligence readiness', () => {
 
   it('expands canonical scheduler filters to legacy source labels', () => {
     expect(benchmarkVerticalAliases('msp_it')).toEqual([
-      'msp_it', 'msp_it_services', 'MSP / IT services', 'managed_service_providers',
+      'msp_it',
+      'msp_it_services',
+      'MSP / IT services',
+      'managed_service_providers',
+      'managed_it_services',
     ]);
   });
 
