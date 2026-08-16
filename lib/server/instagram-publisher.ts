@@ -15,6 +15,13 @@ export type InstagramPublishResult = {
 
 type FetchLike = typeof fetch;
 
+function isMediaProcessingRace(json: Record<string, unknown>): boolean {
+  const error = json['error'];
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return false;
+  const details = error as Record<string, unknown>;
+  return Number(details['code']) === 9007 && Number(details['error_subcode']) === 2207027;
+}
+
 function graphBase(value: string | undefined): string {
   return (value?.trim() || 'https://graph.instagram.com/v25.0').replace(/\/+$/, '');
 }
@@ -55,7 +62,8 @@ async function graphRequest(
       message: `Instagram API request failed (${response.status}): ${text}`,
       providerName: 'instagram',
       statusCode: response.status,
-      retryable: response.status === 429 || response.status >= 500,
+      retryable:
+        response.status === 429 || response.status >= 500 || isMediaProcessingRace(json),
     });
   }
   return json;
