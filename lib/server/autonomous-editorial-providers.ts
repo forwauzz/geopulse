@@ -106,8 +106,52 @@ function safeWriterProviderFailure(reason: string): string {
   return 'workers_ai_request_failed';
 }
 
+function stripSingleModelFence(text: string): string {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json|markdown|md|text)?\s*\r?\n([\s\S]*?)\r?\n```$/i);
+  return (fenced?.[1] ?? trimmed).trim();
+}
+
 function jsonFromModel(text: string): Record<string, unknown> | null {
-  try { const value = JSON.parse(text); return value && typeof value === 'object' ? value as Record<string, unknown> : null; } catch { return null; }
+  const normalized = stripSingleModelFence(text);
+  const firstBrace = normalized.indexOf('{');
+  const lastBrace = normalized.lastIndexOf('}');
+  const candidates = [
+    normalized,
+    ...(firstBrace >= 0 && lastBrace > firstBrace
+      ? [normalized.slice(firstBrace, lastBrace + 1)]
+      : []),
+  ];
+  for (const candidate of [...new Set(candidates)]) {
+    try {
+      const value: unknown = JSON.parse(candidate);
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return value as Record<string, unknown>;
+      }
+    } catch {
+      // A long Markdown body is allowed to use the deterministic envelope below instead.
+    }
+  }
+  return null;
+}
+
+function editorialDraftFromModel(text: string): { title: string; markdown: string } | null {
+  const json = jsonFromModel(text);
+  if (json) {
+    return {
+      title: typeof json.title === 'string' ? json.title.trim() : '',
+      markdown: typeof json.markdown === 'string' ? json.markdown.trim() : '',
+    };
+  }
+
+  const normalized = stripSingleModelFence(text);
+  const envelope = normalized.match(
+    /^<article_title>\s*([^\r\n]+?)\s*<\/article_title>\s*<article_markdown>\s*([\s\S]+?)\s*<\/article_markdown>$/i,
+  );
+  if (!envelope) return null;
+  const title = envelope[1]?.trim() ?? '';
+  const markdown = envelope[2]?.trim() ?? '';
+  return title && markdown ? { title, markdown } : null;
 }
 
 export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, fetchImpl: FetchLike = fetch): EditorialProvider {
@@ -119,7 +163,7 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
     async draft({ topic, existingTitles }) {
       const trustedSources = TRUSTED_EDITORIAL_SOURCES.map((source) => `${source.label}: ${source.url}`).join('\n');
       const result = await runWorkersAiPrompt({ ai: env.AI, model: env.EDITORIAL_WRITER_MODEL, maxTokens: 3500,
-        system: `You write practical, source-backed GEO-Pulse articles about generative engine optimization (GEO) and AI-search readiness. Use AI-search readiness as the primary term. If GEO appears, write "In this article, GEO means generative engine optimization" once; never use GEO to mean geographic or local-search optimization. Do not introduce AEO, AI SEO, or LLM optimization as aliases. Explain observable website evidence, crawler access, answer clarity, and repeatable measurement. Do not promise or imply rankings, citations, traffic, revenue, or improved visibility. Do not invent statistics, customer results, URLs, product capabilities, or sources. Use only the exact source URLs and exact internal routes supplied by the user. Output JSON only: {"title":"","markdown":""}. Include a direct answer near the start, 2+ concrete question-or-decision H2s, an actionable checklist, at least one supplied internal blog link, and a bounded free-scan CTA.`,
+        system: `You write practical, source-backed GEO-Pulse articles about generative engine optimization (GEO) and AI-search readiness. Use AI-search readiness as the primary term. If GEO appears, write "In this article, GEO means generative engine optimization" once; never use GEO to mean geographic or local-search optimization. Do not introduce AEO, AI SEO, or LLM optimization as aliases. Explain observable website evidence, crawler access, answer clarity, and repeatable measurement. Do not promise or imply rankings, citations, traffic, revenue, or improved visibility. Do not invent statistics, customer results, URLs, product capabilities, or sources. Use only the exact source URLs and exact internal routes supplied by the user. Output only this exact envelope, with a one-line title and ordinary unescaped Markdown between the tags: <article_title>Title</article_title><article_markdown>Markdown body</article_markdown>. Do not add a code fence, preface, or text outside the envelope. Include a direct answer near the start, 2+ concrete question-or-decision H2s, an actionable checklist, at least one supplied internal blog link, and a bounded free-scan CTA.`,
         prompt: `GEO-Pulse product context: GEO-Pulse measures public website readiness signals and helps a business decide what to verify, fix, and remeasure. It does not guarantee inclusion or citations in any AI answer.\nTopic: ${topic}\nApproved internal links (use only these): /blog/ai-search-readiness-audit, /blog/msp-service-claims-verifiable-evidence, /solutions/msps, /\nVerified official sources (cite only factual statements they directly support):\n${trustedSources}\nAvoid duplicate intent with: ${existingTitles.slice(0, 50).join(' | ')}` });
       if (!result.ok) {
         return {
@@ -129,17 +173,17 @@ export function createAutonomousEditorialProvider(env: AutonomousEditorialEnv, f
           providerFailure: safeWriterProviderFailure(result.reason),
         };
       }
-      const json = jsonFromModel(result.text);
-      const title = typeof json?.title === 'string' ? json.title.trim() : '';
-      const markdown = typeof json?.markdown === 'string'
-        ? normalizeGeneratedEditorialMarkdown(json.markdown.trim())
+      const parsed = editorialDraftFromModel(result.text);
+      const title = parsed?.title ?? '';
+      const markdown = parsed?.markdown
+        ? normalizeGeneratedEditorialMarkdown(parsed.markdown)
         : '';
       return {
         title,
         markdown,
         sources: TRUSTED_EDITORIAL_SOURCES.map((source) => source.url),
-        ...(!json
-          ? { providerFailure: 'writer_json_parse_failed' }
+        ...(!parsed
+          ? { providerFailure: 'writer_contract_parse_failed' }
           : !title || !markdown
             ? { providerFailure: 'writer_json_incomplete' }
             : {}),
