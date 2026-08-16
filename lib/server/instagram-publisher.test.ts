@@ -89,4 +89,92 @@ describe('Instagram publisher', () => {
     expect(createBody).toContain('link+in+bio');
     expect(createBody).not.toContain('utm_source%3Dinstagram');
   });
+
+  it('retries the bounded media-processing race returned by Instagram', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(response({ id: 'container-1' }))
+      .mockResolvedValueOnce(response({ status_code: 'FINISHED' }))
+      .mockResolvedValueOnce(
+        response(
+          {
+            error: {
+              message: 'Media ID is not available',
+              type: 'OAuthException',
+              code: 9007,
+              error_subcode: 2207027,
+              is_transient: false,
+              error_user_msg: 'The media is not ready to be published. Please wait a moment.',
+            },
+          },
+          400,
+        ),
+      );
+
+    await expect(
+      publishInstagramAsset({
+        account: account as never,
+        asset: asset as never,
+        mediaRows: [
+          {
+            id: 'media-row',
+            distribution_asset_id: 'asset-row',
+            media_kind: 'image',
+            storage_url: 'https://cdn.example.com/hero.jpg',
+            mime_type: 'image/jpeg',
+            alt_text: 'Clean GEO guide hero',
+            caption: null,
+            sort_order: 0,
+            provider_ready_status: 'ready',
+            metadata: {},
+            created_at: '2026-07-23T00:00:00Z',
+            updated_at: '2026-07-23T00:00:00Z',
+          },
+        ],
+        accessToken: 'token',
+        fetchImpl: fetchImpl as typeof fetch,
+        sleep: async () => undefined,
+      }),
+    ).rejects.toMatchObject({
+      providerName: 'instagram',
+      statusCode: 400,
+      retryable: true,
+    });
+  });
+
+  it('keeps unrelated Instagram 400 responses terminal', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(
+      response({ error: { message: 'Invalid image URL', code: 100, error_subcode: 33 } }, 400),
+    );
+
+    await expect(
+      publishInstagramAsset({
+        account: account as never,
+        asset: asset as never,
+        mediaRows: [
+          {
+            id: 'media-row',
+            distribution_asset_id: 'asset-row',
+            media_kind: 'image',
+            storage_url: 'https://cdn.example.com/hero.jpg',
+            mime_type: 'image/jpeg',
+            alt_text: 'Clean GEO guide hero',
+            caption: null,
+            sort_order: 0,
+            provider_ready_status: 'ready',
+            metadata: {},
+            created_at: '2026-07-23T00:00:00Z',
+            updated_at: '2026-07-23T00:00:00Z',
+          },
+        ],
+        accessToken: 'token',
+        fetchImpl: fetchImpl as typeof fetch,
+        sleep: async () => undefined,
+      }),
+    ).rejects.toMatchObject({
+      providerName: 'instagram',
+      statusCode: 400,
+      retryable: false,
+    });
+  });
 });
