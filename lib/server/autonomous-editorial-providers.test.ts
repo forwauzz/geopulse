@@ -54,7 +54,7 @@ Check [the readiness guide](/blog/ai-search-readiness-audit).`);
     });
   });
 
-  it('identifies writer JSON failures without retaining the model payload', async () => {
+  it('identifies writer contract failures without retaining the model payload', async () => {
     const run = vi.fn().mockResolvedValue({ response: 'not-json private model output' });
     const provider = createAutonomousEditorialProvider({ AI: { run } });
 
@@ -64,8 +64,41 @@ Check [the readiness guide](/blog/ai-search-readiness-audit).`);
       title: '',
       markdown: '',
       sources: TRUSTED_EDITORIAL_SOURCES.map((source) => source.url),
-      providerFailure: 'writer_json_parse_failed',
+      providerFailure: 'writer_contract_parse_failed',
     });
+  });
+
+  it('accepts a fenced JSON response without weakening the article checks', async () => {
+    const run = vi.fn().mockResolvedValue({ response: `\`\`\`json
+{"title":"What evidence should an MSP publish?","markdown":"# Direct answer\\n\\nPublish evidence buyers can verify.\\n\\n## What should a buyer check?\\n\\nUse [the MSP guide](/blog/msp-service-claims-verifiable-evidence)."}
+\`\`\`` });
+    const provider = createAutonomousEditorialProvider({ AI: { run } });
+
+    const draft = await provider.draft({ topic: 'msp evidence', existingTitles: [] });
+
+    expect(draft.title).toBe('What evidence should an MSP publish?');
+    expect(draft.markdown).toContain('Publish evidence buyers can verify.');
+    expect(draft.providerFailure).toBeUndefined();
+  });
+
+  it('accepts the bounded long-form envelope with unescaped Markdown', async () => {
+    const run = vi.fn().mockResolvedValue({ response: `<article_title>What should an MSP verify before making a claim?</article_title>
+<article_markdown># Direct answer
+
+Verify that each service claim has public evidence.
+
+## What should a buyer check?
+
+Read [the MSP evidence guide](/blog/msp-service-claims-verifiable-evidence).
+</article_markdown>` });
+    const provider = createAutonomousEditorialProvider({ AI: { run } });
+
+    const draft = await provider.draft({ topic: 'msp evidence', existingTitles: [] });
+
+    expect(draft.title).toBe('What should an MSP verify before making a claim?');
+    expect(draft.providerFailure).toBeUndefined();
+    expect(draft.markdown).toContain('Verify that each service claim has public evidence.');
+    expect(draft.sources).toEqual(TRUSTED_EDITORIAL_SOURCES.map((source) => source.url));
   });
 });
 
