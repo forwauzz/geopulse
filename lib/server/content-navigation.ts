@@ -77,7 +77,12 @@ export function resolveTopicRoute(
   }
   const direct = groups.find((group) => group.topicKey === decoded);
   if (direct) return { group: direct, redirectRequired: false };
-  const legacyMatches = groups.filter((group) => group.sourceTopics.includes(decoded));
+  const normalizedLegacy = normalizeTopicSlug(decoded);
+  const legacyMatches = groups.filter((group) =>
+    group.sourceTopics.some(
+      (sourceTopic) => sourceTopic === decoded || normalizeTopicSlug(sourceTopic) === normalizedLegacy,
+    )
+  );
   if (legacyMatches.length !== 1) return null;
   return { group: legacyMatches[0]!, redirectRequired: true };
 }
