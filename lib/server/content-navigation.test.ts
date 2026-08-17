@@ -107,6 +107,14 @@ describe('content navigation helpers', () => {
       group: { topicKey: 'ai-search-readiness' },
       redirectRequired: true,
     });
+    expect(resolveTopicRoute(groups, 'AI%20Search%20Readiness')).toMatchObject({
+      group: { topicKey: 'ai-search-readiness' },
+      redirectRequired: true,
+    });
+    expect(resolveTopicRoute(groups, 'AI%20SEARCH%20READINESS%3F')).toMatchObject({
+      group: { topicKey: 'ai-search-readiness' },
+      redirectRequired: true,
+    });
     expect(resolveTopicRoute(groups, '%E0%A4%A')).toBeNull();
     expect(resolveTopicRoute(groups, 'unknown legacy topic')).toBeNull();
   });
