@@ -126,6 +126,20 @@ export async function recordDistributionPublicationProof(args: {
     .eq('id', args.asset.id);
   if (assetError) throw assetError;
 
+  // Approved manual Instagram assets publish from their distribution record and do not have a
+  // canonical content_items row. The provider-backed job is their durable publication proof;
+  // avoid attempting a delivery FK write for the synthetic item used by the shared dispatcher.
+  const assetOnlyProof = args.account.provider_name === 'instagram'
+    && args.asset.source_type === 'manual'
+    && args.asset.provider_family === 'instagram'
+    && Boolean(args.asset.approved_at);
+  if (!args.asset.content_item_id && assetOnlyProof) {
+    return { contentItemsPublished: 0 };
+  }
+  if (!args.asset.content_item_id) {
+    throw new Error('Canonical content item is required for publication proof.');
+  }
+
   await publishContentItem({
     db: args.db,
     item: args.contentItem,

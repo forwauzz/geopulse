@@ -2,6 +2,88 @@ import { describe, expect, it } from 'vitest';
 import { recordDistributionPublicationProof } from './distribution-publication-proof';
 
 describe('recordDistributionPublicationProof', () => {
+  it('records asset-only proof for an approved manual Instagram asset', async () => {
+    const updates: Array<{ table: string; payload: Record<string, unknown> }> = [];
+    const db = {
+      from(table: string) {
+        if (table !== 'distribution_assets') {
+          throw new Error(`Unexpected proof table: ${table}`);
+        }
+        let payload: Record<string, unknown> = {};
+        const query: any = {
+          update(next: Record<string, unknown>) {
+            payload = next;
+            return query;
+          },
+          eq() {
+            updates.push({ table, payload });
+            return Promise.resolve({ error: null });
+          },
+        };
+        return query;
+      },
+    };
+
+    const result = await recordDistributionPublicationProof({
+      db,
+      account: { provider_name: 'instagram' } as never,
+      asset: {
+        id: 'manual-asset-1',
+        content_item_id: null,
+        source_type: 'manual',
+        provider_family: 'instagram',
+        approved_at: '2026-08-16T12:00:00.000Z',
+      } as never,
+      job: { id: 'job-1' } as never,
+      contentItem: {
+        id: 'manual-asset-1',
+        content_id: 'manual-asset-1',
+        content_type: 'social_post',
+        metadata: {},
+      },
+      destinationPostId: 'ig-post-1',
+      destinationUrl: 'https://instagram.com/p/ig-post-1',
+    });
+
+    expect(result).toEqual({ contentItemsPublished: 0 });
+    expect(updates).toEqual([
+      { table: 'distribution_assets', payload: { status: 'published' } },
+    ]);
+  });
+
+  it('fails closed when a non-manual asset is missing its canonical content item', async () => {
+    const db = {
+      from() {
+        const query: any = {
+          update: () => query,
+          eq: () => Promise.resolve({ error: null }),
+        };
+        return query;
+      },
+    };
+
+    await expect(recordDistributionPublicationProof({
+      db,
+      account: { provider_name: 'instagram' } as never,
+      asset: {
+        id: 'invalid-asset-1',
+        content_item_id: null,
+        source_type: 'content_item',
+        provider_family: 'instagram',
+        approved_at: '2026-08-16T12:00:00.000Z',
+      } as never,
+      job: { id: 'job-invalid' } as never,
+      contentItem: {
+        id: 'invalid-asset-1',
+        content_id: 'invalid-asset-1',
+        content_type: 'social_post',
+        metadata: {},
+      },
+      destinationPostId: 'ig-post-invalid',
+      destinationUrl: 'https://instagram.com/p/ig-post-invalid',
+    })).rejects.toThrow('Canonical content item is required for publication proof.');
+  });
+
   it('marks the provider asset, canonical item, and SEO social derivative as published', async () => {
     const updates: Array<{ table: string; payload: Record<string, unknown>; filters: unknown[] }> = [];
     const inserts: Array<{ table: string; payload: Record<string, unknown> }> = [];
