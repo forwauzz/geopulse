@@ -10,7 +10,11 @@ import { sendWeeklyReport } from '../services/marketing-attribution/weekly-repor
 import { createClient } from '@supabase/supabase-js';
 import { structuredError, structuredLog } from '../lib/server/structured-log';
 import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
-import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
+import {
+  runScheduledBenchmarkSweep,
+  toBenchmarkChallengerScheduleEnv,
+  type ChallengerScheduleEnvLike,
+} from '../lib/server/benchmark-schedule';
 import { runScheduledDistributionDispatch } from '../lib/server/distribution-job-schedule';
 import { runScheduledStartupExecutionDispatch } from '../lib/server/startup-execution-dispatch-schedule';
 import { runScheduledStartupSlackAutoPost } from '../lib/server/startup-slack-schedule';
@@ -750,6 +754,43 @@ export default {
         }
       } catch (err) {
         structuredError('benchmark_schedule_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // One bounded challenger lane may reuse the same scheduler without changing the
+      // primary MSP protocol. It must name explicit domains and keeps its own run key,
+      // caps, query set and cadence window. Missing domains disable it fail-closed.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('benchmark_challenger');
+        const challengerResult = await runScheduledBenchmarkSweep({
+          supabase,
+          env: toBenchmarkChallengerScheduleEnv(env as unknown as ChallengerScheduleEnvLike),
+          adapter: createBenchmarkExecutionAdapter(env),
+          triggerSource: 'worker_cron',
+        });
+        if (challengerResult.launchedRuns > 0) {
+          const qualityRefresh = await supabase.rpc('refresh_recent_benchmark_intelligence_quality', {
+            p_recent_hours: 72,
+          });
+          if (qualityRefresh.error) {
+            structuredError('intelligence_quality_after_challenger_error', {
+              error: qualityRefresh.error.message,
+            });
+          }
+          const learningResult = await runIntelligenceLearningLoop(supabase);
+          structuredLog('intelligence_learning_after_challenger', {
+            benchmark_launched_runs: challengerResult.launchedRuns,
+            benchmark_failed_runs: challengerResult.failedRuns,
+            benchmark_quality_refresh: qualityRefresh.error ? 'failed_closed' : qualityRefresh.data,
+            ...learningResult,
+          }, learningResult.criticalQuarantined > 0 ? 'warning' : 'info');
+        }
+      } catch (err) {
+        structuredError('benchmark_challenger_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }

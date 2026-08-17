@@ -5,10 +5,46 @@ import {
   executeBenchmarkScheduleSweep,
   parseBenchmarkScheduleConfig,
   previewBenchmarkScheduleSweep,
+  toBenchmarkChallengerScheduleEnv,
   toBenchmarkScheduleWindowDate,
 } from './benchmark-schedule';
 
 describe('benchmark schedule helpers', () => {
+  it('maps one explicit challenger lane without changing the primary config', () => {
+    expect(parseBenchmarkScheduleConfig(toBenchmarkChallengerScheduleEnv({
+      BENCHMARK_CHALLENGER_ENABLED: 'true',
+      BENCHMARK_CHALLENGER_QUERY_SET_ID: 'clinic-set',
+      BENCHMARK_CHALLENGER_MODEL_ID: 'sonar',
+      BENCHMARK_CHALLENGER_RUN_MODES: 'blind_discovery',
+      BENCHMARK_CHALLENGER_VERTICAL: 'healthcare',
+      BENCHMARK_CHALLENGER_DOMAINS: 'techehealthservices.com',
+      BENCHMARK_CHALLENGER_DOMAIN_LIMIT: '1',
+      BENCHMARK_CHALLENGER_MAX_RUNS: '1',
+      BENCHMARK_CHALLENGER_WINDOW_HOURS: '24',
+      BENCHMARK_CHALLENGER_VERSION: 'teche-clinic-v1',
+      BENCHMARK_CHALLENGER_INCLUDE_USER_PROMPTS: 'false',
+    }))).toMatchObject({
+      querySetId: 'clinic-set',
+      modelId: 'sonar',
+      runModes: ['blind_discovery'],
+      vertical: 'healthcare',
+      canonicalDomains: ['techehealthservices.com'],
+      domainLimit: 1,
+      maxRuns: 1,
+      windowHours: 24,
+      scheduleVersion: 'teche-clinic-v1',
+      includeUserPrompts: false,
+    });
+  });
+
+  it('fails closed when a challenger is enabled without explicit domains', () => {
+    expect(parseBenchmarkScheduleConfig(toBenchmarkChallengerScheduleEnv({
+      BENCHMARK_CHALLENGER_ENABLED: 'true',
+      BENCHMARK_CHALLENGER_QUERY_SET_ID: 'clinic-set',
+      BENCHMARK_CHALLENGER_MODEL_ID: 'sonar',
+    }))).toBeNull();
+  });
+
   it('parses the scheduled benchmark config from env', () => {
     const config = parseBenchmarkScheduleConfig({
       BENCHMARK_SCHEDULE_ENABLED: 'true',
@@ -41,6 +77,7 @@ describe('benchmark schedule helpers', () => {
       windowHours: 12,
       scheduleVersion: 'daily-v1',
       queryExecutionDelayMs: 3500,
+      includeUserPrompts: true,
     });
   });
 
