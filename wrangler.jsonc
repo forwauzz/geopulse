@@ -143,9 +143,10 @@
     "BENCHMARK_CHALLENGER_DOMAIN_LIMIT": "1",
     "BENCHMARK_CHALLENGER_MAX_RUNS": "1",
     "BENCHMARK_CHALLENGER_MAX_FAILURES": "1",
+    "BENCHMARK_CHALLENGER_QUERY_DELAY_MS": "3500",
     "BENCHMARK_CHALLENGER_INCLUDE_USER_PROMPTS": "false",
     "BENCHMARK_CHALLENGER_WINDOW_HOURS": "24",
-    "BENCHMARK_CHALLENGER_VERSION": "teche-clinic-live-v1",
+    "BENCHMARK_CHALLENGER_VERSION": "teche-clinic-live-v2",
 
     // Daily benchmark recap email.
     // Fires once a day at HOUR_LOCAL in the configured TIMEZONE (DST-aware via
