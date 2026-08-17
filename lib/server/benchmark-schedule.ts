@@ -12,7 +12,7 @@ import {
 import { runBenchmarkGroupSkeleton } from './benchmark-runner';
 import { structuredError, structuredLog } from './structured-log';
 
-type ScheduleEnvLike = {
+export type ScheduleEnvLike = {
   readonly BENCHMARK_SCHEDULE_ENABLED?: string;
   readonly BENCHMARK_SCHEDULE_QUERY_SET_ID?: string;
   readonly BENCHMARK_SCHEDULE_MODEL_ID?: string;
@@ -26,7 +26,52 @@ type ScheduleEnvLike = {
   readonly BENCHMARK_SCHEDULE_WINDOW_HOURS?: string;
   readonly BENCHMARK_SCHEDULE_VERSION?: string;
   readonly BENCHMARK_SCHEDULE_QUERY_DELAY_MS?: string;
+  readonly BENCHMARK_SCHEDULE_INCLUDE_USER_PROMPTS?: string;
 };
+
+export type ChallengerScheduleEnvLike = {
+  readonly BENCHMARK_CHALLENGER_ENABLED?: string;
+  readonly BENCHMARK_CHALLENGER_QUERY_SET_ID?: string;
+  readonly BENCHMARK_CHALLENGER_MODEL_ID?: string;
+  readonly BENCHMARK_CHALLENGER_RUN_MODES?: string;
+  readonly BENCHMARK_CHALLENGER_VERTICAL?: string;
+  readonly BENCHMARK_CHALLENGER_SEED_PRIORITIES?: string;
+  readonly BENCHMARK_CHALLENGER_DOMAINS?: string;
+  readonly BENCHMARK_CHALLENGER_DOMAIN_LIMIT?: string;
+  readonly BENCHMARK_CHALLENGER_MAX_RUNS?: string;
+  readonly BENCHMARK_CHALLENGER_MAX_FAILURES?: string;
+  readonly BENCHMARK_CHALLENGER_WINDOW_HOURS?: string;
+  readonly BENCHMARK_CHALLENGER_VERSION?: string;
+  readonly BENCHMARK_CHALLENGER_QUERY_DELAY_MS?: string;
+  readonly BENCHMARK_CHALLENGER_INCLUDE_USER_PROMPTS?: string;
+};
+
+/** Maps exactly one explicit challenger lane onto the existing scheduler contract. */
+export function toBenchmarkChallengerScheduleEnv(
+  env: ChallengerScheduleEnvLike | null | undefined,
+): ScheduleEnvLike {
+  const domains = normalizeText(env?.BENCHMARK_CHALLENGER_DOMAINS);
+  const enabled = normalizeText(env?.BENCHMARK_CHALLENGER_ENABLED)?.toLowerCase() === 'true';
+  // A challenger must name its domains. Failing closed prevents an accidental second
+  // all-domain sweep from competing with the primary vertical or exceeding caps.
+  const safeEnabled = enabled && Boolean(domains);
+  return {
+    BENCHMARK_SCHEDULE_ENABLED: safeEnabled ? 'true' : 'false',
+    BENCHMARK_SCHEDULE_QUERY_SET_ID: env?.BENCHMARK_CHALLENGER_QUERY_SET_ID,
+    BENCHMARK_SCHEDULE_MODEL_ID: env?.BENCHMARK_CHALLENGER_MODEL_ID,
+    BENCHMARK_SCHEDULE_RUN_MODES: env?.BENCHMARK_CHALLENGER_RUN_MODES,
+    BENCHMARK_SCHEDULE_VERTICAL: env?.BENCHMARK_CHALLENGER_VERTICAL,
+    BENCHMARK_SCHEDULE_SEED_PRIORITIES: env?.BENCHMARK_CHALLENGER_SEED_PRIORITIES,
+    BENCHMARK_SCHEDULE_DOMAINS: domains ?? undefined,
+    BENCHMARK_SCHEDULE_DOMAIN_LIMIT: env?.BENCHMARK_CHALLENGER_DOMAIN_LIMIT,
+    BENCHMARK_SCHEDULE_MAX_RUNS: env?.BENCHMARK_CHALLENGER_MAX_RUNS,
+    BENCHMARK_SCHEDULE_MAX_FAILURES: env?.BENCHMARK_CHALLENGER_MAX_FAILURES,
+    BENCHMARK_SCHEDULE_WINDOW_HOURS: env?.BENCHMARK_CHALLENGER_WINDOW_HOURS,
+    BENCHMARK_SCHEDULE_VERSION: env?.BENCHMARK_CHALLENGER_VERSION,
+    BENCHMARK_SCHEDULE_QUERY_DELAY_MS: env?.BENCHMARK_CHALLENGER_QUERY_DELAY_MS,
+    BENCHMARK_SCHEDULE_INCLUDE_USER_PROMPTS: env?.BENCHMARK_CHALLENGER_INCLUDE_USER_PROMPTS,
+  };
+}
 
 type ScheduledRunConfig = {
   readonly enabled: true;
@@ -45,6 +90,7 @@ type ScheduledRunConfig = {
   readonly windowHours: number;
   readonly scheduleVersion: string;
   readonly queryExecutionDelayMs?: number;
+  readonly includeUserPrompts?: boolean;
 };
 
 type BenchmarkScheduleRepo = ReturnType<typeof createBenchmarkRepository>;
@@ -208,6 +254,8 @@ export function parseBenchmarkScheduleConfig(
     queryExecutionDelayMs: parseNonNegativeInt(
       normalizeText(env?.BENCHMARK_SCHEDULE_QUERY_DELAY_MS)
     ),
+    includeUserPrompts:
+      normalizeText(env?.BENCHMARK_SCHEDULE_INCLUDE_USER_PROMPTS)?.toLowerCase() !== 'false',
   };
 }
 
@@ -377,7 +425,7 @@ export async function executeBenchmarkScheduleSweep(args: {
       }
     }
     const domainQuerySets = [primarySet];
-    if (args.repo.getQuerySetByName) {
+    if (args.config.includeUserPrompts !== false && args.repo.getQuerySetByName) {
       try {
         const userSet = await args.repo.getQuerySetByName(
           `user-prompts-${domain.canonical_domain.toLowerCase().replace(/^www\./, '')}`

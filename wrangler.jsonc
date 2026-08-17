@@ -132,6 +132,20 @@
     "BENCHMARK_SCHEDULE_QUERY_DELAY_MS": "3500",
     "BENCHMARK_SCHEDULE_WINDOW_HOURS": "12",
     "BENCHMARK_SCHEDULE_VERSION": "msp-perplexity-v3",
+    // One bounded challenger vertical. Explicit-domain and one-run caps keep MSP primary;
+    // the query set itself remains internal-only and aggregate/public claims fail closed.
+    "BENCHMARK_CHALLENGER_ENABLED": "true",
+    "BENCHMARK_CHALLENGER_QUERY_SET_ID": "89500ed0-6cb4-4ced-9a6f-683330c98302",
+    "BENCHMARK_CHALLENGER_MODEL_ID": "sonar",
+    "BENCHMARK_CHALLENGER_RUN_MODES": "blind_discovery",
+    "BENCHMARK_CHALLENGER_VERTICAL": "healthcare",
+    "BENCHMARK_CHALLENGER_DOMAINS": "techehealthservices.com",
+    "BENCHMARK_CHALLENGER_DOMAIN_LIMIT": "1",
+    "BENCHMARK_CHALLENGER_MAX_RUNS": "1",
+    "BENCHMARK_CHALLENGER_MAX_FAILURES": "1",
+    "BENCHMARK_CHALLENGER_INCLUDE_USER_PROMPTS": "false",
+    "BENCHMARK_CHALLENGER_WINDOW_HOURS": "24",
+    "BENCHMARK_CHALLENGER_VERSION": "teche-clinic-live-v1",
 
     // Daily benchmark recap email.
     // Fires once a day at HOUR_LOCAL in the configured TIMEZONE (DST-aware via
