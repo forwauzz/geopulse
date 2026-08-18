@@ -8,11 +8,14 @@ import {
   assignedSocialCandidate,
   filterCampaignAssignedSocial,
   instagramScheduleSlot,
+  latestSocialSequenceAnchor,
   orderAutonomousCandidates,
   preferredAccount,
   remainingDailyAssetCapacity,
   reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
+  socialSequenceDimensions,
+  socialSequenceMetadata,
 } from './social-proof-agent';
 
 function scan(overrides: Record<string, unknown> = {}) {
@@ -256,6 +259,124 @@ describe('Social Proof Agent safeguards', () => {
     ]);
     expect(new Set(ordered.map((item) => item.mediaUrl)).size).toBe(ordered.length);
     expect(ordered.some((item) => item.key === 'educational-one')).toBe(false);
+  });
+
+  it('continues the editorial flow from the previous autonomous run', () => {
+    const candidate = (
+      key: string,
+      kind: 'educational' | 'industry_humor' | 'carousel',
+      assetType: 'single_image_post' | 'carousel_post',
+    ) => ({
+      key,
+      kind,
+      title: key,
+      caption: key,
+      ctaUrl: 'https://getgeopulse.com',
+      contentItemId: null,
+      mediaUrl: null,
+      mediaMimeType: null,
+      mediaAlt: null,
+      assetType,
+      evidence: {},
+      safeForAutonomousPublish: true,
+    });
+    const previous = {
+      narrativeKind: 'carousel' as const,
+      assetType: 'carousel_post' as const,
+      visualFamily: 'carousel' as const,
+    };
+
+    const ordered = orderAutonomousCandidates([
+      candidate('carousel-next', 'carousel', 'carousel_post'),
+      candidate('education-next', 'educational', 'single_image_post'),
+      candidate('humor-next', 'industry_humor', 'single_image_post'),
+    ], new Map(), previous);
+
+    expect(ordered[0]).toMatchObject({
+      key: 'humor-next',
+      kind: 'industry_humor',
+      assetType: 'single_image_post',
+    });
+    expect(ordered[1]?.kind).not.toBe(ordered[0]?.kind);
+  });
+
+  it('recovers the last Jordan sequence anchor and ignores failed drafts', () => {
+    const asset = (
+      createdAt: string,
+      kind: 'carousel' | 'industry_humor',
+      status: 'approved' | 'failed',
+      assetType: 'carousel_post' | 'single_image_post',
+    ) => ({
+      id: createdAt,
+      asset_id: createdAt,
+      content_item_id: null,
+      source_type: 'manual' as const,
+      source_key: createdAt,
+      asset_type: assetType,
+      provider_family: 'instagram' as const,
+      title: createdAt,
+      body_markdown: null,
+      body_plaintext: null,
+      caption_text: null,
+      status,
+      cta_url: null,
+      metadata: {
+        created_by_agent: 'jordan',
+        proof_kind: kind,
+        content_sequence: { visual_family: kind === 'carousel' ? 'carousel' : 'humor' },
+      },
+      created_by_user_id: null,
+      approved_by_user_id: null,
+      approved_at: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+
+    expect(latestSocialSequenceAnchor([
+      asset('2026-08-18T02:00:00.000Z', 'industry_humor', 'failed', 'single_image_post'),
+      asset('2026-08-18T01:00:00.000Z', 'carousel', 'approved', 'carousel_post'),
+    ])).toEqual({
+      narrativeKind: 'carousel',
+      assetType: 'carousel_post',
+      visualFamily: 'carousel',
+    });
+  });
+
+  it('records auditable narrative, format, and visual sequence dimensions', () => {
+    const candidate = {
+      key: 'proof-reel',
+      kind: 'proof_demo',
+      title: 'Proof Reel',
+      caption: 'Proof Reel',
+      ctaUrl: 'https://getgeopulse.com',
+      contentItemId: null,
+      mediaUrl: null,
+      mediaMimeType: null,
+      mediaAlt: null,
+      assetType: 'short_video_post',
+      evidence: {},
+      safeForAutonomousPublish: false,
+    } as const;
+    expect(socialSequenceDimensions(candidate)).toEqual({
+      version: 'social-flow-v1',
+      narrativeKind: 'proof_demo',
+      assetType: 'short_video_post',
+      visualFamily: 'proof',
+    });
+    expect(socialSequenceMetadata(candidate, {
+      narrativeKind: 'carousel',
+      assetType: 'carousel_post',
+      visualFamily: 'carousel',
+    }, 2)).toEqual({
+      version: 'social-flow-v1',
+      narrative_kind: 'proof_demo',
+      asset_format: 'short_video_post',
+      visual_family: 'proof',
+      previous_narrative_kind: 'carousel',
+      previous_asset_format: 'carousel_post',
+      previous_visual_family: 'carousel',
+      run_position: 2,
+    });
   });
 
   it('schedules Toronto posts on an hourly dispatch boundary without bunching missed slots', () => {
