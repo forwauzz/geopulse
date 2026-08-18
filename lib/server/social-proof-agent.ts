@@ -202,7 +202,7 @@ export function remainingDailyAssetCapacity(
   return Math.max(0, dailyCap - createdToday);
 }
 
-function assignedSocialCandidate(
+export function assignedSocialCandidate(
   item: AssignedSocialRow,
   appUrl: string,
 ): SocialProofCandidate | null {
@@ -225,7 +225,7 @@ function assignedSocialCandidate(
     'Measure it at getgeopulse.com.',
   ].join('\n').slice(0, 1_900);
   return {
-    key: `assigned-${item.content_id}`,
+    key: `assigned-carousel-v2-${item.content_id}`,
     kind: 'carousel',
     title: item.title,
     caption,
@@ -250,6 +250,12 @@ function assignedSocialCandidate(
       campaign_key: metadata['campaign_key'] ?? null,
       campaign_role: metadata['campaign_role'] ?? null,
       campaign_vertical: metadata['campaign_vertical'] ?? null,
+      checklist_items: [
+        'State the buyer question in plain language',
+        'Put the direct answer near the top',
+        'Support the claim with visible evidence',
+        'Route the reader to one next action',
+      ],
     },
     safeForAutonomousPublish: true,
   };
@@ -999,6 +1005,8 @@ export async function runSocialProofAgent(args: {
   readonly campaignOnly?: boolean;
   /** Scheduled production must never create an unscoped asset. */
   readonly campaignScopeRequired?: boolean;
+  /** Missing connected-channel formats that this run should replenish. */
+  readonly requiredFormats?: readonly string[];
 }): Promise<SocialProofAgentResult> {
   const setting = await loadAutomationSetting(args.supabase, 'social_proof_agent');
   const config = resolveSocialProofAgentConfig(setting.config, setting.enabled, setting.killSwitch);
@@ -1217,6 +1225,7 @@ export async function runSocialProofAgent(args: {
         timezone: config.timezone,
         config: reelConfig,
         existingAssets,
+        coverageRequired: args.requiredFormats?.includes('instagram:short_video_post'),
       })
       : false;
     const reelSource =

@@ -22,11 +22,22 @@ export type ContentInventoryHealth = {
 type Job = { distribution_asset_id?: unknown; scheduled_for?: unknown };
 type Asset = { id?: unknown; provider_family?: unknown; asset_type?: unknown };
 
+export function requiredContentFormatsForConnectedProviders(
+  providers: readonly string[],
+): readonly string[] {
+  const connected = new Set(providers);
+  return REQUIRED_CONTENT_FORMATS.filter((format) => {
+    const [provider] = format.split(':');
+    return provider === 'blog' || connected.has(provider ?? '');
+  });
+}
+
 export function evaluateContentInventoryHealth(args: {
   readonly now: Date;
   readonly jobs: readonly Job[];
   readonly assets: readonly Asset[];
   readonly recentPublishedArticles: number;
+  readonly requiredFormats?: readonly string[];
 }): ContentInventoryHealth {
   const assetById = new Map(args.assets.map((asset) => [String(asset.id ?? ''), asset]));
   const covered = new Set<string>();
@@ -43,7 +54,8 @@ export function evaluateContentInventoryHealth(args: {
   }
   if (args.recentPublishedArticles > 0) covered.add('blog:article');
 
-  const missingFormats = REQUIRED_CONTENT_FORMATS.filter((format) => !covered.has(format));
+  const requiredFormats = args.requiredFormats ?? REQUIRED_CONTENT_FORMATS;
+  const missingFormats = requiredFormats.filter((format) => !covered.has(format));
   const horizonMinimum = args.now.getTime() + 12 * 86_400_000;
   const horizonCovered = Boolean(
     inventoryThrough && Date.parse(inventoryThrough) >= horizonMinimum,
@@ -91,10 +103,22 @@ export async function loadContentInventoryHealth(
     .eq('status', 'published')
     .gte('published_at', articleFloor);
   if (articlesResult.error) throw articlesResult.error;
+  const accountsResult = await db
+    .from('distribution_accounts')
+    .select('provider_name')
+    .eq('status', 'connected')
+    .in('provider_name', ['instagram', 'linkedin']);
+  if (accountsResult.error) throw accountsResult.error;
+  const requiredFormats = requiredContentFormatsForConnectedProviders(
+    (accountsResult.data ?? []).map((account: { provider_name?: unknown }) =>
+      String(account.provider_name ?? ''),
+    ),
+  );
   return evaluateContentInventoryHealth({
     now,
     jobs: jobsResult.data ?? [],
     assets: assetsResult.data ?? [],
     recentPublishedArticles: Number(articlesResult.count ?? 0),
+    requiredFormats,
   });
 }

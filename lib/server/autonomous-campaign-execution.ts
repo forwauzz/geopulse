@@ -70,6 +70,7 @@ export async function runAutonomousCampaignExecution(args: {
   });
   const loopControl = await runAgentLoopControl({ db: args.supabase, now });
   const pendingSocial = await pendingSeoSocialDerivatives(args.supabase);
+  const inventoryBefore = await loadContentInventoryHealth(args.supabase, now);
   const social = await runSocialProofAgent({
     supabase: args.supabase,
     appUrl: args.appUrl,
@@ -77,6 +78,7 @@ export async function runAutonomousCampaignExecution(args: {
     now,
     campaignOnly: false,
     campaignScopeRequired: true,
+    requiredFormats: inventoryBefore.missingFormats,
   });
   const queuedIds = new Set(social?.queuedContentItemIds ?? []);
   if (queuedIds.size > 0) {

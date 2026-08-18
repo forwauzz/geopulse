@@ -5,6 +5,7 @@ import {
   buildEducationalCandidate,
   buildIndustryHumorCandidate,
   buildProductDemoCandidate,
+  assignedSocialCandidate,
   filterCampaignAssignedSocial,
   instagramScheduleSlot,
   orderAutonomousCandidates,
@@ -28,6 +29,30 @@ function scan(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Social Proof Agent safeguards', () => {
+  it('versions assigned carousel inventory and supplies a real multi-slide checklist', () => {
+    const candidate = assignedSocialCandidate({
+      id: 'item-1',
+      content_id: 'content-1',
+      title: 'What MSP buyers ask AI search',
+      brief_markdown: null,
+      metadata: {
+        source_url: 'https://example.com/source',
+        recommendation: 'Answer the buyer question directly.',
+        evidence: 'The source documents the question.',
+        campaign_vertical: 'msp_it_services',
+      },
+      created_at: '2026-08-17T00:00:00.000Z',
+      growth_campaign_id: 'msp-1',
+      growth_intervention_id: null,
+    }, 'https://getgeopulse.com');
+    expect(candidate).toMatchObject({
+      key: 'assigned-carousel-v2-content-1',
+      assetType: 'carousel_post',
+      evidence: { checklist_items: expect.any(Array) },
+    });
+    expect(candidate?.evidence['checklist_items']).toHaveLength(4);
+  });
+
   it('keeps a first-party grounded Reel source when trend providers are unavailable', () => {
     const candidate = buildProductDemoCandidate('https://getgeopulse.com/');
     expect(candidate.evidence).toMatchObject({

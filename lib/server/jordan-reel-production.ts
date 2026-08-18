@@ -132,6 +132,7 @@ export function shouldPlanJordanReel(args: {
   readonly timezone: string;
   readonly config: JordanReelConfig;
   readonly existingAssets: ReadonlyArray<DistributionAssetRow>;
+  readonly coverageRequired?: boolean;
 }): boolean {
   if (!args.config.enabled) return false;
   const local = localDateParts(args.now, args.timezone);
@@ -157,7 +158,9 @@ export function shouldPlanJordanReel(args: {
     const created = new Date(asset.created_at).getTime();
     return Number.isFinite(created) && created >= staleBefore;
   });
-  return !hasRecentReel || args.config.daysLocal.includes(local.weekday);
+  return args.coverageRequired === true
+    || !hasRecentReel
+    || args.config.daysLocal.includes(local.weekday);
 }
 
 function cleanLine(value: string, max: number): string {
