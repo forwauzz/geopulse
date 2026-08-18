@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateContentInventoryHealth, REQUIRED_CONTENT_FORMATS } from './content-inventory-health';
+import {
+  evaluateContentInventoryHealth,
+  REQUIRED_CONTENT_FORMATS,
+  requiredContentFormatsForConnectedProviders,
+} from './content-inventory-health';
 
 describe('content inventory health', () => {
   const now = new Date('2026-08-12T00:00:00.000Z');
@@ -31,5 +35,16 @@ describe('content inventory health', () => {
       healthy: false,
       reason: expect.stringContaining('missing_required_formats'),
     });
+  });
+
+  it('requires formats only for connected social providers plus the blog', () => {
+    expect(requiredContentFormatsForConnectedProviders(['instagram'])).toEqual([
+      'instagram:short_video_post',
+      'instagram:carousel_post',
+      'instagram:single_image_post',
+      'blog:article',
+    ]);
+    expect(requiredContentFormatsForConnectedProviders(['instagram', 'linkedin']))
+      .toEqual(REQUIRED_CONTENT_FORMATS);
   });
 });

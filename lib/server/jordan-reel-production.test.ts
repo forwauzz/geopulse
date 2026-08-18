@@ -104,6 +104,16 @@ describe('Jordan autonomous Reel production', () => {
         metadata: { reel_slot_key: '2026-07-20-d1' },
       })],
     })).toBe(false);
+    expect(shouldPlanJordanReel({
+      now: new Date('2026-07-27T14:00:00.000Z'),
+      timezone: 'America/Toronto',
+      config,
+      coverageRequired: true,
+      existingAssets: [asset({
+        created_at: '2026-07-20T14:00:00.000Z',
+        metadata: { reel_slot_key: '2026-07-20-d1' },
+      })],
+    })).toBe(true);
   });
 
   it('requires a grounded source and produces bounded crop-safe template copy', () => {
