@@ -118,6 +118,14 @@ export type SocialProofAgentResult = {
   readonly reason?: string;
 };
 
+export const SOCIAL_SEQUENCE_VERSION = 'social-flow-v1';
+
+export type SocialSequenceAnchor = {
+  readonly narrativeKind: SocialProofCandidate['kind'];
+  readonly assetType: DistributionAssetType;
+  readonly visualFamily: 'timely' | 'humor' | 'carousel' | 'proof' | 'educational';
+};
+
 export type SocialProductionEnv = SocialTrendEnv & {
   readonly BROWSER?: BrowserRunBinding;
   readonly REPORT_FILES?: SocialMediaBucket;
@@ -689,6 +697,91 @@ function cardKind(candidate: SocialProofCandidate):
   return candidate.kind === 'timely' ? 'timely' : 'educational';
 }
 
+function candidateAssetType(candidate: SocialProofCandidate): DistributionAssetType {
+  return candidate.assetType ??
+    (candidate.media || candidate.mediaUrl ? 'single_image_post' : 'link_post');
+}
+
+export function socialSequenceDimensions(
+  candidate: SocialProofCandidate,
+): SocialSequenceAnchor & { readonly version: typeof SOCIAL_SEQUENCE_VERSION } {
+  return {
+    version: SOCIAL_SEQUENCE_VERSION,
+    narrativeKind: candidate.kind,
+    assetType: candidateAssetType(candidate),
+    visualFamily: cardKind(candidate),
+  };
+}
+
+export function socialSequenceMetadata(
+  candidate: SocialProofCandidate,
+  previous: SocialSequenceAnchor | null,
+  runPosition: number,
+): Record<string, unknown> {
+  const current = socialSequenceDimensions(candidate);
+  return {
+    version: current.version,
+    narrative_kind: current.narrativeKind,
+    asset_format: current.assetType,
+    visual_family: current.visualFamily,
+    previous_narrative_kind: previous?.narrativeKind ?? null,
+    previous_asset_format: previous?.assetType ?? null,
+    previous_visual_family: previous?.visualFamily ?? null,
+    run_position: runPosition,
+  };
+}
+
+function isSocialProofKind(value: unknown): value is SocialProofCandidate['kind'] {
+  return value === 'before_after' ||
+    value === 'aggregate' ||
+    value === 'educational' ||
+    value === 'industry_humor' ||
+    value === 'timely' ||
+    value === 'carousel' ||
+    value === 'proof_demo';
+}
+
+function visualFamilyForKind(
+  kind: SocialProofCandidate['kind'],
+): SocialSequenceAnchor['visualFamily'] {
+  if (kind === 'industry_humor') return 'humor';
+  if (kind === 'carousel') return 'carousel';
+  if (kind === 'before_after' || kind === 'aggregate' || kind === 'proof_demo') {
+    return 'proof';
+  }
+  return kind === 'timely' ? 'timely' : 'educational';
+}
+
+export function latestSocialSequenceAnchor(
+  assets: ReadonlyArray<DistributionAssetRow>,
+): SocialSequenceAnchor | null {
+  const latest = [...assets]
+    .filter((asset) =>
+      asset.metadata['created_by_agent'] === 'jordan' &&
+      asset.status !== 'failed' &&
+      asset.status !== 'archived' &&
+      isSocialProofKind(asset.metadata['proof_kind'])
+    )
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  if (!latest) return null;
+
+  const narrativeKind = latest.metadata['proof_kind'] as SocialProofCandidate['kind'];
+  const sequence = readRecord(latest.metadata['content_sequence']);
+  const visualFamily = sequence['visual_family'];
+  return {
+    narrativeKind,
+    assetType: latest.asset_type,
+    visualFamily:
+      visualFamily === 'timely' ||
+      visualFamily === 'humor' ||
+      visualFamily === 'carousel' ||
+      visualFamily === 'proof' ||
+      visualFamily === 'educational'
+        ? visualFamily
+        : visualFamilyForKind(narrativeKind),
+  };
+}
+
 function candidateBullets(candidate: SocialProofCandidate): string[] {
   const evidence = candidate.evidence;
   if (Array.isArray(evidence['checklist_items'])) {
@@ -922,7 +1015,8 @@ function candidateCanPublish(
 
 export function orderAutonomousCandidates(
   candidates: ReadonlyArray<SocialProofCandidate>,
-  historicalPerformance: ReadonlyMap<SocialProofCandidate['kind'], number> = new Map()
+  historicalPerformance: ReadonlyMap<SocialProofCandidate['kind'], number> = new Map(),
+  previous: SocialSequenceAnchor | null = null,
 ): SocialProofCandidate[] {
   const ranked = [...candidates].sort(
     (a, b) =>
@@ -960,7 +1054,35 @@ export function orderAutonomousCandidates(
     if (candidate.mediaUrl && usedMedia.has(candidate.mediaUrl)) continue;
     add(candidate);
   }
-  return ordered;
+  const diversified: SocialProofCandidate[] = [];
+  const remaining = [...ordered];
+  let anchor = previous;
+  while (remaining.length > 0) {
+    let selectedIndex = 0;
+    if (anchor) {
+      selectedIndex = remaining
+        .map((candidate, index) => {
+          const dimensions = socialSequenceDimensions(candidate);
+          return {
+            index,
+            sameNarrative: dimensions.narrativeKind === anchor?.narrativeKind ? 1 : 0,
+            sameFormat: dimensions.assetType === anchor?.assetType ? 1 : 0,
+            sameVisual: dimensions.visualFamily === anchor?.visualFamily ? 1 : 0,
+          };
+        })
+        .sort((a, b) =>
+          a.sameNarrative - b.sameNarrative ||
+          a.sameFormat - b.sameFormat ||
+          a.sameVisual - b.sameVisual ||
+          a.index - b.index
+        )[0]!.index;
+    }
+    const [selected] = remaining.splice(selectedIndex, 1);
+    if (!selected) break;
+    diversified.push(selected);
+    anchor = socialSequenceDimensions(selected);
+  }
+  return diversified;
 }
 
 function historicalPerformanceByKind(
@@ -1208,10 +1330,13 @@ export async function runSocialProofAgent(args: {
         instagramScheduleSlot(now, config.timezone, hourLocal),
         occupiedInstagramSlots
       );
-    const baseOrderedCandidates =
-      mode === 'autonomous'
-        ? orderAutonomousCandidates(candidates, historicalPerformanceByKind(existingAssets))
-        : candidates;
+    const previousSequenceAnchor = latestSocialSequenceAnchor(existingAssets);
+    const historicalPerformance = historicalPerformanceByKind(existingAssets);
+    const baseOrderedCandidates = orderAutonomousCandidates(
+      candidates,
+      mode === 'autonomous' ? historicalPerformance : new Map(),
+      previousSequenceAnchor,
+    );
     const reelConfig = {
       enabled: config.reelsEnabled,
       reelsPerWeek: config.reelsPerWeek,
@@ -1254,7 +1379,14 @@ export async function runSocialProofAgent(args: {
         }
       : null;
     const orderedCandidates = reelCandidate
-      ? [reelCandidate, ...baseOrderedCandidates.filter((candidate) => candidate !== reelSource)]
+      ? [
+          reelCandidate,
+          ...orderAutonomousCandidates(
+            baseOrderedCandidates.filter((candidate) => candidate !== reelSource),
+            historicalPerformance,
+            socialSequenceDimensions(reelCandidate),
+          ),
+        ]
       : baseOrderedCandidates;
     let assetsCreated = 0;
     let jobsCreated = 0;
@@ -1265,6 +1397,7 @@ export async function runSocialProofAgent(args: {
       config.dailyCap,
       config.timezone,
     );
+    let sequenceAnchor = previousSequenceAnchor;
 
     for (const rawCandidate of orderedCandidates) {
       if (assetsCreated >= dailyCapacity) break;
@@ -1298,6 +1431,7 @@ export async function runSocialProofAgent(args: {
           );
         }
       }
+      const sequenceDimensions = socialSequenceDimensions(candidate);
       // A deterministic asset is immutable from the agent's perspective. This both rotates
       // through the candidate pool on later runs and prevents a mode change from silently
       // promoting a previously reviewed/rejected draft.
@@ -1326,6 +1460,11 @@ export async function runSocialProofAgent(args: {
           researched_by_agent:
             candidate.evidence['research_agent'] === 'sofia' ? 'sofia' : null,
           proof_kind: candidate.kind,
+          content_sequence: socialSequenceMetadata(
+            candidate,
+            sequenceAnchor,
+            assetsCreated + 1,
+          ),
           evidence: candidate.evidence,
           claim_boundary: 'observed_or_directional_no_ranking_guarantee',
           growth_campaign_id: growthCampaignId,
@@ -1363,6 +1502,7 @@ export async function runSocialProofAgent(args: {
         },
       });
       assetsCreated += 1;
+      sequenceAnchor = sequenceDimensions;
 
       if (candidate.media && candidate.media.length > 0) {
         await repo.replaceAssetMedia(
