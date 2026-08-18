@@ -1,0 +1,111 @@
+{
+  "name": "msp-quebec-cohort10-v1",
+  "vertical": "msp_it",
+  "description": "Governed ten-business Quebec MSP comparison cohort for the primary GEO-Pulse benchmark lane.",
+  "metadata": {
+    "issue": 510,
+    "seed_source": "issue_510_first_party_site_verification",
+    "seed_status": "internal_comparable",
+    "seed_priority": 1,
+    "schedule_enabled": true,
+    "schedule_version": "msp-perplexity-v4-cohort10",
+    "target_subcohort": "quebec_managed_it",
+    "methodology_version": "msp-it-services-v1",
+    "schedule_query_set_id": "9cd3b0fc-8082-4d82-9548-f6f788e0b1b9",
+    "comparison_role": "benchmark_member",
+    "public_claims_allowed": false,
+    "source_verified_at": "2026-08-18"
+  },
+  "domains": [
+    {
+      "siteUrl": "https://www.s3tech.ca/",
+      "domain": "s3tech.ca",
+      "displayName": "S3 Technologies",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://www.s3tech.ca/"] }
+    },
+    {
+      "siteUrl": "https://miracom.ca/",
+      "domain": "miracom.ca",
+      "displayName": "Miracom Informatique",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://miracom.ca/"] }
+    },
+    {
+      "siteUrl": "https://webtekpme.ca/",
+      "domain": "webtekpme.ca",
+      "displayName": "Webtek",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://webtekpme.ca/"] }
+    },
+    {
+      "siteUrl": "https://www.groupesl.com/",
+      "domain": "groupesl.com",
+      "displayName": "Groupe SL",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://www.groupesl.com/"] }
+    },
+    {
+      "siteUrl": "https://softflow.ca/",
+      "domain": "softflow.ca",
+      "displayName": "SoftFlow",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://softflow.ca/"] }
+    },
+    {
+      "siteUrl": "https://connextek.ca/",
+      "domain": "connextek.ca",
+      "displayName": "Connextek",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://connextek.ca/"] }
+    },
+    {
+      "siteUrl": "https://solulan.com/",
+      "domain": "solulan.com",
+      "displayName": "Solulan",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://solulan.com/"] }
+    },
+    {
+      "siteUrl": "https://micrologic.ca/",
+      "domain": "micrologic.ca",
+      "displayName": "Micrologic",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://micrologic.ca/fr/"] }
+    },
+    {
+      "siteUrl": "https://altanora.com/",
+      "domain": "altanora.com",
+      "displayName": "Altanora",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://altanora.com/"] }
+    },
+    {
+      "siteUrl": "https://kezber.com/",
+      "domain": "kezber.com",
+      "displayName": "Kezber",
+      "subvertical": "managed_it_services",
+      "geoRegion": "quebec_ca",
+      "isCompetitor": true,
+      "metadata": { "source_urls": ["https://kezber.com/"] }
+    }
+  ]
+}
