@@ -23,6 +23,10 @@ const benchmarkDomainCohortSeedSchema = z.object({
 
 export type BenchmarkDomainCohortSeed = z.infer<typeof benchmarkDomainCohortSeedSchema>;
 
+export function parseBenchmarkDomainCohortSeed(input: unknown): BenchmarkDomainCohortSeed {
+  return benchmarkDomainCohortSeedSchema.parse(input);
+}
+
 export async function seedBenchmarkDomainCohort(
   supabase: any,
   input: unknown
@@ -32,7 +36,7 @@ export async function seedBenchmarkDomainCohort(
   domainCount: number;
   domains: { id: string; canonicalDomain: string }[];
 }> {
-  const fixture = benchmarkDomainCohortSeedSchema.parse(input);
+  const fixture = parseBenchmarkDomainCohortSeed(input);
   const repo = createBenchmarkRepository(supabase);
 
   const rows = [];
