@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   verify:
+    name: repair-agent-verify
     runs-on: ubuntu-latest
     defaults:
       run:
