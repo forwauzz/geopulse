@@ -30,7 +30,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.20.0'
+          node-version: '22.18.0'
           cache: npm
           cache-dependency-path: repair-agent/package-lock.json
 
@@ -71,7 +71,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.20.0'
+          node-version: '22.18.0'
           cache: npm
           cache-dependency-path: repair-agent/package-lock.json
 
