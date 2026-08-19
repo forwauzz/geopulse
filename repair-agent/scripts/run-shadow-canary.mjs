@@ -7,6 +7,7 @@ const endpoint = process.env.REPAIR_AGENT_URL?.replace(/\/$/, '');
 const token = process.env.REPAIR_AGENT_API_TOKEN;
 const canaryId = process.env.REPAIR_CANARY_ID;
 const outputPath = process.env.REPAIR_CANARY_OUTPUT;
+const existingRepairId = process.env.REPAIR_EXISTING_REPAIR_ID || null;
 const targetRoot = resolve(process.env.REPAIR_CANARY_ROOT || 'test/portable-repo');
 if (!endpoint || !token || !canaryId || !outputPath) throw new Error('repair canary environment is incomplete');
 
@@ -23,7 +24,7 @@ const audit = {
   schemaVersion: 1,
   producer: 'github-shadow-canary',
   auditRunId,
-  repositoryProfileId: 'geopulse-v1',
+  repositoryProfileId: 'geopulse-canary-v1',
   targetUrl: 'https://getgeopulse.com/',
   generatedAt: new Date().toISOString(),
   score: 80,
@@ -43,12 +44,20 @@ const audit = {
   }],
 };
 
-const submitted = await request('/v1/audits', { method: 'POST', body: JSON.stringify(audit) });
-if (submitted.queued !== true || typeof submitted.repairId !== 'string') throw new Error(`canary audit was not queued: ${JSON.stringify(submitted)}`);
+let repairId = existingRepairId;
+if (!repairId) {
+  const submitted = await request('/v1/audits', { method: 'POST', body: JSON.stringify(audit) });
+  if (submitted.queued !== true || typeof submitted.repairId !== 'string') throw new Error(`canary audit was not queued: ${JSON.stringify(submitted)}`);
+  repairId = submitted.repairId;
+}
+if (!/^[a-f0-9]{32}$/.test(repairId)) throw new Error('repair lineage id is invalid');
 
 const leaseId = `github-run-${canaryId}`;
-const claimed = await request('/v1/scopes/claim', { method: 'POST', body: JSON.stringify({ leaseId, repairId: submitted.repairId }) });
-if (!claimed.scope || claimed.scope.repairId !== submitted.repairId) throw new Error('claimed scope does not match submitted canary');
+const claimed = await request('/v1/scopes/claim', { method: 'POST', body: JSON.stringify({ leaseId, repairId }) });
+if (!claimed.scope || claimed.scope.repairId !== repairId) throw new Error('claimed scope does not match requested canary lineage');
+if (existingRepairId && (claimed.scope.attempt < 2 || !Array.isArray(claimed.scope.feedback) || claimed.scope.feedback.length === 0)) {
+  throw new Error('retry scope did not carry bounded reviewer or QA feedback');
+}
 
 const logicalPath = claimed.scope.instruction.path;
 if (logicalPath !== 'public/robots.txt') throw new Error(`unexpected canary path: ${logicalPath}`);
@@ -61,16 +70,13 @@ const repair = {
   mode: 'shadow',
   repository: claimed.scope.repository,
   siteOrigin: claimed.scope.siteOrigin,
-  idempotencyKey: claimed.scope.repairId,
+  idempotencyKey: `${claimed.scope.repairId}:attempt:${claimed.scope.attempt}`,
+  attempt: claimed.scope.attempt,
+  feedback: claimed.scope.feedback,
   finding: {
     findingId: claimed.scope.findingId,
     sourceAuditId: claimed.scope.auditRunId,
-    checkId: 'robots-sitemap',
-    targetUrl: 'https://getgeopulse.com/',
-    finding: audit.findings[0].finding,
-    confidence: 'high',
-    risk: 'low',
-    reportedAt: audit.generatedAt,
+    ...claimed.scope.sourceFinding,
   },
   instruction: claimed.scope.instruction,
   changeBudget: claimed.scope.changeBudget,
@@ -91,7 +97,9 @@ if (!completed || completed.outcome !== 'verified_shadow') throw new Error(`shad
 const artifactResponse = await request(`/v1/artifacts/${repairSubmission.jobId}`);
 const artifact = artifactResponse.artifact;
 const finalFiles = artifact?.finalFiles;
-if (!artifact || artifact.evidenceDigest !== completed.evidenceDigest || Object.keys(finalFiles || {}).join(',') !== logicalPath) {
+if (!artifact || artifact.evidenceDigest !== completed.evidenceDigest || artifact.attempt !== claimed.scope.attempt
+  || JSON.stringify(artifact.feedback) !== JSON.stringify(claimed.scope.feedback)
+  || Object.keys(finalFiles || {}).join(',') !== logicalPath) {
   throw new Error('verified artifact inventory or digest does not match');
 }
 const finalContent = finalFiles[logicalPath];
@@ -106,12 +114,15 @@ if (createHash('sha256').update(contentManifest).digest('hex') !== artifact.cont
 }
 await mkdir(dirname(physicalPath), { recursive: true });
 await writeFile(physicalPath, finalContent, 'utf8');
-await request('/v1/scopes/ack', { method: 'POST', body: JSON.stringify({ repairId: submitted.repairId, leaseId }) });
 
 const evidence = {
   schemaVersion: 1,
-  auditRunId,
-  repairId: submitted.repairId,
+  auditRunId: claimed.scope.auditRunId,
+  repairId,
+  attempt: claimed.scope.attempt,
+  feedback: claimed.scope.feedback,
+  issue: claimed.scope.issue,
+  leaseId,
   jobId: repairSubmission.jobId,
   artifactDigest: artifact.evidenceDigest,
   beforeDigest: createHash('sha256').update(original).digest('hex'),

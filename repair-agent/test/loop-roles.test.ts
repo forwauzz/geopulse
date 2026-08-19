@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseAuditEnvelope, selectAuditFinding } from '../src/loop/audit-intake';
-import type { AuditEnvelope, EngineerArtifact, RoleVerdict } from '../src/loop/contracts';
+import type { AuditEnvelope, EngineerArtifact, RepositoryProfile, RoleVerdict } from '../src/loop/contracts';
 import { evaluateMergeGate, feedbackForNextAttempt } from '../src/loop/merge-gate';
 import {
+  GEOPULSE_CANARY_PROFILE,
   GEOPULSE_PROFILE,
   PORTABLE_FIXTURE_PROFILE,
   validateRepositoryProfile,
@@ -87,7 +89,11 @@ function verdict(role: 'reviewer' | 'qa', overrides: Partial<RoleVerdict> = {}):
 describe('repository profile role', () => {
   it('validates both GEO-Pulse and a second portable repository profile', () => {
     expect(validateRepositoryProfile(GEOPULSE_PROFILE)).toEqual([]);
+    expect(validateRepositoryProfile(GEOPULSE_CANARY_PROFILE)).toEqual([]);
     expect(validateRepositoryProfile(PORTABLE_FIXTURE_PROFILE)).toEqual([]);
+    const portableFile = JSON.parse(readFileSync(new URL('./portable-repo/.repair-agent/repository-profile.v1.json', import.meta.url), 'utf8')) as RepositoryProfile;
+    expect(portableFile).toEqual(PORTABLE_FIXTURE_PROFILE);
+    expect(validateRepositoryProfile(portableFile)).toEqual([]);
   });
 
   it('rejects unsafe paths and deployment commands', () => {
@@ -98,6 +104,23 @@ describe('repository profile role', () => {
     })).toEqual(expect.arrayContaining([
       'unsafe allowed path prefix: ../secrets',
       'unsafe QA command: npm run deploy',
+    ]));
+  });
+
+  it('rejects ambiguous checks, unsafe default branches, and credential-bearing smoke URLs', () => {
+    const failures = validateRepositoryProfile({
+      ...PORTABLE_FIXTURE_PROFILE,
+      defaultBranch: '../main',
+      requiredChecks: [{ workflow: 'CI', job: 'verify', appSlug: 'bad/app' }],
+      repositoryAdapter: {
+        ...PORTABLE_FIXTURE_PROFILE.repositoryAdapter,
+        productionSmokeUrls: ['https://user:password@portable.example/'],
+      },
+    });
+    expect(failures).toEqual(expect.arrayContaining([
+      'default branch is invalid',
+      'required check identity is invalid',
+      'production smoke URL is invalid',
     ]));
   });
 
@@ -148,6 +171,8 @@ describe('scoper agent', () => {
       repository: first.repository,
       siteOrigin: first.siteOrigin,
       idempotencyKey: first.repairId,
+      attempt: first.attempt,
+      feedback: first.feedback,
       finding: {
         findingId: first.findingId,
         sourceAuditId: first.auditRunId,
@@ -196,7 +221,55 @@ describe('QA agent', () => {
 
 describe('deterministic merge controller', () => {
   it('allows only a low-risk exact-SHA repair with distinct green review, QA, and CI', () => {
-    expect(evaluateMergeGate({ enabled: true, killSwitch: false, risk: 'low', artifact: artifact(), reviewer: verdict('reviewer'), qa: verdict('qa'), checks: { verify: 'success' }, profile: GEOPULSE_PROFILE, attemptsUsed: 1 })).toEqual({ allowed: true, reasons: [] });
+    expect(evaluateMergeGate({
+      enabled: true,
+      killSwitch: false,
+      risk: 'low',
+      artifact: artifact(),
+      reviewer: verdict('reviewer'),
+      qa: verdict('qa'),
+      checks: {
+        'github-actions:CI/verify': 'success',
+        'geo-pulse-repair-reviewer:Repair Review/repair-review': 'success',
+        'geo-pulse-repair-qa:Repair QA/repair-qa': 'success',
+      },
+      profile: GEOPULSE_PROFILE,
+      attemptsUsed: 1,
+    })).toEqual({ allowed: true, reasons: [] });
+  });
+
+  it('maps the canary checkout root into the formal repository path policy', () => {
+    const canaryArtifact = artifact({
+      repositoryProfileId: GEOPULSE_CANARY_PROFILE.id,
+      changedPaths: ['repair-agent/test/portable-repo/public/robots.txt'],
+    });
+    expect(evaluateMergeGate({
+      enabled: true,
+      killSwitch: false,
+      risk: 'low',
+      artifact: canaryArtifact,
+      reviewer: verdict('reviewer'),
+      qa: verdict('qa'),
+      checks: {
+        'github-actions:CI/verify': 'success',
+        'geo-pulse-repair-reviewer:Repair Review/repair-review': 'success',
+        'geo-pulse-repair-qa:Repair QA/repair-qa': 'success',
+      },
+      profile: GEOPULSE_CANARY_PROFILE,
+      attemptsUsed: 1,
+    })).toEqual({ allowed: true, reasons: [] });
+    const unprefixed = evaluateMergeGate({
+      enabled: true, killSwitch: false, risk: 'low',
+      artifact: { ...canaryArtifact, changedPaths: ['public/robots.txt'] },
+      reviewer: verdict('reviewer'), qa: verdict('qa'),
+      checks: {
+        'github-actions:CI/verify': 'success',
+        'geo-pulse-repair-reviewer:Repair Review/repair-review': 'success',
+        'geo-pulse-repair-qa:Repair QA/repair-qa': 'success',
+      },
+      profile: GEOPULSE_CANARY_PROFILE, attemptsUsed: 1,
+    });
+    expect(unprefixed).toMatchObject({ allowed: false, reasons: expect.arrayContaining(['engineer artifact contains a disallowed path']) });
   });
 
   it('fails closed on disabled mode, stale review, shared identity, or red checks', () => {
@@ -207,7 +280,11 @@ describe('deterministic merge controller', () => {
       artifact: artifact(),
       reviewer: verdict('reviewer', { headSha: 'e'.repeat(40), identity: 'same-gate-agent' }),
       qa: verdict('qa', { identity: 'same-gate-agent' }),
-      checks: { verify: 'failure' },
+      checks: {
+        'github-actions:CI/verify': 'failure',
+        'geo-pulse-repair-reviewer:Repair Review/repair-review': 'success',
+        'geo-pulse-repair-qa:Repair QA/repair-qa': 'success',
+      },
       profile: GEOPULSE_PROFILE,
       attemptsUsed: 1,
     });
@@ -216,7 +293,7 @@ describe('deterministic merge controller', () => {
       'autonomous merge is not enabled',
       'reviewer verdict is stale for the current head SHA',
       'reviewer and QA identities must be distinct',
-      'required check is not green: verify',
+      'required check is not green: github-actions:CI/verify',
     ]));
   });
 });

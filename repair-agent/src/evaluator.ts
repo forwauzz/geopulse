@@ -107,6 +107,8 @@ export async function evaluateRepair(
     repository: request.repository,
     siteOrigin: request.siteOrigin,
     idempotencyKey: request.idempotencyKey,
+    attempt: request.attempt,
+    feedback: request.feedback,
     instruction: request.instruction,
     changedFiles: result.changedFiles,
     contentDigest: await digestChangedContent(result.changedFiles, result.finalFiles),

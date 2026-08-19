@@ -68,7 +68,9 @@ export class RepairWorkflow extends AgentWorkflow<
     }
 
     const executionErrors: string[] = [];
-    for (let attempt = 1; attempt <= admission.maxAttempts; attempt += 1) {
+    // The durable scope coordinator owns the three-attempt ceiling. Each SHA-bound
+    // request gets one Sandbox execution so nested retries cannot exceed that cap.
+    for (let attempt = 1; attempt <= 1; attempt += 1) {
       await this.reportProgress({ stage: 'sandbox-execution', attempt });
       const execution = await step.do(`execute-shadow-attempt-${attempt}`, async (): Promise<AttemptExecution> => {
         const sandbox = getSandbox(this.env.Sandbox, `repair-${jobId}-${attempt}`, {
@@ -147,6 +149,8 @@ export class RepairWorkflow extends AgentWorkflow<
           repository: request.repository,
           siteOrigin: request.siteOrigin,
           idempotencyKey: request.idempotencyKey,
+          attempt: request.attempt,
+          feedback: request.feedback,
           instruction: request.instruction,
           changedFiles: execution.result?.changedFiles ?? [],
           finalFiles: execution.result?.finalFiles ?? {},
@@ -187,21 +191,21 @@ export class RepairWorkflow extends AgentWorkflow<
       }
     }
 
-    const exhaustedReasons = [
+    const executionFailureReasons = [
       ...executionErrors,
-      'three sandbox execution attempts were exhausted',
+      'the single SHA-bound sandbox execution failed; the scope coordinator owns any next attempt',
     ];
-    await step.do('record-exhausted-repair', async () => {
-      await this.agent.finishRepair(jobId, 'blocked', null, exhaustedReasons);
+    await step.do('record-sandbox-execution-failure', async () => {
+      await this.agent.finishRepair(jobId, 'blocked', null, executionFailureReasons);
     });
-    const exhausted: RepairWorkflowResult = {
+    const blocked: RepairWorkflowResult = {
       jobId,
       outcome: 'blocked',
-      attempts: admission.maxAttempts,
+      attempts: 1,
       evaluation: null,
-      reasons: exhaustedReasons,
+      reasons: executionFailureReasons,
     };
-    await step.reportComplete(exhausted);
-    return exhausted;
+    await step.reportComplete(blocked);
+    return blocked;
   }
 }

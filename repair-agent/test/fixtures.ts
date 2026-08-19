@@ -12,6 +12,8 @@ export function validRepairRequest(): RepairRequest {
     repository: 'forwauzz/geopulse',
     siteOrigin: 'https://getgeopulse.com',
     idempotencyKey: 'audit-1:broken-link-1',
+    attempt: 1,
+    feedback: [],
     finding: {
       findingId: 'broken-link-1',
       sourceAuditId: 'audit-1',

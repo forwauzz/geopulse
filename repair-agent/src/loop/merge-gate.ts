@@ -1,5 +1,5 @@
 import type { EngineerArtifact, MergeGateDecision, MergeGateInput, RoleVerdict } from './contracts';
-import { pathAllowed } from './repository-profile';
+import { artifactPathAllowed } from './repository-profile';
 
 function validateVerdict(input: MergeGateInput, verdict: RoleVerdict | null, role: 'reviewer' | 'qa', reasons: string[]): void {
   if (!verdict) {
@@ -30,14 +30,15 @@ export function evaluateMergeGate(input: MergeGateInput): MergeGateDecision {
   if (input.artifact.changedPaths.length < 1 || input.artifact.changedLines < 1) reasons.push('engineer artifact has no bounded change evidence');
   if (input.artifact.changedPaths.length > input.profile.maxFiles) reasons.push('file budget exceeded');
   if (input.artifact.changedLines > input.profile.maxChangedLines) reasons.push('changed-line budget exceeded');
-  if (input.artifact.changedPaths.some((path) => !pathAllowed(input.profile, path))) reasons.push('engineer artifact contains a disallowed path');
+  if (input.artifact.changedPaths.some((path) => !artifactPathAllowed(input.profile, path))) reasons.push('engineer artifact contains a disallowed path');
   validateVerdict(input, input.reviewer, 'reviewer', reasons);
   validateVerdict(input, input.qa, 'qa', reasons);
   if (input.reviewer && input.qa && input.reviewer.identity === input.qa.identity) {
     reasons.push('reviewer and QA identities must be distinct');
   }
   for (const check of input.profile.requiredChecks) {
-    if (input.checks[check] !== 'success') reasons.push(`required check is not green: ${check}`);
+    const identity = `${check.appSlug}:${check.workflow}/${check.job}`;
+    if (input.checks[identity] !== 'success') reasons.push(`required check is not green: ${identity}`);
   }
   const unique = [...new Set(reasons)];
   return unique.length === 0 ? { allowed: true, reasons: [] } : { allowed: false, reasons: unique };

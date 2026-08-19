@@ -1,5 +1,5 @@
 import type { EngineerArtifact, RepositoryProfile, RoleVerdict } from './contracts';
-import { pathAllowed } from './repository-profile';
+import { artifactPathAllowed } from './repository-profile';
 
 async function digest(value: unknown): Promise<string> {
   const encoded = new TextEncoder().encode(JSON.stringify(value));
@@ -27,7 +27,7 @@ export async function reviewEngineerArtifact(args: {
   if (artifact.attempt < 1 || artifact.attempt > 3) reasons.push('attempt is outside the retry ceiling');
   if (artifact.changedPaths.length < 1 || artifact.changedPaths.length > profile.maxFiles) reasons.push('file budget exceeded');
   if (artifact.changedLines < 1 || artifact.changedLines > profile.maxChangedLines) reasons.push('changed-line budget exceeded');
-  if (artifact.changedPaths.some((path) => !pathAllowed(profile, path))) reasons.push('artifact contains a disallowed path');
+  if (artifact.changedPaths.some((path) => !artifactPathAllowed(profile, path))) reasons.push('artifact contains a disallowed path');
   const unique = [...new Set(reasons)];
   return {
     schemaVersion: 1,

@@ -152,6 +152,19 @@ function stringField(body: unknown, field: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+function integerField(body: unknown, field: string): number | null {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const value = (body as Record<string, unknown>)[field];
+  return Number.isInteger(value) ? value as number : null;
+}
+
+function stringArrayField(body: unknown, field: string): string[] | null {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const value = (body as Record<string, unknown>)[field];
+  if (!Array.isArray(value) || value.length < 1 || value.length > 10 || !value.every((item) => typeof item === 'string' && item.trim().length > 0 && item.length <= 500)) return null;
+  return value;
+}
+
 async function handleScopeClaim(request: Request, env: RepairWorkerEnv): Promise<Response> {
   const denied = await requireAuthorization(request, env);
   if (denied) return denied;
@@ -183,12 +196,37 @@ async function handleScopeAck(request: Request, env: RepairWorkerEnv): Promise<R
   }
   const repairId = stringField(body, 'repairId');
   const leaseId = stringField(body, 'leaseId');
-  if (!repairId || !leaseId) return json({ ok: false, error: 'repairId and leaseId are required' }, { status: 400 });
+  const attempt = integerField(body, 'attempt');
+  const gateDigest = stringField(body, 'gateDigest');
+  if (!repairId || !leaseId || !attempt || !gateDigest) return json({ ok: false, error: 'repairId, attempt, leaseId, and gateDigest are required' }, { status: 400 });
   try {
-    await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).acknowledgeScope(repairId, leaseId);
-    return json({ ok: true });
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).acknowledgeScope(repairId, attempt, leaseId, gateDigest);
+    return json({ ok: true, ...result });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : 'acknowledgement failed' }, { status: 409 });
+  }
+}
+
+async function handleScopeFeedback(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  const attempt = integerField(body, 'attempt');
+  const feedbackDigest = stringField(body, 'feedbackDigest');
+  const reasons = stringArrayField(body, 'reasons');
+  if (!repairId || !leaseId || !attempt || !feedbackDigest || !reasons) return json({ ok: false, error: 'repairId, attempt, leaseId, feedbackDigest, and bounded reasons are required' }, { status: 400 });
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).submitScopeFeedback(repairId, attempt, leaseId, feedbackDigest, reasons);
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'feedback failed' }, { status: 409 });
   }
 }
 
@@ -227,6 +265,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/v1/scopes/ack') {
       return handleScopeAck(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/feedback') {
+      return handleScopeFeedback(request, env);
     }
     if (request.method === 'GET' && url.pathname === '/v1/status') {
       return handleStatus(request, env);

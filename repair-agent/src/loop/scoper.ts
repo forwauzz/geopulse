@@ -22,6 +22,8 @@ export async function scopeRepair(args: {
   const repairId = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 32);
   return {
     schemaVersion: 1,
+    attempt: 1,
+    feedback: [],
     producer: args.envelope.producer,
     repairId,
     auditRunId: args.envelope.auditRunId,
@@ -30,6 +32,14 @@ export async function scopeRepair(args: {
     repository: args.profile.repository,
     defaultBranch: args.profile.defaultBranch,
     siteOrigin: new URL(args.profile.siteOrigin).origin,
+    sourceFinding: {
+      checkId: args.finding.checkId,
+      targetUrl: args.envelope.targetUrl,
+      finding: args.finding.finding,
+      confidence: args.finding.confidence,
+      risk: args.finding.risk,
+      reportedAt: args.envelope.generatedAt,
+    },
     instruction,
     changeBudget: {
       maxFiles: Math.min(args.profile.maxFiles, skill.maximumFiles),
