@@ -50,4 +50,9 @@ export const PUBLIC_LEGACY_REDIRECTS: readonly PublicLegacyRedirect[] = [
     destination: '/methodology/ai-search-readiness-audit',
     permanent: true,
   },
+  {
+    source: '/blog/geopulse',
+    destination: '/blog/seo-ge-pulse',
+    permanent: true,
+  },
 ] as const;
