@@ -122,7 +122,7 @@ describe('disposable repository adapter canary', () => {
     const merge = await evaluateMergeGate({
       enabled: true, killSwitch: false, risk: 'low', artifact, reviewer, qa,
       checkRuns: PORTABLE_FIXTURE_PROFILE.requiredChecks.map((check, index) => parseGitHubRequiredCheckObservation({
-        raw: { id: 200 + index, name: check.checkName, head_sha: headSha, conclusion: 'success', app: { slug: check.appSlug, id: check.appId } },
+        raw: { id: check.checkName === 'repair-review' ? 101 : check.checkName === 'repair-qa' ? 102 : 200 + index, name: check.checkName, head_sha: headSha, conclusion: 'success', app: { slug: check.appSlug, id: check.appId } },
         repository: PORTABLE_FIXTURE_PROFILE.repository, observedAt: '2026-08-19T15:59:00.000Z',
       })),
       profile: PORTABLE_FIXTURE_PROFILE, profileDigest,
@@ -130,7 +130,7 @@ describe('disposable repository adapter canary', () => {
         raw: { id: 103, head_sha: headSha, conclusion: 'success', app: { slug: 'portable-repair-merge', id: 91003 } },
         role: 'merge-controller', repository: PORTABLE_FIXTURE_PROFILE.repository, observedAt: '2026-08-19T15:59:30.000Z',
       }),
-      pullRequest: { repository: PORTABLE_FIXTURE_PROFILE.repository, number: 8, state: 'open', baseRef: 'main', baseSha, headSha, mergeable: true, linkedIssueNumbers: [7], observedAt: '2026-08-19T15:59:30.000Z' },
+      pullRequest: { repository: PORTABLE_FIXTURE_PROFILE.repository, number: 8, state: 'open', baseRef: 'main', baseSha, headSha, mergeable: true, lineageIssueNumbers: [7], observedAt: '2026-08-19T15:59:30.000Z' },
       issueNumber: 7, evaluatedAt: '2026-08-19T16:00:00.000Z', attemptsUsed: 1,
     });
     expect(merge).toEqual({ allowed: true, reasons: [] });

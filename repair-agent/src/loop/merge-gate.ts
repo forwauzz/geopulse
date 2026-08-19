@@ -35,7 +35,7 @@ async function validateVerdict(input: MergeGateInput, verdict: RoleVerdict | nul
     || !issuerAllowed(input.profile, role, verdict.issuer.appSlug, verdict.issuer.appId)) reasons.push(`${role} issuer is not authorized by the repository profile`);
   if (verdict.issuer.conclusion !== 'success') reasons.push(`${role} authenticated check did not succeed`);
   if (!Number.isSafeInteger(verdict.issuer.checkRunId) || verdict.issuer.checkRunId <= 0) reasons.push(`${role} check-run identity is invalid`);
-  if (!freshObservation(verdict.issuer.observedAt, input.evaluatedAt)) reasons.push(`${role} observation is stale or invalid`);
+  if (!Number.isFinite(Date.parse(verdict.issuer.observedAt))) reasons.push(`${role} observation time is invalid`);
   if (!/^[a-f0-9]{64}$/.test(verdict.workEvidenceDigest) || !/^[a-f0-9]{64}$/.test(verdict.evidenceDigest)) {
     reasons.push(`${role} evidence digest is invalid`);
   } else {
@@ -47,7 +47,7 @@ async function validateVerdict(input: MergeGateInput, verdict: RoleVerdict | nul
 function validateController(input: MergeGateInput, controller: GitHubRoleObservation, reasons: string[]): void {
   if (controller.role !== 'merge-controller' || controller.repository !== input.profile.repository
     || !issuerAllowed(input.profile, 'merge-controller', controller.appSlug, controller.appId)) reasons.push('merge-controller issuer is not authorized by the repository profile');
-  if (controller.headSha !== input.artifact.headSha || controller.conclusion !== 'success') reasons.push('merge-controller observation is stale or unsuccessful');
+  if (controller.headSha !== input.artifact.headSha || (controller.conclusion !== 'pending' && controller.conclusion !== 'success')) reasons.push('merge-controller observation is stale or unsuccessful');
   if (!Number.isSafeInteger(controller.checkRunId) || controller.checkRunId <= 0 || !freshObservation(controller.observedAt, input.evaluatedAt)) reasons.push('merge-controller observation identity or time is invalid');
 }
 
@@ -78,7 +78,7 @@ export async function evaluateMergeGate(input: MergeGateInput): Promise<MergeGat
   if (pull.repository !== input.profile.repository || pull.state !== 'open' || pull.baseRef !== input.profile.defaultBranch) reasons.push('pull request repository, state, or base branch does not match');
   if (pull.baseSha !== input.artifact.baseSha || pull.headSha !== input.artifact.headSha) reasons.push('pull request no longer points to the reviewed base and head SHAs');
   if (!pull.mergeable) reasons.push('pull request is not mergeable');
-  if (!pull.linkedIssueNumbers.includes(input.issueNumber)) reasons.push('pull request is not linked to the bounded repair issue');
+  if (!pull.lineageIssueNumbers.includes(input.issueNumber)) reasons.push('pull request does not carry an authenticated bounded repair issue lineage');
   if (!freshObservation(pull.observedAt, input.evaluatedAt)) reasons.push('pull request observation is stale or invalid');
 
   await validateVerdict(input, input.reviewer, 'reviewer', reasons);
@@ -94,11 +94,17 @@ export async function evaluateMergeGate(input: MergeGateInput): Promise<MergeGat
       reasons.push(`required check principal is not provisioned: ${required.appSlug}:${required.checkName}`);
       continue;
     }
+    const roleVerdict = issuerAllowed(input.profile, 'reviewer', required.appSlug, required.appId)
+      ? input.reviewer
+      : issuerAllowed(input.profile, 'qa', required.appSlug, required.appId)
+        ? input.qa
+        : null;
     const matches = input.checkRuns.filter((check) => check.provider === 'github'
       && check.repository === input.profile.repository
       && check.checkName === required.checkName
       && check.appSlug === required.appSlug
-      && check.appId === required.appId);
+      && check.appId === required.appId
+      && (roleVerdict === null || check.checkRunId === roleVerdict.issuer.checkRunId));
     if (matches.length !== 1) {
       reasons.push(`required check observation is missing or ambiguous: ${required.appId}:${required.appSlug}:${required.checkName}`);
       continue;

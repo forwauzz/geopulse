@@ -52,6 +52,21 @@ export type RepairAuditDeliveryResult = {
   reason: string | null;
 };
 
+function supportedRepairFinding(finding: NonNullable<SelfImprovementRunResult['plan']>[number]): {
+  risk: 'low' | 'prohibited';
+  repairHint?: { instruction: { skillId: 'allow-ai-retrieval-agents'; path: 'app/robots.ts' } };
+} {
+  if (finding.checkId === 'ai-crawler-access' && finding.status === 'FAIL' && finding.confidence === 'high') {
+    return {
+      risk: 'low',
+      repairHint: { instruction: { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' } },
+    };
+  }
+  return { risk: 'prohibited' };
+}
+
+const SUPPORTED_REPAIR_CHECK_CATALOG_VERSION = '2026-07-21';
+
 const DELIVERY_PREFIX = 'repair-audit-delivery:v1:';
 const DELIVERY_TTL_SECONDS = 7 * 24 * 60 * 60;
 const RETRY_DELAYS_MS = [5 * 60_000, 30 * 60_000] as const;
@@ -94,20 +109,22 @@ export function buildRepairAuditEnvelope(args: {
     score: args.result.score ?? null,
     letterGrade: args.result.letterGrade ?? null,
     checkCatalogVersion: args.result.checkCatalogVersion ?? 'unknown',
-    findings: args.result.plan.map((finding, index) => ({
-      findingId: `${args.result.runId}:${finding.checkId}:${index + 1}`,
-      checkId: finding.checkId,
-      status: finding.status,
-      confidence: finding.confidence,
-      // The scan plan has no exact repository path/replacement evidence. Marking this prohibited
-      // makes the repair agent record it but refuse to infer a code mutation. A later audited
-      // skill adapter may attach a bounded repairHint and lower this to low risk.
-      risk: 'prohibited',
-      weight: finding.weight,
-      category: finding.category,
-      finding: finding.finding,
-      fix: finding.fix,
-    })),
+    findings: args.result.plan.map((finding, index) => {
+      const supported = args.result.checkCatalogVersion === SUPPORTED_REPAIR_CHECK_CATALOG_VERSION
+        ? supportedRepairFinding(finding)
+        : { risk: 'prohibited' as const };
+      return {
+        findingId: `${args.result.runId}:${finding.checkId}:${index + 1}`,
+        checkId: finding.checkId,
+        status: finding.status,
+        confidence: finding.confidence,
+        ...supported,
+        weight: finding.weight,
+        category: finding.category,
+        finding: finding.finding,
+        fix: finding.fix,
+      };
+    }),
   };
 }
 

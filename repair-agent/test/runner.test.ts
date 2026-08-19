@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -116,6 +117,81 @@ describe('deterministic container repair runner', () => {
     expect(result.finalFiles['public/robots.txt']).toBe(
       'User-agent: *\nAllow: /\n\nSitemap: https://getgeopulse.com/sitemap.xml\n'
     );
+  });
+
+  it('adds each approved retrieval agent exactly once to the Next.js robots rules', async () => {
+    const request = validRepairRequest();
+    request.finding.checkId = 'ai-crawler-access';
+    request.finding.findingId = 'retrieval-1';
+    request.instruction = {
+      skillId: 'allow-ai-retrieval-agents',
+      path: 'app/robots.ts',
+    };
+    request.changeBudget = { maxFiles: 1, maxChangedLines: 10 };
+    request.fixture = {
+      files: {
+        'app/robots.ts': "// decoy: { userAgent: 'OAI-SearchBot', allow: '/' }\nexport default async function robots() {\n  return {\n    rules: [\n      { userAgent: '*', disallow: '/' },\n    ],\n  };\n}\n",
+      },
+    };
+
+    const { exitCode, result } = await execute(request);
+
+    expect(exitCode).toBe(0);
+    expect(result.ok).toBe(true);
+    const finalRobots = result.finalFiles['app/robots.ts'];
+    if (typeof finalRobots !== 'string') throw new Error('runner returned no app/robots.ts content');
+    const executableRobots = finalRobots.replace(/^\s*\/\/.*$/gm, '');
+    for (const agent of ['Googlebot', 'Bingbot', 'OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot']) {
+      expect(executableRobots.match(new RegExp(`userAgent: '${agent}'`, 'g'))).toHaveLength(1);
+    }
+    expect((await evaluateRepair('job-1', request, result)).passed).toBe(true);
+  });
+
+  it('repairs one exact explicit agent disallow without widening an ambiguous rule', async () => {
+    const request = validRepairRequest();
+    request.finding.checkId = 'ai-crawler-access';
+    request.finding.findingId = 'retrieval-explicit-block';
+    request.instruction = { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' };
+    request.changeBudget = { maxFiles: 1, maxChangedLines: 10 };
+    request.fixture = { files: { 'app/robots.ts': "export default async function robots() {\n  return {\n    rules: [\n      { userAgent: 'OAI-SearchBot', disallow: '/' },\n      { userAgent: '*', disallow: '/' },\n    ],\n  };\n}\n" } };
+    const { result } = await execute(request);
+    expect(result.ok).toBe(true);
+    expect(result.finalFiles['app/robots.ts']).toContain("{ userAgent: 'OAI-SearchBot', allow: '/' }");
+    expect(result.finalFiles['app/robots.ts']).not.toContain("{ userAgent: 'OAI-SearchBot', disallow: '/' }");
+  });
+
+  it('independently rejects decoy rules outside the returned rules array', async () => {
+    const request = validRepairRequest();
+    request.finding.checkId = 'ai-crawler-access';
+    request.finding.findingId = 'retrieval-decoy';
+    request.instruction = { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' };
+    request.changeBudget = { maxFiles: 1, maxChangedLines: 10 };
+    request.fixture = { files: { 'app/robots.ts': "export default async function robots() {\n  return {\n    rules: [\n      { userAgent: '*', disallow: '/' },\n    ],\n  };\n}\n" } };
+    const { result } = await execute(request);
+    const blocked = "const decoy = { userAgent: 'Googlebot', allow: '/' };\nexport default async function robots() {\n  return { rules: [{ userAgent: '*', disallow: '/' }] };\n}\n";
+    const tampered = structuredClone(result);
+    tampered.finalFiles['app/robots.ts'] = blocked;
+    tampered.changedFiles[0]!.afterSha256 = createHash('sha256').update(blocked).digest('hex');
+    expect(await evaluateRepair('job-1', request, tampered)).toMatchObject({ passed: false, hardGateFailures: expect.arrayContaining(['app/robots.ts does not contain exactly one approved allow rule for Googlebot']) });
+  });
+
+  it('fails closed when the returned Next.js robots object has multiple rules arrays', async () => {
+    const request = validRepairRequest();
+    request.finding.checkId = 'ai-crawler-access';
+    request.finding.findingId = 'retrieval-ambiguous';
+    request.instruction = { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' };
+    request.changeBudget = { maxFiles: 1, maxChangedLines: 10 };
+    request.fixture = {
+      files: {
+        'app/robots.ts': "export default async function robots() {\n  return { rules: [], nested: { rules: [] } };\n}\n",
+      },
+    };
+
+    const { exitCode, result } = await execute(request);
+
+    expect(exitCode).toBe(1);
+    expect(result.ok).toBe(false);
+    expect(result.failureReason).toBe('app/robots.ts must contain exactly one returned rules array');
   });
 
   it('removes one exact sitemap URL block', async () => {

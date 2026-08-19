@@ -7,6 +7,11 @@ import {
   enqueueRepairScope,
   initialRepairState,
   leaseNextRepairScope,
+  markRepairScopeMerged,
+  recordRepairMergeIntent,
+  recordRepairMergeAbort,
+  recordRepairRollbackIntent,
+  recordRepairRolledBack,
   normalizeRepairState,
   acknowledgeRepairScope,
   recordRepairScopeFeedback,
@@ -14,6 +19,11 @@ import {
 import type { RepairScope } from '../src/loop/contracts';
 
 const now = '2026-08-19T04:00:00.000Z';
+const mergeIntent = {
+  intentDigest: '9'.repeat(64), pullRequestNumber: 8, issueNumber: 7,
+  baseSha: 'a'.repeat(40), headSha: 'b'.repeat(40), patchDigest: 'c'.repeat(64),
+  controllerCheckRunId: 10, requiredCheckRunIds: [11, 12, 13],
+};
 
 describe('repair state machine', () => {
   const scope: RepairScope = {
@@ -110,7 +120,7 @@ describe('repair state machine', () => {
     });
   });
 
-  it('leases one scope idempotently and requires the exact lease to acknowledge it', () => {
+  it('leases one scope idempotently, preserves it through production QA, and acknowledges only after merge', () => {
     const queued = enqueueRepairScope(initialRepairState(), scope, now);
     const secondScope = { ...scope, repairId: 'repair-2', auditRunId: 'audit-2', findingId: 'finding-2' };
     const withTwo = enqueueRepairScope(queued, secondScope, now);
@@ -120,14 +130,45 @@ describe('repair state machine', () => {
     expect(repeated.scope?.repairId).toBe('repair-1');
     expect(repeated.state.pendingScopes?.find((item) => item.scope.repairId === 'repair-2')?.state).toBe('pending');
     const gateDigest = 'a'.repeat(64);
-    expect(() => acknowledgeRepairScope(leased.state, 'repair-1', 1, 'wrong-lease-123456', gateDigest, now)).toThrow('scope lease does not match');
-    const acknowledged = acknowledgeRepairScope(leased.state, 'repair-1', 1, 'workflow-run-123456', gateDigest, now);
+    expect(() => acknowledgeRepairScope(leased.state, 'repair-1', 1, 'workflow-run-123456', gateDigest, now)).toThrow('scope is not awaiting production QA');
+    const pendingMerge = recordRepairMergeIntent(leased.state, 'repair-1', 1, 'workflow-run-123456', mergeIntent, now);
+    expect(pendingMerge.state.pendingScopes?.[0]).toMatchObject({ state: 'merge_pending', mergeIntent });
+    const merged = markRepairScopeMerged(pendingMerge.state, 'repair-1', 1, 'workflow-run-123456', { mergeSha: 'd'.repeat(40), mergeDigest: 'e'.repeat(64) }, now);
+    expect(merged.state.pendingScopes?.find((item) => item.scope.repairId === 'repair-1')).toMatchObject({ state: 'awaiting_qa', leaseId: 'workflow-run-123456', leaseExpiresAt: null });
+    const afterExpiry = leaseNextRepairScope(merged.state, 'other-workflow-123456', Date.parse(now) + 60 * 60_000, 'repair-1');
+    expect(afterExpiry.scope).toBeNull();
+    expect(() => acknowledgeRepairScope(merged.state, 'repair-1', 1, 'wrong-lease-123456', gateDigest, now)).toThrow('scope is not awaiting production QA');
+    const acknowledged = acknowledgeRepairScope(merged.state, 'repair-1', 1, 'workflow-run-123456', gateDigest, now);
     expect(acknowledged.state.pendingScopes?.map((item) => item.scope.repairId)).toEqual(['repair-2']);
     expect(acknowledged.state.auditHistory?.[0]).toMatchObject({ outcome: 'acknowledged', repairId: 'repair-1' });
     const replayed = acknowledgeRepairScope(acknowledged.state, 'repair-1', 1, 'workflow-run-123456', gateDigest, now);
     expect(replayed.replayed).toBe(true);
     expect(replayed.state).toBe(acknowledged.state);
     expect(() => acknowledgeRepairScope(acknowledged.state, 'repair-1', 1, 'workflow-run-123456', 'b'.repeat(64), now)).toThrow('evidence digest does not match');
+  });
+
+  it('can return a rolled-back production QA failure to the same repair lineage', () => {
+    const queued = enqueueRepairScope(initialRepairState(), scope, now);
+    const leased = leaseNextRepairScope(queued, 'workflow-run-prodqa-1', Date.parse(now), 'repair-1');
+    const pendingMerge = recordRepairMergeIntent(leased.state, 'repair-1', 1, 'workflow-run-prodqa-1', mergeIntent, now);
+    const merged = markRepairScopeMerged(pendingMerge.state, 'repair-1', 1, 'workflow-run-prodqa-1', { mergeSha: 'd'.repeat(40), mergeDigest: '6'.repeat(64) }, now);
+    expect(() => recordRepairScopeFeedback(merged.state, 'repair-1', 1, 'workflow-run-prodqa-1', '7'.repeat(64), ['live robots postcondition failed'], now)).toThrow('scope lease does not match');
+    const rollbackPending = recordRepairRollbackIntent(merged.state, 'repair-1', 1, 'workflow-run-prodqa-1', '8'.repeat(64), now);
+    const rolledBack = recordRepairRolledBack(rollbackPending.state, 'repair-1', 1, 'workflow-run-prodqa-1', {
+      rollbackMergeSha: 'f'.repeat(40), deploymentId: 'cloudflare-check-1', versionId: 'build-1', evidenceDigest: '7'.repeat(64),
+    }, ['live robots postcondition failed'], now);
+    expect(rolledBack).toMatchObject({ requeued: true, nextAttempt: 2, exhausted: false });
+    expect(rolledBack.state.pendingScopes?.[0]).toMatchObject({ state: 'pending', scope: { attempt: 2, feedback: ['live robots postcondition failed'] } });
+  });
+
+  it('reconciles an unmerged durable intent into exactly one bounded retry', () => {
+    const leased = leaseNextRepairScope(enqueueRepairScope(initialRepairState(), scope, now), 'workflow-run-crash-1', Date.parse(now), 'repair-1');
+    const pendingMerge = recordRepairMergeIntent(leased.state, 'repair-1', 1, 'workflow-run-crash-1', mergeIntent, now);
+    const abortDigest = '4'.repeat(64);
+    const aborted = recordRepairMergeAbort(pendingMerge.state, 'repair-1', 1, 'workflow-run-crash-1', abortDigest, ['merge process ended before GitHub accepted it'], now);
+    expect(aborted).toMatchObject({ requeued: true, nextAttempt: 2, replayed: false });
+    expect(aborted.state.pendingScopes?.[0]).toMatchObject({ state: 'pending', scope: { attempt: 2 } });
+    expect(recordRepairMergeAbort(aborted.state, 'repair-1', 1, 'workflow-run-crash-1', abortDigest, ['merge process ended before GitHub accepted it'], now)).toMatchObject({ replayed: true, nextAttempt: 2 });
   });
 
   it('feeds failed QA back to the same scope and exhausts after three attempts', () => {

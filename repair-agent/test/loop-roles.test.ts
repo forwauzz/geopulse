@@ -5,7 +5,7 @@ import type { AuditEnvelope, EngineerArtifact, GitHubRoleObservation, MergeGateI
 import { evaluateDeploymentQa } from '../src/loop/deployment-qa';
 import { DeploymentEvidenceAdapter } from '../src/loop/deployment-adapter';
 import { GitHubObservationAdapter } from '../src/loop/github-adapter';
-import { parseGitHubCheckRunObservation, parseGitHubPullRequestObservation, parseGitHubRequiredCheckObservation } from '../src/loop/github-observations';
+import { parseGitHubCheckRunObservation, parseGitHubPullRequestObservation, parseGitHubRequiredCheckObservation, parseRepairIssueLineageMarkers } from '../src/loop/github-observations';
 import { evaluateMergeGate, feedbackForNextAttempt } from '../src/loop/merge-gate';
 import { RepositoryProfileRegistry, repositoryProfileDigest } from '../src/loop/profile-registry';
 import {
@@ -116,7 +116,7 @@ async function mergeInput(overrides: Partial<MergeGateInput> = {}): Promise<Merg
     reviewer,
     qa,
     checkRuns: PORTABLE_FIXTURE_PROFILE.requiredChecks.map((check, index) => parseGitHubRequiredCheckObservation({
-      raw: { id: 200 + index, name: check.checkName, head_sha: engineer.headSha, conclusion: 'success', app: { slug: check.appSlug, id: check.appId } },
+      raw: { id: check.checkName === 'repair-review' ? 101 : check.checkName === 'repair-qa' ? 102 : 200 + index, name: check.checkName, head_sha: engineer.headSha, conclusion: 'success', app: { slug: check.appSlug, id: check.appId } },
       repository: PORTABLE_FIXTURE_PROFILE.repository, observedAt: '2026-08-19T15:59:00.000Z',
     })),
     profile: PORTABLE_FIXTURE_PROFILE,
@@ -124,7 +124,7 @@ async function mergeInput(overrides: Partial<MergeGateInput> = {}): Promise<Merg
     mergeController: observation('merge-controller'),
     pullRequest: parseGitHubPullRequestObservation({
       raw: { number: 8, state: 'open', mergeable: true, base: { ref: 'main', sha: engineer.baseSha }, head: { sha: engineer.headSha } },
-      repository: PORTABLE_FIXTURE_PROFILE.repository, linkedIssueNumbers: [7], observedAt: '2026-08-19T15:59:30.000Z',
+      repository: PORTABLE_FIXTURE_PROFILE.repository, lineageIssueNumbers: [7], observedAt: '2026-08-19T15:59:30.000Z',
     }),
     issueNumber: 7,
     evaluatedAt: now,
@@ -140,7 +140,7 @@ describe('repository profile registry and command policy', () => {
     expect(validateRepositoryProfile(PORTABLE_FIXTURE_PROFILE)).toEqual([]);
     const portableFile = JSON.parse(readFileSync(new URL('./portable-repo/.repair-agent/repository-profile.v1.json', import.meta.url), 'utf8')) as RepositoryProfile;
     expect(portableFile).toEqual(PORTABLE_FIXTURE_PROFILE);
-    expect(profileSupportsAutonomousMerge(GEOPULSE_PROFILE)).toBe(false);
+    expect(profileSupportsAutonomousMerge(GEOPULSE_PROFILE)).toBe(true);
     expect(profileSupportsAutonomousMerge(PORTABLE_FIXTURE_PROFILE)).toBe(true);
   });
 
@@ -223,9 +223,14 @@ describe('audit intake and scoper', () => {
 });
 
 describe('authenticated reviewer role', () => {
+  it('recognizes only exact non-closing repair lineage markers', () => {
+    expect(parseRepairIssueLineageMarkers('Tracks #27. Automated bounded repair.\nTracks #27')).toEqual([27]);
+    expect(parseRepairIssueLineageMarkers('This tracks #27 in prose.\nCloses #28.')).toEqual([]);
+  });
+
   it('parses only GitHub API-shaped check and pull-request observations', () => {
     expect(() => parseGitHubCheckRunObservation({ raw: { id: 1, head_sha: 'b'.repeat(40), conclusion: 'success', app: { slug: '../spoof', id: 1 } }, role: 'reviewer', repository: 'example/portable-site', observedAt: now })).toThrow('GitHub check-run app slug is invalid');
-    expect(() => parseGitHubPullRequestObservation({ raw: { number: 1, state: 'open', mergeable: null, base: { ref: 'main', sha: 'a'.repeat(40) }, head: { sha: 'b'.repeat(40) } }, repository: 'example/portable-site', linkedIssueNumbers: [7], observedAt: now })).toThrow('GitHub pull-request mergeability is unresolved');
+    expect(() => parseGitHubPullRequestObservation({ raw: { number: 1, state: 'open', mergeable: null, base: { ref: 'main', sha: 'a'.repeat(40) }, head: { sha: 'b'.repeat(40) } }, repository: 'example/portable-site', lineageIssueNumbers: [7], observedAt: now })).toThrow('GitHub pull-request mergeability is unresolved');
   });
 
   it('acquires repository and timestamps from a credential-owning GitHub adapter boundary', async () => {
@@ -239,14 +244,14 @@ describe('authenticated reviewer role', () => {
         calls.push(`pull:${repository}:${number}`);
         return { number, state: 'open', mergeable: true, base: { ref: 'main', sha: 'a'.repeat(40) }, head: { sha: 'b'.repeat(40) } };
       },
-      async readLinkedIssueNumbers(repository: string, number: number) {
+      async readIssueLineageNumbers(repository: string, number: number) {
         calls.push(`links:${repository}:${number}`);
         return [7];
       },
     };
     const adapter = new GitHubObservationAdapter({ reader, repository: PORTABLE_FIXTURE_PROFILE.repository, clock: () => new Date('2026-08-19T16:00:00.000Z') });
     await expect(adapter.observeRole('reviewer', 101)).resolves.toMatchObject({ repository: PORTABLE_FIXTURE_PROFILE.repository, observedAt: now, appId: 91001 });
-    await expect(adapter.observePullRequest(8)).resolves.toMatchObject({ repository: PORTABLE_FIXTURE_PROFILE.repository, number: 8, linkedIssueNumbers: [7], observedAt: now });
+    await expect(adapter.observePullRequest(8)).resolves.toMatchObject({ repository: PORTABLE_FIXTURE_PROFILE.repository, number: 8, lineageIssueNumbers: [7], observedAt: now });
     expect(calls).toEqual(['check:example/portable-site:101', 'pull:example/portable-site:8', 'links:example/portable-site:8']);
   });
 
@@ -301,12 +306,12 @@ describe('deterministic merge controller', () => {
       enabled: false,
       reviewer: tamperedReviewer,
       qa: qaWithSharedPrincipal,
-      pullRequest: { ...input.pullRequest, headSha: 'f'.repeat(40), linkedIssueNumbers: [], observedAt: '2026-08-19T15:00:00.000Z' },
+      pullRequest: { ...input.pullRequest, headSha: 'f'.repeat(40), lineageIssueNumbers: [], observedAt: '2026-08-19T15:00:00.000Z' },
     });
     expect(decision.allowed).toBe(false);
     if (!decision.allowed) expect(decision.reasons).toEqual(expect.arrayContaining([
       'autonomous merge is not enabled', 'reviewer evidence digest does not verify', 'pull request no longer points to the reviewed base and head SHAs',
-      'pull request is not linked to the bounded repair issue', 'pull request observation is stale or invalid', 'engineer, reviewer, QA, and merge-controller App principals must be pairwise distinct',
+      'pull request does not carry an authenticated bounded repair issue lineage', 'pull request observation is stale or invalid', 'engineer, reviewer, QA, and merge-controller App principals must be pairwise distinct',
     ]));
   });
 
@@ -321,6 +326,17 @@ describe('deterministic merge controller', () => {
     ]), });
   });
 
+  it('requires the current role check observation to be the exact check run bound into its verdict', async () => {
+    const input = await mergeInput();
+    const substituted = input.checkRuns.map((check) => check.checkName === 'repair-review'
+      ? { ...check, checkRunId: check.checkRunId + 1000 }
+      : check);
+    const decision = await evaluateMergeGate({ ...input, checkRuns: substituted });
+    expect(decision).toMatchObject({ allowed: false, reasons: expect.arrayContaining([
+      'required check observation is missing or ambiguous: 91001:portable-repair-reviewer:repair-review',
+    ]) });
+  });
+
   it('never accepts a digest-valid logical-shadow verdict at the authenticated gate', async () => {
     const input = await mergeInput();
     const { evidenceDigest: _prior, ...reviewerUnsigned } = input.reviewer!;
@@ -330,7 +346,7 @@ describe('deterministic merge controller', () => {
     expect(decision).toMatchObject({ allowed: false, reasons: expect.arrayContaining(['reviewer verdict schema or contract mode is unsupported']) });
   });
 
-  it('keeps GEO-Pulse auto-merge blocked until real reviewer, QA, and controller App IDs exist', async () => {
+  it('keeps provisioned GEO-Pulse auto-merge blocked for evidence issued by another repository profile', async () => {
     const portable = await mergeInput();
     const geoArtifact = artifact({ repositoryProfileId: GEOPULSE_PROFILE.id, repositoryProfileDigest: geoDigest, repository: GEOPULSE_PROFILE.repository, changedPaths: ['public/robots.txt'] });
     const decision = await evaluateMergeGate({
@@ -340,7 +356,12 @@ describe('deterministic merge controller', () => {
       profileDigest: geoDigest,
       pullRequest: { ...portable.pullRequest, repository: GEOPULSE_PROFILE.repository, baseSha: geoArtifact.baseSha, headSha: geoArtifact.headSha },
     });
-    expect(decision).toMatchObject({ allowed: false, reasons: expect.arrayContaining(['repository profile has unprovisioned or non-independent authenticated principals or checks']) });
+    expect(decision).toMatchObject({ allowed: false, reasons: expect.arrayContaining([
+      'engineer issuer is not authorized by the repository profile',
+      'reviewer issuer is not authorized by the repository profile',
+      'qa issuer is not authorized by the repository profile',
+      'merge-controller issuer is not authorized by the repository profile',
+    ]) });
   });
 });
 

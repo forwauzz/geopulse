@@ -16,6 +16,11 @@ import {
   enqueueRepairScope,
   initialRepairState,
   leaseNextRepairScope,
+  markRepairScopeMerged,
+  recordRepairMergeIntent,
+  recordRepairMergeAbort,
+  recordRepairRollbackIntent,
+  recordRepairRolledBack,
   recordAuditDisposition,
   recordRepairScopeFeedback,
   normalizeRepairState,
@@ -23,6 +28,9 @@ import {
   type CompletedRepair,
   type RepairAgentState,
   type RepairAttemptRecord,
+  type MergeIntent,
+  type MergeOutcome,
+  type RollbackOutcome,
 } from './state';
 export type { RepairAgentState } from './state';
 
@@ -163,6 +171,7 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
     if (!decision.accepted) {
       this.setState(recordAuditDisposition(this.state, {
         auditRunId: envelope.auditRunId,
+        producer: envelope.producer,
         recordedAt: now,
         outcome: decision.reasons.includes('no eligible supported finding') ? 'unsupported' : 'rejected',
         repairId: null,
@@ -187,6 +196,36 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
     const result = acknowledgeRepairScope(this.state, repairId, attempt, leaseId, gateDigest, new Date().toISOString());
     this.setState(result.state);
     return { replayed: result.replayed };
+  }
+
+  async recordMergeIntent(repairId: string, attempt: number, leaseId: string, intent: MergeIntent): Promise<{ replayed: boolean }> {
+    const result = recordRepairMergeIntent(this.state, repairId, attempt, leaseId, intent, new Date().toISOString());
+    this.setState(result.state);
+    return { replayed: result.replayed };
+  }
+
+  async abortMergeIntent(repairId: string, attempt: number, leaseId: string, abortDigest: string, reasons: string[]): Promise<{ requeued: boolean; nextAttempt: number | null; exhausted: boolean; replayed: boolean }> {
+    const result = recordRepairMergeAbort(this.state, repairId, attempt, leaseId, abortDigest, reasons, new Date().toISOString());
+    this.setState(result.state);
+    return { requeued: result.requeued, nextAttempt: result.nextAttempt, exhausted: result.exhausted, replayed: result.replayed };
+  }
+
+  async markScopeMerged(repairId: string, attempt: number, leaseId: string, outcome: MergeOutcome): Promise<{ replayed: boolean }> {
+    const result = markRepairScopeMerged(this.state, repairId, attempt, leaseId, outcome, new Date().toISOString());
+    this.setState(result.state);
+    return { replayed: result.replayed };
+  }
+
+  async recordRollbackIntent(repairId: string, attempt: number, leaseId: string, rollbackIntentDigest: string): Promise<{ replayed: boolean }> {
+    const result = recordRepairRollbackIntent(this.state, repairId, attempt, leaseId, rollbackIntentDigest, new Date().toISOString());
+    this.setState(result.state);
+    return { replayed: result.replayed };
+  }
+
+  async recordRolledBack(repairId: string, attempt: number, leaseId: string, outcome: RollbackOutcome, reasons: string[]): Promise<{ requeued: boolean; nextAttempt: number | null; exhausted: boolean; replayed: boolean }> {
+    const result = recordRepairRolledBack(this.state, repairId, attempt, leaseId, outcome, reasons, new Date().toISOString());
+    this.setState(result.state);
+    return { requeued: result.requeued, nextAttempt: result.nextAttempt, exhausted: result.exhausted, replayed: result.replayed };
   }
 
   async submitScopeFeedback(repairId: string, attempt: number, leaseId: string, feedbackDigest: string, reasons: string[]): Promise<{ requeued: boolean; nextAttempt: number | null; exhausted: boolean; replayed: boolean }> {

@@ -207,6 +207,112 @@ async function handleScopeAck(request: Request, env: RepairWorkerEnv): Promise<R
   }
 }
 
+function integerArrayField(body: unknown, field: string): number[] | null {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const value = (body as Record<string, unknown>)[field];
+  if (!Array.isArray(value) || value.length < 1 || value.length > 20 || !value.every((item) => Number.isSafeInteger(item) && Number(item) > 0)) return null;
+  return value as number[];
+}
+
+async function handleMergeIntent(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try { body = await readBoundedJson(request); } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  const attempt = integerField(body, 'attempt');
+  const intentDigest = stringField(body, 'intentDigest');
+  const pullRequestNumber = integerField(body, 'pullRequestNumber');
+  const issueNumber = integerField(body, 'issueNumber');
+  const baseSha = stringField(body, 'baseSha');
+  const headSha = stringField(body, 'headSha');
+  const patchDigest = stringField(body, 'patchDigest');
+  const controllerCheckRunId = integerField(body, 'controllerCheckRunId');
+  const requiredCheckRunIds = integerArrayField(body, 'requiredCheckRunIds');
+  if (!repairId || !leaseId || !attempt || !intentDigest || !pullRequestNumber || !issueNumber || !baseSha || !headSha || !patchDigest || !controllerCheckRunId || !requiredCheckRunIds) {
+    return json({ ok: false, error: 'complete merge intent evidence is required' }, { status: 400 });
+  }
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).recordMergeIntent(repairId, attempt, leaseId, {
+      intentDigest, pullRequestNumber, issueNumber, baseSha, headSha, patchDigest, controllerCheckRunId, requiredCheckRunIds,
+    });
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'merge intent failed' }, { status: 409 });
+  }
+}
+
+async function handleScopeMerged(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  const attempt = integerField(body, 'attempt');
+  const mergeDigest = stringField(body, 'mergeDigest');
+  const mergeSha = stringField(body, 'mergeSha');
+  const integrityFailure = stringField(body, 'integrityFailure') ?? undefined;
+  if (!repairId || !leaseId || !attempt || !mergeDigest || !mergeSha) return json({ ok: false, error: 'repairId, attempt, leaseId, mergeSha, and mergeDigest are required' }, { status: 400 });
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).markScopeMerged(repairId, attempt, leaseId, { mergeSha, mergeDigest, ...(integrityFailure ? { integrityFailure } : {}) });
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'merged transition failed' }, { status: 409 });
+  }
+}
+
+async function handleRollbackIntent(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try { body = await readBoundedJson(request); } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  const attempt = integerField(body, 'attempt');
+  const rollbackIntentDigest = stringField(body, 'rollbackIntentDigest');
+  if (!repairId || !leaseId || !attempt || !rollbackIntentDigest) return json({ ok: false, error: 'rollback intent evidence is required' }, { status: 400 });
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).recordRollbackIntent(repairId, attempt, leaseId, rollbackIntentDigest);
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'rollback intent failed' }, { status: 409 });
+  }
+}
+
+async function handleRolledBack(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try { body = await readBoundedJson(request); } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  const attempt = integerField(body, 'attempt');
+  const rollbackMergeSha = stringField(body, 'rollbackMergeSha');
+  const deploymentId = stringField(body, 'deploymentId');
+  const versionId = stringField(body, 'versionId');
+  const evidenceDigest = stringField(body, 'evidenceDigest');
+  const reasons = stringArrayField(body, 'reasons');
+  if (!repairId || !leaseId || !attempt || !rollbackMergeSha || !deploymentId || !versionId || !evidenceDigest || !reasons) return json({ ok: false, error: 'complete rollback outcome evidence and reasons are required' }, { status: 400 });
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).recordRolledBack(repairId, attempt, leaseId, { rollbackMergeSha, deploymentId, versionId, evidenceDigest }, reasons);
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'rolled-back transition failed' }, { status: 409 });
+  }
+}
+
 async function handleScopeFeedback(request: Request, env: RepairWorkerEnv): Promise<Response> {
   const denied = await requireAuthorization(request, env);
   if (denied) return denied;
@@ -227,6 +333,27 @@ async function handleScopeFeedback(request: Request, env: RepairWorkerEnv): Prom
     return json({ ok: true, ...result });
   } catch (error) {
     return json({ ok: false, error: error instanceof Error ? error.message : 'feedback failed' }, { status: 409 });
+  }
+}
+
+async function handleMergeAbort(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try { body = await readBoundedJson(request); } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  const attempt = integerField(body, 'attempt');
+  const abortDigest = stringField(body, 'abortDigest');
+  const reasons = stringArrayField(body, 'reasons');
+  if (!repairId || !leaseId || !attempt || !abortDigest || !reasons) return json({ ok: false, error: 'complete merge-abort evidence is required' }, { status: 400 });
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).abortMergeIntent(repairId, attempt, leaseId, abortDigest, reasons);
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'merge abort failed' }, { status: 409 });
   }
 }
 
@@ -265,6 +392,21 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/v1/scopes/ack') {
       return handleScopeAck(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/merge-intent') {
+      return handleMergeIntent(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/merge-abort') {
+      return handleMergeAbort(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/merged') {
+      return handleScopeMerged(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/rollback-intent') {
+      return handleRollbackIntent(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/rolled-back') {
+      return handleRolledBack(request, env);
     }
     if (request.method === 'POST' && url.pathname === '/v1/scopes/feedback') {
       return handleScopeFeedback(request, env);

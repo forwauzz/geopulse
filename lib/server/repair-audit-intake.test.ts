@@ -24,6 +24,28 @@ function audited(): SelfImprovementRunResult {
   };
 }
 
+function blockedRetrievalAgents(): SelfImprovementRunResult {
+  return {
+    ok: true,
+    status: 'audited',
+    runId: 'audit-run-retrieval',
+    score: 70,
+    letterGrade: 'C',
+    checkCatalogVersion: '2026-07-21',
+    plan: [{
+      check: 'AI retrieval agent access (robots.txt)',
+      checkId: 'ai-crawler-access',
+      weight: 10,
+      category: 'ai_readiness',
+      finding: 'robots.txt blocks OAI-SearchBot.',
+      fix: 'Allow approved retrieval agents.',
+      status: 'FAIL',
+      bucket: 'eligibility',
+      confidence: 'high',
+    }],
+  };
+}
+
 function memoryKv(): RepairAuditKv & { values: Map<string, string> } {
   const values = new Map<string, string>();
   return {
@@ -62,6 +84,37 @@ describe('canonical self-audit repair delivery', () => {
       checkCatalogVersion: 'catalog-v1',
       findings: [{ checkId: 'internal-links', confidence: 'high', risk: 'prohibited' }],
     });
+  });
+
+  it('maps only the evidence-complete retrieval-access failure to the installed deterministic skill', () => {
+    const envelope = buildRepairAuditEnvelope({
+      result: blockedRetrievalAgents(),
+      targetUrl: 'https://getgeopulse.com/',
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    });
+    expect(envelope?.findings).toEqual([expect.objectContaining({
+      checkId: 'ai-crawler-access',
+      status: 'FAIL',
+      confidence: 'high',
+      risk: 'low',
+      repairHint: { instruction: { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' } },
+    })]);
+
+    const warning = blockedRetrievalAgents();
+    warning.plan![0] = { ...warning.plan![0]!, status: 'WARNING' };
+    expect(buildRepairAuditEnvelope({
+      result: warning,
+      targetUrl: 'https://getgeopulse.com/',
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    })?.findings).toEqual([expect.objectContaining({ risk: 'prohibited' })]);
+
+    const unsupportedCatalog = blockedRetrievalAgents();
+    unsupportedCatalog.checkCatalogVersion = 'future-catalog';
+    expect(buildRepairAuditEnvelope({
+      result: unsupportedCatalog,
+      targetUrl: 'https://getgeopulse.com/',
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    })?.findings).toEqual([expect.objectContaining({ risk: 'prohibited' })]);
   });
 
   it('delivers through the internal service binding and reports an honest unsupported no-op', async () => {
