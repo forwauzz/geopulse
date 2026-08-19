@@ -18,12 +18,15 @@ const engineerEnvelope = JSON.parse(await readFile(engineerPath, 'utf8'));
 const reviewer = JSON.parse(await readFile(reviewerPath, 'utf8'));
 const qa = JSON.parse(await readFile(qaPath, 'utf8'));
 const artifact = engineerEnvelope.engineerArtifact;
-const unsignedEngineer = { schemaVersion: 1, repairEvidence: engineerEnvelope.repairEvidence, engineerArtifact: artifact };
+const unsignedEngineer = { schemaVersion: 1, contractMode: 'logical-shadow-v1', repairEvidence: engineerEnvelope.repairEvidence, engineerArtifact: artifact };
 if (createHash('sha256').update(JSON.stringify(unsignedEngineer)).digest('hex') !== engineerEnvelope.evidenceDigest) {
   throw new Error('engineer evidence digest does not verify');
 }
-if (artifact?.schemaVersion !== 1 || artifact.repositoryProfileId !== 'geopulse-canary-v1' || artifact.repository !== 'forwauzz/geopulse' || artifact.risk !== 'low') {
+if (engineerEnvelope.contractMode !== 'logical-shadow-v1' || artifact?.schemaVersion !== 1 || artifact.contractMode !== 'logical-shadow-v1' || artifact.repositoryProfileId !== 'geopulse-canary-v1' || artifact.repository !== 'forwauzz/geopulse' || artifact.risk !== 'low') {
   throw new Error('engineer artifact repository or risk contract is invalid');
+}
+if (!/^[a-f0-9]{64}$/.test(artifact.repositoryProfileDigest || '') || !/^[a-f0-9]{64}$/.test(artifact.engineerEvidenceDigest || '')) {
+  throw new Error('engineer profile or source evidence digest is invalid');
 }
 if (!Array.isArray(artifact.changedPaths) || artifact.changedPaths.join(',') !== 'repair-agent/test/portable-repo/public/robots.txt') {
   throw new Error('engineer artifact path budget is invalid');
@@ -31,13 +34,17 @@ if (!Array.isArray(artifact.changedPaths) || artifact.changedPaths.join(',') !==
 if (!Number.isInteger(artifact.changedLines) || artifact.changedLines < 1 || artifact.changedLines > 8) throw new Error('engineer changed-line budget is invalid');
 
 for (const [expectedRole, verdict] of [['reviewer', reviewer], ['qa', qa]]) {
-  if (verdict.schemaVersion !== 1 || verdict.role !== expectedRole || verdict.verdict !== 'passed' || verdict.repairId !== artifact.repairId) {
+  if (verdict.schemaVersion !== 1 || verdict.contractMode !== 'logical-shadow-v1' || verdict.role !== expectedRole || verdict.verdict !== 'passed' || verdict.repairId !== artifact.repairId) {
     throw new Error(`${expectedRole} verdict identity is invalid`);
   }
   if (verdict.attempt !== artifact.attempt || verdict.headSha !== artifact.headSha || verdict.patchDigest !== artifact.patchDigest) {
     throw new Error(`${expectedRole} verdict is stale`);
   }
-  if (verdict.engineerEvidenceDigest !== engineerEnvelope.evidenceDigest || !/^[a-f0-9]{64}$/.test(verdict.evidenceDigest || '')) {
+  if (verdict.repositoryProfileDigest !== artifact.repositoryProfileDigest
+    || verdict.engineerEvidenceDigest !== artifact.engineerEvidenceDigest
+    || verdict.engineerEnvelopeDigest !== engineerEnvelope.evidenceDigest
+    || !/^[a-f0-9]{64}$/.test(verdict.workEvidenceDigest || '')
+    || !/^[a-f0-9]{64}$/.test(verdict.evidenceDigest || '')) {
     throw new Error(`${expectedRole} evidence digest is invalid`);
   }
   const unsignedVerdict = { ...verdict };
@@ -69,6 +76,7 @@ const gateClaim = {
   baseSha: artifact.baseSha,
   headSha: artifact.headSha,
   patchDigest: artifact.patchDigest,
+  repositoryProfileDigest: artifact.repositoryProfileDigest,
   engineerEvidenceDigest: engineerEnvelope.evidenceDigest,
   reviewerEvidenceDigest: reviewer.evidenceDigest,
   qaEvidenceDigest: qa.evidenceDigest,

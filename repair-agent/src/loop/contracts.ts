@@ -1,4 +1,13 @@
 import type { RepairConfidence, RepairInstruction, RepairRisk, RepairSkillId } from '../contracts';
+import type { QaCommandPresetId } from './command-presets';
+
+export type RepairRole = 'engineer' | 'reviewer' | 'qa' | 'merge-controller';
+
+export type GitHubIssuerPolicy = {
+  provider: 'github';
+  appSlug: string;
+  appId: number | null;
+};
 
 export type RepositoryProfile = {
   schemaVersion: 1;
@@ -14,22 +23,24 @@ export type RepositoryProfile = {
     provider: 'github';
     installationMode: 'github_app';
     deploymentStrategy: 'merge_to_default_branch';
+    deploymentProvider: 'cloudflare' | 'fixture';
     checkoutRoot: string | null;
     previewUrlTemplate: string | null;
+    previewSmokePaths: readonly string[];
     productionSmokeUrls: readonly string[];
   };
   requiredChecks: readonly {
-    workflow: string;
-    job: string;
+    checkName: string;
     appSlug: string;
+    appId: number | null;
   }[];
-  qaCommands: {
-    focused: readonly string[];
-    affected: readonly string[];
-    typeCheck: readonly string[];
-    build: readonly string[];
-    browser: readonly string[];
+  roleIssuers: {
+    engineer: readonly GitHubIssuerPolicy[];
+    reviewer: readonly GitHubIssuerPolicy[];
+    qa: readonly GitHubIssuerPolicy[];
+    'merge-controller': readonly GitHubIssuerPolicy[];
   };
+  qaCommandPresetId: QaCommandPresetId;
 };
 
 export type AuditRepairHint = {
@@ -71,6 +82,7 @@ export type RepairScope = {
   auditRunId: string;
   findingId: string;
   repositoryProfileId: string;
+  repositoryProfileDigest: string;
   repository: string;
   defaultBranch: string;
   siteOrigin: string;
@@ -97,9 +109,11 @@ export type RepairScope = {
 
 export type EngineerArtifact = {
   schemaVersion: 1;
+  contractMode: 'authenticated-github-v1';
   repairId: string;
   auditRunId: string;
   repositoryProfileId: string;
+  repositoryProfileDigest: string;
   repository: string;
   risk: RepairRisk;
   attempt: number;
@@ -109,22 +123,65 @@ export type EngineerArtifact = {
   changedPaths: readonly string[];
   changedLines: number;
   authorIdentity: string;
+  authorIssuer: GitHubIssuerPolicy;
+  engineerEvidenceDigest: string;
+};
+
+export type GitHubRoleObservation = {
+  provider: 'github';
+  role: 'reviewer' | 'qa' | 'merge-controller';
+  repository: string;
+  appSlug: string;
+  appId: number;
+  checkRunId: number;
+  headSha: string;
+  conclusion: CheckConclusion;
+  observedAt: string;
+};
+
+export type GitHubRequiredCheckObservation = {
+  provider: 'github';
+  repository: string;
+  checkName: string;
+  appSlug: string;
+  appId: number;
+  checkRunId: number;
+  headSha: string;
+  conclusion: CheckConclusion;
+  observedAt: string;
 };
 
 export type RoleVerdict = {
   schemaVersion: 1;
+  contractMode: 'authenticated-github-v1';
   role: 'reviewer' | 'qa';
   repairId: string;
   attempt: number;
   headSha: string;
   patchDigest: string;
+  repositoryProfileDigest: string;
+  engineerEvidenceDigest: string;
+  workEvidenceDigest: string;
   identity: string;
+  issuer: GitHubRoleObservation;
   verdict: 'passed' | 'failed';
   evidenceDigest: string;
   reasons: readonly string[];
 };
 
 export type CheckConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | 'pending';
+
+export type PullRequestObservation = {
+  repository: string;
+  number: number;
+  state: 'open' | 'closed';
+  baseRef: string;
+  baseSha: string;
+  headSha: string;
+  mergeable: boolean;
+  linkedIssueNumbers: readonly number[];
+  observedAt: string;
+};
 
 export type MergeGateInput = {
   enabled: boolean;
@@ -133,11 +190,47 @@ export type MergeGateInput = {
   artifact: EngineerArtifact;
   reviewer: RoleVerdict | null;
   qa: RoleVerdict | null;
-  checks: Readonly<Record<string, CheckConclusion>>;
+  checkRuns: readonly GitHubRequiredCheckObservation[];
   profile: RepositoryProfile;
+  profileDigest: string;
+  mergeController: GitHubRoleObservation;
+  pullRequest: PullRequestObservation;
+  issueNumber: number;
+  evaluatedAt: string;
   attemptsUsed: number;
 };
 
 export type MergeGateDecision =
   | { allowed: true; reasons: [] }
   | { allowed: false; reasons: string[] };
+
+export type DeploymentObservation = {
+  provider: 'cloudflare' | 'fixture';
+  deploymentId: string;
+  versionId: string;
+  sourceSha: string;
+  environment: 'preview' | 'production';
+  observedAt: string;
+};
+
+export type DeploymentProbe = {
+  url: string;
+  status: number;
+  finalUrl: string;
+  bodyDigest: string;
+};
+
+export type DeploymentQaVerdict = {
+  schemaVersion: 1;
+  repositoryProfileId: string;
+  repositoryProfileDigest: string;
+  repairId: string;
+  sourceSha: string;
+  deploymentId: string;
+  versionId: string;
+  environment: 'preview' | 'production';
+  verdict: 'passed' | 'failed';
+  probeEvidenceDigest: string;
+  evidenceDigest: string;
+  reasons: readonly string[];
+};

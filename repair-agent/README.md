@@ -1,6 +1,6 @@
 # GEO-Pulse Repair Agent
 
-This dedicated Cloudflare Worker is the bounded proof for issues #515 and #520. It accepts one executable
+This dedicated Cloudflare Worker is the bounded proof for issues #515, #520, and #523. It accepts one executable
 audit finding at a time, admits only allowlisted low-risk repair skills, executes fixture repairs
 inside Cloudflare Sandbox, and independently evaluates the result.
 
@@ -36,6 +36,9 @@ The repair coordinator records every run, deduplicates its audit ID, and queues 
 only when an installed repository profile, exact check-to-skill mapping, high confidence, low risk,
 path allowlist, and skill budget all agree. The current production audit adapter deliberately marks
 findings without exact repository evidence as unsupported; it never guesses a file or replacement.
+Profile selection now goes through a strict runtime registry keyed by profile ID, producer authority,
+repository, and audit origin. The coordinator computes a canonical SHA-256 digest of the installed
+profile and binds it into the scope; callers cannot choose profile contents by sending an ID alone.
 
 The manual `repair-loop-canary` GitHub workflow proves the staged lifecycle:
 
@@ -45,7 +48,7 @@ The manual `repair-loop-canary` GitHub workflow proves the staged lifecycle:
 4. retrieve a verified artifact whose returned bytes are bound to recomputed SHA-256 evidence;
 5. open a one-file fixture PR;
 6. review and QA the immutable base/head diff in read-only jobs;
-7. emit formal SHA/patch/attempt-bound engineer, review, and QA artifacts;
+7. emit SHA/patch/attempt/profile-digest-bound engineer, review, and QA artifacts;
 8. validate all three artifacts in the merge controller before acknowledging the leased scope;
 9. return a failed reviewer/QA verdict to that same scope, incrementing its bounded attempt or
    recording exhaustion after attempt three; and
@@ -75,21 +78,65 @@ no protected required-check rules, so an Actions job cannot be a genuinely indep
 Autonomous merge must remain disabled until a separate least-privilege reviewer identity and branch
 rules require exact CI, repair-review, and repair-QA checks and dismiss stale verdicts.
 
+The deterministic future merge contract is nonetheless executable and fail-closed. It recomputes
+the complete installed profile digest at every artifact, verdict, merge, and deployment boundary and validates the
+current open PR's exact repository, base branch, base/head SHAs, mergeability, linked bounded issue,
+fresh observation time, change budgets, profile digest, engineer evidence, authorized GitHub App IDs,
+pairwise-distinct engineer/reviewer/QA/merge-controller App authorities, exact required-check
+observations bound to check-run ID/current SHA/fresh fetch, opt-in, and kill switch. Every
+role verdict is content-digested and bound to the authenticated GitHub observation that issued it.
+The GEO-Pulse profile intentionally records the not-yet-provisioned reviewer, QA, and controller App
+IDs as `null`, which makes a positive production merge decision impossible.
+
 ## Portable repository contract
 
 The current runtime installs GEO-Pulse and its controlled canary profiles only; cross-repository
 writes remain disabled. A second repository must provide a versioned profile declaring its exact
 repository/default branch, HTTPS origin, allowed path prefixes, repair skill allowlist, file/line
-budgets, allowlisted QA commands, exact check-app identities, GitHub App adapter mode, preview URL
+budgets, a trusted orchestrator-owned QA command preset ID, exact check/app IDs, role issuer policies,
+GitHub App adapter mode, preview URL
 template, and production smoke URLs. The checked-in
 `test/portable-repo/.repair-agent/repository-profile.v1.json` file is the portable onboarding
-artifact and is compared byte-for-value with the `portable-fixture-v1` contract in tests. This is a
-validated onboarding contract, not yet an executable second-repository adapter.
+artifact and is compared byte-for-value with the `portable-fixture-v1` contract in tests. Repository
+profiles never carry executable command text. Preset IDs resolve to immutable argument arrays owned
+by the coordinator, preventing a repository profile from injecting a deploy, secret, or shell command.
+QA must return every command in the selected preset exactly once; a successful subset or duplicated
+command is not accepted as complete evidence.
+
+`test/portable-loop.test.ts` is an executable second-repository proof. It creates a disposable Git
+repository, produces an audit and deterministic scope, runs the bounded repair runner, commits the
+one-file patch, derives exact base/head/patch evidence, executes the trusted QA preset, emits distinct
+reviewer and QA observations, obtains a positive dry-run merge decision, and verifies deployment
+identity, version, source SHA, URL inventory, response status, redirect origin, and body digests. It
+never creates or writes a real external repository.
+
+The GitHub observation adapter is the credential-owning boundary for future activation: it fetches
+check runs, PR state, and linked-issue evidence for its fixed repository and stamps observation time
+from its own clock. Role callers do not supply repository or timestamps. Unit fixtures implement that
+reader interface; a real GitHub App reader remains required before autonomous merge is enabled.
+
+Deployment QA is currently a dry-run contract, not an autonomous deploy authority. It recomputes the
+profile digest and validates the profile-bound provider, deployment ID, version, source SHA, fresh timestamp,
+complete preview/production URL inventory, exact redirect behavior, response status, and probe-content
+digest. `DeploymentEvidenceAdapter` fixes the repository/provider/URL inventory and clock at the
+credential-owning boundary; the disposable proof supplies only a fixture reader. A real Cloudflare
+reader must acquire those facts before activation, and a fixture observation is never accepted by the
+GEO-Pulse production profile.
 
 Moving from the fixture to another real repository additionally requires a separately authorized
 GitHub App installation with least-privilege repository access and its own branch rules. GitHub
 credentials never enter Cloudflare Sandbox; the repository adapter uses short-lived installation
 tokens in the GitHub control plane.
+
+The live PR-only canary uses an explicit `logical-shadow-v1` artifact discriminator. The future
+authenticated gate accepts only `authenticated-github-v1`, preventing logical jobs under the shared
+GitHub Actions principal from being mistaken for independent App verdicts.
+
+The exact remaining GEO-Pulse activation boundary is: allow the current PR-only canary to create a
+pull request, provision distinct reviewer/QA/merge-controller GitHub Apps, record their numeric App
+IDs in the profile, and install a default-branch ruleset requiring the exact CI/reviewer/QA checks
+with stale verdict dismissal and no agent bypass. None of those external permissions is inferred or
+enabled by this code.
 
 ## Local verification
 

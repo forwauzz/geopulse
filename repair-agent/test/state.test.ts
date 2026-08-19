@@ -25,6 +25,7 @@ describe('repair state machine', () => {
     auditRunId: 'audit-1',
     findingId: 'finding-1',
     repositoryProfileId: 'geopulse-v1',
+    repositoryProfileDigest: '9'.repeat(64),
     repository: 'forwauzz/geopulse',
     defaultBranch: 'main',
     siteOrigin: 'https://getgeopulse.com',

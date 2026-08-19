@@ -119,6 +119,8 @@ const evidence = {
   schemaVersion: 1,
   auditRunId: claimed.scope.auditRunId,
   repairId,
+  repositoryProfileId: claimed.scope.repositoryProfileId,
+  repositoryProfileDigest: claimed.scope.repositoryProfileDigest,
   attempt: claimed.scope.attempt,
   feedback: claimed.scope.feedback,
   issue: claimed.scope.issue,
