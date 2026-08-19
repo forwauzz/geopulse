@@ -1,5 +1,6 @@
 import type { EvaluationResult, RepairRequest, RunnerResult } from './contracts';
 import { getRepairSkill } from './skills';
+import { digestChangedContent, sha256Text } from './artifact';
 
 function countOccurrences(value: string, needle: string): number {
   if (needle.length === 0) return 0;
@@ -76,6 +77,12 @@ export async function evaluateRepair(
     if (!isSha256(file.beforeSha256) || !isSha256(file.afterSha256)) failures.push('invalid file evidence digest');
     if (file.beforeSha256 === file.afterSha256) failures.push('before and after file digests are identical');
     if (!Number.isInteger(file.changedLines) || file.changedLines < 1) failures.push('invalid changed-line evidence');
+    const original = request.fixture.files[file.path];
+    const final = result.finalFiles[file.path];
+    const expectedBefore = original === undefined ? null : await sha256Text(original);
+    const expectedAfter = typeof final === 'string' ? await sha256Text(final) : null;
+    if (file.beforeSha256 !== expectedBefore) failures.push(`before digest does not match fixture content: ${file.path}`);
+    if (expectedAfter === null || file.afterSha256 !== expectedAfter) failures.push(`after digest does not match final content: ${file.path}`);
   }
 
   const fixturePaths = Object.keys(request.fixture.files).sort();
@@ -97,8 +104,12 @@ export async function evaluateRepair(
   const uniqueFailures = [...new Set(failures)];
   const evidenceDigest = await digestEvidence({
     jobId,
+    repository: request.repository,
+    siteOrigin: request.siteOrigin,
     idempotencyKey: request.idempotencyKey,
+    instruction: request.instruction,
     changedFiles: result.changedFiles,
+    contentDigest: await digestChangedContent(result.changedFiles, result.finalFiles),
     postcondition: result.postcondition,
     failures: uniqueFailures,
   });

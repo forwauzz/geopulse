@@ -104,5 +104,7 @@ export async function POST(request: Request): Promise<Response> {
     force: true,
   });
   structuredLog('self_improvement_manual_run', { via: auth.via, status: result.status, score: result.score ?? null }, 'info');
-  return Response.json(result, { status: result.ok ? 200 : 200 });
+  return Response.json(result, {
+    status: result.ok ? 200 : result.status === 'skipped' ? 409 : 500,
+  });
 }

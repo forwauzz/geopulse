@@ -3,11 +3,12 @@ import { AgentWorkflow } from 'agents/workflows';
 import type { AgentWorkflowEvent, AgentWorkflowStep } from 'agents/workflows';
 import type { RepairAgent, RepairWorkflowParams } from './agent';
 import { parseRunnerResult } from './contracts';
-import type { EvaluationResult, RunnerResult } from './contracts';
+import type { EvaluationResult, RunnerResult, VerifiedRepairArtifact } from './contracts';
 import { evaluateRepair } from './evaluator';
 import type { RepairWorkerEnv } from './env';
 import { admitRepair, policyConfigFromEnv } from './policy';
 import type { RepairAttemptRecord } from './state';
+import { digestChangedContent } from './artifact';
 
 type AttemptExecution = {
   result: RunnerResult | null;
@@ -140,8 +141,20 @@ export class RepairWorkflow extends AgentWorkflow<
       });
 
       if (evaluation?.passed) {
+        const artifact: VerifiedRepairArtifact = {
+          schemaVersion: 1,
+          jobId,
+          repository: request.repository,
+          siteOrigin: request.siteOrigin,
+          idempotencyKey: request.idempotencyKey,
+          instruction: request.instruction,
+          changedFiles: execution.result?.changedFiles ?? [],
+          finalFiles: execution.result?.finalFiles ?? {},
+          evidenceDigest: evaluation.evidenceDigest,
+          contentDigest: await digestChangedContent(execution.result?.changedFiles ?? [], execution.result?.finalFiles ?? {}),
+        };
         await step.do('record-shadow-verification', async () => {
-          await this.agent.finishRepair(jobId, 'verified_shadow', evaluation, []);
+          await this.agent.finishRepair(jobId, 'verified_shadow', evaluation, [], artifact);
         });
         const verified: RepairWorkflowResult = {
           jobId,

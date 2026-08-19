@@ -52,4 +52,12 @@ describe('independent repair evaluator', () => {
     expect(result.hardGateFailures).toContain('runner job identity does not match');
     expect(result.hardGateFailures).toContain('invalid file evidence digest');
   });
+
+  it('recomputes evidence digests from the exact final bytes', async () => {
+    const runner = passingRunnerResult();
+    runner.finalFiles['app/resources/page.tsx'] = '<a href="/articles/new-guide">Changed after evaluation</a>\n';
+    const result = await evaluateRepair('job-1', validRepairRequest(), runner);
+    expect(result.passed).toBe(false);
+    expect(result.hardGateFailures).toContain('after digest does not match final content: app/resources/page.tsx');
+  });
 });

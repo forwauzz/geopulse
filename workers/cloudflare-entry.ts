@@ -58,6 +58,7 @@ import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
 import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
 import { enqueueDailyLifecycleExceptionDigest, enqueueMissingAccountCreatedEmails, enqueueOnboardingReminders, processLifecycleEmailQueue } from '../lib/server/lifecycle-email';
+import { deliverRepairAudit } from '../lib/server/repair-audit-intake';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -447,6 +448,15 @@ export default {
             env: selfEnv,
             triggerSource: 'worker_cron',
           });
+          if (result.ok) {
+            const repairDelivery = await deliverRepairAudit({
+              service: (env as unknown as Record<string, unknown>)['REPAIR_AGENT_SERVICE'] as { fetch(input: string, init?: RequestInit): Promise<Response> } | undefined,
+              result,
+              targetUrl: selfCfg.targetUrl,
+              generatedAt: new Date().toISOString(),
+            });
+            structuredLog('self_improvement_repair_intake', repairDelivery, repairDelivery.delivered ? 'info' : 'error');
+          }
           if (result.status !== 'skipped') {
             structuredLog('self_improvement_cron_run', {
               status: result.status,

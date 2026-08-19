@@ -127,6 +127,84 @@ async function handleStatus(request: Request, env: RepairWorkerEnv): Promise<Res
   return json(snapshot);
 }
 
+async function handleAuditSubmission(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  // The production scheduler reaches this hostname only through a Cloudflare service binding.
+  // Public workers.dev/custom-domain requests retain their real hostname and still require bearer auth.
+  const internal = new URL(request.url).hostname === 'repair-agent.internal';
+  if (!internal) {
+    const denied = await requireAuthorization(request, env);
+    if (denied) return denied;
+  }
+  let body: unknown;
+  try {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const agent = env.REPAIR_AGENT.getByName(SITE_AGENT_NAME);
+  const result = await agent.submitAudit(body, internal ? 'internal-scheduler' : 'external-canary');
+  return json(result, { status: result.accepted ? 202 : 422 });
+}
+
+function stringField(body: unknown, field: string): string | null {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const value = (body as Record<string, unknown>)[field];
+  return typeof value === 'string' ? value : null;
+}
+
+async function handleScopeClaim(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const leaseId = stringField(body, 'leaseId');
+  const repairId = stringField(body, 'repairId') ?? undefined;
+  if (!leaseId) return json({ ok: false, error: 'leaseId is required' }, { status: 400 });
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).claimScope(leaseId, repairId);
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'claim failed' }, { status: 422 });
+  }
+}
+
+async function handleScopeAck(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try {
+    body = await readBoundedJson(request);
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  if (!repairId || !leaseId) return json({ ok: false, error: 'repairId and leaseId are required' }, { status: 400 });
+  try {
+    await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).acknowledgeScope(repairId, leaseId);
+    return json({ ok: true });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'acknowledgement failed' }, { status: 409 });
+  }
+}
+
+async function handleArtifact(request: Request, env: RepairWorkerEnv, jobId: string): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  if (!/^[a-f0-9]{32}$/.test(jobId)) {
+    return json({ ok: false, error: 'invalid job id' }, { status: 400 });
+  }
+  const agent = env.REPAIR_AGENT.getByName(SITE_AGENT_NAME);
+  const artifact = await agent.getVerifiedArtifact(jobId);
+  return artifact
+    ? json({ ok: true, artifact })
+    : json({ ok: false, error: 'verified artifact not found' }, { status: 404 });
+}
+
 export default {
   async fetch(request: Request, env: RepairWorkerEnv): Promise<Response> {
     const url = new URL(request.url);
@@ -141,8 +219,21 @@ export default {
     if (request.method === 'POST' && url.pathname === '/v1/repairs') {
       return handleRepairSubmission(request, env);
     }
+    if (request.method === 'POST' && url.pathname === '/v1/audits') {
+      return handleAuditSubmission(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/claim') {
+      return handleScopeClaim(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/ack') {
+      return handleScopeAck(request, env);
+    }
     if (request.method === 'GET' && url.pathname === '/v1/status') {
       return handleStatus(request, env);
+    }
+    const artifactMatch = /^\/v1\/artifacts\/([a-f0-9]{32})$/.exec(url.pathname);
+    if (request.method === 'GET' && artifactMatch?.[1]) {
+      return handleArtifact(request, env, artifactMatch[1]);
     }
     return json({ ok: false, error: 'not found' }, { status: 404 });
   },

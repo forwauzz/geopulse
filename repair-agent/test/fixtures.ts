@@ -1,4 +1,9 @@
 import type { RepairRequest, RunnerResult } from '../src/contracts';
+import { createHash } from 'node:crypto';
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
 
 export function validRepairRequest(): RepairRequest {
   return {
@@ -43,8 +48,8 @@ export function passingRunnerResult(jobId = 'job-1'): RunnerResult {
     changedFiles: [
       {
         path: 'app/resources/page.tsx',
-        beforeSha256: 'a'.repeat(64),
-        afterSha256: 'b'.repeat(64),
+        beforeSha256: sha256('<a href="/articles/old-guide">Guide</a>\n'),
+        afterSha256: sha256('<a href="/articles/new-guide">Guide</a>\n'),
         changedLines: 2,
       },
     ],
