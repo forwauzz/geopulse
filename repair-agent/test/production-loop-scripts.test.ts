@@ -40,6 +40,50 @@ async function listen(handler: RequestListener): Promise<{ url: string; close():
 }
 
 describe('production repair orchestration scripts', () => {
+  it('keeps disabled App principal canaries least-privilege and non-gating', async () => {
+    const workflow = await readFile(new URL('../../.github/workflows/repair-loop-canary.yml', import.meta.url), 'utf8');
+    expect(workflow).toContain("test \"$REPAIR_LOOP_ENABLED\" = 'false'");
+    expect(workflow.match(/uses: actions\/create-github-app-token@v3/g)).toHaveLength(3);
+    expect(workflow.match(/permission-checks: write/g)).toHaveLength(3);
+    expect(workflow.match(/permission-variables: read/g)).toHaveLength(1);
+
+    const block = (job: string, nextJob: string): string => {
+      const match = new RegExp(`\\n  ${job}:([\\s\\S]*?)\\n  ${nextJob}:`).exec(workflow);
+      expect(match, `${job} job must exist before ${nextJob}`).not.toBeNull();
+      return match?.[1] ?? '';
+    };
+    const reviewer = block('reviewer-principal-canary', 'qa-principal-canary');
+    const qa = block('qa-principal-canary', 'merge-principal-canary');
+    const merge = block('merge-principal-canary', 'engineer');
+
+    for (const [job, expectedAppId, expectedSecret, expectedCheck] of [
+      [reviewer, 'REPAIR_REVIEWER_APP_ID', 'REPAIR_REVIEWER_PRIVATE_KEY', 'repair-review-principal-canary'],
+      [qa, 'REPAIR_QA_APP_ID', 'REPAIR_QA_PRIVATE_KEY', 'repair-qa-principal-canary'],
+      [merge, 'REPAIR_MERGE_APP_ID', 'REPAIR_MERGE_PRIVATE_KEY', 'repair-merge-principal-canary'],
+    ] as const) {
+      expect(job).toContain('needs: dispatch-policy');
+      expect(job).toContain('permissions: {}');
+      expect(job).toContain(expectedAppId);
+      expect(job).toContain(expectedSecret);
+      expect(job).toContain(expectedCheck);
+      expect(job.match(/permission-checks: write/g)).toHaveLength(1);
+      expect(job).toContain(`test "$(jq -r '.name' <<<"$RESPONSE")" = '${expectedCheck}'`);
+      expect(job).toContain(`test "$(jq -r '.status' <<<"$RESPONSE")" = 'completed'`);
+      expect(job).toContain(`test "$(jq -r '.conclusion' <<<"$RESPONSE")" = 'success'`);
+      expect(job).not.toMatch(/pulls\/.+merge|git\/refs|pull-requests:|contents:|issues:/);
+    }
+    expect(reviewer).not.toContain('permission-variables:');
+    expect(qa).not.toContain('permission-variables:');
+    expect(merge.match(/permission-variables: read/g)).toHaveLength(1);
+    expect(reviewer).not.toContain('REPAIR_QA_PRIVATE_KEY');
+    expect(reviewer).not.toContain('REPAIR_MERGE_PRIVATE_KEY');
+    expect(qa).not.toContain('REPAIR_REVIEWER_PRIVATE_KEY');
+    expect(qa).not.toContain('REPAIR_MERGE_PRIVATE_KEY');
+    expect(merge).not.toContain('REPAIR_REVIEWER_PRIVATE_KEY');
+    expect(merge).not.toContain('REPAIR_QA_PRIVATE_KEY');
+    expect(merge).toContain('permission-variables: read');
+  });
+
   it('uses a distinct idempotent rollback lineage for every bounded attempt', async () => {
     const source = await readFile(rollbackScript, 'utf8');
     expect(source).toContain('BRANCH="repair-agent/revert-$REPAIR_ID-attempt-$ATTEMPT"');

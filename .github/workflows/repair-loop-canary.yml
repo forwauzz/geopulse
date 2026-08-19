@@ -38,6 +38,7 @@ jobs:
         env:
           EXPECTED_REF: refs/heads/${{ github.event.repository.default_branch }}
           OBSERVED_REF: ${{ github.ref }}
+          REPAIR_LOOP_ENABLED: ${{ vars.REPAIR_LOOP_ENABLED }}
           REPAIR_ID: ${{ inputs.repair_id }}
           REPAIR_BRANCH: ${{ inputs.repair_branch }}
           REPAIR_PR: ${{ inputs.repair_pr }}
@@ -45,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$OBSERVED_REF" = "$EXPECTED_REF"
+          test "$REPAIR_LOOP_ENABLED" = 'false'
           if [ -z "$REPAIR_ID" ]; then
             test -z "$REPAIR_BRANCH"
             test -z "$REPAIR_PR"
@@ -87,6 +89,113 @@ jobs:
         working-directory: repair-agent
       - run: npm run type-check
         working-directory: repair-agent
+
+  reviewer-principal-canary:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions: {}
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: reviewer-token
+        with:
+          app-id: ${{ vars.REPAIR_REVIEWER_APP_ID }}
+          private-key: ${{ secrets.REPAIR_REVIEWER_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Prove reviewer App identity and Checks write permission
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.reviewer-token.outputs.token }}
+          EXPECTED_APP_ID: ${{ vars.REPAIR_REVIEWER_APP_ID }}
+        run: |
+          set -euo pipefail
+          RESPONSE="$(gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='repair-review-principal-canary' \
+            -f head_sha="$GITHUB_SHA" \
+            -f status='completed' \
+            -f conclusion='success' \
+            -f 'output[title]=Reviewer principal canary' \
+            -f 'output[summary]=Exact-SHA permission proof only; not a production review verdict.')"
+          test "$(jq -r '.head_sha' <<<"$RESPONSE")" = "$GITHUB_SHA"
+          test "$(jq -r '.app.id' <<<"$RESPONSE")" = "$EXPECTED_APP_ID"
+          test "$(jq -r '.app.slug' <<<"$RESPONSE")" = 'geo-pulse-repair-reviewer'
+          test "$(jq -r '.name' <<<"$RESPONSE")" = 'repair-review-principal-canary'
+          test "$(jq -r '.status' <<<"$RESPONSE")" = 'completed'
+          test "$(jq -r '.conclusion' <<<"$RESPONSE")" = 'success'
+
+  qa-principal-canary:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions: {}
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: qa-token
+        with:
+          app-id: ${{ vars.REPAIR_QA_APP_ID }}
+          private-key: ${{ secrets.REPAIR_QA_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Prove QA App identity and Checks write permission
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.qa-token.outputs.token }}
+          EXPECTED_APP_ID: ${{ vars.REPAIR_QA_APP_ID }}
+        run: |
+          set -euo pipefail
+          RESPONSE="$(gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='repair-qa-principal-canary' \
+            -f head_sha="$GITHUB_SHA" \
+            -f status='completed' \
+            -f conclusion='success' \
+            -f 'output[title]=QA principal canary' \
+            -f 'output[summary]=Exact-SHA permission proof only; not a production QA verdict.')"
+          test "$(jq -r '.head_sha' <<<"$RESPONSE")" = "$GITHUB_SHA"
+          test "$(jq -r '.app.id' <<<"$RESPONSE")" = "$EXPECTED_APP_ID"
+          test "$(jq -r '.app.slug' <<<"$RESPONSE")" = 'geo-pulse-repair-qa'
+          test "$(jq -r '.name' <<<"$RESPONSE")" = 'repair-qa-principal-canary'
+          test "$(jq -r '.status' <<<"$RESPONSE")" = 'completed'
+          test "$(jq -r '.conclusion' <<<"$RESPONSE")" = 'success'
+
+  merge-principal-canary:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions: {}
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: merge-token
+        with:
+          app-id: ${{ vars.REPAIR_MERGE_APP_ID }}
+          private-key: ${{ secrets.REPAIR_MERGE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+          permission-variables: read
+      - name: Prove merge App identity, Actions variable read, and Checks write
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.merge-token.outputs.token }}
+          EXPECTED_APP_ID: ${{ vars.REPAIR_MERGE_APP_ID }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/variables/REPAIR_LOOP_ENABLED" --jq '.value')" = 'false'
+          RESPONSE="$(gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='repair-merge-principal-canary' \
+            -f head_sha="$GITHUB_SHA" \
+            -f status='completed' \
+            -f conclusion='success' \
+            -f 'output[title]=Merge principal canary' \
+            -f 'output[summary]=Exact-SHA permission proof with activation disabled; this job cannot merge.')"
+          test "$(jq -r '.head_sha' <<<"$RESPONSE")" = "$GITHUB_SHA"
+          test "$(jq -r '.app.id' <<<"$RESPONSE")" = "$EXPECTED_APP_ID"
+          test "$(jq -r '.app.slug' <<<"$RESPONSE")" = 'geo-pulse-repair-merge'
+          test "$(jq -r '.name' <<<"$RESPONSE")" = 'repair-merge-principal-canary'
+          test "$(jq -r '.status' <<<"$RESPONSE")" = 'completed'
+          test "$(jq -r '.conclusion' <<<"$RESPONSE")" = 'success'
 
   engineer:
     needs: [dispatch-policy, individual-role-tests]

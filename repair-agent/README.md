@@ -41,7 +41,9 @@ Profile selection now goes through a strict runtime registry keyed by profile ID
 repository, and audit origin. The coordinator computes a canonical SHA-256 digest of the installed
 profile and binds it into the scope; callers cannot choose profile contents by sending an ID alone.
 
-The manual `repair-loop-canary` workflow remains a non-merging fixture proof. The production
+The manual `repair-loop-canary` workflow remains a non-merging fixture proof. It also issues
+distinct, non-gating exact-SHA canary checks from the Reviewer, QA, and Merge App installations;
+the Merge canary proves the activation variable is still false and has no merge step. The production
 `repair-loop` workflow is separately opt-in through `REPAIR_LOOP_ENABLED`, runs every 15 minutes,
 and implements the staged lifecycle:
 
