@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  countQualifiedWorkspaceActivations,
   chooseRevenueAgencyFocus,
   resolveRevenueAgencyConfig,
 } from './revenue-agency-agent';
@@ -89,5 +90,45 @@ describe('Revenue Agency control plane', () => {
         activeMonitoring: 0,
       }).focus
     ).toBe('convert');
+  });
+
+  it('counts only deduplicated external workspaces with evidenced first value', () => {
+    expect(countQualifiedWorkspaceActivations({
+      owners: [
+        { id: 'startup-1', kind: 'startup', canonical_domain: 'customer.ca', fallback_domain: null, status: 'active', metadata: {} },
+        { id: 'startup-duplicate', kind: 'startup', canonical_domain: 'www.customer.ca', fallback_domain: null, status: 'pilot', metadata: {} },
+        { id: 'startup-free-no-value', kind: 'startup', canonical_domain: 'free.ca', fallback_domain: null, status: 'active', metadata: {} },
+        { id: 'startup-test', kind: 'startup', canonical_domain: 'example.com', fallback_domain: null, status: 'active', metadata: {} },
+        { id: 'startup-internal', kind: 'startup', canonical_domain: 'alie.app', fallback_domain: null, status: 'active', metadata: {} },
+        { id: 'agency-excluded', kind: 'agency', canonical_domain: 'lifter.ca', fallback_domain: null, status: 'active', metadata: {} },
+        { id: 'agency-external', kind: 'agency', canonical_domain: 'agency.ca', fallback_domain: null, status: 'active', metadata: {} },
+      ],
+      scans: [
+        { startup_workspace_id: 'startup-1', agency_account_id: null, domain: 'https://customer.ca/', url: null, run_source: 'startup_dashboard' },
+        { startup_workspace_id: 'startup-duplicate', agency_account_id: null, domain: 'customer.ca', url: null, run_source: 'monitor' },
+        { startup_workspace_id: 'startup-test', agency_account_id: null, domain: 'example.com', url: null, run_source: 'startup_dashboard' },
+        { startup_workspace_id: 'startup-internal', agency_account_id: null, domain: 'alie.app', url: null, run_source: 'startup_dashboard' },
+        { startup_workspace_id: null, agency_account_id: 'agency-excluded', domain: 'client.ca', url: null, run_source: 'agency_dashboard' },
+        { startup_workspace_id: null, agency_account_id: 'agency-external', domain: 'agency-client.ca', url: null, run_source: 'agency_dashboard' },
+      ],
+    })).toBe(2);
+  });
+
+  it('fails closed on mismatched startup domains, invalid sources, and inactive owners', () => {
+    expect(countQualifiedWorkspaceActivations({
+      owners: [
+        { id: 'mismatch', kind: 'startup', canonical_domain: 'right.ca', fallback_domain: null, status: 'active', metadata: {} },
+        { id: 'paused', kind: 'startup', canonical_domain: 'paused.ca', fallback_domain: null, status: 'paused', metadata: {} },
+        { id: 'flagged', kind: 'agency', canonical_domain: 'flagged.ca', fallback_domain: null, status: 'active', metadata: { is_test: true } },
+        { id: 'admin-comp', kind: 'startup', canonical_domain: null, fallback_domain: 'gmail.com', status: 'active', metadata: { subscription_id: 'admin_comp:user-id' } },
+      ],
+      scans: [
+        { startup_workspace_id: 'mismatch', agency_account_id: null, domain: 'wrong.ca', url: null, run_source: 'startup_dashboard' },
+        { startup_workspace_id: 'paused', agency_account_id: null, domain: 'paused.ca', url: null, run_source: 'startup_dashboard' },
+        { startup_workspace_id: null, agency_account_id: 'flagged', domain: 'client.ca', url: null, run_source: 'agency_dashboard' },
+        { startup_workspace_id: 'admin-comp', agency_account_id: null, domain: 'gmail.com', url: null, run_source: 'startup_dashboard' },
+        { startup_workspace_id: 'mismatch', agency_account_id: null, domain: 'right.ca', url: null, run_source: 'public_self_serve' },
+      ],
+    })).toBe(0);
   });
 });

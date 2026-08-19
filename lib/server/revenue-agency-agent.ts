@@ -30,6 +30,7 @@ import {
   isExcludedRevenueIdentity,
   isExternalPaidCheckout,
   isVerifiedStripeSubscriptionId,
+  normalizedRevenueDomain,
   type RevenueIdentityMetadata,
 } from './revenue-identity';
 
@@ -69,7 +70,8 @@ export type RevenueAgencySnapshot = {
   readonly checkoutStarts: number;
   readonly repliesReceived: number;
   readonly meetingsBooked: number;
-  readonly activatedWorkspaces: number;
+  readonly workspaceRecordsCreated: number;
+  readonly qualifiedWorkspaceActivations: number;
   readonly paymentsCompleted: number;
   readonly paidSubscriptionsStarted: number;
   readonly cancellations: number;
@@ -364,6 +366,106 @@ async function safeQualifiedReportCount(
   }
 }
 
+type WorkspaceActivationOwner = {
+  readonly id: string;
+  readonly kind: 'startup' | 'agency';
+  readonly canonical_domain: string | null;
+  readonly fallback_domain: string | null;
+  readonly status: string;
+  readonly metadata: RevenueIdentityMetadata;
+};
+
+type WorkspaceActivationScan = {
+  readonly startup_workspace_id: string | null;
+  readonly agency_account_id: string | null;
+  readonly domain: string | null;
+  readonly url: string | null;
+  readonly run_source: string | null;
+};
+
+export function countQualifiedWorkspaceActivations(args: {
+  readonly owners: readonly WorkspaceActivationOwner[];
+  readonly scans: readonly WorkspaceActivationScan[];
+}): number {
+  const owners = new Map(
+    args.owners.map((owner) => [`${owner.kind}:${owner.id}`, owner] as const),
+  );
+  const activatedDomains = new Set<string>();
+  for (const scan of args.scans) {
+    const kind = scan.startup_workspace_id ? 'startup' : scan.agency_account_id ? 'agency' : null;
+    const ownerId = scan.startup_workspace_id ?? scan.agency_account_id;
+    if (!kind || !ownerId) continue;
+    const owner = owners.get(`${kind}:${ownerId}`);
+    if (!owner || !['active', 'pilot'].includes(owner.status)) continue;
+    if (
+      (kind === 'startup' && !['startup_dashboard', 'monitor'].includes(scan.run_source ?? ''))
+      || (kind === 'agency' && !['agency_dashboard', 'monitor'].includes(scan.run_source ?? ''))
+    ) continue;
+
+    const ownerDomain = normalizedRevenueDomain(owner.canonical_domain ?? owner.fallback_domain);
+    if (!ownerDomain || isExcludedRevenueIdentity({ domain: ownerDomain, metadata: owner.metadata })) continue;
+    if (
+      kind === 'startup'
+      && normalizedRevenueDomain(scan.domain ?? scan.url) !== ownerDomain
+    ) continue;
+    activatedDomains.add(ownerDomain);
+  }
+  return activatedDomains.size;
+}
+
+async function loadQualifiedWorkspaceActivationCount(
+  supabase: SupabaseClient,
+  since: string,
+): Promise<number> {
+  try {
+    const scansResult = await supabase
+      .from('scans')
+      .select('startup_workspace_id,agency_account_id,domain,url,run_source')
+      .eq('status', 'complete')
+      .in('run_source', ['startup_dashboard', 'agency_dashboard', 'monitor'])
+      .gte('created_at', since)
+      .limit(5_000);
+    if (scansResult.error || !scansResult.data?.length) return 0;
+    const scans = scansResult.data as WorkspaceActivationScan[];
+    const startupIds = [...new Set(scans.map((row) => row.startup_workspace_id).filter((id): id is string => Boolean(id)))];
+    const agencyIds = [...new Set(scans.map((row) => row.agency_account_id).filter((id): id is string => Boolean(id)))];
+    const [startupResult, agencyResult] = await Promise.all([
+      startupIds.length > 0
+        ? supabase.from('startup_workspaces').select('id,canonical_domain,primary_domain,status,metadata').in('id', startupIds)
+        : Promise.resolve({ data: [], error: null }),
+      agencyIds.length > 0
+        ? supabase.from('agency_accounts').select('id,canonical_domain,website_domain,status,metadata').in('id', agencyIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (startupResult.error || agencyResult.error) return 0;
+    const owners: WorkspaceActivationOwner[] = [
+      ...((startupResult.data ?? []) as Array<{
+        id: string; canonical_domain: string | null; primary_domain: string | null; status: string; metadata: RevenueIdentityMetadata;
+      }>).map((row) => ({
+        id: row.id,
+        kind: 'startup' as const,
+        canonical_domain: row.canonical_domain,
+        fallback_domain: row.primary_domain,
+        status: row.status,
+        metadata: row.metadata,
+      })),
+      ...((agencyResult.data ?? []) as Array<{
+        id: string; canonical_domain: string | null; website_domain: string | null; status: string; metadata: RevenueIdentityMetadata;
+      }>).map((row) => ({
+        id: row.id,
+        kind: 'agency' as const,
+        canonical_domain: row.canonical_domain,
+        fallback_domain: row.website_domain,
+        status: row.status,
+        metadata: row.metadata,
+      })),
+    ];
+    return countQualifiedWorkspaceActivations({ owners, scans });
+  } catch {
+    return 0;
+  }
+}
+
 export function chooseRevenueAgencyFocus(values: {
   leads: number;
   activeProspects: number;
@@ -408,8 +510,9 @@ export async function loadRevenueAgencySnapshot(
     checkoutStarts,
     repliesReceived,
     meetingsBooked,
-    activatedStartupWorkspaces,
-    activatedAgencyAccounts,
+    startupWorkspaceRecordsCreated,
+    agencyAccountRecordsCreated,
+    qualifiedWorkspaceActivations,
     paymentsCompleted,
     subscriptionMetrics,
     proofAssets,
@@ -437,6 +540,7 @@ export async function loadRevenueAgencySnapshot(
     ),
     safeCount(supabase, 'startup_workspaces', (q) => q.gte('created_at', since)),
     safeCount(supabase, 'agency_accounts', (q) => q.gte('created_at', since)),
+    loadQualifiedWorkspaceActivationCount(supabase, since),
     safeExternalPaymentCount(supabase, since),
     loadExternalSubscriptionMetrics(supabase, since),
     safeCount(supabase, 'distribution_assets', (q) =>
@@ -451,7 +555,7 @@ export async function loadRevenueAgencySnapshot(
     subscriptionMetrics.paidWorkspaceSubscriptions
     + subscriptionMetrics.paidMonitoringSubscriptions;
   const convertedLeads = paymentsCompleted + paidSubscriptionsStarted;
-  const activatedWorkspaces = activatedStartupWorkspaces + activatedAgencyAccounts;
+  const workspaceRecordsCreated = startupWorkspaceRecordsCreated + agencyAccountRecordsCreated;
   const cancellations = subscriptionMetrics.cancellations;
   const activeMonitoring = subscriptionMetrics.activeMonitoring;
   const pastDueMonitoring = subscriptionMetrics.pastDueMonitoring;
@@ -480,7 +584,7 @@ export async function loadRevenueAgencySnapshot(
       label: 'Diagnose',
       value: completedScans,
       status: completedScans > 0 ? 'healthy' : 'waiting',
-      detail: `${completedScans} completed scans · ${deliveredReports} reports delivered`,
+      detail: `${completedScans} completed scans · ${deliveredReports} reports delivered · ${workspaceRecordsCreated} workspace records created · ${qualifiedWorkspaceActivations} qualified first-value activations`,
     },
     {
       key: 'prove',
@@ -519,7 +623,8 @@ export async function loadRevenueAgencySnapshot(
     checkoutStarts,
     repliesReceived,
     meetingsBooked,
-    activatedWorkspaces,
+    workspaceRecordsCreated,
+    qualifiedWorkspaceActivations,
     paymentsCompleted,
     paidSubscriptionsStarted,
     cancellations,
