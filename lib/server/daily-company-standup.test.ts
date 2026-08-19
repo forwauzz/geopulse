@@ -27,7 +27,8 @@ const snapshot: RevenueAgencySnapshot = {
   checkoutStarts: 0,
   repliesReceived: 0,
   meetingsBooked: 0,
-  activatedWorkspaces: 3,
+  workspaceRecordsCreated: 6,
+  qualifiedWorkspaceActivations: 1,
   paymentsCompleted: 2,
   paidSubscriptionsStarted: 0,
   cancellations: 0,
@@ -114,6 +115,10 @@ describe('recurring revenue identity exclusions', () => {
       metadata: { source: 'admin_assign_plan' },
     })).toBe(true);
     expect(isExcludedRevenueIdentity({
+      domain: 'gmail.com',
+      metadata: { source: 'self_serve', subscription_id: 'admin_comp:owner-id' },
+    })).toBe(true);
+    expect(isExcludedRevenueIdentity({
       email: 'owner@northstarmsp.ca',
       domain: 'northstarmsp.ca',
     })).toBe(false);
@@ -173,6 +178,8 @@ describe('daily company standup', () => {
 
     const html = renderDailyCompanyStandupHtml(report);
     expect(html).toContain('Verified non-internal recurring customers');
+    expect(html).toContain('Workspace records created / qualified first value');
+    expect(html).not.toContain('Activated workspaces');
     expect(html).toContain('Maya Brooks');
     expect(html).toContain('Codex');
     expect(html).toContain('Role rubric');

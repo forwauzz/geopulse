@@ -50,6 +50,7 @@ export function isExcludedRevenueIdentity(args: {
     metadata['environment'],
   ].map((value) => String(value ?? '').toLowerCase());
   const source = String(metadata['source'] ?? '').trim().toLowerCase();
+  const subscriptionId = String(metadata['subscription_id'] ?? '').trim().toLowerCase();
 
   return (!email && !siteDomain)
     || INTERNAL_REVENUE_EMAILS.has(email)
@@ -59,6 +60,7 @@ export function isExcludedRevenueIdentity(args: {
     || email.includes('+test@')
     || explicitInternal
     || ['admin_assign_plan', 'admin_comp'].includes(source)
+    || subscriptionId.startsWith('admin_comp:')
     || classification.some((value) => ['internal', 'test', 'sandbox'].includes(value));
 }
 
