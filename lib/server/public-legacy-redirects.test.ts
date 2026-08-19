@@ -29,6 +29,7 @@ describe('public legacy redirects', () => {
         '/blog/why-crawlable-pages-still-fail-in-ai-answers',
         '/blog/schema-present-but-page-still-unclear-pattern',
         '/blog/topic/benchmark_methodology_literacy',
+        '/blog/geopulse',
       ])
     );
   });
