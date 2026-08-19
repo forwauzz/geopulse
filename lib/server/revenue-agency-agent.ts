@@ -584,7 +584,7 @@ export async function loadRevenueAgencySnapshot(
       label: 'Diagnose',
       value: completedScans,
       status: completedScans > 0 ? 'healthy' : 'waiting',
-      detail: `${completedScans} completed scans · ${deliveredReports} reports delivered`,
+      detail: `${completedScans} completed scans · ${deliveredReports} reports delivered · ${workspaceRecordsCreated} workspace records created · ${qualifiedWorkspaceActivations} qualified first-value activations`,
     },
     {
       key: 'prove',
