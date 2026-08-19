@@ -140,10 +140,11 @@ GitHub Actions principal from being mistaken for independent App verdicts.
 
 The exact remaining GEO-Pulse activation boundary is: merge and deploy #527, grant the existing merge-
 controller App Checks read/write permission, install a default-branch ruleset requiring pull requests,
-strict up-to-date exact CI, and no force-push/delete/bypass, prove all three App-issued checks in a controlled run,
+strict up-to-date Actions-issued `verify`, and no force-push/delete/bypass, prove all three App-issued checks in a controlled run,
 then set `REPAIR_LOOP_ENABLED=true`. Role verdicts are also required by the deterministic controller,
 so an unreviewed repair cannot merge even though those repair-only checks are not imposed on unrelated
-repository PRs. None of these external permissions is inferred or enabled by the code.
+repository PRs. The dedicated Worker check is named `repair-agent-verify`, leaving the root CI aggregate
+`verify` as the single server-ruleset context. None of these external permissions is inferred or enabled by the code.
 
 ## Local verification
 
