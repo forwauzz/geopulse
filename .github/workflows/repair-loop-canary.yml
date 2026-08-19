@@ -1,0 +1,288 @@
+name: repair-loop-canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      open_pr:
+        description: Open a PR after all individual role tests and the live shadow repair pass
+        type: boolean
+        default: true
+
+concurrency:
+  group: repair-loop-canary
+  cancel-in-progress: false
+
+jobs:
+  dispatch-policy:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require an immutable default-branch dispatch
+        shell: bash
+        env:
+          EXPECTED_REF: refs/heads/${{ github.event.repository.default_branch }}
+          OBSERVED_REF: ${{ github.ref }}
+        run: test "$OBSERVED_REF" = "$EXPECTED_REF"
+
+  individual-role-tests:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - name: Audit intake and scoper tests
+        run: npx vitest run test/loop-roles.test.ts -t "audit intake agent|scoper agent"
+        working-directory: repair-agent
+      - name: Engineer sandbox and policy tests
+        run: npx vitest run test/runner.test.ts test/contracts-policy.test.ts
+        working-directory: repair-agent
+      - name: Reviewer tests
+        run: npx vitest run test/loop-roles.test.ts -t "review agent"
+        working-directory: repair-agent
+      - name: QA and feedback tests
+        run: npx vitest run test/loop-roles.test.ts -t "QA agent"
+        working-directory: repair-agent
+      - name: Merge controller and portability tests
+        run: npx vitest run test/loop-roles.test.ts -t "deterministic merge controller|repository profile role"
+        working-directory: repair-agent
+      - run: npm run type-check
+        working-directory: repair-agent
+
+  engineer:
+    needs: [dispatch-policy, individual-role-tests]
+    if: ${{ inputs.open_pr && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      branch: ${{ steps.publish.outputs.branch }}
+      pr: ${{ steps.publish.outputs.pr }}
+      head_sha: ${{ steps.publish.outputs.head_sha }}
+      base_sha: ${{ steps.publish.outputs.base_sha }}
+      patch_digest: ${{ steps.publish.outputs.patch_digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reassert trusted dispatch before loading dependencies or secrets
+        shell: bash
+        env:
+          EXPECTED_REF: refs/heads/${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - name: Run live Cloudflare shadow repair and apply only its verified fixture artifact
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_CANARY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          REPAIR_CANARY_ROOT: test/portable-repo
+          REPAIR_CANARY_OUTPUT: ${{ runner.temp }}/repair-canary.json
+        run: node scripts/run-shadow-canary.mjs
+        working-directory: repair-agent
+      - name: Publish bounded repair PR
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED='repair-agent/test/portable-repo/public/robots.txt'
+          CHANGED="$(git diff --name-only)"
+          test "$CHANGED" = "$EXPECTED"
+          grep -Fx 'Sitemap: https://getgeopulse.com/sitemap.xml' "$EXPECTED"
+          BRANCH="repair-agent/canary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git config user.name 'GEO-Pulse Repair Engineer'
+          git config user.email 'repair-engineer@getgeopulse.com'
+          git checkout -b "$BRANCH"
+          git add -- "$EXPECTED"
+          git commit -m 'test(repair-loop): apply verified shadow canary'
+          git push --set-upstream origin "$BRANCH"
+          PR_URL="$(gh pr create --base main --head "$BRANCH" --title '[REPAIR CANARY] Apply verified robots fixture repair' --body 'Controlled issue #520 canary. The Cloudflare engineer changed only the portable fixture after audit intake, scoping, sandbox execution, and deterministic evaluation. Runtime auto-merge remains disabled until independent GitHub identities and branch rules exist.')"
+          PR="${PR_URL##*/}"
+          BASE_SHA="$(git rev-parse origin/main)"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          PATCH_DIGEST="$(git diff --binary --full-index "$BASE_SHA" "$HEAD_SHA" | sha256sum | cut -d' ' -f1)"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "patch_digest=$PATCH_DIGEST" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/repair-canary.json
+          if-no-files-found: error
+
+  reviewer:
+    needs: engineer
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.engineer.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable review target before executing branch code
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.engineer.outputs.head_sha }}
+          BASE_SHA: ${{ needs.engineer.outputs.base_sha }}
+          EXPECTED_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          ACTUAL_DIGEST="$(git diff --binary --full-index "$BASE_SHA" "$EXPECTED_SHA" | sha256sum | cut -d' ' -f1)"
+          CHANGED="$(git diff --name-only "$BASE_SHA" "$EXPECTED_SHA")"
+          test "$ACTUAL_DIGEST" = "$EXPECTED_DIGEST"
+          test "$CHANGED" = 'repair-agent/test/portable-repo/public/robots.txt'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/engineer
+      - name: SHA-bound independent logical review
+        run: npm test -- --run test/loop-roles.test.ts -t 'review agent'
+        working-directory: repair-agent
+      - name: Emit structured SHA-bound review verdict
+        env:
+          REPAIR_ROLE: reviewer
+          REPAIR_ROLE_IDENTITY: repair-reviewer-logical-shadow
+          REPAIR_HEAD_SHA: ${{ needs.engineer.outputs.head_sha }}
+          REPAIR_PATCH_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-canary.json
+          REPAIR_ROLE_OUTPUT: ${{ runner.temp }}/repair-review.json
+        run: node scripts/write-canary-verdict.mjs
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repair-review-verdict
+          path: ${{ runner.temp }}/repair-review.json
+          if-no-files-found: error
+
+  qa:
+    needs: engineer
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.engineer.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable QA target before executing branch code
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.engineer.outputs.head_sha }}
+          BASE_SHA: ${{ needs.engineer.outputs.base_sha }}
+          EXPECTED_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          ACTUAL_DIGEST="$(git diff --binary --full-index "$BASE_SHA" "$EXPECTED_SHA" | sha256sum | cut -d' ' -f1)"
+          CHANGED="$(git diff --name-only "$BASE_SHA" "$EXPECTED_SHA")"
+          test "$ACTUAL_DIGEST" = "$EXPECTED_DIGEST"
+          test "$CHANGED" = 'repair-agent/test/portable-repo/public/robots.txt'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/engineer
+      - name: Finding-specific QA and regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -Fc 'Sitemap: https://getgeopulse.com/sitemap.xml' test/portable-repo/public/robots.txt)" = '1'
+          npm test
+          npm run type-check
+        working-directory: repair-agent
+      - name: Emit structured SHA-bound QA verdict
+        env:
+          REPAIR_ROLE: qa
+          REPAIR_ROLE_IDENTITY: repair-qa-logical-shadow
+          REPAIR_HEAD_SHA: ${{ needs.engineer.outputs.head_sha }}
+          REPAIR_PATCH_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-canary.json
+          REPAIR_ROLE_OUTPUT: ${{ runner.temp }}/repair-qa.json
+        run: node scripts/write-canary-verdict.mjs
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repair-qa-verdict
+          path: ${{ runner.temp }}/repair-qa.json
+          if-no-files-found: error
+
+  merge-controller-shadow:
+    needs: [engineer, reviewer, qa]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: repair-*-verdict
+          path: ${{ runner.temp }}/verdicts
+          merge-multiple: true
+      - name: Record fail-closed merge verdict
+        run: |
+          test -f '${{ runner.temp }}/verdicts/repair-review.json'
+          test -f '${{ runner.temp }}/verdicts/repair-qa.json'
+          echo 'Engineer, logical reviewer, and QA passed on the same SHA.'
+          echo 'Merge remains blocked: GitHub currently has one Actions identity and no protected required checks.'
+          echo 'A distinct reviewer GitHub App and main-branch ruleset are required before autonomous merge can be enabled.'
+
+  feedback:
+    if: ${{ always() && needs.engineer.result == 'success' && (needs.reviewer.result != 'success' || needs.qa.result != 'success') }}
+    needs: [engineer, reviewer, qa]
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Feed review or QA failure back to the same repair PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.engineer.outputs.pr }}
+          REVIEW_RESULT: ${{ needs.reviewer.result }}
+          QA_RESULT: ${{ needs.qa.result }}
+        run: |
+          gh pr comment "$PR" --repo "${{ github.repository }}" --body "Repair-loop feedback for the same SHA: reviewer=$REVIEW_RESULT; qa=$QA_RESULT. The engineer must update this PR under the same repair lineage; maximum three attempts. No merge occurred."

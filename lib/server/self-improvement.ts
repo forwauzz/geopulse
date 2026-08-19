@@ -101,6 +101,9 @@ export type ImprovementItem = {
   category: string;
   finding: string;
   fix: string;
+  status: ScanIssueJson['status'];
+  bucket: ScanIssueJson['bucket'];
+  confidence: NonNullable<ScanIssueJson['confidence']>;
 };
 
 function isActionableFailure(i: ScanIssueJson): boolean {
@@ -124,6 +127,9 @@ export function buildImprovementPlan(output: FreeScanOutput, max = 8): Improveme
       category: i.category,
       finding: i.finding,
       fix: i.fix ?? 'Review this check on the site.',
+      status: i.status,
+      bucket: i.bucket,
+      confidence: i.confidence ?? 'low',
     }));
 }
 
@@ -203,6 +209,7 @@ export type SelfImprovementRunResult = {
   plan?: ImprovementItem[];
   emailed?: boolean;
   reason?: string;
+  checkCatalogVersion?: string;
 };
 
 function buildLlm(env: SelfImprovementEnvLike): LLMProvider | undefined {
@@ -356,5 +363,6 @@ export async function runSelfImprovementAudit(args: {
     letterGrade: scan.output.letterGrade,
     plan,
     emailed,
+    checkCatalogVersion: scan.output.checkCatalogVersion,
   };
 }

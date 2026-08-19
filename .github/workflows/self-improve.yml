@@ -2,8 +2,8 @@
 name: self-improve
 
 on:
-  schedule:
-    - cron: "10 12 * * *"
+  # The production Cloudflare Worker is the single recurring audit scheduler. Keeping this
+  # workflow manual prevents a duplicate forced audit after the canonical noon run.
   workflow_dispatch:
     inputs:
       run_audit:
@@ -34,8 +34,9 @@ jobs:
         run: node scripts/opennext-build.cjs
 
   trigger-audit:
+    needs: gates
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'schedule' || inputs.run_audit }}
+    if: ${{ inputs.run_audit }}
     steps:
       - name: Trigger self-audit
         env:

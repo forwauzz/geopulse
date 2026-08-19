@@ -31,6 +31,10 @@
     {
       "binding": "WORKER_SELF_REFERENCE",
       "service": "geo-pulse"
+    },
+    {
+      "binding": "REPAIR_AGENT_SERVICE",
+      "service": "geo-pulse-repair-agent-shadow"
     }
   ],
 

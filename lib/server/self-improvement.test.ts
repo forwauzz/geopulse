@@ -84,7 +84,7 @@ describe('buildSelfImprovementReportHtml', () => {
       score: 58,
       letterGrade: 'F',
       dateStr: '2026-07-18',
-      plan: [{ check: 'Schema <types>', checkId: 'x', weight: 10, category: 'trust', finding: 'f', fix: 'Add <script>' }],
+      plan: [{ check: 'Schema <types>', checkId: 'x', weight: 10, category: 'trust', finding: 'f', fix: 'Add <script>', status: 'FAIL', bucket: 'eligibility', confidence: 'high' }],
     });
     expect(html).toContain('58');
     expect(html).toContain('Grade F');

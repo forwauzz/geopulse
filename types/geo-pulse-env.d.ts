@@ -8,6 +8,8 @@ interface CloudflareEnv {
   DISTRIBUTION_QUEUE?: Queue;
   /** Cloudflare Browser Run binding used for deterministic social-card rendering. */
   BROWSER: Fetcher;
+  /** Internal service binding to the fail-closed Cloudflare repair coordinator. */
+  REPAIR_AGENT_SERVICE?: Fetcher;
   NEXT_PUBLIC_SUPABASE_URL: string;
   NEXT_PUBLIC_SUPABASE_ANON_KEY: string;
   NEXT_PUBLIC_APP_URL: string;

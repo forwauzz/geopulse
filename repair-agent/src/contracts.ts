@@ -97,6 +97,19 @@ export type EvaluationResult = {
   score: number;
 };
 
+export type VerifiedRepairArtifact = {
+  schemaVersion: 1;
+  jobId: string;
+  repository: string;
+  siteOrigin: string;
+  idempotencyKey: string;
+  instruction: RepairInstruction;
+  changedFiles: ChangedFileEvidence[];
+  finalFiles: Record<string, string>;
+  evidenceDigest: string;
+  contentDigest: string;
+};
+
 export type RunnerParseResult =
   | { ok: true; result: RunnerResult }
   | { ok: false; reason: string };
@@ -167,7 +180,7 @@ function parseFinding(value: unknown): RepairFinding {
   };
 }
 
-function parseInstruction(value: unknown): RepairInstruction {
+export function parseRepairInstruction(value: unknown): RepairInstruction {
   if (!isRecord(value)) throw new Error('instruction must be an object');
   const skillId = value['skillId'];
   const path = boundedString(value['path'], 'instruction.path', MAX_BODY_STRINGS.path);
@@ -224,7 +237,7 @@ export function parseRepairRequest(value: unknown): ParseResult {
         siteOrigin: new URL(parseUrl(value['siteOrigin'], 'siteOrigin')).origin,
         idempotencyKey: boundedString(value['idempotencyKey'], 'idempotencyKey', MAX_BODY_STRINGS.id),
         finding: parseFinding(value['finding']),
-        instruction: parseInstruction(value['instruction']),
+        instruction: parseRepairInstruction(value['instruction']),
         changeBudget: {
           maxFiles: exactInteger(value['changeBudget']['maxFiles'], 'changeBudget.maxFiles', 1, 3),
           maxChangedLines: exactInteger(
