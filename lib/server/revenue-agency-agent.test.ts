@@ -120,11 +120,13 @@ describe('Revenue Agency control plane', () => {
         { id: 'mismatch', kind: 'startup', canonical_domain: 'right.ca', fallback_domain: null, status: 'active', metadata: {} },
         { id: 'paused', kind: 'startup', canonical_domain: 'paused.ca', fallback_domain: null, status: 'paused', metadata: {} },
         { id: 'flagged', kind: 'agency', canonical_domain: 'flagged.ca', fallback_domain: null, status: 'active', metadata: { is_test: true } },
+        { id: 'admin-comp', kind: 'startup', canonical_domain: null, fallback_domain: 'gmail.com', status: 'active', metadata: { subscription_id: 'admin_comp:user-id' } },
       ],
       scans: [
         { startup_workspace_id: 'mismatch', agency_account_id: null, domain: 'wrong.ca', url: null, run_source: 'startup_dashboard' },
         { startup_workspace_id: 'paused', agency_account_id: null, domain: 'paused.ca', url: null, run_source: 'startup_dashboard' },
         { startup_workspace_id: null, agency_account_id: 'flagged', domain: 'client.ca', url: null, run_source: 'agency_dashboard' },
+        { startup_workspace_id: 'admin-comp', agency_account_id: null, domain: 'gmail.com', url: null, run_source: 'startup_dashboard' },
         { startup_workspace_id: 'mismatch', agency_account_id: null, domain: 'right.ca', url: null, run_source: 'public_self_serve' },
       ],
     })).toBe(0);
