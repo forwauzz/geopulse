@@ -1,0 +1,55 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "geo-pulse-repair-agent-shadow",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-19",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "REPAIR_MODE": "shadow",
+    "REPAIR_TARGET_REPOSITORY": "forwauzz/geopulse",
+    "REPAIR_TARGET_ORIGIN": "https://getgeopulse.com",
+    "REPAIR_MAX_ATTEMPTS": "3",
+    "REPAIR_KILL_SWITCH": "false",
+    "REPAIR_PRODUCTION_MUTATIONS_ENABLED": "false"
+  },
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "./Dockerfile",
+      "instance_type": "lite",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "REPAIR_AGENT",
+        "class_name": "RepairAgent"
+      },
+      {
+        "name": "Sandbox",
+        "class_name": "Sandbox"
+      }
+    ]
+  },
+  "workflows": [
+    {
+      "binding": "REPAIR_WORKFLOW",
+      "name": "geo-pulse-repair-workflow-shadow",
+      "class_name": "RepairWorkflow"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RepairAgent", "Sandbox"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  }
+}
