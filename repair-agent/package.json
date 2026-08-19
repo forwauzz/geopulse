@@ -1,0 +1,31 @@
+{
+  "name": "@geopulse/repair-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fail-closed Cloudflare audit repair agent running in shadow mode",
+  "scripts": {
+    "cf-typegen": "wrangler types worker-configuration.d.ts --include-runtime false",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:container": "docker build --tag geopulse-repair-agent:local .",
+    "smoke:container": "docker run --rm --entrypoint node geopulse-repair-agent:local /opt/geopulse/repair-runner.mjs --self-test",
+    "deploy:dry-run": "wrangler deploy --dry-run --outdir .wrangler-dist",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/sandbox": "0.12.7",
+    "agents": "0.21.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260819.1",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.1",
+    "wrangler": "4.124.0"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  }
+}
