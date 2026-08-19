@@ -54,6 +54,8 @@ export function admitRepair(request: RepairRequest, config: RepairPolicyConfig):
   if (request.finding.confidence !== 'high') reasons.push('only high-confidence findings are eligible');
   if (request.finding.risk !== 'low') reasons.push('only low-risk findings are eligible');
   if (config.maxAttempts !== 3) reasons.push('the proof requires an exact three-attempt ceiling');
+  if (request.attempt === 1 && request.feedback.length > 0) reasons.push('first attempt cannot contain prior feedback');
+  if (request.attempt > 1 && request.feedback.length === 0) reasons.push('retry attempt requires bounded prior feedback');
 
   const allPaths = [...Object.keys(request.fixture.files), request.instruction.path];
   for (const path of allPaths) {

@@ -5,7 +5,7 @@ import type { RepairWorkerEnv } from './env';
 import { admitRepair, policyConfigFromEnv } from './policy';
 import { parseAuditEnvelope, selectAuditFinding } from './loop/audit-intake';
 import type { RepairScope } from './loop/contracts';
-import { GEOPULSE_PROFILE } from './loop/repository-profile';
+import { GEOPULSE_CANARY_PROFILE, GEOPULSE_PROFILE } from './loop/repository-profile';
 import { scopeRepair } from './loop/scoper';
 import {
   acknowledgeRepairScope,
@@ -17,6 +17,8 @@ import {
   initialRepairState,
   leaseNextRepairScope,
   recordAuditDisposition,
+  recordRepairScopeFeedback,
+  normalizeRepairState,
   validateRepairState,
   type CompletedRepair,
   type RepairAgentState,
@@ -43,6 +45,11 @@ async function stableJobId(idempotencyKey: string): Promise<string> {
 
 export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
   initialState: RepairAgentState = initialRepairState();
+
+  async onStart(): Promise<void> {
+    const normalized = normalizeRepairState(this.state, new Date().toISOString());
+    if (normalized !== this.state) this.setState(normalized);
+  }
 
   validateStateChange(nextState: RepairAgentState): void {
     validateRepairState(nextState);
@@ -137,7 +144,11 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
     if (authority === 'external-canary' && envelope.producer !== 'github-shadow-canary') {
       return { accepted: false, reasons: ['external audit producer is restricted to shadow canaries'] };
     }
-    const profile = envelope.repositoryProfileId === GEOPULSE_PROFILE.id ? GEOPULSE_PROFILE : null;
+    const profile = envelope.repositoryProfileId === GEOPULSE_PROFILE.id
+      ? GEOPULSE_PROFILE
+      : authority === 'external-canary' && envelope.repositoryProfileId === GEOPULSE_CANARY_PROFILE.id
+        ? GEOPULSE_CANARY_PROFILE
+        : null;
     if (!profile) return { accepted: false, reasons: ['repository profile is not installed'] };
     const seen = new Set((this.state.auditHistory ?? []).map((item) => item.auditRunId));
     if (seen.has(envelope.auditRunId)) {
@@ -171,8 +182,16 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
     return { scope: result.scope, leaseId };
   }
 
-  async acknowledgeScope(repairId: string, leaseId: string): Promise<void> {
-    this.setState(acknowledgeRepairScope(this.state, repairId, leaseId, new Date().toISOString()));
+  async acknowledgeScope(repairId: string, attempt: number, leaseId: string, gateDigest: string): Promise<{ replayed: boolean }> {
+    const result = acknowledgeRepairScope(this.state, repairId, attempt, leaseId, gateDigest, new Date().toISOString());
+    this.setState(result.state);
+    return { replayed: result.replayed };
+  }
+
+  async submitScopeFeedback(repairId: string, attempt: number, leaseId: string, feedbackDigest: string, reasons: string[]): Promise<{ requeued: boolean; nextAttempt: number | null; exhausted: boolean; replayed: boolean }> {
+    const result = recordRepairScopeFeedback(this.state, repairId, attempt, leaseId, feedbackDigest, reasons, new Date().toISOString());
+    this.setState(result.state);
+    return { requeued: result.requeued, nextAttempt: result.nextAttempt, exhausted: result.exhausted, replayed: result.replayed };
   }
 
   async getVerifiedArtifact(jobId: string): Promise<VerifiedRepairArtifact | null> {

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "portable-fixture-v1",
+  "repository": "example/portable-site",
+  "defaultBranch": "main",
+  "siteOrigin": "https://portable.example",
+  "allowedPathPrefixes": ["public", "src"],
+  "skillAllowlist": ["ensure-robots-sitemap", "remove-sitemap-url", "replace-broken-internal-link"],
+  "maxFiles": 1,
+  "maxChangedLines": 20,
+  "repositoryAdapter": {
+    "provider": "github",
+    "installationMode": "github_app",
+    "deploymentStrategy": "merge_to_default_branch",
+    "checkoutRoot": null,
+    "previewUrlTemplate": "https://preview-{sha}.portable.example/",
+    "productionSmokeUrls": ["https://portable.example/", "https://portable.example/robots.txt"]
+  },
+  "requiredChecks": [
+    { "workflow": "CI", "job": "verify", "appSlug": "github-actions" },
+    { "workflow": "Repair Review", "job": "repair-review", "appSlug": "portable-repair-reviewer" },
+    { "workflow": "Repair QA", "job": "repair-qa", "appSlug": "portable-repair-qa" }
+  ],
+  "qaCommands": {
+    "focused": ["npm run test"],
+    "affected": [],
+    "typeCheck": ["npm run type-check"],
+    "build": ["npm run build"],
+    "browser": []
+  }
+}

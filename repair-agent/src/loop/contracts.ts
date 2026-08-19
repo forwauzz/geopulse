@@ -10,7 +10,19 @@ export type RepositoryProfile = {
   skillAllowlist: readonly RepairSkillId[];
   maxFiles: number;
   maxChangedLines: number;
-  requiredChecks: readonly string[];
+  repositoryAdapter: {
+    provider: 'github';
+    installationMode: 'github_app';
+    deploymentStrategy: 'merge_to_default_branch';
+    checkoutRoot: string | null;
+    previewUrlTemplate: string | null;
+    productionSmokeUrls: readonly string[];
+  };
+  requiredChecks: readonly {
+    workflow: string;
+    job: string;
+    appSlug: string;
+  }[];
   qaCommands: {
     focused: readonly string[];
     affected: readonly string[];
@@ -52,6 +64,8 @@ export type AuditEnvelope = {
 
 export type RepairScope = {
   schemaVersion: 1;
+  attempt: number;
+  feedback: readonly string[];
   producer: AuditEnvelope['producer'];
   repairId: string;
   auditRunId: string;
@@ -60,6 +74,14 @@ export type RepairScope = {
   repository: string;
   defaultBranch: string;
   siteOrigin: string;
+  sourceFinding: {
+    checkId: string;
+    targetUrl: string;
+    finding: string;
+    confidence: RepairConfidence;
+    risk: RepairRisk;
+    reportedAt: string;
+  };
   instruction: RepairInstruction;
   changeBudget: { maxFiles: number; maxChangedLines: number };
   issue: {

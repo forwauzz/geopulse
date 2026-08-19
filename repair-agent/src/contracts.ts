@@ -58,6 +58,8 @@ export type RepairRequest = {
   repository: string;
   siteOrigin: string;
   idempotencyKey: string;
+  attempt: number;
+  feedback: readonly string[];
   finding: RepairFinding;
   instruction: RepairInstruction;
   changeBudget: ChangeBudget;
@@ -103,6 +105,8 @@ export type VerifiedRepairArtifact = {
   repository: string;
   siteOrigin: string;
   idempotencyKey: string;
+  attempt: number;
+  feedback: readonly string[];
   instruction: RepairInstruction;
   changedFiles: ChangedFileEvidence[];
   finalFiles: Record<string, string>;
@@ -221,6 +225,11 @@ function parseFixture(value: unknown): RepairFixture {
   return { files };
 }
 
+function parseFeedback(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 10) throw new Error('feedback must contain at most 10 items');
+  return [...new Set(value.map((item, index) => boundedString(item, `feedback[${index}]`, 500)))];
+}
+
 export function parseRepairRequest(value: unknown): ParseResult {
   try {
     if (!isRecord(value)) throw new Error('request must be an object');
@@ -236,6 +245,8 @@ export function parseRepairRequest(value: unknown): ParseResult {
         repository: boundedString(value['repository'], 'repository', 200),
         siteOrigin: new URL(parseUrl(value['siteOrigin'], 'siteOrigin')).origin,
         idempotencyKey: boundedString(value['idempotencyKey'], 'idempotencyKey', MAX_BODY_STRINGS.id),
+        attempt: exactInteger(value['attempt'], 'attempt', 1, 3),
+        feedback: parseFeedback(value['feedback']),
         finding: parseFinding(value['finding']),
         instruction: parseRepairInstruction(value['instruction']),
         changeBudget: {

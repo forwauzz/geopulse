@@ -58,7 +58,7 @@ import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
 import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
 import { enqueueDailyLifecycleExceptionDigest, enqueueMissingAccountCreatedEmails, enqueueOnboardingReminders, processLifecycleEmailQueue } from '../lib/server/lifecycle-email';
-import { deliverRepairAudit } from '../lib/server/repair-audit-intake';
+import { persistAndDeliverRepairAudit, retryPendingRepairAudits } from '../lib/server/repair-audit-intake';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -438,7 +438,16 @@ export default {
       try {
         const selfEnv = env as unknown as SelfImprovementEnvLike;
         const selfCfg = resolveSelfImprovementEnvConfig(selfEnv);
+        const repairService = (env as unknown as Record<string, unknown>)['REPAIR_AGENT_SERVICE'] as { fetch(input: string, init?: RequestInit): Promise<Response> } | undefined;
         stage('self_improvement');
+        const repairRetries = await retryPendingRepairAudits({
+          kv: env.SCAN_CACHE,
+          service: repairService,
+          limit: 5,
+        });
+        for (const retry of repairRetries) {
+          structuredLog('self_improvement_repair_retry', retry, retry.delivered ? 'info' : 'error');
+        }
         if (new Date().getUTCHours() === selfCfg.hourUtc) {
           const supabase = createClient(supaUrl, supaKey, {
             auth: { persistSession: false, autoRefreshToken: false },
@@ -449,8 +458,9 @@ export default {
             triggerSource: 'worker_cron',
           });
           if (result.ok) {
-            const repairDelivery = await deliverRepairAudit({
-              service: (env as unknown as Record<string, unknown>)['REPAIR_AGENT_SERVICE'] as { fetch(input: string, init?: RequestInit): Promise<Response> } | undefined,
+            const repairDelivery = await persistAndDeliverRepairAudit({
+              kv: env.SCAN_CACHE,
+              service: repairService,
               result,
               targetUrl: selfCfg.targetUrl,
               generatedAt: new Date().toISOString(),

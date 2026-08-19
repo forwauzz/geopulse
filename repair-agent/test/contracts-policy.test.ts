@@ -70,6 +70,15 @@ describe('repair request contract and admission policy', () => {
     expect(parseRepairRequest(request)).toEqual({ ok: false, reason: 'only shadow mode is supported' });
   });
 
+  it('requires bounded feedback on retries and forbids it on attempt one', () => {
+    const retry = { ...validRepairRequest(), attempt: 2, feedback: ['QA found a canonical mismatch'] };
+    expect(parseRepairRequest(retry)).toEqual({ ok: true, request: retry });
+    expect(admitRepair(retry, policy)).toMatchObject({ admitted: true });
+    expect(admitRepair({ ...retry, feedback: [] }, policy)).toMatchObject({ admitted: false, reasons: expect.arrayContaining(['retry attempt requires bounded prior feedback']) });
+    expect(admitRepair({ ...validRepairRequest(), feedback: ['unexpected'] }, policy)).toMatchObject({ admitted: false, reasons: expect.arrayContaining(['first attempt cannot contain prior feedback']) });
+    expect(parseRepairRequest({ ...retry, feedback: Array.from({ length: 11 }, () => 'too many') })).toEqual({ ok: false, reason: 'feedback must contain at most 10 items' });
+  });
+
   it('refuses an environment that enables production mutations', () => {
     expect(() =>
       policyConfigFromEnv({
