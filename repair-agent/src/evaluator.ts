@@ -14,6 +14,65 @@ function countOccurrences(value: string, needle: string): number {
   }
 }
 
+function stripComments(value: string): string {
+  let output = '';
+  let state: 'code' | 'string' | 'line-comment' | 'block-comment' = 'code';
+  let quote = '';
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!;
+    const next = value[index + 1];
+    if (state === 'line-comment') { if (char === '\n') { state = 'code'; output += char; } else output += ' '; continue; }
+    if (state === 'block-comment') { if (char === '*' && next === '/') { output += '  '; index += 1; state = 'code'; } else output += char === '\n' ? '\n' : ' '; continue; }
+    if (state === 'string') { output += char; if (char === '\\') { output += next ?? ''; index += 1; } else if (char === quote) state = 'code'; continue; }
+    if (char === '/' && next === '/') { output += '  '; index += 1; state = 'line-comment'; continue; }
+    if (char === '/' && next === '*') { output += '  '; index += 1; state = 'block-comment'; continue; }
+    if (char === '\'' || char === '"' || char === '`') { state = 'string'; quote = char; }
+    output += char;
+  }
+  if (state === 'block-comment' || state === 'string') throw new Error('unterminated string or comment');
+  return output;
+}
+
+function matchingDelimiter(value: string, start: number, open: string, close: string): number {
+  let depth = 0;
+  let quote = '';
+  let state: 'code' | 'string' | 'line-comment' | 'block-comment' = 'code';
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index]!;
+    const next = value[index + 1];
+    if (state === 'line-comment') { if (char === '\n') state = 'code'; continue; }
+    if (state === 'block-comment') { if (char === '*' && next === '/') { index += 1; state = 'code'; } continue; }
+    if (state === 'string') { if (char === '\\') index += 1; else if (char === quote) state = 'code'; continue; }
+    if (char === '/' && next === '/') { index += 1; state = 'line-comment'; continue; }
+    if (char === '/' && next === '*') { index += 1; state = 'block-comment'; continue; }
+    if (char === '\'' || char === '"' || char === '`') { state = 'string'; quote = char; continue; }
+    if (char === open) depth += 1;
+    if (char === close && --depth === 0) return index;
+  }
+  throw new Error(`unmatched ${open}`);
+}
+
+function returnedRobotsRules(value: string): string | null {
+  try {
+    const functions = [...value.matchAll(/export\s+default\s+async\s+function\s+robots\s*\(/g)];
+    if (functions.length !== 1 || functions[0]!.index === undefined) return null;
+    const functionOpen = value.indexOf('{', functions[0]!.index! + functions[0]![0].length);
+    const functionEnd = matchingDelimiter(value, functionOpen, '{', '}');
+    const body = value.slice(functionOpen + 1, functionEnd);
+    const returns = [...stripComments(body).matchAll(/\breturn\s*\{/g)];
+    if (returns.length !== 1 || returns[0]!.index === undefined) return null;
+    const returnOpen = value.indexOf('{', functionOpen + 1 + returns[0]!.index!);
+    const returnEnd = matchingDelimiter(value, returnOpen, '{', '}');
+    const returned = value.slice(returnOpen + 1, returnEnd);
+    const rules = [...stripComments(returned).matchAll(/\brules\s*:\s*\[/g)];
+    if (rules.length !== 1 || rules[0]!.index === undefined) return null;
+    const start = value.indexOf('[', returnOpen + 1 + rules[0]!.index!);
+    return stripComments(value.slice(start, matchingDelimiter(value, start, '[', ']') + 1));
+  } catch {
+    return null;
+  }
+}
+
 function isSha256(value: string | null): boolean {
   return value === null || /^[a-f0-9]{64}$/.test(value);
 }
@@ -27,6 +86,28 @@ function verifyPostcondition(request: RepairRequest, result: RunnerResult): stri
     return countOccurrences(output, directive) === 1
       ? null
       : 'robots.txt does not contain exactly one approved Sitemap directive';
+  }
+  if (request.instruction.skillId === 'allow-ai-retrieval-agents') {
+    const rules = returnedRobotsRules(output);
+    if (rules === null) return 'app/robots.ts returned rules array is ambiguous';
+    const requiredAgents = [
+      'Googlebot',
+      'Bingbot',
+      'OAI-SearchBot',
+      'Claude-SearchBot',
+      'PerplexityBot',
+    ];
+    for (const agent of requiredAgents) {
+      const escaped = agent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rule = new RegExp(
+        `\\{\\s*userAgent\\s*:\\s*['\"]${escaped}['\"]\\s*,\\s*allow\\s*:\\s*['\"]/['\"]\\s*\\}`,
+        'g'
+      );
+      if ((rules.match(rule) ?? []).length !== 1) {
+        return `app/robots.ts does not contain exactly one approved allow rule for ${agent}`;
+      }
+    }
+    return null;
   }
   if (request.instruction.skillId === 'remove-sitemap-url') {
     return output.includes(request.instruction.url) ? 'rejected sitemap URL remains in the target file' : null;

@@ -1,0 +1,808 @@
+name: repair-loop
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      repair_id:
+        description: Existing repair lineage to retry; blank claims the next eligible audit
+        type: string
+        default: ''
+      repair_branch:
+        description: Existing repair branch for the lineage
+        type: string
+        default: ''
+      repair_pr:
+        description: Existing pull request number
+        type: string
+        default: ''
+      repair_issue:
+        description: Existing bounded repair issue number
+        type: string
+        default: ''
+
+concurrency:
+  group: repair-loop-production
+  cancel-in-progress: false
+
+jobs:
+  dispatch-policy:
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      enabled: ${{ steps.policy.outputs.enabled }}
+    steps:
+      - name: Require enabled immutable default-branch execution
+        id: policy
+        shell: bash
+        env:
+          ENABLED: ${{ vars.REPAIR_LOOP_ENABLED }}
+          EXPECTED_REF: refs/heads/${{ github.event.repository.default_branch }}
+          REPAIR_ID: ${{ inputs.repair_id }}
+          REPAIR_BRANCH: ${{ inputs.repair_branch }}
+          REPAIR_PR: ${{ inputs.repair_pr }}
+          REPAIR_ISSUE: ${{ inputs.repair_issue }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          test "$ENABLED" = 'true' || test "$ENABLED" = 'false'
+          echo "enabled=$ENABLED" >> "$GITHUB_OUTPUT"
+          if [ -z "$REPAIR_ID" ]; then
+            test -z "$REPAIR_BRANCH"
+            test -z "$REPAIR_PR"
+            test -z "$REPAIR_ISSUE"
+          else
+            [[ "$REPAIR_ID" =~ ^[a-f0-9]{32}$ ]]
+            test -z "$REPAIR_BRANCH" || [[ "$REPAIR_BRANCH" =~ ^repair-agent/[a-f0-9]{32}$ ]]
+            test -z "$REPAIR_PR" || [[ "$REPAIR_PR" =~ ^[0-9]+$ ]]
+            test -z "$REPAIR_ISSUE" || [[ "$REPAIR_ISSUE" =~ ^[0-9]+$ ]]
+          fi
+
+  lifecycle-recovery:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: write
+      contents: read
+    outputs:
+      action: ${{ steps.recover.outputs.action }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/create-github-app-token@v2
+        id: merge-token
+        with:
+          app-id: ${{ vars.REPAIR_MERGE_APP_ID }}
+          private-key: ${{ secrets.REPAIR_MERGE_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - uses: actions/create-github-app-token@v2
+        id: qa-token
+        with:
+          app-id: ${{ vars.REPAIR_QA_APP_ID }}
+          private-key: ${{ secrets.REPAIR_QA_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - name: Reconcile any durable post-gate lifecycle before new work
+        id: recover
+        env:
+          REPAIR_MERGE_APP_TOKEN: ${{ steps.merge-token.outputs.token }}
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_RECOVERY_OUTPUT: ${{ runner.temp }}/repair-recovery.json
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/repair-merge.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node node_modules/tsx/dist/cli.mjs src/cli/recover-production-lifecycle.ts
+          echo "action=$(jq -r '.action' '${{ runner.temp }}/repair-recovery.json')" >> "$GITHUB_OUTPUT"
+        working-directory: repair-agent
+      - name: Re-run exact production QA for a recovered merge
+        id: recovered-production-qa
+        continue-on-error: true
+        if: ${{ steps.recover.outputs.action == 'production_qa' }}
+        env:
+          REPAIR_QA_APP_TOKEN: ${{ steps.qa-token.outputs.token }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/repair-merge.json
+          REPAIR_DEPLOYMENT_QA_OUTPUT: ${{ runner.temp }}/repair-deployment-qa.json
+        run: node node_modules/tsx/dist/cli.mjs src/cli/run-production-deployment-qa.ts
+        working-directory: repair-agent
+      - name: Finalize a recovered deployment only after QA
+        if: ${{ steps.recover.outputs.action == 'production_qa' && steps.recovered-production-qa.outcome == 'success' }}
+        env:
+          REPAIR_MERGE_APP_TOKEN: ${{ steps.merge-token.outputs.token }}
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/repair-merge.json
+          REPAIR_DEPLOYMENT_QA_EVIDENCE: ${{ runner.temp }}/repair-deployment-qa.json
+          REPAIR_FINALIZE_OUTPUT: ${{ runner.temp }}/repair-finalize.json
+        run: node node_modules/tsx/dist/cli.mjs src/cli/finalize-production-repair.ts
+        working-directory: repair-agent
+      - name: Record or replay recovered rollback intent
+        if: ${{ steps.recover.outputs.action == 'rollback_pending' || steps.recovered-production-qa.outcome == 'failure' }}
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/repair-merge.json
+          REPAIR_ROLLBACK_TRANSITION: intent
+          REPAIR_ROLLBACK_TRANSITION_OUTPUT: ${{ runner.temp }}/repair-rollback-intent.json
+        run: node node_modules/tsx/dist/cli.mjs src/cli/transition-production-rollback.ts
+        working-directory: repair-agent
+      - name: Reconcile recovered rollback, CI, and deployment
+        if: ${{ steps.recover.outputs.action == 'rollback_pending' || steps.recovered-production-qa.outcome == 'failure' }}
+        env:
+          REPAIR_MERGE_APP_TOKEN: ${{ steps.merge-token.outputs.token }}
+          ACTIONS_TOKEN: ${{ github.token }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/repair-merge.json
+          REPAIR_ROLLBACK_EVIDENCE: ${{ runner.temp }}/repair-rollback.json
+        run: bash scripts/run-production-rollback.sh
+        working-directory: repair-agent
+      - name: Record recovered rollback completion
+        if: ${{ steps.recover.outputs.action == 'rollback_pending' || steps.recovered-production-qa.outcome == 'failure' }}
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/repair-merge.json
+          REPAIR_ROLLBACK_EVIDENCE: ${{ runner.temp }}/repair-rollback.json
+          REPAIR_ROLLBACK_TRANSITION: complete
+          REPAIR_ROLLBACK_TRANSITION_OUTPUT: ${{ runner.temp }}/repair-rollback-transition.json
+        run: node node_modules/tsx/dist/cli.mjs src/cli/transition-production-rollback.ts
+        working-directory: repair-agent
+
+  engineer:
+    needs: [dispatch-policy, lifecycle-recovery]
+    if: ${{ needs.dispatch-policy.outputs.enabled == 'true' && (needs.lifecycle-recovery.outputs.action == 'none' || needs.lifecycle-recovery.outputs.action == 'aborted') }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: write
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      has_repair: ${{ steps.scope.outputs.has_repair }}
+      repair_id: ${{ steps.publish.outputs.repair_id }}
+      attempt: ${{ steps.publish.outputs.attempt }}
+      branch: ${{ steps.publish.outputs.branch }}
+      pr: ${{ steps.publish.outputs.pr }}
+      issue: ${{ steps.publish.outputs.issue }}
+      base_sha: ${{ steps.publish.outputs.base_sha }}
+      head_sha: ${{ steps.publish.outputs.head_sha }}
+      patch_digest: ${{ steps.publish.outputs.patch_digest }}
+      changed_path: ${{ steps.publish.outputs.changed_path }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reassert trusted orchestration source
+        shell: bash
+        env:
+          EXPECTED_REF: refs/heads/${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - name: Claim the next audit scope and apply its verified artifact
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          REPAIR_OUTPUT: ${{ runner.temp }}/repair-raw.json
+          REPAIR_REPOSITORY_ROOT: ${{ github.workspace }}
+          REPAIR_EXISTING_REPAIR_ID: ${{ inputs.repair_id }}
+        run: node repair-agent/scripts/run-production-repair.mjs
+      - name: Record whether eligible work was claimed
+        id: scope
+        shell: bash
+        env:
+          RAW: ${{ runner.temp }}/repair-raw.json
+        run: |
+          set -euo pipefail
+          test -f "$RAW"
+          echo "has_repair=$(jq -r '.queued == true' "$RAW")" >> "$GITHUB_OUTPUT"
+      - name: Publish or update the bounded repair issue and PR
+        if: ${{ steps.scope.outputs.has_repair == 'true' }}
+        id: publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAW: ${{ runner.temp }}/repair-raw.json
+          ENGINEER_EVIDENCE: ${{ runner.temp }}/repair-engineer.json
+          PRIOR_BRANCH: ${{ inputs.repair_branch }}
+          PRIOR_PR: ${{ inputs.repair_pr }}
+          PRIOR_ISSUE: ${{ inputs.repair_issue }}
+        run: |
+          set -euo pipefail
+          REPAIR_ID="$(jq -r '.scope.repairId' "$RAW")"
+          ATTEMPT="$(jq -r '.scope.attempt' "$RAW")"
+          CHANGED_PATH="$(jq -r '.changedPath' "$RAW")"
+          test "$CHANGED_PATH" = 'app/robots.ts'
+          test "$(git diff --name-only)" = "$CHANGED_PATH"
+          for agent in Googlebot Bingbot OAI-SearchBot Claude-SearchBot PerplexityBot; do
+            test "$(grep -Fc "userAgent: '$agent'" "$CHANGED_PATH")" = '1'
+          done
+          BRANCH="${PRIOR_BRANCH:-repair-agent/$REPAIR_ID}"
+          test "$BRANCH" = "repair-agent/$REPAIR_ID"
+          ISSUE="$PRIOR_ISSUE"
+          if [ -z "$ISSUE" ]; then
+            TITLE="$(jq -r '.scope.issue.title' "$RAW")"
+            DUE="$(jq -r '.scope.issue.dueAt' "$RAW")"
+            NEXT="$(jq -r '.scope.issue.nextAction' "$RAW")"
+            POST="$(jq -r '.scope.issue.postcondition' "$RAW")"
+            EXISTING_ISSUES="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$REPAIR_ID in:body" --json number,body)"
+            MATCHING_ISSUES="$(jq --arg repairId "$REPAIR_ID" '[.[] | select(.body | contains($repairId))]' <<<"$EXISTING_ISSUES")"
+            test "$(jq 'length' <<<"$MATCHING_ISSUES")" -le 1
+            ISSUE="$(jq -r '.[0].number // empty' <<<"$MATCHING_ISSUES")"
+            if [ -z "$ISSUE" ]; then
+              ISSUE_URL="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "Automated low-risk repair lineage \`$REPAIR_ID\`. Owner: engineer. Independent reviewer: GEO-Pulse Repair Reviewer. Retry policy: maximum three SHA-bound attempts. Due: $DUE. Next action: $NEXT Acceptance: $POST. Unknown checks, expanded paths, pricing, claims, auth, billing, privacy, dependencies, migrations, and product-direction changes remain prohibited.")"
+              ISSUE="${ISSUE_URL##*/}"
+            fi
+          else
+            test "$(gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json state --jq '.state')" = 'OPEN'
+          fi
+          git config user.name 'GEO-Pulse Repair Engineer'
+          git config user.email 'repair-engineer@getgeopulse.com'
+          git checkout -b "repair-attempt-${REPAIR_ID}-${ATTEMPT}"
+          git add -- "$CHANGED_PATH"
+          git commit -m "fix(repair-agent): apply $REPAIR_ID attempt $ATTEMPT"
+          BASE_SHA="$GITHUB_SHA"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          PATCH_DIGEST="$(git diff --binary --full-index "$BASE_SHA" "$HEAD_SHA" | sha256sum | cut -d' ' -f1)"
+          CHANGED_LINES="$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" -- "$CHANGED_PATH" | awk '{print $1 + $2}')"
+          REPAIR_RAW_EVIDENCE="$RAW" \
+          REPAIR_ENGINEER_OUTPUT="$ENGINEER_EVIDENCE" \
+          REPAIR_BASE_SHA="$BASE_SHA" \
+          REPAIR_HEAD_SHA="$HEAD_SHA" \
+          REPAIR_PATCH_DIGEST="$PATCH_DIGEST" \
+          REPAIR_CHANGED_PATH="$CHANGED_PATH" \
+          REPAIR_CHANGED_LINES="$CHANGED_LINES" \
+            node repair-agent/node_modules/tsx/dist/cli.mjs repair-agent/src/cli/write-production-engineer.ts
+          OLD_HEAD="$(git ls-remote --heads origin "refs/heads/$BRANCH" | awk '{print $1}')"
+          if [ -n "$OLD_HEAD" ]; then
+            git push --force-with-lease="refs/heads/$BRANCH:$OLD_HEAD" origin "HEAD:refs/heads/$BRANCH"
+          else
+            git push --set-upstream origin "HEAD:$BRANCH"
+          fi
+          PR="$PRIOR_PR"
+          if [ -z "$PR" ]; then
+            OPEN="$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base main --head "$BRANCH" --json number,headRefOid)"
+            test "$(jq 'length' <<<"$OPEN")" -le 1
+            PR="$(jq -r '.[0].number // empty' <<<"$OPEN")"
+            if [ -n "$PR" ]; then
+              test "$(jq -r '.[0].headRefOid' <<<"$OPEN")" = "$HEAD_SHA"
+            else
+              PR_URL="$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "[REPAIR] $REPAIR_ID attempt $ATTEMPT" --body "Tracks #$ISSUE. Automated bounded repair from canonical audit evidence. Exact path: \`$CHANGED_PATH\`. Reviewer, QA, CI, merge controller, deployment QA, retry ceiling, and rollback remain fail-closed.")"
+              PR="${PR_URL##*/}"
+            fi
+          else
+            test "$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state,headRefName --jq '.state + " " + .headRefName')" = "OPEN $BRANCH"
+          fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"
+          {
+            echo "repair_id=$REPAIR_ID"
+            echo "attempt=$ATTEMPT"
+            echo "branch=$BRANCH"
+            echo "pr=$PR"
+            echo "issue=$ISSUE"
+            echo "base_sha=$BASE_SHA"
+            echo "head_sha=$HEAD_SHA"
+            echo "patch_digest=$PATCH_DIGEST"
+            echo "changed_path=$CHANGED_PATH"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: repair-production-engineer
+          path: |
+            ${{ runner.temp }}/repair-raw.json
+            ${{ runner.temp }}/repair-engineer.json
+          if-no-files-found: error
+
+  reviewer:
+    needs: engineer
+    if: ${{ needs.engineer.outputs.has_repair == 'true' }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.engineer.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable review target before branch execution
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.engineer.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.engineer.outputs.head_sha }}
+          PATCH_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+          CHANGED_PATH: ${{ needs.engineer.outputs.changed_path }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          test "$(git diff --binary --full-index "$BASE_SHA" "$HEAD_SHA" | sha256sum | cut -d' ' -f1)" = "$PATCH_DIGEST"
+          test "$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")" = "$CHANGED_PATH"
+          test "$CHANGED_PATH" = 'app/robots.ts'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-engineer
+          path: ${{ runner.temp }}/engineer
+      - name: Run deterministic reviewer rubric
+        id: review
+        shell: bash
+        run: |
+          set +e
+          npm test -- --run test/runner.test.ts test/contracts-policy.test.ts test/loop-roles.test.ts
+          RESULT=$?
+          git diff --check
+          DIFF_RESULT=$?
+          set -e
+          if [ "$RESULT" = 0 ] && [ "$DIFF_RESULT" = 0 ]; then
+            echo 'passed=true' >> "$GITHUB_OUTPUT"
+            echo 'reasons=' >> "$GITHUB_OUTPUT"
+          else
+            echo 'passed=false' >> "$GITHUB_OUTPUT"
+            echo 'reasons=review rubric or diff validation failed' >> "$GITHUB_OUTPUT"
+          fi
+        working-directory: repair-agent
+      - uses: actions/create-github-app-token@v2
+        id: reviewer-token
+        with:
+          app-id: ${{ vars.REPAIR_REVIEWER_APP_ID }}
+          private-key: ${{ secrets.REPAIR_REVIEWER_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - name: Publish authenticated SHA-bound reviewer verdict
+        env:
+          REPAIR_ROLE: reviewer
+          REPAIR_ROLE_APP_TOKEN: ${{ steps.reviewer-token.outputs.token }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-engineer.json
+          REPAIR_ROLE_OUTPUT: ${{ runner.temp }}/repair-review.json
+          REPAIR_WORK_PASSED: ${{ steps.review.outputs.passed }}
+          REPAIR_WORK_REASONS: ${{ steps.review.outputs.reasons }}
+        run: node node_modules/tsx/dist/cli.mjs src/cli/publish-role-verdict.ts
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: repair-production-review
+          path: ${{ runner.temp }}/repair-review.json
+          if-no-files-found: warn
+
+  qa:
+    needs: engineer
+    if: ${{ needs.engineer.outputs.has_repair == 'true' }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-placeholder-anon-key-not-for-production
+      NEXT_PUBLIC_APP_URL: https://placeholder.example
+      NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.engineer.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable QA target before branch execution
+        shell: bash
+        env:
+          BASE_SHA: ${{ needs.engineer.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.engineer.outputs.head_sha }}
+          PATCH_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+          CHANGED_PATH: ${{ needs.engineer.outputs.changed_path }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          test "$(git diff --binary --full-index "$BASE_SHA" "$HEAD_SHA" | sha256sum | cut -d' ' -f1)" = "$PATCH_DIGEST"
+          test "$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")" = "$CHANGED_PATH"
+          test "$CHANGED_PATH" = 'app/robots.ts'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/wrangler-config-for-ci.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-engineer
+          path: ${{ runner.temp }}/engineer
+      - name: Run the installed QA command preset and finding postcondition
+        id: qa-work
+        shell: bash
+        env:
+          RESULTS: ${{ runner.temp }}/qa-command-results.json
+        run: |
+          set -uo pipefail
+          JSON='[]'
+          run_command() {
+            set +e
+            "$@"
+            CODE=$?
+            set -e
+            ARGV="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+            JSON="$(jq --argjson argv "$ARGV" --argjson exitCode "$CODE" '. + [{argv:$argv,exitCode:$exitCode}]' <<<"$JSON")"
+          }
+          run_command npm run test
+          run_command npm run type-check
+          run_command node scripts/opennext-build.cjs
+          run_command npx playwright test
+          printf '%s\n' "$JSON" > "$RESULTS"
+          if jq -e 'all(.[]; .exitCode == 0)' "$RESULTS" >/dev/null; then
+            echo 'commands_passed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'commands_passed=false' >> "$GITHUB_OUTPUT"
+          fi
+          POST=true
+          for agent in Googlebot Bingbot OAI-SearchBot Claude-SearchBot PerplexityBot; do
+            test "$(grep -Fc "userAgent: '$agent'" app/robots.ts)" = '1' || POST=false
+          done
+          echo "postcondition_passed=$POST" >> "$GITHUB_OUTPUT"
+          if [ "$POST" = true ]; then echo 'reasons=' >> "$GITHUB_OUTPUT"; else echo 'reasons=retrieval-agent postcondition failed' >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/create-github-app-token@v2
+        id: qa-token
+        with:
+          app-id: ${{ vars.REPAIR_QA_APP_ID }}
+          private-key: ${{ secrets.REPAIR_QA_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - name: Publish authenticated SHA-bound QA verdict
+        env:
+          REPAIR_ROLE: qa
+          REPAIR_ROLE_APP_TOKEN: ${{ steps.qa-token.outputs.token }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-engineer.json
+          REPAIR_ROLE_OUTPUT: ${{ runner.temp }}/repair-qa.json
+          REPAIR_WORK_PASSED: ${{ steps.qa-work.outputs.commands_passed }}
+          REPAIR_WORK_REASONS: ${{ steps.qa-work.outputs.reasons }}
+          REPAIR_QA_COMMAND_RESULTS: ${{ runner.temp }}/qa-command-results.json
+          REPAIR_POSTCONDITION_PASSED: ${{ steps.qa-work.outputs.postcondition_passed }}
+        run: node node_modules/tsx/dist/cli.mjs repair-agent/src/cli/publish-role-verdict.ts
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: repair-production-qa
+          path: |
+            ${{ runner.temp }}/repair-qa.json
+            ${{ runner.temp }}/qa-command-results.json
+          if-no-files-found: warn
+
+  merge-controller:
+    if: ${{ always() && needs.engineer.outputs.has_repair == 'true' && needs.reviewer.result == 'success' && needs.qa.result == 'success' }}
+    needs: [engineer, reviewer, qa]
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    outputs:
+      merged: ${{ steps.merge.outputs.merged }}
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-engineer
+          path: ${{ runner.temp }}/engineer
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-review
+          path: ${{ runner.temp }}/review
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-qa
+          path: ${{ runner.temp }}/qa
+      - uses: actions/create-github-app-token@v2
+        id: merge-token
+        with:
+          app-id: ${{ vars.REPAIR_MERGE_APP_ID }}
+          private-key: ${{ secrets.REPAIR_MERGE_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - name: Evaluate authenticated gate and merge exact SHA
+        id: merge
+        env:
+          REPAIR_MERGE_APP_TOKEN: ${{ steps.merge-token.outputs.token }}
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-engineer.json
+          REPAIR_REVIEW_VERDICT: ${{ runner.temp }}/review/repair-review.json
+          REPAIR_QA_VERDICT: ${{ runner.temp }}/qa/repair-qa.json
+          REPAIR_MERGE_OUTPUT: ${{ runner.temp }}/repair-merge.json
+          REPAIR_PR_NUMBER: ${{ needs.engineer.outputs.pr }}
+          REPAIR_ISSUE_NUMBER: ${{ needs.engineer.outputs.issue }}
+          REPAIR_AUTONOMOUS_MERGE_ENABLED: ${{ vars.REPAIR_LOOP_ENABLED }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node node_modules/tsx/dist/cli.mjs src/cli/run-production-merge.ts
+          echo "merged=$(jq -r '.merged == true' '${{ runner.temp }}/repair-merge.json')" >> "$GITHUB_OUTPUT"
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: repair-production-merge
+          path: ${{ runner.temp }}/repair-merge.json
+          if-no-files-found: warn
+
+  feedback:
+    if: ${{ always() && (needs.engineer.result == 'failure' || (needs.engineer.outputs.has_repair == 'true' && (needs.reviewer.result != 'success' || needs.qa.result != 'success' || needs.merge-controller.result != 'success'))) }}
+    needs: [engineer, reviewer, qa, merge-controller]
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: repair-production-*
+          path: ${{ runner.temp }}/evidence
+          merge-multiple: true
+      - name: Requeue the same repair with structured failure evidence
+        id: feedback
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          REPAIR_RAW_EVIDENCE: ${{ runner.temp }}/evidence/repair-raw.json
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/evidence/repair-engineer.json
+          REPAIR_REVIEW_VERDICT: ${{ runner.temp }}/evidence/repair-review.json
+          REPAIR_QA_VERDICT: ${{ runner.temp }}/evidence/repair-qa.json
+          REPAIR_GATE_EVIDENCE: ${{ runner.temp }}/evidence/repair-merge.json
+          REPAIR_FEEDBACK_OUTPUT: ${{ runner.temp }}/repair-feedback.json
+          REPAIR_ENGINEER_RESULT: ${{ needs.engineer.result }}
+          REPAIR_REVIEW_RESULT: ${{ needs.reviewer.result }}
+          REPAIR_QA_RESULT: ${{ needs.qa.result }}
+          REPAIR_GATE_RESULT: ${{ needs.merge-controller.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node repair-agent/scripts/submit-production-feedback.mjs
+          echo "requeued=$(jq -r '.requeued == true' '${{ runner.temp }}/repair-feedback.json')" >> "$GITHUB_OUTPUT"
+          echo "repair_id=$(jq -r '.repairId // empty' '${{ runner.temp }}/repair-feedback.json')" >> "$GITHUB_OUTPUT"
+      - name: Comment on the same PR when one exists
+        if: ${{ needs.engineer.outputs.pr != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.engineer.outputs.pr }}
+        run: gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body 'The autonomous repair loop failed closed. Structured evidence was returned to the same repair lineage; no merge occurred.'
+      - name: Dispatch the next bounded attempt
+        if: ${{ steps.feedback.outputs.requeued == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR_ID: ${{ steps.feedback.outputs.repair_id }}
+          BRANCH: ${{ needs.engineer.outputs.branch }}
+          PR: ${{ needs.engineer.outputs.pr }}
+          ISSUE: ${{ needs.engineer.outputs.issue }}
+        run: gh workflow run repair-loop.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" -f repair_id="$REPAIR_ID" -f repair_branch="$BRANCH" -f repair_pr="$PR" -f repair_issue="$ISSUE"
+
+  production-qa:
+    needs: [engineer, merge-controller]
+    if: ${{ always() && needs.merge-controller.outputs.merged == 'true' }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-merge
+          path: ${{ runner.temp }}/merge
+      - uses: actions/create-github-app-token@v2
+        id: qa-token
+        with:
+          app-id: ${{ vars.REPAIR_QA_APP_ID }}
+          private-key: ${{ secrets.REPAIR_QA_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - name: Verify exact Cloudflare build and production probes
+        env:
+          REPAIR_QA_APP_TOKEN: ${{ steps.qa-token.outputs.token }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/merge/repair-merge.json
+          REPAIR_DEPLOYMENT_QA_OUTPUT: ${{ runner.temp }}/repair-deployment-qa.json
+        run: node node_modules/tsx/dist/cli.mjs src/cli/run-production-deployment-qa.ts
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: repair-production-deployment-qa
+          path: ${{ runner.temp }}/repair-deployment-qa.json
+          if-no-files-found: warn
+
+  finalize:
+    needs: [engineer, merge-controller, production-qa]
+    if: ${{ needs.production-qa.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-merge
+          path: ${{ runner.temp }}/merge
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-deployment-qa
+          path: ${{ runner.temp }}/deployment
+      - uses: actions/create-github-app-token@v2
+        id: merge-token
+        with:
+          app-id: ${{ vars.REPAIR_MERGE_APP_ID }}
+          private-key: ${{ secrets.REPAIR_MERGE_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - name: Finalize the durable scope only after production QA
+        env:
+          REPAIR_MERGE_APP_TOKEN: ${{ steps.merge-token.outputs.token }}
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/merge/repair-merge.json
+          REPAIR_DEPLOYMENT_QA_EVIDENCE: ${{ runner.temp }}/deployment/repair-deployment-qa.json
+          REPAIR_FINALIZE_OUTPUT: ${{ runner.temp }}/repair-finalize.json
+        run: node node_modules/tsx/dist/cli.mjs src/cli/finalize-production-repair.ts
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: repair-production-finalize
+          path: ${{ runner.temp }}/repair-finalize.json
+          if-no-files-found: warn
+
+  rollback:
+    needs: [engineer, merge-controller, production-qa]
+    if: ${{ always() && needs.merge-controller.outputs.merged == 'true' && needs.production-qa.result == 'failure' }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-merge
+          path: ${{ runner.temp }}/merge
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-production-engineer
+          path: ${{ runner.temp }}/engineer
+      - uses: actions/create-github-app-token@v2
+        id: merge-token
+        with:
+          app-id: ${{ vars.REPAIR_MERGE_APP_ID }}
+          private-key: ${{ secrets.REPAIR_MERGE_PRIVATE_KEY }}
+          owner: forwauzz
+          repositories: geopulse
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Record durable rollback intent
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/merge/repair-merge.json
+          REPAIR_ROLLBACK_TRANSITION: intent
+          REPAIR_ROLLBACK_TRANSITION_OUTPUT: ${{ runner.temp }}/repair-rollback-intent.json
+        run: node repair-agent/node_modules/tsx/dist/cli.mjs repair-agent/src/cli/transition-production-rollback.ts
+      - name: Create or reconcile the exact rollback, CI, and deployment
+        id: rollback-work
+        shell: bash
+        env:
+          REPAIR_MERGE_APP_TOKEN: ${{ steps.merge-token.outputs.token }}
+          ACTIONS_TOKEN: ${{ github.token }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/merge/repair-merge.json
+          REPAIR_ROLLBACK_EVIDENCE: ${{ runner.temp }}/repair-rollback.json
+        run: bash repair-agent/scripts/run-production-rollback.sh
+      - name: Atomically record authenticated rollback and bounded feedback
+        id: rollback-complete
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_MERGE_EVIDENCE: ${{ runner.temp }}/merge/repair-merge.json
+          REPAIR_ROLLBACK_EVIDENCE: ${{ runner.temp }}/repair-rollback.json
+          REPAIR_ROLLBACK_TRANSITION: complete
+          REPAIR_ROLLBACK_TRANSITION_OUTPUT: ${{ runner.temp }}/repair-rollback-transition.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node repair-agent/node_modules/tsx/dist/cli.mjs repair-agent/src/cli/transition-production-rollback.ts
+          echo "requeued=$(jq -r '.requeued == true' '${{ runner.temp }}/repair-rollback-transition.json')" >> "$GITHUB_OUTPUT"
+      - name: Report verified rollback while keeping the incident open
+        env:
+          GH_TOKEN: ${{ steps.merge-token.outputs.token }}
+          MERGE_EVIDENCE: ${{ runner.temp }}/merge/repair-merge.json
+          ROLLBACK_EVIDENCE: ${{ runner.temp }}/repair-rollback.json
+        shell: bash
+        run: |
+          ISSUE="$(jq -r '.issueNumber' "$MERGE_EVIDENCE")"
+          MERGE_SHA="$(jq -r '.mergeSha' "$MERGE_EVIDENCE")"
+          ROLLBACK_SHA="$(jq -r '.rollbackMergeSha' "$ROLLBACK_EVIDENCE")"
+          PR="$(jq -r '.pullRequestNumber' "$ROLLBACK_EVIDENCE")"
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body "Production QA failed for $MERGE_SHA. Idempotent rollback PR #$PR passed CI and deployed as $ROLLBACK_SHA. Durable rollback evidence is recorded; the incident remains open while feedback returns to the same repair lineage."
+      - name: Dispatch a bounded retry only after rollback deployment verification
+        if: ${{ steps.rollback-complete.outputs.requeued == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR_ID: ${{ needs.engineer.outputs.repair_id }}
+          BRANCH: ${{ needs.engineer.outputs.branch }}
+          ISSUE: ${{ needs.engineer.outputs.issue }}
+        run: gh workflow run repair-loop.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" -f repair_id="$REPAIR_ID" -f repair_branch="$BRANCH" -f repair_pr='' -f repair_issue="$ISSUE"

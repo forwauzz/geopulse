@@ -13,7 +13,7 @@ const PRESETS: Readonly<Record<QaCommandPresetId, QaCommandPreset>> = Object.fre
   'geopulse-safe-v1': Object.freeze({
     id: 'geopulse-safe-v1',
     focused: Object.freeze([Object.freeze(['npm', 'run', 'test'])]),
-    affected: Object.freeze([Object.freeze(['npm', 'run', 'test'])]),
+    affected: Object.freeze([]),
     typeCheck: Object.freeze([Object.freeze(['npm', 'run', 'type-check'])]),
     build: Object.freeze([Object.freeze(['node', 'scripts/opennext-build.cjs'])]),
     browser: Object.freeze([Object.freeze(['npx', 'playwright', 'test'])]),

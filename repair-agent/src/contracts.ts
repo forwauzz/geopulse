@@ -1,5 +1,6 @@
 export const REPAIR_SKILL_IDS = [
   'ensure-robots-sitemap',
+  'allow-ai-retrieval-agents',
   'remove-sitemap-url',
   'replace-broken-internal-link',
 ] as const;
@@ -12,6 +13,11 @@ export type EnsureRobotsSitemapInstruction = {
   skillId: 'ensure-robots-sitemap';
   path: 'public/robots.txt';
   sitemapUrl: string;
+};
+
+export type AllowAiRetrievalAgentsInstruction = {
+  skillId: 'allow-ai-retrieval-agents';
+  path: 'app/robots.ts';
 };
 
 export type RemoveSitemapUrlInstruction = {
@@ -29,6 +35,7 @@ export type ReplaceBrokenInternalLinkInstruction = {
 
 export type RepairInstruction =
   | EnsureRobotsSitemapInstruction
+  | AllowAiRetrievalAgentsInstruction
   | RemoveSitemapUrlInstruction
   | ReplaceBrokenInternalLinkInstruction;
 
@@ -194,6 +201,12 @@ export function parseRepairInstruction(value: unknown): RepairInstruction {
     }
     return { skillId, path, sitemapUrl: parseUrl(value['sitemapUrl'], 'instruction.sitemapUrl') };
   }
+  if (skillId === 'allow-ai-retrieval-agents') {
+    if (path !== 'app/robots.ts') {
+      throw new Error('allow-ai-retrieval-agents may only write app/robots.ts');
+    }
+    return { skillId, path };
+  }
   if (skillId === 'remove-sitemap-url') {
     return { skillId, path, url: parseUrl(value['url'], 'instruction.url') };
   }
@@ -273,6 +286,7 @@ export function parseRunnerResult(value: unknown): RunnerParseResult {
     const skillId = value['skillId'];
     if (
       skillId !== 'ensure-robots-sitemap' &&
+      skillId !== 'allow-ai-retrieval-agents' &&
       skillId !== 'remove-sitemap-url' &&
       skillId !== 'replace-broken-internal-link'
     ) {

@@ -179,7 +179,7 @@ export type PullRequestObservation = {
   baseSha: string;
   headSha: string;
   mergeable: boolean;
-  linkedIssueNumbers: readonly number[];
+  lineageIssueNumbers: readonly number[];
   observedAt: string;
 };
 

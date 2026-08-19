@@ -69,6 +69,9 @@ export function admitRepair(request: RepairRequest, config: RepairPolicyConfig):
     if (new URL(request.instruction.sitemapUrl).origin !== requestOrigin) {
       reasons.push('sitemap URL is outside the approved site origin');
     }
+  } else if (request.instruction.skillId === 'allow-ai-retrieval-agents') {
+    // This skill has no caller-controlled replacement text. The runner owns the exact
+    // retrieval-agent allowlist and may only edit app/robots.ts.
   } else if (request.instruction.skillId === 'remove-sitemap-url') {
     if (new URL(request.instruction.url).origin !== requestOrigin) {
       reasons.push('removed sitemap URL is outside the approved site origin');

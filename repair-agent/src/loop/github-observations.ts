@@ -15,6 +15,13 @@ function positiveInteger(value: unknown, field: string): number {
   return Number(value);
 }
 
+export function parseRepairIssueLineageMarkers(body: unknown): number[] {
+  if (typeof body !== 'string') return [];
+  return [...new Set([...body.matchAll(/(?:^|\r?\n)Tracks #(\d+)(?=[.\s]|$)/g)]
+    .map((match) => Number.parseInt(match[1]!, 10))
+    .filter((value) => Number.isSafeInteger(value) && value > 0))];
+}
+
 export function parseGitHubCheckRunObservation(args: {
   raw: unknown;
   role: 'reviewer' | 'qa' | 'merge-controller';
@@ -65,7 +72,7 @@ export function parseGitHubRequiredCheckObservation(args: {
 export function parseGitHubPullRequestObservation(args: {
   raw: unknown;
   repository: string;
-  linkedIssueNumbers: readonly number[];
+  lineageIssueNumbers: readonly number[];
   observedAt: string;
 }): PullRequestObservation {
   const raw = record(args.raw, 'GitHub pull request');
@@ -75,7 +82,7 @@ export function parseGitHubPullRequestObservation(args: {
   if (state !== 'open' && state !== 'closed') throw new Error('GitHub pull-request state is invalid');
   if (typeof raw['mergeable'] !== 'boolean') throw new Error('GitHub pull-request mergeability is unresolved');
   if (Number.isNaN(Date.parse(args.observedAt))) throw new Error('GitHub pull-request observation time is invalid');
-  const linkedIssueNumbers = [...new Set(args.linkedIssueNumbers.map((value) => positiveInteger(value, 'GitHub linked issue number')))];
+  const lineageIssueNumbers = [...new Set(args.lineageIssueNumbers.map((value) => positiveInteger(value, 'GitHub lineage issue number')))];
   return {
     repository: text(args.repository, 'GitHub repository', /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
     number: positiveInteger(raw['number'], 'GitHub pull-request number'),
@@ -84,7 +91,7 @@ export function parseGitHubPullRequestObservation(args: {
     baseSha: text(base['sha'], 'GitHub pull-request base SHA', /^[a-f0-9]{40}$/),
     headSha: text(head['sha'], 'GitHub pull-request head SHA', /^[a-f0-9]{40}$/),
     mergeable: raw['mergeable'],
-    linkedIssueNumbers,
+    lineageIssueNumbers,
     observedAt: args.observedAt,
   };
 }

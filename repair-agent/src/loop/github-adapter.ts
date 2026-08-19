@@ -4,7 +4,7 @@ import { parseGitHubCheckRunObservation, parseGitHubPullRequestObservation, pars
 export interface AuthenticatedGitHubReader {
   readCheckRun(repository: string, checkRunId: number): Promise<unknown>;
   readPullRequest(repository: string, pullRequestNumber: number): Promise<unknown>;
-  readLinkedIssueNumbers(repository: string, pullRequestNumber: number): Promise<readonly number[]>;
+  readIssueLineageNumbers(repository: string, pullRequestNumber: number): Promise<readonly number[]>;
 }
 
 export class GitHubObservationAdapter {
@@ -30,10 +30,10 @@ export class GitHubObservationAdapter {
   }
 
   async observePullRequest(pullRequestNumber: number): Promise<PullRequestObservation> {
-    const [raw, linkedIssueNumbers] = await Promise.all([
+    const [raw, lineageIssueNumbers] = await Promise.all([
       this.#reader.readPullRequest(this.#repository, pullRequestNumber),
-      this.#reader.readLinkedIssueNumbers(this.#repository, pullRequestNumber),
+      this.#reader.readIssueLineageNumbers(this.#repository, pullRequestNumber),
     ]);
-    return parseGitHubPullRequestObservation({ raw, repository: this.#repository, linkedIssueNumbers, observedAt: this.#clock().toISOString() });
+    return parseGitHubPullRequestObservation({ raw, repository: this.#repository, lineageIssueNumbers, observedAt: this.#clock().toISOString() });
   }
 }

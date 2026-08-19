@@ -65,6 +65,26 @@ describe('repair request contract and admission policy', () => {
     }
   });
 
+  it('parses and admits only the exact retrieval-agent repair contract', () => {
+    const request = validRepairRequest();
+    request.finding.checkId = 'ai-crawler-access';
+    request.finding.findingId = 'retrieval-contract';
+    request.instruction = { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' };
+    request.changeBudget = { maxFiles: 1, maxChangedLines: 10 };
+    request.fixture = {
+      files: {
+        'app/robots.ts': "export default async function robots() {\n  return { rules: [{ userAgent: '*', allow: '/' }] };\n}\n",
+      },
+    };
+
+    expect(parseRepairRequest(request)).toEqual({ ok: true, request });
+    expect(admitRepair(request, policy)).toMatchObject({ admitted: true });
+    expect(parseRepairRequest({
+      ...request,
+      instruction: { skillId: 'allow-ai-retrieval-agents', path: 'workers/robots.ts' },
+    })).toEqual({ ok: false, reason: 'allow-ai-retrieval-agents may only write app/robots.ts' });
+  });
+
   it('parses only shadow-mode schema v1 requests', () => {
     const request = { ...validRepairRequest(), mode: 'production' };
     expect(parseRepairRequest(request)).toEqual({ ok: false, reason: 'only shadow mode is supported' });

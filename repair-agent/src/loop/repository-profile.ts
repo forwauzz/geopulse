@@ -2,7 +2,7 @@ import { isQaCommandPresetId } from './command-presets';
 import type { GitHubIssuerPolicy, RepairRole, RepositoryProfile } from './contracts';
 
 const SAFE_PREFIX = /^(?![A-Za-z]:)(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._/-]+$/;
-const ALLOWED_SKILLS = new Set(['ensure-robots-sitemap', 'remove-sitemap-url', 'replace-broken-internal-link']);
+const ALLOWED_SKILLS = new Set(['ensure-robots-sitemap', 'allow-ai-retrieval-agents', 'remove-sitemap-url', 'replace-broken-internal-link']);
 const ROLE_NAMES: readonly RepairRole[] = ['engineer', 'reviewer', 'qa', 'merge-controller'];
 
 function publicHttpsUrl(value: string): URL | null {
@@ -135,7 +135,7 @@ export const GEOPULSE_PROFILE: RepositoryProfile = {
   defaultBranch: 'main',
   siteOrigin: 'https://getgeopulse.com',
   allowedPathPrefixes: ['public', 'app', 'lib', 'workers'],
-  skillAllowlist: ['ensure-robots-sitemap', 'remove-sitemap-url', 'replace-broken-internal-link'],
+  skillAllowlist: ['ensure-robots-sitemap', 'allow-ai-retrieval-agents', 'remove-sitemap-url', 'replace-broken-internal-link'],
   maxFiles: 1,
   maxChangedLines: 30,
   repositoryAdapter: {
@@ -150,14 +150,14 @@ export const GEOPULSE_PROFILE: RepositoryProfile = {
   },
   requiredChecks: [
     { checkName: 'verify', appSlug: 'github-actions', appId: 15368 },
-    { checkName: 'repair-review', appSlug: 'geo-pulse-repair-reviewer', appId: null },
-    { checkName: 'repair-qa', appSlug: 'geo-pulse-repair-qa', appId: null },
+    { checkName: 'repair-review', appSlug: 'geo-pulse-repair-reviewer', appId: 4652371 },
+    { checkName: 'repair-qa', appSlug: 'geo-pulse-repair-qa', appId: 4652496 },
   ],
   roleIssuers: {
     engineer: [{ provider: 'github', appSlug: 'github-actions', appId: 15368 }],
-    reviewer: [{ provider: 'github', appSlug: 'geo-pulse-repair-reviewer', appId: null }],
-    qa: [{ provider: 'github', appSlug: 'geo-pulse-repair-qa', appId: null }],
-    'merge-controller': [{ provider: 'github', appSlug: 'geo-pulse-repair-merge', appId: null }],
+    reviewer: [{ provider: 'github', appSlug: 'geo-pulse-repair-reviewer', appId: 4652371 }],
+    qa: [{ provider: 'github', appSlug: 'geo-pulse-repair-qa', appId: 4652496 }],
+    'merge-controller': [{ provider: 'github', appSlug: 'geo-pulse-repair-merge', appId: 4652526 }],
   },
   qaCommandPresetId: 'geopulse-safe-v1',
 };

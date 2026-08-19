@@ -31,6 +31,16 @@ export const REPAIR_SKILLS: Readonly<Record<RepairSkillId, RepairSkillContract>>
     pathPattern: /^public\/robots\.txt$/,
     postcondition: 'robots.txt contains exactly one Sitemap directive for the approved site origin',
   },
+  'allow-ai-retrieval-agents': {
+    id: 'allow-ai-retrieval-agents',
+    version: '1.0.0',
+    allowedCheckIds: ['ai-crawler-access'],
+    allowedTools: SHADOW_TOOLS,
+    maximumFiles: 1,
+    maximumChangedLines: 10,
+    pathPattern: /^app\/robots\.ts$/,
+    postcondition: 'the Next.js robots policy explicitly allows every approved retrieval and conventional search agent',
+  },
   'remove-sitemap-url': {
     id: 'remove-sitemap-url',
     version: '1.0.0',
