@@ -93,6 +93,8 @@ function currentScope(item: QueuedRepairScope): boolean {
     && (scope.attempt ?? 0) <= 3
     && Array.isArray(scope.feedback)
     && scope.feedback.length <= 10
+    && typeof scope.repositoryProfileDigest === 'string'
+    && /^[a-f0-9]{64}$/.test(scope.repositoryProfileDigest)
     && source !== undefined
     && typeof source.checkId === 'string'
     && typeof source.targetUrl === 'string'
@@ -149,6 +151,9 @@ export function validateRepairState(state: RepairAgentState): void {
     }
     if (!Array.isArray(item.scope.feedback) || item.scope.feedback.length > 10) {
       throw new Error('scope feedback exceeds its bounded contract');
+    }
+    if (!/^[a-f0-9]{64}$/.test(item.scope.repositoryProfileDigest)) {
+      throw new Error('scope repository profile digest is invalid');
     }
     if (!item.scope.sourceFinding || typeof item.scope.sourceFinding.checkId !== 'string' || typeof item.scope.sourceFinding.targetUrl !== 'string') {
       throw new Error('scope source finding is incomplete');

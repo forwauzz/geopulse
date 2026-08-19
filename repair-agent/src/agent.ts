@@ -5,7 +5,7 @@ import type { RepairWorkerEnv } from './env';
 import { admitRepair, policyConfigFromEnv } from './policy';
 import { parseAuditEnvelope, selectAuditFinding } from './loop/audit-intake';
 import type { RepairScope } from './loop/contracts';
-import { GEOPULSE_CANARY_PROFILE, GEOPULSE_PROFILE } from './loop/repository-profile';
+import { INSTALLED_PROFILE_REGISTRY } from './loop/profile-registry';
 import { scopeRepair } from './loop/scoper';
 import {
   acknowledgeRepairScope,
@@ -144,12 +144,13 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
     if (authority === 'external-canary' && envelope.producer !== 'github-shadow-canary') {
       return { accepted: false, reasons: ['external audit producer is restricted to shadow canaries'] };
     }
-    const profile = envelope.repositoryProfileId === GEOPULSE_PROFILE.id
-      ? GEOPULSE_PROFILE
-      : authority === 'external-canary' && envelope.repositoryProfileId === GEOPULSE_CANARY_PROFILE.id
-        ? GEOPULSE_CANARY_PROFILE
-        : null;
-    if (!profile) return { accepted: false, reasons: ['repository profile is not installed'] };
+    const resolvedProfile = await INSTALLED_PROFILE_REGISTRY.resolve({
+      profileId: envelope.repositoryProfileId,
+      authority,
+      targetUrl: envelope.targetUrl,
+    });
+    if (!resolvedProfile) return { accepted: false, reasons: ['repository profile is not installed for this producer and target'] };
+    const { profile, digest: profileDigest } = resolvedProfile;
     const seen = new Set((this.state.auditHistory ?? []).map((item) => item.auditRunId));
     if (seen.has(envelope.auditRunId)) {
       const existing = (this.state.auditHistory ?? []).find((item) => item.auditRunId === envelope.auditRunId);
@@ -169,7 +170,7 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
       }));
       return { accepted: true, queued: false, repairId: null, reasons: decision.reasons };
     }
-    const scope = await scopeRepair({ envelope, finding: decision.finding, profile, nowMs: Date.now() });
+    const scope = await scopeRepair({ envelope, finding: decision.finding, profile, profileDigest, nowMs: Date.now() });
     this.setState(enqueueRepairScope(this.state, scope, now));
     return { accepted: true, queued: true, repairId: scope.repairId };
   }

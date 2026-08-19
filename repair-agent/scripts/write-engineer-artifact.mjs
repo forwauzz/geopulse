@@ -22,15 +22,20 @@ if (repairEvidence.schemaVersion !== 1 || typeof repairEvidence.repairId !== 'st
 if (!Number.isInteger(repairEvidence.attempt) || repairEvidence.attempt < 1 || repairEvidence.attempt > 3 || typeof repairEvidence.leaseId !== 'string') {
   throw new Error('repair attempt or lease evidence is invalid');
 }
+if (repairEvidence.repositoryProfileId !== 'geopulse-canary-v1' || !/^[a-f0-9]{64}$/.test(repairEvidence.repositoryProfileDigest || '')) {
+  throw new Error('repair repository profile evidence is invalid');
+}
 if (repairEvidence.changedPath !== changedPath || !/^[a-f0-9]{64}$/.test(repairEvidence.artifactDigest || '')) {
   throw new Error('Cloudflare artifact does not match the Git change');
 }
 
 const engineerArtifact = {
   schemaVersion: 1,
+  contractMode: 'logical-shadow-v1',
   repairId: repairEvidence.repairId,
   auditRunId: repairEvidence.auditRunId,
-  repositoryProfileId: 'geopulse-canary-v1',
+  repositoryProfileId: repairEvidence.repositoryProfileId,
+  repositoryProfileDigest: repairEvidence.repositoryProfileDigest,
   repository: 'forwauzz/geopulse',
   risk: 'low',
   attempt: repairEvidence.attempt,
@@ -40,8 +45,9 @@ const engineerArtifact = {
   changedPaths: [changedPath],
   changedLines,
   authorIdentity: 'github-actions:repair-engineer-shadow',
+  engineerEvidenceDigest: repairEvidence.artifactDigest,
 };
-const unsigned = { schemaVersion: 1, repairEvidence, engineerArtifact };
+const unsigned = { schemaVersion: 1, contractMode: 'logical-shadow-v1', repairEvidence, engineerArtifact };
 const evidenceDigest = createHash('sha256').update(JSON.stringify(unsigned)).digest('hex');
 const output = { ...unsigned, evidenceDigest };
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`, 'utf8');

@@ -71,19 +71,19 @@ jobs:
       - run: npm ci
         working-directory: repair-agent
       - name: Audit intake and scoper tests
-        run: npx vitest run test/loop-roles.test.ts -t "audit intake agent|scoper agent"
+        run: npx vitest run test/loop-roles.test.ts -t "audit intake and scoper"
         working-directory: repair-agent
       - name: Engineer sandbox and policy tests
         run: npx vitest run test/runner.test.ts test/contracts-policy.test.ts
         working-directory: repair-agent
       - name: Reviewer tests
-        run: npx vitest run test/loop-roles.test.ts -t "review agent"
+        run: npx vitest run test/loop-roles.test.ts -t "authenticated reviewer role"
         working-directory: repair-agent
       - name: QA and feedback tests
-        run: npx vitest run test/loop-roles.test.ts -t "QA agent"
+        run: npx vitest run test/loop-roles.test.ts -t "authenticated QA role"
         working-directory: repair-agent
       - name: Merge controller and portability tests
-        run: npx vitest run test/loop-roles.test.ts -t "deterministic merge controller|repository profile role"
+        run: npx vitest run test/loop-roles.test.ts test/portable-loop.test.ts -t "deterministic merge controller|repository profile registry and command policy|deployment QA|disposable repository adapter canary"
         working-directory: repair-agent
       - run: npm run type-check
         working-directory: repair-agent
@@ -262,7 +262,7 @@ jobs:
           name: repair-engineer-evidence
           path: ${{ runner.temp }}/engineer
       - name: SHA-bound independent logical review
-        run: npm test -- --run test/loop-roles.test.ts -t 'review agent'
+        run: npm test -- --run test/loop-roles.test.ts -t 'authenticated reviewer role'
         working-directory: repair-agent
       - name: Emit structured SHA-bound review verdict
         env:

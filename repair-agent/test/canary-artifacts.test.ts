@@ -36,6 +36,8 @@ describe('live canary artifact scripts', () => {
       schemaVersion: 1,
       auditRunId: 'canary-run-1',
       repairId,
+      repositoryProfileId: 'geopulse-canary-v1',
+      repositoryProfileDigest: '2'.repeat(64),
       attempt: 1,
       leaseId: 'github-run-canary-12345',
       artifactDigest: 'e'.repeat(64),
@@ -129,9 +131,11 @@ describe('live canary artifact scripts', () => {
     const qaPath = join(directory, 'qa.json');
     const artifact = {
       schemaVersion: 1,
+      contractMode: 'logical-shadow-v1',
       repairId: 'd'.repeat(32),
       auditRunId: 'canary-run-1',
       repositoryProfileId: 'geopulse-canary-v1',
+      repositoryProfileDigest: '2'.repeat(64),
       repository: 'forwauzz/geopulse',
       risk: 'low',
       attempt: 1,
@@ -141,11 +145,12 @@ describe('live canary artifact scripts', () => {
       changedPaths: ['repair-agent/test/portable-repo/public/robots.txt'],
       changedLines: 2,
       authorIdentity: 'github-actions:repair-engineer-shadow',
+      engineerEvidenceDigest: 'e'.repeat(64),
     };
     const repairEvidence = { leaseId: 'github-run-canary-12345' };
-    const unsigned = { schemaVersion: 1, repairEvidence, engineerArtifact: artifact };
+    const unsigned = { schemaVersion: 1, contractMode: 'logical-shadow-v1', repairEvidence, engineerArtifact: artifact };
     await writeFile(engineerPath, JSON.stringify({ ...unsigned, evidenceDigest: createHash('sha256').update(JSON.stringify(unsigned)).digest('hex') }), 'utf8');
-    const stale = { schemaVersion: 1, role: 'reviewer', repairId: artifact.repairId, attempt: 1, headSha: '9'.repeat(40), patchDigest: artifact.patchDigest, identity: 'reviewer', verdict: 'passed', engineerEvidenceDigest: '0'.repeat(64), reasons: [], evidenceDigest: '0'.repeat(64) };
+    const stale = { schemaVersion: 1, contractMode: 'logical-shadow-v1', role: 'reviewer', repairId: artifact.repairId, attempt: 1, headSha: '9'.repeat(40), patchDigest: artifact.patchDigest, repositoryProfileDigest: artifact.repositoryProfileDigest, identity: 'reviewer', verdict: 'passed', engineerEvidenceDigest: artifact.engineerEvidenceDigest, engineerEnvelopeDigest: '0'.repeat(64), workEvidenceDigest: '0'.repeat(64), reasons: [], evidenceDigest: '0'.repeat(64) };
     await writeFile(reviewPath, JSON.stringify(stale), 'utf8');
     await writeFile(qaPath, JSON.stringify({ ...stale, role: 'qa', identity: 'qa' }), 'utf8');
     await expect(execFileAsync(process.execPath, [gateScript], {
@@ -179,6 +184,7 @@ describe('live canary artifact scripts', () => {
           response.end(JSON.stringify({ ok: true, leaseId: body.leaseId, scope: {
             schemaVersion: 1, attempt: 2, feedback: ['QA job failure'], producer: 'github-shadow-canary', repairId,
             auditRunId: 'canary-original', findingId: 'canary-original:robots-sitemap', repositoryProfileId: 'geopulse-canary-v1',
+            repositoryProfileDigest: '2'.repeat(64),
             repository: 'forwauzz/geopulse', defaultBranch: 'main', siteOrigin: 'https://getgeopulse.com',
             sourceFinding: { checkId: 'robots-sitemap', targetUrl: 'https://getgeopulse.com/', finding: 'Missing sitemap directive.', confidence: 'high', risk: 'low', reportedAt: '2026-08-19T16:00:00.000Z' },
             instruction: { skillId: 'ensure-robots-sitemap', path: 'public/robots.txt', sitemapUrl: 'https://getgeopulse.com/sitemap.xml' },

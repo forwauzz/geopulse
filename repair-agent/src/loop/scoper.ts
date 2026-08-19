@@ -1,6 +1,7 @@
 import type { AuditEnvelope, AuditFinding, RepairScope, RepositoryProfile } from './contracts';
 import { getRepairSkill } from '../skills';
 import { pathAllowed } from './repository-profile';
+import { repositoryProfileDigest } from './profile-registry';
 
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
@@ -10,6 +11,7 @@ export async function scopeRepair(args: {
   envelope: AuditEnvelope;
   finding: AuditFinding;
   profile: RepositoryProfile;
+  profileDigest: string;
   nowMs: number;
 }): Promise<RepairScope> {
   const instruction = args.finding.repairHint?.instruction;
@@ -17,7 +19,8 @@ export async function scopeRepair(args: {
   const skill = getRepairSkill(instruction.skillId);
   if (!skill.allowedCheckIds.includes(args.finding.checkId)) throw new Error('finding check is incompatible with the selected repair skill');
   if (!skill.pathPattern.test(instruction.path) || !pathAllowed(args.profile, instruction.path)) throw new Error('repair instruction path is not allowed');
-  const identity = `${args.envelope.producer}:${args.envelope.auditRunId}:${args.finding.findingId}:${args.profile.id}:${instruction.skillId}:${instruction.path}`;
+  if (!/^[a-f0-9]{64}$/.test(args.profileDigest) || await repositoryProfileDigest(args.profile) !== args.profileDigest) throw new Error('repository profile digest is invalid');
+  const identity = `${args.envelope.producer}:${args.envelope.auditRunId}:${args.finding.findingId}:${args.profile.id}:${args.profileDigest}:${instruction.skillId}:${instruction.path}`;
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity));
   const repairId = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 32);
   return {
@@ -29,6 +32,7 @@ export async function scopeRepair(args: {
     auditRunId: args.envelope.auditRunId,
     findingId: args.finding.findingId,
     repositoryProfileId: args.profile.id,
+    repositoryProfileDigest: args.profileDigest,
     repository: args.profile.repository,
     defaultBranch: args.profile.defaultBranch,
     siteOrigin: new URL(args.profile.siteOrigin).origin,
