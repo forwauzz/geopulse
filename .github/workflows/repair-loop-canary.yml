@@ -174,7 +174,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-checks: write
-          permission-variables: read
+          permission-actions-variables: read
       - name: Prove merge App identity, Actions variable read, and Checks write
         shell: bash
         env:
