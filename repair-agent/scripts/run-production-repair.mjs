@@ -40,13 +40,13 @@ try {
   if (scope === null) {
     const status = await request('/v1/status');
     const history = Array.isArray(status.auditHistory) ? status.auditHistory : [];
-    const latestCanonical = history.find((item) => item?.producer === 'canonical-cloudflare-scheduler'
+    const latestCanonical = history.find((item) => typeof item?.producer === 'string' && item.producer.startsWith('canonical-cloudflare-')
       && ['queued', 'unsupported', 'rejected'].includes(item?.outcome));
     const latestAt = Date.parse(latestCanonical?.recordedAt ?? '');
     if (!Number.isFinite(latestAt) || Date.now() - latestAt > 26 * 60 * 60_000) {
       throw new Error('no pending scope and no fresh canonical audit intake evidence');
     }
-    if (history.some((item) => item?.producer === 'canonical-cloudflare-scheduler' && item?.outcome === 'exhausted' && Date.parse(item?.recordedAt ?? '') >= latestAt)) {
+    if (history.some((item) => typeof item?.producer === 'string' && item.producer.startsWith('canonical-cloudflare-') && item?.outcome === 'exhausted' && Date.parse(item?.recordedAt ?? '') >= latestAt)) {
       throw new Error('canonical repair scope is exhausted and requires an owned incident');
     }
     const pending = Array.isArray(status.pendingScopes) ? status.pendingScopes : [];
@@ -59,7 +59,7 @@ try {
     // trip a libuv assertion on Windows and can truncate the evidence file.
     break productionRun;
   }
-  if (scope.producer !== 'canonical-cloudflare-scheduler'
+  if (!['canonical-cloudflare-scheduler', 'canonical-cloudflare-admin', 'canonical-cloudflare-ci'].includes(scope.producer)
     || scope.repositoryProfileId !== 'geopulse-v1'
     || scope.repository !== 'forwauzz/geopulse'
     || scope.siteOrigin !== 'https://getgeopulse.com') {

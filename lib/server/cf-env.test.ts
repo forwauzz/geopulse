@@ -54,10 +54,12 @@ describe('Cloudflare build-time environment', () => {
 
   it('continues to use Cloudflare runtime context outside the static build', async () => {
     delete mutableEnv['GEOPULSE_STATIC_BUILD'];
+    const repairAgentService = { fetch: vi.fn() };
     cloudflareMocks.getCloudflareContext.mockResolvedValue({
       env: {
         NEXT_PUBLIC_APP_URL: 'https://runtime.getgeopulse.com/',
         LEGACY_PAID_ENABLED: 'true',
+        REPAIR_AGENT_SERVICE: repairAgentService,
       },
     });
 
@@ -65,6 +67,20 @@ describe('Cloudflare build-time environment', () => {
 
     expect(paymentEnv.NEXT_PUBLIC_APP_URL).toBe('https://runtime.getgeopulse.com/');
     expect(paymentEnv.LEGACY_PAID_ENABLED).toBe('true');
+    expect(paymentEnv.REPAIR_AGENT_SERVICE).toBe(repairAgentService);
     expect(cloudflareMocks.getCloudflareContext).toHaveBeenCalledWith({ async: true });
+  });
+
+  it('recovers the repair service binding from the synchronous Worker context', async () => {
+    delete mutableEnv['GEOPULSE_STATIC_BUILD'];
+    const repairAgentService = { fetch: vi.fn() };
+    cloudflareMocks.getCloudflareContext.mockImplementation(({ async }: { async: boolean }) => async
+      ? Promise.resolve({ env: { NEXT_PUBLIC_APP_URL: 'https://getgeopulse.com/' } })
+      : { env: { REPAIR_AGENT_SERVICE: repairAgentService } });
+
+    const paymentEnv = await getPaymentApiEnv();
+
+    expect(paymentEnv.REPAIR_AGENT_SERVICE).toBe(repairAgentService);
+    expect(cloudflareMocks.getCloudflareContext).toHaveBeenCalledWith({ async: false });
   });
 });

@@ -146,7 +146,10 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
     const parsed = parseAuditEnvelope(raw);
     if (!parsed.ok) return { accepted: false, reasons: [parsed.reason] };
     const envelope = parsed.envelope;
-    if (authority === 'internal-scheduler' && envelope.producer !== 'canonical-cloudflare-scheduler') {
+    const internalProducer = envelope.producer === 'canonical-cloudflare-scheduler'
+      || envelope.producer === 'canonical-cloudflare-admin'
+      || envelope.producer === 'canonical-cloudflare-ci';
+    if (authority === 'internal-scheduler' && !internalProducer) {
       return { accepted: false, reasons: ['internal audit producer identity does not match'] };
     }
     if (authority === 'external-canary' && envelope.producer !== 'github-shadow-canary') {

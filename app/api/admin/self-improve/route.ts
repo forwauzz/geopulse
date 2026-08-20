@@ -13,6 +13,7 @@ import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { loadAdminActionContext } from '@/lib/server/admin-runtime';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { runSelfImprovementAudit, loadSelfImprovementSettings } from '@/lib/server/self-improvement';
+import { persistCommittedSelfImprovementRepairIntake, selfImprovementRepairHttpStatus } from '@/lib/server/self-improvement-repair-intake';
 import { structuredLog } from '@/lib/server/structured-log';
 
 export const runtime = 'nodejs';
@@ -103,8 +104,18 @@ export async function POST(request: Request): Promise<Response> {
     triggerSource: auth.via === 'secret' ? 'ci' : 'admin_manual',
     force: true,
   });
-  structuredLog('self_improvement_manual_run', { via: auth.via, status: result.status, score: result.score ?? null }, 'info');
-  return Response.json(result, {
-    status: result.ok ? 200 : result.status === 'skipped' ? 409 : 500,
+  const repairDelivery = await persistCommittedSelfImprovementRepairIntake({ env, result });
+  structuredLog('self_improvement_manual_run', {
+    via: auth.via,
+    status: result.status,
+    score: result.score ?? null,
+    repair_delivered: repairDelivery.delivered,
+    repair_queued: repairDelivery.queued,
+    repair_outbox_persisted: repairDelivery.outboxPersisted,
+    repair_delivery_pending: repairDelivery.deliveryPending,
+    repair_reason: repairDelivery.reason,
+  }, result.ok && repairDelivery.delivered ? 'info' : repairDelivery.deliveryPending ? 'warning' : 'error');
+  return Response.json({ ...result, repairDelivery }, {
+    status: selfImprovementRepairHttpStatus(result, repairDelivery),
   });
 }

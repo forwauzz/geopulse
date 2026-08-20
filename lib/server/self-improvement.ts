@@ -203,6 +203,7 @@ export async function sendSelfImprovementReport(input: {
 export type SelfImprovementRunResult = {
   ok: boolean;
   status: 'audited' | 'skipped' | 'failed';
+  triggerSource: 'worker_cron' | 'admin_manual' | 'ci';
   runId?: string;
   score?: number;
   letterGrade?: string;
@@ -303,10 +304,10 @@ export async function runSelfImprovementAudit(args: {
   const settings = await loadSelfImprovementSettings(supabase);
 
   if (settings.killSwitch) {
-    return { ok: false, status: 'skipped', reason: 'kill_switch' };
+    return { ok: false, status: 'skipped', triggerSource, reason: 'kill_switch' };
   }
   if (!args.force && !(cfg.envEnabled && settings.enabled)) {
-    return { ok: false, status: 'skipped', reason: 'disabled' };
+    return { ok: false, status: 'skipped', triggerSource, reason: 'disabled' };
   }
 
   const llm = buildLlm(env) ?? NOOP_LLM;
@@ -317,7 +318,7 @@ export async function runSelfImprovementAudit(args: {
       .insert({ trigger_source: triggerSource, target_url: cfg.targetUrl, status: 'failed', error: scan.reason })
       .select('id')
       .single();
-    return { ok: false, status: 'failed', runId: data?.id, reason: scan.reason };
+    return { ok: false, status: 'failed', triggerSource, runId: data?.id, reason: scan.reason };
   }
 
   const plan = buildImprovementPlan(scan.output);
@@ -352,12 +353,13 @@ export async function runSelfImprovementAudit(args: {
     .single();
 
   if (error) {
-    return { ok: false, status: 'failed', reason: error.message, score: scan.output.score, letterGrade: scan.output.letterGrade, plan };
+    return { ok: false, status: 'failed', triggerSource, reason: error.message, score: scan.output.score, letterGrade: scan.output.letterGrade, plan };
   }
 
   return {
     ok: true,
     status: 'audited',
+    triggerSource,
     runId: data?.id,
     score: scan.output.score,
     letterGrade: scan.output.letterGrade,

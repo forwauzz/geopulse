@@ -7,11 +7,13 @@ import {
   type RepairAuditKv,
 } from './repair-audit-intake';
 import type { SelfImprovementRunResult } from './self-improvement';
+import { persistCommittedSelfImprovementRepairIntake, selfImprovementRepairHttpStatus } from './self-improvement-repair-intake';
 
 function audited(): SelfImprovementRunResult {
   return {
     ok: true,
     status: 'audited',
+    triggerSource: 'worker_cron',
     runId: 'audit-run-1',
     score: 80,
     letterGrade: 'B',
@@ -28,6 +30,7 @@ function blockedRetrievalAgents(): SelfImprovementRunResult {
   return {
     ok: true,
     status: 'audited',
+    triggerSource: 'worker_cron',
     runId: 'audit-run-retrieval',
     score: 70,
     letterGrade: 'C',
@@ -74,6 +77,59 @@ function memoryKv(): RepairAuditKv & { values: Map<string, string> } {
 }
 
 describe('canonical self-audit repair delivery', () => {
+  it('fails visibly when a manual or API trigger has no durable outbox binding', async () => {
+    const result = await persistCommittedSelfImprovementRepairIntake({
+      env: { SELF_IMPROVEMENT_TARGET_URL: 'https://getgeopulse.com/' },
+      result: audited(),
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      auditRunId: 'audit-run-1',
+      delivered: false,
+      queued: false,
+      outboxPersisted: false,
+      deliveryPending: false,
+      attempts: 0,
+      exhausted: false,
+      nextAttemptAt: null,
+      reason: 'repair audit outbox binding is missing',
+    });
+  });
+
+  it('uses the same durable outbox and internal service handoff for non-scheduled triggers', async () => {
+    const kv = memoryKv();
+    const fetch = vi.fn(async () => Response.json({ accepted: true, queued: false, reasons: ['no eligible supported finding'] }, { status: 202 }));
+
+    const result = await persistCommittedSelfImprovementRepairIntake({
+      env: {
+        SELF_IMPROVEMENT_TARGET_URL: 'https://getgeopulse.com/',
+        SCAN_CACHE: kv,
+        REPAIR_AGENT_SERVICE: { fetch },
+      },
+      result: audited(),
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    });
+
+    expect(result).toMatchObject({ auditRunId: 'audit-run-1', delivered: true, queued: false, attempts: 1 });
+    expect(kv.put).toHaveBeenCalledBefore(fetch);
+    expect(kv.values.size).toBe(0);
+  });
+
+  it('reports durable pending delivery as accepted instead of inviting a duplicate audit', () => {
+    expect(selfImprovementRepairHttpStatus(audited(), {
+      auditRunId: 'audit-run-1',
+      delivered: false,
+      queued: false,
+      outboxPersisted: true,
+      deliveryPending: true,
+      attempts: 1,
+      exhausted: false,
+      nextAttemptAt: '2026-08-19T16:05:00.000Z',
+      reason: 'temporary failure',
+    })).toBe(202);
+  });
+
   it('preserves audit provenance and fails closed without exact repository repair evidence', () => {
     const envelope = buildRepairAuditEnvelope({ result: audited(), targetUrl: 'https://getgeopulse.com/', generatedAt: '2026-08-19T16:00:00.000Z' });
     expect(envelope).toMatchObject({
@@ -84,6 +140,20 @@ describe('canonical self-audit repair delivery', () => {
       checkCatalogVersion: 'catalog-v1',
       findings: [{ checkId: 'internal-links', confidence: 'high', risk: 'prohibited' }],
     });
+  });
+
+  it.each([
+    ['worker_cron', 'canonical-cloudflare-scheduler'],
+    ['admin_manual', 'canonical-cloudflare-admin'],
+    ['ci', 'canonical-cloudflare-ci'],
+  ] as const)('preserves %s trigger provenance as %s', (triggerSource, producer) => {
+    const result = audited();
+    result.triggerSource = triggerSource;
+    expect(buildRepairAuditEnvelope({
+      result,
+      targetUrl: 'https://getgeopulse.com/',
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    })?.producer).toBe(producer);
   });
 
   it('maps only the evidence-complete retrieval-access failure to the installed deterministic skill', () => {
@@ -125,7 +195,7 @@ describe('canonical self-audit repair delivery', () => {
   });
 
   it('does not report success for a skipped or uncommitted audit', async () => {
-    const result = await deliverRepairAudit({ service: { fetch: vi.fn() }, result: { ok: false, status: 'skipped', reason: 'kill_switch' }, targetUrl: 'https://getgeopulse.com/', generatedAt: '2026-08-19T16:00:00.000Z' });
+    const result = await deliverRepairAudit({ service: { fetch: vi.fn() }, result: { ok: false, status: 'skipped', triggerSource: 'worker_cron', reason: 'kill_switch' }, targetUrl: 'https://getgeopulse.com/', generatedAt: '2026-08-19T16:00:00.000Z' });
     expect(result).toEqual({ delivered: false, queued: false, reason: 'audit produced no committed run' });
   });
 
@@ -166,6 +236,25 @@ describe('canonical self-audit repair delivery', () => {
     expect(kv.values.size).toBe(0);
   });
 
+  it('replaying a pending delivery preserves its attempt budget and due time', async () => {
+    const kv = memoryKv();
+    const fetch = vi.fn(async () => Response.json({ accepted: false, reasons: ['temporary rejection'] }, { status: 503 }));
+    const input = {
+      kv,
+      service: { fetch },
+      result: audited(),
+      targetUrl: 'https://getgeopulse.com/',
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    };
+
+    const first = await persistAndDeliverRepairAudit({ ...input, nowMs: Date.parse('2026-08-19T16:00:00.000Z') });
+    const replay = await persistAndDeliverRepairAudit({ ...input, nowMs: Date.parse('2026-08-19T16:01:00.000Z') });
+
+    expect(first).toMatchObject({ attempts: 1, outboxPersisted: true, deliveryPending: true, nextAttemptAt: '2026-08-19T16:05:00.000Z' });
+    expect(replay).toMatchObject({ attempts: 1, outboxPersisted: true, deliveryPending: true, nextAttemptAt: '2026-08-19T16:05:00.000Z' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('stops after three evidence-backed attempts and retains an owned exhausted record', async () => {
     const kv = memoryKv();
     const fetch = vi.fn(async () => Response.json({ accepted: false, reasons: ['temporary rejection'] }, { status: 503 }));
@@ -183,7 +272,15 @@ describe('canonical self-audit repair delivery', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
     const retained = JSON.parse([...kv.values.values()][0]!) as Record<string, unknown>;
     expect(retained).toMatchObject({ owner: 'repair-intake', retryPolicy: 'three_attempts_5m_30m', state: 'exhausted', attempts: 3, lastError: 'temporary rejection' });
-    await retryPendingRepairAudits({ kv, service: { fetch }, nowMs: Date.parse('2026-08-20T16:35:00.000Z') });
+    const replay = await persistAndDeliverRepairAudit({
+      kv,
+      service: { fetch },
+      result: audited(),
+      targetUrl: 'https://getgeopulse.com/',
+      generatedAt: '2026-08-19T16:00:00.000Z',
+      nowMs: Date.parse('2026-08-20T16:35:00.000Z'),
+    });
+    expect(replay).toMatchObject({ attempts: 3, exhausted: true, outboxPersisted: true, deliveryPending: false });
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 

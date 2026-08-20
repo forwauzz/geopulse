@@ -107,6 +107,8 @@ export type ScanApiEnv = {
 export type PaymentApiEnv = ScanApiEnv & {
   SCAN_QUEUE: Queue | undefined;
   DISTRIBUTION_QUEUE?: Queue | undefined;
+  /** Internal service binding for the durable audit-to-repair coordinator. */
+  REPAIR_AGENT_SERVICE?: { fetch(input: string, init?: RequestInit): Promise<Response> };
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRICE_ID_DEEP_AUDIT: string;
@@ -232,6 +234,26 @@ function resolveQueueBinding(e: Record<string, unknown>, key: string): Queue | u
     const q = (syncEnv as unknown as Record<string, unknown>)[key];
     if (q && typeof (q as Queue).send === 'function') {
       return q as Queue;
+    }
+  } catch {
+    /* sync context unavailable */
+  }
+  return undefined;
+}
+
+function resolveFetcherBinding(
+  e: Record<string, unknown>,
+  key: string
+): { fetch(input: string, init?: RequestInit): Promise<Response> } | undefined {
+  const direct = e[key] as { fetch?: unknown } | undefined;
+  if (direct && typeof direct.fetch === 'function') {
+    return direct as { fetch(input: string, init?: RequestInit): Promise<Response> };
+  }
+  try {
+    const { env: syncEnv } = getCloudflareContext({ async: false });
+    const binding = (syncEnv as unknown as Record<string, unknown>)[key] as { fetch?: unknown } | undefined;
+    if (binding && typeof binding.fetch === 'function') {
+      return binding as { fetch(input: string, init?: RequestInit): Promise<Response> };
     }
   } catch {
     /* sync context unavailable */
@@ -425,6 +447,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       ...base,
       SCAN_QUEUE: resolveScanQueue(e),
       DISTRIBUTION_QUEUE: resolveQueueBinding(e, 'DISTRIBUTION_QUEUE'),
+      REPAIR_AGENT_SERVICE: resolveFetcherBinding(e, 'REPAIR_AGENT_SERVICE'),
       STRIPE_SECRET_KEY: pickEnvString(e, 'STRIPE_SECRET_KEY'),
       STRIPE_WEBHOOK_SECRET: pickEnvString(e, 'STRIPE_WEBHOOK_SECRET'),
       STRIPE_PRICE_ID_DEEP_AUDIT: pickEnvString(e, 'STRIPE_PRICE_ID_DEEP_AUDIT'),

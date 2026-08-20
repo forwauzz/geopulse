@@ -53,7 +53,7 @@ export function parseAuditEnvelope(value: unknown): { ok: true; envelope: AuditE
     if (parsedTarget.protocol !== 'https:' || parsedTarget.username || parsedTarget.password) throw new Error('targetUrl must be credential-free https');
     const generatedAt = string(raw['generatedAt'], 'generatedAt', 64);
     const producer = raw['producer'];
-    if (producer !== 'canonical-cloudflare-scheduler' && producer !== 'github-shadow-canary') throw new Error('audit producer is invalid');
+    if (!['canonical-cloudflare-scheduler', 'canonical-cloudflare-admin', 'canonical-cloudflare-ci', 'github-shadow-canary'].includes(String(producer))) throw new Error('audit producer is invalid');
     if (Number.isNaN(Date.parse(generatedAt))) throw new Error('generatedAt is invalid');
     const score = raw['score'];
     const letterGrade = raw['letterGrade'];
@@ -63,7 +63,7 @@ export function parseAuditEnvelope(value: unknown): { ok: true; envelope: AuditE
       ok: true,
       envelope: {
         schemaVersion: 1,
-        producer,
+        producer: producer as AuditEnvelope['producer'],
         auditRunId: string(raw['auditRunId'], 'auditRunId', 160),
         repositoryProfileId: string(raw['repositoryProfileId'], 'repositoryProfileId', 120),
         targetUrl: parsedTarget.toString(),
