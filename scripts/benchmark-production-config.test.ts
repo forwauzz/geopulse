@@ -29,6 +29,7 @@ describe('production benchmark configuration', () => {
       maxRuns: 30,
       windowHours: 12,
       scheduleVersion: 'msp-perplexity-v4-cohort10',
+      includeUserPrompts: false,
     });
     expect(config?.canonicalDomains).toHaveLength(10);
     expect(new Set(config?.canonicalDomains).size).toBe(10);
