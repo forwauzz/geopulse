@@ -62,7 +62,7 @@ export type AuditFinding = {
 
 export type AuditEnvelope = {
   schemaVersion: 1;
-  producer: 'canonical-cloudflare-scheduler' | 'github-shadow-canary';
+  producer: 'canonical-cloudflare-scheduler' | 'canonical-cloudflare-admin' | 'canonical-cloudflare-ci' | 'github-shadow-canary';
   auditRunId: string;
   repositoryProfileId: string;
   targetUrl: string;

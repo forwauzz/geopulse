@@ -220,6 +220,14 @@ describe('audit intake and scoper', () => {
       expect(selectAuditFinding({ envelope, profile: GEOPULSE_PROFILE, seenAuditRunIds: new Set(), nowMs }).accepted).toBe(false);
     }
   });
+
+  it.each(['canonical-cloudflare-scheduler', 'canonical-cloudflare-admin', 'canonical-cloudflare-ci'] as const)(
+    'parses truthful internal producer %s without accepting unknown identities',
+    (producer) => {
+      expect(parseAuditEnvelope(audit({ producer })).ok).toBe(true);
+      expect(parseAuditEnvelope({ ...audit(), producer: 'canonical-cloudflare-unknown' }).ok).toBe(false);
+    }
+  );
 });
 
 describe('authenticated reviewer role', () => {

@@ -17,7 +17,7 @@ export type RepairAuditKv = {
 
 export type RepairAuditEnvelope = {
   schemaVersion: 1;
-  producer: 'canonical-cloudflare-scheduler';
+  producer: 'canonical-cloudflare-scheduler' | 'canonical-cloudflare-admin' | 'canonical-cloudflare-ci';
   auditRunId: string;
   repositoryProfileId: 'geopulse-v1';
   targetUrl: string;
@@ -46,6 +46,8 @@ export type RepairAuditDeliveryResult = {
   auditRunId: string | null;
   delivered: boolean;
   queued: boolean;
+  outboxPersisted: boolean;
+  deliveryPending: boolean;
   attempts: number;
   exhausted: boolean;
   nextAttemptAt: string | null;
@@ -99,9 +101,14 @@ export function buildRepairAuditEnvelope(args: {
   generatedAt: string;
 }): RepairAuditEnvelope | null {
   if (!args.result.ok || args.result.status !== 'audited' || !args.result.runId || !args.result.plan) return null;
+  const producer = args.result.triggerSource === 'worker_cron'
+    ? 'canonical-cloudflare-scheduler'
+    : args.result.triggerSource === 'admin_manual'
+      ? 'canonical-cloudflare-admin'
+      : 'canonical-cloudflare-ci';
   return {
     schemaVersion: 1,
-    producer: 'canonical-cloudflare-scheduler',
+    producer,
     auditRunId: args.result.runId,
     repositoryProfileId: 'geopulse-v1',
     targetUrl: args.targetUrl,
@@ -173,6 +180,8 @@ async function attemptStoredDelivery(args: {
     return {
       auditRunId: args.record.auditRunId,
       ...delivered,
+      outboxPersisted: true,
+      deliveryPending: false,
       attempts,
       exhausted: false,
       nextAttemptAt: null,
@@ -191,6 +200,8 @@ async function attemptStoredDelivery(args: {
   return {
     auditRunId: args.record.auditRunId,
     ...delivered,
+    outboxPersisted: true,
+    deliveryPending: !exhausted,
     attempts,
     exhausted,
     nextAttemptAt,
@@ -207,9 +218,39 @@ export async function persistAndDeliverRepairAudit(args: {
 }): Promise<RepairAuditDeliveryResult> {
   const envelope = buildRepairAuditEnvelope(args);
   if (!envelope) {
-    return { auditRunId: null, delivered: false, queued: false, attempts: 0, exhausted: false, nextAttemptAt: null, reason: 'audit produced no committed run' };
+    return { auditRunId: null, delivered: false, queued: false, outboxPersisted: false, deliveryPending: false, attempts: 0, exhausted: false, nextAttemptAt: null, reason: 'audit produced no committed run' };
   }
   const nowMs = args.nowMs ?? Date.now();
+  const stored = await args.kv.get(deliveryKey(envelope.auditRunId), 'json');
+  if (validDeliveryRecord(stored)) {
+    if (stored.state === 'exhausted') {
+      return {
+        auditRunId: stored.auditRunId,
+        delivered: false,
+        queued: false,
+        outboxPersisted: true,
+        deliveryPending: false,
+        attempts: stored.attempts,
+        exhausted: true,
+        nextAttemptAt: null,
+        reason: stored.lastError,
+      };
+    }
+    if (stored.nextAttemptAt && Date.parse(stored.nextAttemptAt) > nowMs) {
+      return {
+        auditRunId: stored.auditRunId,
+        delivered: false,
+        queued: false,
+        outboxPersisted: true,
+        deliveryPending: true,
+        attempts: stored.attempts,
+        exhausted: false,
+        nextAttemptAt: stored.nextAttemptAt,
+        reason: stored.lastError,
+      };
+    }
+    return attemptStoredDelivery({ kv: args.kv, service: args.service, record: stored, nowMs });
+  }
   const now = new Date(nowMs).toISOString();
   const record: RepairAuditDeliveryRecord = {
     schemaVersion: 1,
