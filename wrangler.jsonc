@@ -127,6 +127,9 @@
     "BENCHMARK_SCHEDULE_DOMAIN_LIMIT": "10",
     // Ten domains x 3 modes x 1 model. The explicit list keeps the expanded
     // frame deterministic and prevents unrelated schedule-enabled rows from entering it.
+    // Customer-added prompt sets run through the tracked-prompt lane; including them here would
+    // consume this 30-group cap and leave the governed MSP frame at only 28/30 groups.
+    "BENCHMARK_SCHEDULE_INCLUDE_USER_PROMPTS": "false",
     "BENCHMARK_SCHEDULE_MAX_RUNS": "30",
     "BENCHMARK_SCHEDULE_MAX_FAILURES": "5",
     // Perplexity accepts the lane but throttles bursty parallel query sets. Sequence each query
