@@ -197,15 +197,41 @@ function categoryFor(kind: string): JordanReelCategory {
 
 export function chooseJordanReelSource<T extends ReelSource>(
   candidates: ReadonlyArray<T>,
-  categories: readonly JordanReelCategory[]
+  categories: readonly JordanReelCategory[],
+  existingAssets: ReadonlyArray<DistributionAssetRow> = []
 ): T | null {
+  const usedScripts = new Set(
+    existingAssets
+      .filter((asset) => asset.asset_type === 'short_video_post')
+      .map((asset) => reelScriptSignature(asset.metadata['reel_script']))
+      .filter((signature): signature is string => signature !== null)
+  );
   return candidates.find((candidate) => {
     const sourceUrl = candidate.evidence['source_url'];
     return categories.includes(categoryFor(candidate.kind)) &&
       typeof sourceUrl === 'string' &&
       /^https:\/\//.test(sourceUrl) &&
-      candidate.title.trim().length > 0;
+      candidate.title.trim().length > 0 &&
+      !usedScripts.has(reelScriptSignature(buildJordanReelScript(candidate)) ?? '');
   }) ?? null;
+}
+
+function reelScriptSignature(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const fields = [
+    'hook',
+    'tension',
+    'comparisonTop',
+    'comparisonBottom',
+    'diagnostic',
+    'cta',
+    'url',
+    'sourceUrl',
+    'sourceLabel',
+  ] as const;
+  if (fields.some((field) => typeof row[field] !== 'string')) return null;
+  return JSON.stringify(fields.map((field) => String(row[field]).trim()));
 }
 
 export function buildJordanReelScript(source: ReelSource): JordanReelScript {

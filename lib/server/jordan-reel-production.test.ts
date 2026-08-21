@@ -129,6 +129,26 @@ describe('Jordan autonomous Reel production', () => {
     expect(script.url).toBe('getgeopulse.com');
   });
 
+  it('rotates away from a previously rendered script instead of repeating its media', () => {
+    const alternate = {
+      ...source,
+      key: 'sofia-service-proof',
+      title: 'Show the service evidence before the promise',
+      evidence: {
+        ...source.evidence,
+        hook: 'Lead with the service evidence an MSP buyer can verify.',
+        original_angle: 'Make the offer, service area, proof, and next action agree.',
+      },
+    };
+    const existing = asset({
+      metadata: { reel_script: buildJordanReelScript(source) },
+    });
+
+    expect(chooseJordanReelSource([source, alternate], ['timely'], [existing]))
+      .toEqual(alternate);
+    expect(chooseJordanReelSource([source], ['timely'], [existing])).toBeNull();
+  });
+
   it('never truncates a Reel line in the middle of a word', () => {
     const script = buildJordanReelScript({
       ...source,
