@@ -198,7 +198,16 @@ describe('audit intake and scoper', () => {
     if (!decision.accepted) return;
     const first = await scopeRepair({ envelope, finding: decision.finding, profile: GEOPULSE_PROFILE, profileDigest: geoDigest, nowMs });
     const second = await scopeRepair({ envelope, finding: decision.finding, profile: GEOPULSE_PROFILE, profileDigest: geoDigest, nowMs });
+    const laterEnvelope = audit({ auditRunId: 'audit-run-2', producer: 'canonical-cloudflare-admin' });
+    const laterDecision = selectAuditFinding({ envelope: laterEnvelope, profile: GEOPULSE_PROFILE, seenAuditRunIds: new Set(), nowMs });
+    expect(laterDecision.accepted).toBe(true);
+    if (!laterDecision.accepted) return;
+    const later = await scopeRepair({ envelope: laterEnvelope, finding: laterDecision.finding, profile: GEOPULSE_PROFILE, profileDigest: geoDigest, nowMs });
+    const differentFinding = { ...decision.finding, repairHint: { instruction: { ...decision.finding.repairHint!.instruction, from: '/articles/another-old-guide' } } };
+    const different = await scopeRepair({ envelope, finding: differentFinding, profile: GEOPULSE_PROFILE, profileDigest: geoDigest, nowMs });
     expect(first.repairId).toBe(second.repairId);
+    expect(later.repairId).toBe(first.repairId);
+    expect(different.repairId).not.toBe(first.repairId);
     expect(first.repositoryProfileDigest).toBe(geoDigest);
     expect(first).toMatchObject({ changeBudget: { maxFiles: 1, maxChangedLines: 4 }, issue: { retryPolicy: 'maximum_three_sha_bound_attempts' } });
     const admitted = admitRepair({
