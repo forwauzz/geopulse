@@ -260,8 +260,8 @@ jobs:
           else
             test "$(gh issue view "$ISSUE" --repo "$GITHUB_REPOSITORY" --json state --jq '.state')" = 'OPEN'
           fi
-          git config user.name 'GEO-Pulse Repair Engineer'
-          git config user.email 'repair-engineer@getgeopulse.com'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -b "repair-attempt-${REPAIR_ID}-${ATTEMPT}"
           git add -- "$CHANGED_PATH"
           git commit -m "fix(repair-agent): apply $REPAIR_ID attempt $ATTEMPT"
