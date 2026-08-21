@@ -269,6 +269,74 @@ export function assignedSocialCandidate(
   };
 }
 
+export function assignedSocialCandidates(
+  item: AssignedSocialRow,
+  appUrl: string,
+): SocialProofCandidate[] {
+  const primary = assignedSocialCandidate(item, appUrl);
+  if (!primary) return [];
+
+  const metadata = item.metadata ?? {};
+  const recommendation = String(metadata['recommendation'] ?? '').trim();
+  const evidence = String(metadata['evidence'] ?? '').trim();
+  const sharedEvidence = {
+    ...primary.evidence,
+    source_excerpt: evidence.slice(0, 800),
+  };
+
+  return [
+    primary,
+    {
+      ...primary,
+      key: `assigned-carousel-evidence-v1-${item.content_id}`,
+      title: `Proof before promise: ${item.title}`,
+      caption: [
+        `Proof before promise: ${item.title}`,
+        '',
+        evidence,
+        '',
+        'Use the source, show the limitation, and route the buyer to one measurable next action.',
+        '',
+        'Run a free GEO-Pulse scan — link in bio.',
+      ].join('\n').slice(0, 1_900),
+      evidence: {
+        ...sharedEvidence,
+        content_variant: 'evidence_before_claim',
+        checklist_items: [
+          'Name the buyer question precisely',
+          evidence.slice(0, 100),
+          'Separate observed evidence from inference',
+          'Offer one measurable next action',
+        ],
+      },
+    },
+    {
+      ...primary,
+      key: `assigned-carousel-action-v1-${item.content_id}`,
+      title: `Turn this MSP question into a clearer page`,
+      caption: [
+        'Turn this MSP question into a clearer page.',
+        '',
+        recommendation,
+        '',
+        'The goal is clarity and verifiable evidence—not a ranking or citation promise.',
+        '',
+        'Save the checklist, then run a free GEO-Pulse scan.',
+      ].join('\n').slice(0, 1_900),
+      evidence: {
+        ...sharedEvidence,
+        content_variant: 'buyer_question_to_action',
+        checklist_items: [
+          'Lead with the direct answer',
+          recommendation.slice(0, 100),
+          'Place visible proof beside the claim',
+          'End with one concrete next step',
+        ],
+      },
+    },
+  ];
+}
+
 function readBoolean(config: Record<string, unknown>, key: string, fallback: boolean): boolean {
   const value = config[key];
   return typeof value === 'boolean' ? value : fallback;
@@ -1085,6 +1153,30 @@ export function orderAutonomousCandidates(
   return diversified;
 }
 
+export function prioritizeRequiredFormatCandidates(
+  candidates: ReadonlyArray<SocialProofCandidate>,
+  requiredFormats: readonly string[] = [],
+): SocialProofCandidate[] {
+  const requiredAssetTypes = [...new Set(requiredFormats
+    .filter((format) => format.startsWith('instagram:'))
+    .map((format) => format.slice('instagram:'.length))
+    .filter((format) => format !== 'short_video_post'))];
+  if (requiredAssetTypes.length === 0) return [...candidates];
+
+  const prioritized: SocialProofCandidate[] = [];
+  const selected = new Set<SocialProofCandidate>();
+  for (const assetType of requiredAssetTypes) {
+    const candidate = candidates.find((item) =>
+      !selected.has(item) &&
+      (item.assetType ?? (item.media || item.mediaUrl ? 'single_image_post' : 'link_post')) === assetType
+    );
+    if (!candidate) continue;
+    prioritized.push(candidate);
+    selected.add(candidate);
+  }
+  return [...prioritized, ...candidates.filter((candidate) => !selected.has(candidate))];
+}
+
 function historicalPerformanceByKind(
   assets: ReadonlyArray<DistributionAssetRow>
 ): ReadonlyMap<SocialProofCandidate['kind'], number> {
@@ -1231,14 +1323,13 @@ export async function runSocialProofAgent(args: {
       const opportunityId = typeof item.metadata?.['seo_opportunity_id'] === 'string'
         ? item.metadata['seo_opportunity_id']
         : '';
-      const candidate = assignedSocialCandidate({
+      candidates.push(...assignedSocialCandidates({
         ...item,
         metadata: {
           ...(item.metadata ?? {}),
           intelligence_evidence_ids: proofEvidenceByOpportunity.get(opportunityId) ?? [],
         },
-      }, args.appUrl);
-      if (candidate) candidates.push(candidate);
+      }, args.appUrl));
     }
 
     if (!args.campaignOnly && config.beforeAfterEnabled) {
@@ -1332,10 +1423,13 @@ export async function runSocialProofAgent(args: {
       );
     const previousSequenceAnchor = latestSocialSequenceAnchor(existingAssets);
     const historicalPerformance = historicalPerformanceByKind(existingAssets);
-    const baseOrderedCandidates = orderAutonomousCandidates(
-      candidates,
-      mode === 'autonomous' ? historicalPerformance : new Map(),
-      previousSequenceAnchor,
+    const baseOrderedCandidates = prioritizeRequiredFormatCandidates(
+      orderAutonomousCandidates(
+        candidates,
+        mode === 'autonomous' ? historicalPerformance : new Map(),
+        previousSequenceAnchor,
+      ),
+      args.requiredFormats,
     );
     const reelConfig = {
       enabled: config.reelsEnabled,
@@ -1381,10 +1475,13 @@ export async function runSocialProofAgent(args: {
     const orderedCandidates = reelCandidate
       ? [
           reelCandidate,
-          ...orderAutonomousCandidates(
-            baseOrderedCandidates.filter((candidate) => candidate !== reelSource),
-            historicalPerformance,
-            socialSequenceDimensions(reelCandidate),
+          ...prioritizeRequiredFormatCandidates(
+            orderAutonomousCandidates(
+              baseOrderedCandidates.filter((candidate) => candidate !== reelSource),
+              historicalPerformance,
+              socialSequenceDimensions(reelCandidate),
+            ),
+            args.requiredFormats,
           ),
         ]
       : baseOrderedCandidates;

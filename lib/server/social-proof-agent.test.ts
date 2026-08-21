@@ -6,11 +6,13 @@ import {
   buildIndustryHumorCandidate,
   buildProductDemoCandidate,
   assignedSocialCandidate,
+  assignedSocialCandidates,
   filterCampaignAssignedSocial,
   instagramScheduleSlot,
   latestSocialSequenceAnchor,
   orderAutonomousCandidates,
   preferredAccount,
+  prioritizeRequiredFormatCandidates,
   remainingDailyAssetCapacity,
   reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
@@ -54,6 +56,65 @@ describe('Social Proof Agent safeguards', () => {
       evidence: { checklist_items: expect.any(Array) },
     });
     expect(candidate?.evidence['checklist_items']).toHaveLength(4);
+  });
+
+  it('keeps source-backed assigned carousel inventory non-duplicative after the first version', () => {
+    const candidates = assignedSocialCandidates({
+      id: 'item-1',
+      content_id: 'content-1',
+      title: 'What MSP buyers ask AI search',
+      brief_markdown: null,
+      metadata: {
+        source_url: 'https://example.com/source',
+        source_label: 'First-party MSP source',
+        recommendation: 'Put the direct answer beside the service proof.',
+        evidence: 'The source documents the buyer question and the current evidence gap.',
+        campaign_vertical: 'msp_it_services',
+      },
+      created_at: '2026-08-17T00:00:00.000Z',
+      growth_campaign_id: 'msp-1',
+      growth_intervention_id: null,
+    }, 'https://getgeopulse.com');
+
+    expect(candidates).toHaveLength(3);
+    expect(new Set(candidates.map((candidate) => candidate.key)).size).toBe(3);
+    expect(new Set(candidates.map((candidate) =>
+      JSON.stringify(candidate.evidence['checklist_items'])
+    )).size).toBe(3);
+    expect(candidates.every((candidate) => candidate.assetType === 'carousel_post')).toBe(true);
+    expect(candidates.every((candidate) => candidate.evidence['source_url'] === 'https://example.com/source')).toBe(true);
+  });
+
+  it('puts a missing connected format ahead of covered candidates without changing the cap', () => {
+    const candidate = (
+      key: string,
+      assetType: 'single_image_post' | 'carousel_post',
+    ) => ({
+      key,
+      kind: assetType === 'carousel_post' ? 'carousel' as const : 'educational' as const,
+      title: key,
+      caption: key,
+      ctaUrl: 'https://getgeopulse.com',
+      contentItemId: null,
+      mediaUrl: null,
+      mediaMimeType: null,
+      mediaAlt: null,
+      assetType,
+      evidence: {},
+      safeForAutonomousPublish: true,
+    });
+    const ordered = prioritizeRequiredFormatCandidates([
+      candidate('covered-one', 'single_image_post'),
+      candidate('needed-carousel', 'carousel_post'),
+      candidate('covered-two', 'single_image_post'),
+    ], ['instagram:carousel_post']);
+
+    expect(ordered.map((item) => item.key)).toEqual([
+      'needed-carousel',
+      'covered-one',
+      'covered-two',
+    ]);
+    expect(ordered).toHaveLength(3);
   });
 
   it('keeps a first-party grounded Reel source when trend providers are unavailable', () => {
