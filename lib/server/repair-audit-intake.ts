@@ -1,4 +1,5 @@
 import type { SelfImprovementRunResult } from './self-improvement';
+import { isAiCrawlerExplicitPolicyDrift } from '../shared/repair-signals';
 
 export type RepairAuditService = {
   fetch(input: string, init?: RequestInit): Promise<Response>;
@@ -58,7 +59,11 @@ function supportedRepairFinding(finding: NonNullable<SelfImprovementRunResult['p
   risk: 'low' | 'prohibited';
   repairHint?: { instruction: { skillId: 'allow-ai-retrieval-agents'; path: 'app/robots.ts' } };
 } {
-  if (finding.checkId === 'ai-crawler-access' && finding.status === 'FAIL' && finding.confidence === 'high') {
+  const repairablePolicyDrift = finding.status === 'WARNING'
+    && isAiCrawlerExplicitPolicyDrift(finding.finding);
+  if (finding.checkId === 'ai-crawler-access'
+    && (finding.status === 'FAIL' || repairablePolicyDrift)
+    && finding.confidence === 'high') {
     return {
       risk: 'low',
       repairHint: { instruction: { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' } },
@@ -67,7 +72,7 @@ function supportedRepairFinding(finding: NonNullable<SelfImprovementRunResult['p
   return { risk: 'prohibited' };
 }
 
-const SUPPORTED_REPAIR_CHECK_CATALOG_VERSION = '2026-07-21';
+const SUPPORTED_REPAIR_CHECK_CATALOG_VERSION = '2026-08-20';
 
 const DELIVERY_PREFIX = 'repair-audit-delivery:v1:';
 const DELIVERY_TTL_SECONDS = 7 * 24 * 60 * 60;

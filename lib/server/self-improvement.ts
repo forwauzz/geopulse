@@ -14,6 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { EMAIL_COLORS, emailShell, issueListHtml, scoreBlock } from './email-theme';
 import { runFreeScan, type FreeScanOutput, type ScanIssueJson } from '../../workers/scan-engine/run-scan';
+import { isAiCrawlerExplicitPolicyDrift } from '../shared/repair-signals';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
 
@@ -107,7 +108,12 @@ export type ImprovementItem = {
 };
 
 function isActionableFailure(i: ScanIssueJson): boolean {
-  if (i.passed) return false;
+  const repairablePolicyDrift = i.passed
+    && i.checkId === 'ai-crawler-access'
+    && i.status === 'WARNING'
+    && i.confidence === 'high'
+    && isAiCrawlerExplicitPolicyDrift(i.finding);
+  if (i.passed && !repairablePolicyDrift) return false;
   if (i.status === 'BLOCKED' || i.status === 'NOT_EVALUATED') return false;
   // Skip LLM checks that merely failed to fetch (finding like "http_403").
   if (i.status === 'LOW_CONFIDENCE' && /^http_\d+$/.test(i.finding.trim())) return false;

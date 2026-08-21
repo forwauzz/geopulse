@@ -34,7 +34,7 @@ function blockedRetrievalAgents(): SelfImprovementRunResult {
     runId: 'audit-run-retrieval',
     score: 70,
     letterGrade: 'C',
-    checkCatalogVersion: '2026-07-21',
+    checkCatalogVersion: '2026-08-20',
     plan: [{
       check: 'AI retrieval agent access (robots.txt)',
       checkId: 'ai-crawler-access',
@@ -177,6 +177,22 @@ describe('canonical self-audit repair delivery', () => {
       targetUrl: 'https://getgeopulse.com/',
       generatedAt: '2026-08-19T16:00:00.000Z',
     })?.findings).toEqual([expect.objectContaining({ risk: 'prohibited' })]);
+
+    const policyDrift = blockedRetrievalAgents();
+    policyDrift.plan![0] = {
+      ...policyDrift.plan![0]!,
+      status: 'WARNING',
+      finding: 'robots.txt allows every required search agent, but relies on a fallback policy for Bingbot, Claude-SearchBot.',
+    };
+    expect(buildRepairAuditEnvelope({
+      result: policyDrift,
+      targetUrl: 'https://getgeopulse.com/',
+      generatedAt: '2026-08-19T16:00:00.000Z',
+    })?.findings).toEqual([expect.objectContaining({
+      status: 'WARNING',
+      risk: 'low',
+      repairHint: { instruction: { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' } },
+    })]);
 
     const unsupportedCatalog = blockedRetrievalAgents();
     unsupportedCatalog.checkCatalogVersion = 'future-catalog';

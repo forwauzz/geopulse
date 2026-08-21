@@ -19,11 +19,12 @@ describe('ai-crawler-access (retrieval vs training — spec §2.1/§2.2)', () =>
     expect(r.status).toBe('PASS');
   });
 
-  it('passes when only TRAINING bots are blocked (an IP choice, not a visibility failure)', async () => {
+  it('does not fail when only TRAINING bots are blocked, but surfaces missing explicit search policy', async () => {
     const robots =
       'User-agent: GPTBot\nDisallow: /\n\nUser-agent: ClaudeBot\nDisallow: /\n\nUser-agent: Google-Extended\nDisallow: /\n\nUser-agent: CCBot\nDisallow: /';
     const r = await aiCrawlerAccessCheck.run(ctx(robots));
-    expect(r.status).toBe('PASS');
+    expect(r).toMatchObject({ passed: true, status: 'WARNING', confidence: 'high' });
+    expect(r.finding).not.toContain('blocks');
   });
 
   it('fails when a retrieval agent is blocked, naming the destination consequence', async () => {
@@ -53,8 +54,18 @@ describe('ai-crawler-access (retrieval vs training — spec §2.1/§2.2)', () =>
     expect(r.passed).toBe(true);
   });
 
-  it('passes a WordPress-style robots.txt that only disallows /wp-admin/', async () => {
+  it('surfaces explicit-policy drift without treating currently allowed agents as blocked', async () => {
     const robots = 'User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php';
+    const r = await aiCrawlerAccessCheck.run(ctx(robots));
+    expect(r).toMatchObject({ passed: true, status: 'WARNING', confidence: 'high' });
+    expect(r.finding).toContain('relies on a fallback policy');
+    expect(r.finding).toContain('Claude-SearchBot');
+  });
+
+  it('passes when every required retrieval and conventional search agent is explicitly allowed', async () => {
+    const robots = ['Googlebot', 'Bingbot', 'OAI-SearchBot', 'Claude-SearchBot', 'PerplexityBot']
+      .map((agent) => `User-agent: ${agent}\nAllow: /`)
+      .join('\n\n');
     const r = await aiCrawlerAccessCheck.run(ctx(robots));
     expect(r.status).toBe('PASS');
   });
