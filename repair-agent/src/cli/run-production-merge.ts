@@ -22,6 +22,7 @@ function required(name: string): string {
 }
 
 const repository = required('GITHUB_REPOSITORY');
+const githubActionsToken = required('REPAIR_GITHUB_ACTIONS_TOKEN');
 const githubToken = required('REPAIR_MERGE_APP_TOKEN');
 const repairAgentUrl = required('REPAIR_AGENT_URL').replace(/\/$/, '');
 const repairAgentToken = required('REPAIR_AGENT_API_TOKEN');
@@ -74,6 +75,22 @@ async function github(path: string, init: RequestInit = {}): Promise<Record<stri
   });
   const body = await response.json().catch(() => null) as Record<string, unknown> | null;
   if (!response.ok || !body) throw new Error(`GitHub ${path} returned ${response.status}${safeProviderDetail(body)}`);
+  return body;
+}
+
+async function githubActions(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+  const response = await fetch(`${api}${path}`, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${githubActionsToken}`,
+      accept: 'application/vnd.github+json',
+      'content-type': 'application/json',
+      'x-github-api-version': '2022-11-28',
+      ...init.headers,
+    },
+  });
+  const body = await response.json().catch(() => null) as Record<string, unknown> | null;
+  if (!response.ok || !body) throw new Error(`GitHub Actions ${path} returned ${response.status}${safeProviderDetail(body)}`);
   return body;
 }
 
@@ -192,6 +209,43 @@ if (!finalSafety.enabled || finalSafety.killSwitch) {
     body: JSON.stringify({ status: 'completed', conclusion: 'failure', output: { title: 'Repair merge blocked', summary: 'The live repair-loop activation or kill switch changed before merge.' } }),
   });
   throw new Error('live repair safety switch blocked merge');
+}
+
+const verifyIndex = GEOPULSE_PROFILE.requiredChecks.findIndex((check) => check.checkName === 'verify'
+  && check.appSlug === 'github-actions' && check.appId === 15368);
+if (verifyIndex < 0) throw new Error('authenticated exact-SHA CI source is unavailable for PR attestation');
+const sourceVerifyCheckRunId = requiredCheckIds[verifyIndex];
+if (sourceVerifyCheckRunId === undefined || !Number.isSafeInteger(sourceVerifyCheckRunId) || sourceVerifyCheckRunId <= 0) {
+  throw new Error('authenticated exact-SHA CI source is unavailable for PR attestation');
+}
+const verifyAttestationDigest = await sha256({
+  schemaVersion: 1,
+  repairId: artifact.repairId,
+  attempt: artifact.attempt,
+  headSha: artifact.headSha,
+  patchDigest: artifact.patchDigest,
+  sourceVerifyCheckRunId,
+});
+const verifyAttestation = await githubActions(`/repos/${repository}/check-runs`, {
+  method: 'POST',
+  body: JSON.stringify({
+    name: 'verify',
+    head_sha: artifact.headSha,
+    status: 'completed',
+    conclusion: 'success',
+    external_id: `repair-verify:${artifact.repairId}:${artifact.attempt}:${verifyAttestationDigest}`,
+    output: {
+      title: 'Exact-SHA CI attested for protected-main evaluation',
+      summary: `Authenticated GitHub Actions check run ${sourceVerifyCheckRunId} passed for ${artifact.headSha}; deterministic attestation ${verifyAttestationDigest}.`,
+    },
+  }),
+});
+const verifyAttestationApp = verifyAttestation['app'] as Record<string, unknown> | undefined;
+if (verifyAttestation['name'] !== 'verify' || verifyAttestation['head_sha'] !== artifact.headSha
+  || verifyAttestation['status'] !== 'completed' || verifyAttestation['conclusion'] !== 'success'
+  || verifyAttestationApp?.['slug'] !== 'github-actions' || verifyAttestationApp?.['id'] !== 15368
+  || !Number.isSafeInteger(verifyAttestation['id'])) {
+  throw new Error('GitHub Actions exact-SHA CI attestation identity is invalid');
 }
 
 const intentClaim = {
