@@ -51,6 +51,16 @@ if (repository !== GEOPULSE_PROFILE.repository || artifact.repository !== reposi
 const profileDigest = await repositoryProfileDigest(GEOPULSE_PROFILE);
 
 const api = process.env.GITHUB_API_URL || 'https://api.github.com';
+function safeProviderDetail(body: Record<string, unknown> | null): string {
+  if (!body || typeof body['message'] !== 'string') return '';
+  const message = body['message'].replace(/[\r\n\t]+/g, ' ').trim().slice(0, 300);
+  const documentationUrl = typeof body['documentation_url'] === 'string'
+    && /^https:\/\/docs\.github\.com\//.test(body['documentation_url'])
+    ? ` (${body['documentation_url'].slice(0, 300)})`
+    : '';
+  return message ? `: ${message}${documentationUrl}` : '';
+}
+
 async function github(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
   const response = await fetch(`${api}${path}`, {
     ...init,
@@ -63,7 +73,7 @@ async function github(path: string, init: RequestInit = {}): Promise<Record<stri
     },
   });
   const body = await response.json().catch(() => null) as Record<string, unknown> | null;
-  if (!response.ok || !body) throw new Error(`GitHub ${path} returned ${response.status}`);
+  if (!response.ok || !body) throw new Error(`GitHub ${path} returned ${response.status}${safeProviderDetail(body)}`);
   return body;
 }
 
@@ -206,6 +216,40 @@ const intentResponse = await fetch(`${repairAgentUrl}/v1/scopes/merge-intent`, {
 const intentBody = await intentResponse.json().catch(() => null) as { ok?: boolean } | null;
 if (!intentResponse.ok || intentBody?.ok !== true) throw new Error(`durable merge intent failed with ${intentResponse.status}`);
 
+async function abortMergeIntent(reason: string): Promise<void> {
+  const abortDigest = await sha256({
+    schemaVersion: 1,
+    repairId: artifact.repairId,
+    attempt: artifact.attempt,
+    leaseId: engineerEnvelope.repairEvidence.leaseId,
+    intentDigest,
+    reason,
+  });
+  const abortResponse = await fetch(`${repairAgentUrl}/v1/scopes/merge-abort`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${repairAgentToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      repairId: artifact.repairId,
+      attempt: artifact.attempt,
+      leaseId: engineerEnvelope.repairEvidence.leaseId,
+      abortDigest,
+      reasons: [reason],
+    }),
+  });
+  const abortBody = await abortResponse.json().catch(() => null) as { ok?: boolean; requeued?: boolean } | null;
+  if (!abortResponse.ok || abortBody?.ok !== true || abortBody.requeued !== true) {
+    throw new Error(`${reason}; durable abort failed with ${abortResponse.status}`);
+  }
+  await writeFile(outputPath, `${JSON.stringify({
+    schemaVersion: 1,
+    merged: false,
+    repairId: artifact.repairId,
+    attempt: artifact.attempt,
+    reasons: [reason],
+    requeued: true,
+  }, null, 2)}\n`, 'utf8');
+}
+
 await github(`/repos/${repository}/check-runs/${controllerCheckRunId}`, {
   method: 'PATCH',
   body: JSON.stringify({ status: 'in_progress', output: { title: 'Repair merge authorized', summary: `Durable intent recorded; merging exact reviewed head ${artifact.headSha}.` } }),
@@ -217,16 +261,14 @@ const currentDefaultRef = await github(`/repos/${repository}/git/ref/heads/${GEO
 const currentHead = currentPull['head'] as Record<string, unknown> | undefined;
 const currentBase = currentPull['base'] as Record<string, unknown> | undefined;
 const currentDefaultObject = currentDefaultRef['object'] as Record<string, unknown> | undefined;
-if (currentHead?.['sha'] !== artifact.headSha) throw new Error('pull request head changed after durable merge intent');
+if (currentHead?.['sha'] !== artifact.headSha) {
+  const reason = 'pull request head changed after durable merge intent';
+  await abortMergeIntent(reason);
+  throw new Error(reason);
+}
 if (currentBase?.['sha'] !== artifact.baseSha || currentBase?.['ref'] !== GEOPULSE_PROFILE.defaultBranch || currentDefaultObject?.['sha'] !== artifact.baseSha) {
   const reason = 'pull request base changed after review and before merge';
-  const abortDigest = await sha256({ schemaVersion: 1, repairId: artifact.repairId, attempt: artifact.attempt, leaseId: engineerEnvelope.repairEvidence.leaseId, intentDigest, reason });
-  const abortResponse = await fetch(`${repairAgentUrl}/v1/scopes/merge-abort`, {
-    method: 'POST', headers: { authorization: `Bearer ${repairAgentToken}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ repairId: artifact.repairId, attempt: artifact.attempt, leaseId: engineerEnvelope.repairEvidence.leaseId, abortDigest, reasons: [reason] }),
-  });
-  if (!abortResponse.ok) throw new Error(`${reason}; durable abort also failed with ${abortResponse.status}`);
-  await writeFile(outputPath, `${JSON.stringify({ schemaVersion: 1, merged: false, repairId: artifact.repairId, attempt: artifact.attempt, reasons: [reason] }, null, 2)}\n`, 'utf8');
+  await abortMergeIntent(reason);
   throw new Error(reason);
 }
 if (currentPull['merged'] === true && typeof currentPull['merge_commit_sha'] === 'string') {
@@ -243,20 +285,24 @@ if (currentPull['merged'] === true && typeof currentPull['merge_commit_sha'] ===
     if (reconciled['merged'] === true && reconciledHead?.['sha'] === artifact.headSha && typeof reconciled['merge_commit_sha'] === 'string') {
       merged = { merged: true, sha: reconciled['merge_commit_sha'] };
     } else {
+      const reason = error instanceof Error ? error.message : 'GitHub merge failed after authorization.';
+      await abortMergeIntent(reason);
       await github(`/repos/${repository}/check-runs/${controllerCheckRunId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'completed', conclusion: 'failure', output: { title: 'Repair merge failed', summary: error instanceof Error ? error.message : 'GitHub merge failed after authorization.' } }),
+        body: JSON.stringify({ status: 'completed', conclusion: 'failure', output: { title: 'Repair merge failed; attempt requeued', summary: reason } }),
       }).catch(() => undefined);
       throw error;
     }
   }
 }
 if (merged['merged'] !== true || typeof merged['sha'] !== 'string' || !/^[a-f0-9]{40}$/.test(merged['sha'])) {
+  const reason = `GitHub did not merge the validated head SHA: ${String(merged['message'] ?? 'unknown error')}`;
+  await abortMergeIntent(reason);
   await github(`/repos/${repository}/check-runs/${controllerCheckRunId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ status: 'completed', conclusion: 'failure', output: { title: 'Repair merge failed', summary: String(merged['message'] ?? 'GitHub did not merge the validated head SHA.') } }),
+    body: JSON.stringify({ status: 'completed', conclusion: 'failure', output: { title: 'Repair merge failed; attempt requeued', summary: reason } }),
   });
-  throw new Error(`GitHub did not merge the validated head SHA: ${String(merged['message'] ?? 'unknown error')}`);
+  throw new Error(reason);
 }
 const mergeSha = merged['sha'];
 const mergeCommit = await github(`/repos/${repository}/commits/${mergeSha}`);

@@ -262,8 +262,8 @@ jobs:
           test "$CHANGED" = "$EXPECTED"
           grep -Fx 'Sitemap: https://getgeopulse.com/sitemap.xml' "$EXPECTED"
           BRANCH="${RETRY_BRANCH:-repair-agent/canary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
-          git config user.name 'GEO-Pulse Repair Engineer'
-          git config user.email 'repair-engineer@getgeopulse.com'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -b "repair-attempt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git add -- "$EXPECTED"
           ATTEMPT="$(jq -r '.attempt' "$RAW_EVIDENCE")"

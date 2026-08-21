@@ -40,6 +40,15 @@ async function listen(handler: RequestListener): Promise<{ url: string; close():
 }
 
 describe('production repair orchestration scripts', () => {
+  it('attributes autonomous repair commits to the linked GitHub Actions bot', async () => {
+    for (const path of ['../../.github/workflows/repair-loop.yml', '../../.github/workflows/repair-loop-canary.yml']) {
+      const workflow = await readFile(new URL(path, import.meta.url), 'utf8');
+      expect(workflow).toContain("git config user.name 'github-actions[bot]'");
+      expect(workflow).toContain("git config user.email '41898282+github-actions[bot]@users.noreply.github.com'");
+      expect(workflow).not.toContain('repair-engineer@getgeopulse.com');
+    }
+  });
+
   it('keeps disabled App principal canaries least-privilege and non-gating', async () => {
     const workflow = await readFile(new URL('../../.github/workflows/repair-loop-canary.yml', import.meta.url), 'utf8');
     expect(workflow).toContain("test \"$REPAIR_LOOP_ENABLED\" = 'false'");
@@ -336,6 +345,84 @@ describe('production repair orchestration scripts', () => {
       } })).rejects.toBeTruthy();
       expect(coordinatorCalls).toEqual(['/v1/scopes/merge-intent', '/v1/scopes/merge-abort']);
       expect(JSON.parse(await readFile(outputPath, 'utf8'))).toMatchObject({ merged: false, repairId, reasons: ['pull request base changed after review and before merge'] });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('surfaces a safe GitHub merge reason and durably requeues a rejected PUT', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'repair-production-merge-rejected-'));
+    temporaryDirectories.push(directory);
+    const engineerPath = join(directory, 'engineer.json');
+    const reviewerPath = join(directory, 'reviewer.json');
+    const qaPath = join(directory, 'qa.json');
+    const outputPath = join(directory, 'merge.json');
+    const repairId = '6'.repeat(32);
+    const baseSha = '7'.repeat(40);
+    const headSha = '8'.repeat(40);
+    const profileDigest = await repositoryProfileDigest(GEOPULSE_PROFILE);
+    const artifact: EngineerArtifact = {
+      schemaVersion: 1, contractMode: 'authenticated-github-v1', repairId, auditRunId: 'audit-merge-rejected-1',
+      repositoryProfileId: GEOPULSE_PROFILE.id, repositoryProfileDigest: profileDigest,
+      repository: GEOPULSE_PROFILE.repository, risk: 'low', attempt: 1, baseSha, headSha,
+      patchDigest: '9'.repeat(64), changedPaths: ['app/robots.ts'], changedLines: 3,
+      authorIdentity: 'github-app:15368:github-actions:run:100', authorIssuer: { provider: 'github', appSlug: 'github-actions', appId: 15368 },
+      engineerEvidenceDigest: 'a'.repeat(64),
+    };
+    const observedAt = new Date().toISOString();
+    const reviewerObservation = parseGitHubCheckRunObservation({ raw: { id: 701, head_sha: headSha, conclusion: 'success', app: { slug: 'geo-pulse-repair-reviewer', id: 4652371 } }, role: 'reviewer', repository: GEOPULSE_PROFILE.repository, observedAt });
+    const qaObservation = parseGitHubCheckRunObservation({ raw: { id: 702, head_sha: headSha, conclusion: 'success', app: { slug: 'geo-pulse-repair-qa', id: 4652496 } }, role: 'qa', repository: GEOPULSE_PROFILE.repository, observedAt });
+    const reviewer = await reviewEngineerArtifact({ artifact, profile: GEOPULSE_PROFILE, profileDigest, observation: reviewerObservation, observedPatchDigest: artifact.patchDigest });
+    const preset = resolveQaCommandPreset(GEOPULSE_PROFILE.qaCommandPresetId);
+    const commandResults = [...preset.focused, ...preset.affected, ...preset.typeCheck, ...preset.build, ...preset.browser].map((argv) => ({ argv, exitCode: 0 }));
+    const qa = await qaEngineerArtifact({ artifact, profile: GEOPULSE_PROFILE, profileDigest, observation: qaObservation, observedPatchDigest: artifact.patchDigest, commandResults, postconditionPassed: true });
+    const unsignedEnvelope = { schemaVersion: 1 as const, contractMode: 'authenticated-github-v1' as const, repairEvidence: { leaseId: 'github-production-rejected-1' }, engineerArtifact: artifact };
+    await writeFile(engineerPath, JSON.stringify({ ...unsignedEnvelope, evidenceDigest: await sha256(unsignedEnvelope) }), 'utf8');
+    await writeFile(reviewerPath, JSON.stringify(reviewer), 'utf8');
+    await writeFile(qaPath, JSON.stringify(qa), 'utf8');
+
+    const coordinatorCalls: string[] = [];
+    const checkRuns = new Map<number, Record<string, unknown>>([
+      [701, { id: 701, name: 'repair-review', head_sha: headSha, conclusion: 'success', app: { slug: 'geo-pulse-repair-reviewer', id: 4652371 } }],
+      [702, { id: 702, name: 'repair-qa', head_sha: headSha, conclusion: 'success', app: { slug: 'geo-pulse-repair-qa', id: 4652496 } }],
+      [703, { id: 703, name: 'verify', head_sha: headSha, conclusion: 'success', app: { slug: 'github-actions', id: 15368 } }],
+      [700, { id: 700, name: 'repair-merge-controller', head_sha: headSha, conclusion: null, app: { slug: 'geo-pulse-repair-merge', id: 4652526 } }],
+    ]);
+    const server = await listen((request, response): void => {
+      const url = request.url ?? '';
+      if (url === '/health') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ ok: true, mode: 'shadow', productionMutationsEnabled: false, killSwitch: false })); return; }
+      if (url.endsWith('/actions/variables/REPAIR_LOOP_ENABLED')) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ value: 'true' })); return; }
+      if (url.endsWith('/check-runs') && request.method === 'POST') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(checkRuns.get(700))); return; }
+      const checkId = /\/check-runs\/(\d+)$/.exec(url)?.[1];
+      if (checkId) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(checkRuns.get(Number(checkId)))); return; }
+      if (url.includes(`/commits/${headSha}/check-runs`)) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ check_runs: [checkRuns.get(703)] })); return; }
+      if (url.endsWith('/pulls/8') && request.method === 'GET') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ number: 8, state: 'open', merged: false, mergeable: true, body: 'Tracks #7.', base: { ref: 'main', sha: baseSha }, head: { sha: headSha } })); return; }
+      if (url.endsWith('/pulls/8/merge') && request.method === 'PUT') { response.writeHead(405, { 'content-type': 'application/json' }); response.end(JSON.stringify({ message: 'Pull Request is not mergeable', documentation_url: 'https://docs.github.com/rest/pulls/pulls#merge-a-pull-request' })); return; }
+      if (url.endsWith('/issues/7')) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ number: 7, state: 'open', body: `Automated low-risk repair lineage \`${repairId}\`.` })); return; }
+      if (url.endsWith('/git/ref/heads/main')) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ object: { sha: baseSha } })); return; }
+      if (url === '/v1/scopes/merge-intent' || url === '/v1/scopes/merge-abort') {
+        coordinatorCalls.push(url);
+        request.resume();
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ ok: true, requeued: url.endsWith('merge-abort') }));
+        return;
+      }
+      response.writeHead(404, { 'content-type': 'application/json' }); response.end('{}');
+    });
+    try {
+      await expect(execFileAsync(process.execPath, [tsxCli, mergeScript], { env: {
+        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url,
+        REPAIR_MERGE_APP_TOKEN: 'merge-token', REPAIR_AGENT_URL: server.url, REPAIR_AGENT_API_TOKEN: 'repair-token',
+        REPAIR_ENGINEER_EVIDENCE: engineerPath, REPAIR_REVIEW_VERDICT: reviewerPath, REPAIR_QA_VERDICT: qaPath,
+        REPAIR_MERGE_OUTPUT: outputPath, REPAIR_PR_NUMBER: '8', REPAIR_ISSUE_NUMBER: '7', REPAIR_AUTONOMOUS_MERGE_ENABLED: 'true',
+      } })).rejects.toMatchObject({ stderr: expect.stringContaining('Pull Request is not mergeable') });
+      expect(coordinatorCalls).toEqual(['/v1/scopes/merge-intent', '/v1/scopes/merge-abort']);
+      expect(JSON.parse(await readFile(outputPath, 'utf8'))).toMatchObject({
+        merged: false,
+        repairId,
+        requeued: true,
+        reasons: [expect.stringContaining('GitHub /repos/forwauzz/geopulse/pulls/8/merge returned 405: Pull Request is not mergeable')],
+      });
     } finally {
       await server.close();
     }
