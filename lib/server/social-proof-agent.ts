@@ -1449,7 +1449,7 @@ export async function runSocialProofAgent(args: {
       : false;
     const reelSource =
       reelPlanEligible
-        ? chooseJordanReelSource(baseOrderedCandidates, config.reelCategories)
+        ? chooseJordanReelSource(baseOrderedCandidates, config.reelCategories, existingAssets)
         : null;
     const reelCandidate: SocialProofCandidate | null = reelSource
       ? {
