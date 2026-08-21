@@ -24,7 +24,7 @@ export interface CatalogEntry {
   whyItMatters: string;
 }
 
-export const CHECK_CATALOG_VERSION = '2026-07-21';
+export const CHECK_CATALOG_VERSION = '2026-08-20';
 
 export const CHECK_CATALOG: readonly CatalogEntry[] = [
   // ── Bucket A — AI Retrieval Eligibility (gates everything) ──────────────────

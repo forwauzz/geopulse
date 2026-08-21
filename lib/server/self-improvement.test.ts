@@ -67,6 +67,21 @@ describe('buildImprovementPlan', () => {
     expect(plan[0]!.fix).toBe('fix high');
   });
 
+  it('includes only the deterministic repairable policy warning among passing warnings', () => {
+    const withWarnings: FreeScanOutput = {
+      ...output,
+      issues: [
+        issue({ checkId: 'generic-warning', passed: true, status: 'WARNING', confidence: 'high', finding: 'Review this.' }),
+        issue({
+          checkId: 'ai-crawler-access', passed: true, status: 'WARNING', confidence: 'high',
+          finding: 'robots.txt allows every required search agent, but relies on a fallback policy for Bingbot.',
+        }),
+      ],
+    };
+
+    expect(buildImprovementPlan(withWarnings).map((item) => item.checkId)).toEqual(['ai-crawler-access']);
+  });
+
   it('supplies a default fix when none is present', () => {
     const plan = buildImprovementPlan(output);
     expect(plan.find((p) => p.checkId === 'mid')!.fix).toMatch(/review/i);
