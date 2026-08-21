@@ -315,7 +315,12 @@ describe('production repair orchestration scripts', () => {
       const url = request.url ?? '';
       if (url === '/health') { response.end(JSON.stringify({ ok: true, mode: 'shadow', productionMutationsEnabled: false, killSwitch: false })); return; }
       if (url.endsWith('/actions/variables/REPAIR_LOOP_ENABLED')) { response.end(JSON.stringify({ value: 'true' })); return; }
-      if (url.endsWith('/check-runs') && request.method === 'POST') { response.end(JSON.stringify(checkRuns.get(600))); return; }
+      if (url.endsWith('/check-runs') && request.method === 'POST') {
+        response.end(JSON.stringify(request.headers.authorization === 'Bearer actions-token'
+          ? { id: 604, name: 'verify', head_sha: headSha, status: 'completed', conclusion: 'success', app: { slug: 'github-actions', id: 15368 } }
+          : checkRuns.get(600)));
+        return;
+      }
       const checkId = /\/check-runs\/(\d+)$/.exec(url)?.[1];
       if (checkId) { response.end(JSON.stringify(checkRuns.get(Number(checkId)))); return; }
       if (url.includes(`/commits/${headSha}/check-runs`)) { response.end(JSON.stringify({ check_runs: [checkRuns.get(503)] })); return; }
@@ -338,7 +343,7 @@ describe('production repair orchestration scripts', () => {
     });
     try {
       await expect(execFileAsync(process.execPath, [tsxCli, mergeScript], { env: {
-        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url,
+        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url, REPAIR_GITHUB_ACTIONS_TOKEN: 'actions-token',
         REPAIR_MERGE_APP_TOKEN: 'merge-token', REPAIR_AGENT_URL: server.url, REPAIR_AGENT_API_TOKEN: 'repair-token',
         REPAIR_ENGINEER_EVIDENCE: engineerPath, REPAIR_REVIEW_VERDICT: reviewerPath, REPAIR_QA_VERDICT: qaPath,
         REPAIR_MERGE_OUTPUT: outputPath, REPAIR_PR_NUMBER: '8', REPAIR_ISSUE_NUMBER: '7', REPAIR_AUTONOMOUS_MERGE_ENABLED: 'true',
@@ -392,7 +397,13 @@ describe('production repair orchestration scripts', () => {
       const url = request.url ?? '';
       if (url === '/health') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ ok: true, mode: 'shadow', productionMutationsEnabled: false, killSwitch: false })); return; }
       if (url.endsWith('/actions/variables/REPAIR_LOOP_ENABLED')) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ value: 'true' })); return; }
-      if (url.endsWith('/check-runs') && request.method === 'POST') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(checkRuns.get(700))); return; }
+      if (url.endsWith('/check-runs') && request.method === 'POST') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(request.headers.authorization === 'Bearer actions-token'
+          ? { id: 704, name: 'verify', head_sha: headSha, status: 'completed', conclusion: 'success', app: { slug: 'github-actions', id: 15368 } }
+          : checkRuns.get(700)));
+        return;
+      }
       const checkId = /\/check-runs\/(\d+)$/.exec(url)?.[1];
       if (checkId) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(checkRuns.get(Number(checkId)))); return; }
       if (url.includes(`/commits/${headSha}/check-runs`)) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ check_runs: [checkRuns.get(703)] })); return; }
@@ -411,7 +422,7 @@ describe('production repair orchestration scripts', () => {
     });
     try {
       await expect(execFileAsync(process.execPath, [tsxCli, mergeScript], { env: {
-        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url,
+        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url, REPAIR_GITHUB_ACTIONS_TOKEN: 'actions-token',
         REPAIR_MERGE_APP_TOKEN: 'merge-token', REPAIR_AGENT_URL: server.url, REPAIR_AGENT_API_TOKEN: 'repair-token',
         REPAIR_ENGINEER_EVIDENCE: engineerPath, REPAIR_REVIEW_VERDICT: reviewerPath, REPAIR_QA_VERDICT: qaPath,
         REPAIR_MERGE_OUTPUT: outputPath, REPAIR_PR_NUMBER: '8', REPAIR_ISSUE_NUMBER: '7', REPAIR_AUTONOMOUS_MERGE_ENABLED: 'true',

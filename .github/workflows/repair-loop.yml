@@ -325,6 +325,7 @@ jobs:
     environment: repair-agent-shadow
     permissions:
       actions: read
+      checks: write
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -544,6 +545,7 @@ jobs:
       - name: Evaluate authenticated gate and merge exact SHA
         id: merge
         env:
+          REPAIR_GITHUB_ACTIONS_TOKEN: ${{ github.token }}
           REPAIR_MERGE_APP_TOKEN: ${{ steps.merge-token.outputs.token }}
           REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
           REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
