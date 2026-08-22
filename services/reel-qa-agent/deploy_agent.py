@@ -14,12 +14,16 @@ def deploy() -> str:
     project = os.environ.get("GOOGLE_CLOUD_PROJECT") or "grand-karma-504620-m3"
     location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
     model = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
+    staging_bucket = os.environ.get(
+        "AGENT_STAGING_BUCKET", f"gs://{project}-reel-qa-agent-staging"
+    )
     client = agentplatform.Client(project=project, location=location)
     remote = client.agent_engines.create(
         agent=ReelQaAgent(model=model),
         config={
             "display_name": "GEO-Pulse Reel QA Reviewer",
             "description": "Reviews complete Canva Reel exports and returns evidence-backed repair plans.",
+            "staging_bucket": staging_bucket,
             "requirements": [
                 "google-cloud-aiplatform[agent_engines]==1.163.0",
                 "google-genai==2.17.0",
