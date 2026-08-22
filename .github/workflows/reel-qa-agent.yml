@@ -1,0 +1,39 @@
+name: Reel QA agent
+
+on:
+  pull_request:
+    paths:
+      - "services/reel-qa-agent/**"
+      - "lib/server/jordan-reel-production.ts"
+      - "lib/server/jordan-reel-production.test.ts"
+      - "app/admin/(console)/agents/page.tsx"
+      - ".github/workflows/reel-qa-agent.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/reel-qa-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/reel-qa-agent/requirements-dev.txt
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+      - name: Install pinned dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Compile and test
+        run: |
+          python -m compileall -q reel_qa worker deploy_agent.py
+          python -m pytest -q

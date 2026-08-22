@@ -3,6 +3,7 @@ import {
   buildJordanReelScript,
   chooseJordanReelSource,
   jordanReelSlotKey,
+  resolveJordanReelQaStatus,
   resolveJordanReelConfig,
   shouldPlanJordanReel,
 } from './jordan-reel-production';
@@ -34,6 +35,21 @@ const source = {
 };
 
 describe('Jordan autonomous Reel production', () => {
+  it('fails unknown Reel Doctor evidence closed in the control room', () => {
+    expect(resolveJordanReelQaStatus({})).toEqual({
+      qaStatus: 'not_reviewed',
+      qaScore: null,
+      qaReportId: null,
+    });
+    expect(resolveJordanReelQaStatus({
+      reel_qa_status: 'passed',
+      reel_qa_score: 92.4,
+      reel_qa_report_id: 'rqa_123',
+    })).toEqual({ qaStatus: 'passed', qaScore: 92, qaReportId: 'rqa_123' });
+    expect(resolveJordanReelQaStatus({ reel_qa_status: 'invented', reel_qa_score: 200 }))
+      .toEqual({ qaStatus: 'not_reviewed', qaScore: 100, qaReportId: null });
+  });
+
   it('enables brief creation by default while preserving an explicit kill switch', () => {
     expect(resolveJordanReelConfig({}).enabled).toBe(true);
     expect(resolveJordanReelConfig({ reels_enabled: false }).enabled).toBe(false);

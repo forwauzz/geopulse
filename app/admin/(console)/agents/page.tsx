@@ -611,6 +611,8 @@ export default async function AdminAgentsPage() {
                       <p className="truncate font-sans text-sm font-bold text-on-background">{reel.title}</p>
                       <p className="font-sans text-xs text-on-surface-variant">
                         {reel.renderStatus.replaceAll('_', ' ')}
+                        {' · QA '}{reel.qaStatus.replaceAll('_', ' ')}
+                        {reel.qaScore !== null ? ` (${reel.qaScore}/100)` : ''}
                         {reel.scheduledFor ? ` · ${new Date(reel.scheduledFor).toLocaleString('en-CA', { timeZone: social.timezone })}` : ''}
                       </p>
                     </div>

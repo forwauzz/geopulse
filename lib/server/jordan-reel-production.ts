@@ -345,8 +345,41 @@ export type JordanReelLibraryItem = {
   readonly scheduledFor: string | null;
   readonly destinationUrl: string | null;
   readonly renderStatus: string;
+  readonly qaStatus: 'not_reviewed' | 'reviewing' | 'repair_required' | 'passed' | 'blocked';
+  readonly qaScore: number | null;
+  readonly qaReportId: string | null;
   readonly createdAt: string;
 };
+
+export function resolveJordanReelQaStatus(metadata: Record<string, unknown>): {
+  readonly qaStatus: JordanReelLibraryItem['qaStatus'];
+  readonly qaScore: number | null;
+  readonly qaReportId: string | null;
+} {
+  const raw = String(metadata['reel_qa_status'] ?? 'not_reviewed');
+  const allowed = new Set<JordanReelLibraryItem['qaStatus']>([
+    'not_reviewed',
+    'reviewing',
+    'repair_required',
+    'passed',
+    'blocked',
+  ]);
+  const score = typeof metadata['reel_qa_score'] === 'number'
+    && Number.isFinite(metadata['reel_qa_score'])
+    ? Math.max(0, Math.min(100, Math.round(metadata['reel_qa_score'])))
+    : null;
+  const reportId = typeof metadata['reel_qa_report_id'] === 'string'
+    && metadata['reel_qa_report_id'].trim()
+    ? metadata['reel_qa_report_id'].trim()
+    : null;
+  return {
+    qaStatus: allowed.has(raw as JordanReelLibraryItem['qaStatus'])
+      ? raw as JordanReelLibraryItem['qaStatus']
+      : 'not_reviewed',
+    qaScore: score,
+    qaReportId: reportId,
+  };
+}
 
 function displayStatus(asset: DistributionAssetRow, job?: DistributionJobRow): JordanReelLibraryItem['status'] {
   if (asset.status === 'failed' || job?.status === 'failed') return 'Failed';
@@ -378,6 +411,7 @@ export async function loadJordanReelLibrary(
   }
   return assets.map((asset: any) => {
     const job = byAsset.get(asset.id);
+    const qa = resolveJordanReelQaStatus(asset.metadata ?? {});
     return {
       assetId: asset.asset_id,
       title: asset.title ?? 'Untitled Reel',
@@ -385,6 +419,7 @@ export async function loadJordanReelLibrary(
       scheduledFor: job?.scheduled_for ?? null,
       destinationUrl: job?.destination_url ?? null,
       renderStatus: String(asset.metadata?.reel_render_status ?? 'unknown'),
+      ...qa,
       createdAt: asset.created_at,
     };
   });
