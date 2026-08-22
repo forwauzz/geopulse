@@ -30,7 +30,9 @@ def deploy() -> str:
                 "google-genai==2.17.0",
                 "pydantic==2.13.4",
             ],
-            "extra_packages": [str(ROOT / "reel_qa")],
+            # Upload the package parent so Vertex preserves the ``reel_qa``
+            # import path required when the runtime unpickles ReelQaAgent.
+            "extra_packages": [str(ROOT)],
             "agent_framework": "custom",
             "python_version": "3.12",
         },
