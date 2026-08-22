@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 import agentplatform
@@ -18,25 +20,28 @@ def deploy() -> str:
         "AGENT_STAGING_BUCKET", f"gs://{project}-reel-qa-agent-staging"
     )
     client = agentplatform.Client(project=project, location=location)
-    remote = client.agent_engines.create(
-        agent=ReelQaAgent(model=model),
-        config={
-            "display_name": "GEO-Pulse Reel QA Reviewer",
-            "description": "Reviews complete Canva Reel exports and returns evidence-backed repair plans.",
-            "staging_bucket": staging_bucket,
-            "requirements": [
-                "cloudpickle==3.1.2",
-                "google-cloud-aiplatform[agent_engines]==1.163.0",
-                "google-genai==2.17.0",
-                "pydantic==2.13.4",
-            ],
-            # Upload the package parent so Vertex preserves the ``reel_qa``
-            # import path required when the runtime unpickles ReelQaAgent.
-            "extra_packages": [str(ROOT)],
-            "agent_framework": "custom",
-            "python_version": "3.12",
-        },
-    )
+    with tempfile.TemporaryDirectory(prefix="reel-qa-agent-") as bundle_dir:
+        bundle_root = Path(bundle_dir)
+        shutil.copytree(ROOT / "reel_qa", bundle_root / "reel_qa")
+        remote = client.agent_engines.create(
+            agent=ReelQaAgent(model=model),
+            config={
+                "display_name": "GEO-Pulse Reel QA Reviewer",
+                "description": "Reviews complete Canva Reel exports and returns evidence-backed repair plans.",
+                "staging_bucket": staging_bucket,
+                "requirements": [
+                    "cloudpickle==3.1.2",
+                    "google-cloud-aiplatform[agent_engines]==1.163.0",
+                    "google-genai==2.17.0",
+                    "pydantic==2.13.4",
+                ],
+                # Upload a clean parent so Vertex preserves ``reel_qa`` without
+                # bundling the worker, tests, or local virtual environment.
+                "extra_packages": [str(bundle_root)],
+                "agent_framework": "custom",
+                "python_version": "3.12",
+            },
+        )
     resource_name = str(remote.api_resource.name)
     print(resource_name)
     return resource_name
