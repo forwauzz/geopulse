@@ -25,8 +25,10 @@ def deploy() -> str:
             "description": "Reviews complete Canva Reel exports and returns evidence-backed repair plans.",
             "staging_bucket": staging_bucket,
             "requirements": [
+                "cloudpickle==3.1.2",
                 "google-cloud-aiplatform[agent_engines]==1.163.0",
                 "google-genai==2.17.0",
+                "pydantic==2.13.4",
             ],
             "extra_packages": [str(ROOT / "reel_qa")],
             "agent_framework": "custom",
