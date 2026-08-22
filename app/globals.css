@@ -26,6 +26,16 @@
   --color-outline-variant: 171 180 181;
   --color-error: 159 64 61;
   --color-gold: 183 156 96;          /* muted gold — structural use only (dividers, accents, separators) */
+
+  /* Landing-page palette. Marketing surface only — the app and blog keep the slate/gold
+     system above. Colour here is used at full-panel scale, which the app deliberately does not do. */
+  --color-lp-ink: 20 24 26;
+  --color-lp-lime: 200 240 74;
+  --color-lp-blue: 43 76 216;
+  --color-lp-soft: 244 246 242;
+  --color-lp-muted: 74 82 84;
+  --color-lp-subtle: 122 130 133;
+  --color-lp-line: 214 219 221;
 }
 
 /* Light tokens for blog pages + matching header/footer when route is /blog (html may still be .dark). */
@@ -191,4 +201,26 @@ body {
     transform: none !important;
     transition: none !important;
   }
+}
+
+/* Landing-page feature cards. Square, sharp-cornered, unshadowed and slightly rotated,
+   interleaved with the headline. Rotation rides a custom property so the settle keyframe
+   can land on it. easeOutQuint over 1s, staggered per card. Respects reduced motion. */
+.lp-card {
+  transform: rotate(var(--lp-rot, 0deg));
+  animation: lp-settle 1s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+.lp-rise {
+  animation: lp-rise 1s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@keyframes lp-settle {
+  from { opacity: 0; transform: translateY(46px) scale(0.94) rotate(0deg); }
+  to   { opacity: 1; transform: translateY(0) scale(1) rotate(var(--lp-rot, 0deg)); }
+}
+@keyframes lp-rise {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp-card, .lp-rise { animation: none; opacity: 1; transform: rotate(var(--lp-rot, 0deg)); }
 }
