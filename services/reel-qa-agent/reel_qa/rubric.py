@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 QA_VERSION = "geopulse-reel-qa-v1"
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.7-flash"
 
 SEVERITIES = ("critical", "high", "medium", "low")
 REPAIR_KINDS = (

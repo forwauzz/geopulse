@@ -57,7 +57,7 @@ def _authorize(header: str | None, secret_name: str) -> None:
 def _remote_review(payload: ReviewRequest, facts: dict[str, Any]) -> dict[str, Any]:
     resource = os.environ.get("REEL_QA_AGENT_ENGINE_RESOURCE", "").strip()
     if not resource:
-        return ReelQaAgent(model=os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")).query(
+        return ReelQaAgent(model=os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")).query(
             gcs_uri=payload.gcs_uri,
             deterministic_report=facts,
             brief=payload.brief,

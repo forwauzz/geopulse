@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent
 def deploy() -> str:
     project = os.environ.get("GOOGLE_CLOUD_PROJECT") or "grand-karma-504620-m3"
     location = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
-    model = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    model = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
     client = agentplatform.Client(project=project, location=location)
     remote = client.agent_engines.create(
         agent=ReelQaAgent(model=model),
