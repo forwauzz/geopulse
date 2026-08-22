@@ -31,10 +31,6 @@ def deploy() -> str:
             "extra_packages": [str(ROOT / "reel_qa")],
             "agent_framework": "custom",
             "python_version": "3.12",
-            "env_vars": {
-                "GOOGLE_CLOUD_PROJECT": project,
-                "GOOGLE_CLOUD_LOCATION": location,
-            },
         },
     )
     resource_name = str(remote.api_resource.name)
