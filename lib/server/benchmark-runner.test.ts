@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { runBenchmarkGroupSkeleton } from './benchmark-runner';
+import {
+  runBenchmarkGroupSkeleton,
+  terminalBenchmarkProviderFailureCode,
+} from './benchmark-runner';
 import type { BenchmarkExecutionAdapter } from './benchmark-execution';
 
 describe('runBenchmarkGroupSkeleton', () => {
+  it('classifies only missing or rejected provider credentials as terminal', () => {
+    expect(terminalBenchmarkProviderFailureCode([
+      { status: 'failed', errorMessage: 'benchmark_perplexity_http_401' },
+    ])).toBe('benchmark_perplexity_http_401');
+    expect(terminalBenchmarkProviderFailureCode([
+      { status: 'failed', errorMessage: 'benchmark_openai_http_403' },
+    ])).toBe('benchmark_openai_http_403');
+    expect(terminalBenchmarkProviderFailureCode([
+      { status: 'failed', errorMessage: 'benchmark_gemini_api_key_missing' },
+    ])).toBe('benchmark_gemini_api_key_missing');
+    expect(terminalBenchmarkProviderFailureCode([
+      { status: 'failed', errorMessage: 'benchmark_perplexity_http_429' },
+      { status: 'failed', errorMessage: 'benchmark_gemini_http_500' },
+    ])).toBeNull();
+  });
+
   it('creates a skeleton run group, skipped query runs, and starter metrics', async () => {
     const calls: Array<{ table: string; op: string; payload?: unknown }> = [];
 
@@ -259,6 +278,7 @@ describe('runBenchmarkGroupSkeleton', () => {
       completedQueryCount: 0,
       failedQueryCount: 0,
       skippedQueryCount: 2,
+      terminalProviderFailureCode: null,
     });
     expect(calls.some((call) => call.table === 'benchmark_run_groups' && call.op === 'insert')).toBe(true);
     expect(calls.some((call) => call.table === 'query_runs' && call.op === 'insert')).toBe(true);
