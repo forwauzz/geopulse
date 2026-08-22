@@ -186,6 +186,7 @@ describe('repair state machine', () => {
     const exhausted = recordRepairScopeFeedback(thirdLease.state, 'repair-1', 3, 'workflow-run-attempt-3', '3'.repeat(64), ['still failing'], now);
     expect(exhausted).toMatchObject({ requeued: false, nextAttempt: null, exhausted: true });
     expect(exhausted.state.pendingScopes).toEqual([]);
+    expect(exhausted.state.exhaustedRepairIds).toContain('repair-1');
     expect(exhausted.state.auditHistory?.[0]).toMatchObject({ outcome: 'exhausted', reasons: ['still failing'] });
   });
 
