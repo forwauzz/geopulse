@@ -27,7 +27,8 @@ const snapshot: RevenueAgencySnapshot = {
   checkoutStarts: 0,
   repliesReceived: 0,
   meetingsBooked: 0,
-  activatedWorkspaces: 3,
+  workspaceRecordsCreated: 6,
+  qualifiedWorkspaceActivations: 1,
   paymentsCompleted: 2,
   paidSubscriptionsStarted: 0,
   cancellations: 0,
@@ -102,6 +103,7 @@ function loop(overrides: Partial<StandupWorkLoop>): StandupWorkLoop {
 describe('recurring revenue identity exclusions', () => {
   it('excludes founder, internal, Lifter, and test identities while allowing a real customer', () => {
     expect(isExcludedRevenueIdentity({ email: 'uzzielt@techehealthservices.com' })).toBe(true);
+    expect(isExcludedRevenueIdentity({ email: 'founder@gmail.com', domain: 'alie.app' })).toBe(true);
     expect(isExcludedRevenueIdentity({ email: 'jack@lifter.ca' })).toBe(true);
     expect(isExcludedRevenueIdentity({ email: 'buyer+test@msp.example' })).toBe(true);
     expect(isExcludedRevenueIdentity({
@@ -113,9 +115,14 @@ describe('recurring revenue identity exclusions', () => {
       metadata: { source: 'admin_assign_plan' },
     })).toBe(true);
     expect(isExcludedRevenueIdentity({
+      domain: 'gmail.com',
+      metadata: { source: 'self_serve', subscription_id: 'admin_comp:owner-id' },
+    })).toBe(true);
+    expect(isExcludedRevenueIdentity({
       email: 'owner@northstarmsp.ca',
       domain: 'northstarmsp.ca',
     })).toBe(false);
+    expect(isExcludedRevenueIdentity({ domain: 'northstarmsp.ca' })).toBe(false);
     expect(isVerifiedStripeSubscriptionId('admin_comp_123')).toBe(false);
     expect(isVerifiedStripeSubscriptionId('sub_1AbCdEfGhIjK')).toBe(true);
   });
@@ -171,6 +178,8 @@ describe('daily company standup', () => {
 
     const html = renderDailyCompanyStandupHtml(report);
     expect(html).toContain('Verified non-internal recurring customers');
+    expect(html).toContain('Workspace records created / qualified first value');
+    expect(html).not.toContain('Activated workspaces');
     expect(html).toContain('Maya Brooks');
     expect(html).toContain('Codex');
     expect(html).toContain('Role rubric');
@@ -223,7 +232,7 @@ describe('daily company standup', () => {
   it('keeps role rubrics explicit and changes the verdict only for verified recurring revenue', () => {
     expect(Object.keys(DEPARTMENT_RUBRICS)).toHaveLength(8);
     expect(DEPARTMENT_RUBRICS.maya).toContain(
-      'Sends one complete daily company standup.'
+      'Records one complete daily company standup and sends only qualifying exceptions.'
     );
     const report = buildDailyCompanyStandup({
       snapshot,

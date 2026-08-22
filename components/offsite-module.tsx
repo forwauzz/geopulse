@@ -47,11 +47,6 @@ export function OffsiteModuleCard() {
             <p className="mt-1 font-body text-xs text-on-surface-variant/80">Owner: {lever.ownerRole}</p>
             <p className="mt-1.5 font-body text-sm leading-6 text-on-background">{lever.what}</p>
             <p className="mt-1 font-body text-sm leading-6 text-on-surface-variant">{lever.why}</p>
-            {lever.stat && (
-              <p className="mt-1.5 font-body text-xs leading-5 text-on-surface-variant/80">
-                {lever.stat.claim} — <em>{lever.stat.source}</em>
-              </p>
-            )}
           </li>
         ))}
       </ul>

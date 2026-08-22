@@ -1,6 +1,7 @@
 import type { BenchmarkRunListRow } from './benchmark-admin-data';
 import {
   buildBenchmarkScheduleWindowSummary,
+  hasCompletedBenchmarkEvidence,
   type BenchmarkScheduleWindowSummary,
 } from './benchmark-schedule-window-summary';
 
@@ -9,6 +10,10 @@ export type BenchmarkScheduleHealthWindow = {
   readonly domainCount: number;
   readonly pairedDomainCount: number;
   readonly runCount: number;
+  readonly evidenceRunCount: number;
+  readonly completedQueryCount: number;
+  readonly failedQueryCount: number;
+  readonly skippedQueryCount: number;
   readonly triggerSources: readonly string[];
   readonly statuses: readonly string[];
   readonly latestCreatedAt: string | null;
@@ -71,18 +76,26 @@ export function buildBenchmarkScheduleHealthSummary(args: {
     });
     const matchingRuns = args.runs.filter((run) => {
       if (run.run_scope !== 'scheduled_internal_benchmark') return false;
-      if (run.query_set_id !== args.querySetId) return false;
       if (run.model_set_version !== args.modelId) return false;
       if (run.metadata['schedule_version'] !== args.scheduleVersion) return false;
       if (run.metadata['schedule_window_utc'] !== windowDate) return false;
       return true;
     });
+    const countQueries = (key: string): number => matchingRuns.reduce((sum, run) => {
+      const value = run.metadata[key];
+      return sum + (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+    }, 0);
+    const evidenceRunCount = matchingRuns.filter(hasCompletedBenchmarkEvidence).length;
 
     return {
       windowDate,
       domainCount: summary.domainCount,
       pairedDomainCount: summary.pairedDomainCount,
       runCount: matchingRuns.length,
+      evidenceRunCount,
+      completedQueryCount: countQueries('completed_query_count'),
+      failedQueryCount: countQueries('failed_query_count'),
+      skippedQueryCount: countQueries('skipped_query_count'),
       triggerSources: Array.from(
         new Set(
           matchingRuns
@@ -96,7 +109,7 @@ export function buildBenchmarkScheduleHealthSummary(args: {
       ).sort(),
       statuses: Array.from(new Set(matchingRuns.map((run) => run.status))).sort(),
       latestCreatedAt: matchingRuns[0]?.created_at ?? null,
-      missing: matchingRuns.length === 0,
+      missing: evidenceRunCount === 0,
     };
   });
 

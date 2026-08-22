@@ -143,6 +143,16 @@ function parseEnabledModels(
   return Array.from(new Set(ordered));
 }
 
+function isGeminiModelId(modelId: string): boolean {
+  const normalized = modelId.trim().toLowerCase();
+  return normalized.startsWith('gemini-') || normalized.startsWith('models/gemini-') || normalized.startsWith('google/');
+}
+
+function isQuotaDepletedResponse(responseBody: string | null): boolean {
+  if (!responseBody) return false;
+  return /prepayment credits? (?:are )?depleted|insufficient[_ -]?quota|billing (?:account|quota)|quota has been exhausted/i.test(responseBody);
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -153,11 +163,15 @@ function resolveGeminiConfigBase(
 ): Omit<BenchmarkExecutionConfig, 'provider'> {
   const fallbackModel =
     env?.BENCHMARK_EXECUTION_MODEL?.trim() || env?.GEMINI_MODEL?.trim() || 'gemini-2.0-flash';
-  const enabledModels = parseEnabledModels(env?.BENCHMARK_EXECUTION_ENABLED_MODELS, fallbackModel);
+  const configuredModels = parseEnabledModels(env?.BENCHMARK_EXECUTION_ENABLED_MODELS, fallbackModel);
+  // The shared allowlist may contain OpenAI/Perplexity lanes in multi-provider mode. Never let
+  // Gemini claim those model ids first and send them to the wrong endpoint.
+  const enabledModels = configuredModels.filter(isGeminiModelId);
+  const effectiveModels = enabledModels.length > 0 ? enabledModels : [fallbackModel];
   return {
     apiKey: env?.BENCHMARK_EXECUTION_API_KEY?.trim() || env?.GEMINI_API_KEY?.trim() || '',
-    model: enabledModels[0] ?? fallbackModel,
-    enabledModels,
+    model: effectiveModels[0] ?? fallbackModel,
+    enabledModels: effectiveModels,
     endpoint:
       env?.BENCHMARK_EXECUTION_ENDPOINT?.trim() ||
       env?.GEMINI_ENDPOINT?.trim() ||
@@ -304,7 +318,8 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
 
         if (!response.ok) {
           const responseBody = await readResponseTextSafely(response);
-          const retryable = GEMINI_TRANSIENT_STATUSES.has(response.status);
+          const quotaDepleted = response.status === 429 && isQuotaDepletedResponse(responseBody);
+          const retryable = GEMINI_TRANSIENT_STATUSES.has(response.status) && !quotaDepleted;
           const hasRetry = attempt < GEMINI_MAX_ATTEMPTS;
           if (retryable && hasRetry) {
             const delayMs = GEMINI_RETRY_DELAYS_MS[attempt - 1] ?? 1200;
@@ -326,6 +341,7 @@ export class GeminiBenchmarkExecutionAdapter implements BenchmarkExecutionAdapte
               response_body: responseBody,
               attempts: attempt,
               retryable,
+              quota_state: quotaDepleted ? 'depleted' : 'available_or_unknown',
             },
             errorMessage: `benchmark_gemini_http_${String(response.status)}`,
             executedAt,
@@ -524,7 +540,8 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
 
         if (!response.ok) {
           const responseBody = await readResponseTextSafely(response);
-          const retryable = OPENAI_TRANSIENT_STATUSES.has(response.status);
+          const quotaDepleted = response.status === 429 && isQuotaDepletedResponse(responseBody);
+          const retryable = OPENAI_TRANSIENT_STATUSES.has(response.status) && !quotaDepleted;
           const hasRetry = attempt < OPENAI_MAX_ATTEMPTS;
           if (retryable && hasRetry) {
             const delayMs = OPENAI_RETRY_DELAYS_MS[attempt - 1] ?? 1200;
@@ -546,6 +563,7 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
               response_body: responseBody,
               attempts: attempt,
               retryable,
+              quota_state: quotaDepleted ? 'depleted' : 'available_or_unknown',
             },
             errorMessage: `benchmark_${provider}_http_${String(response.status)}`,
             executedAt,

@@ -1,5 +1,6 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { AgencyReportQuestion, AgencyReportSnapshotV2 } from './agency-report-snapshot';
+import type { BuyerIntelligenceViewModel } from '../intelligence/buyer-intelligence-view-model';
 import { GEO_PULSE_BRAND, type BrandConfig, type Rgb01 } from '../../workers/report/report-branding';
 
 const PAGE = { width: 595.28, height: 841.89 } as const;
@@ -111,8 +112,15 @@ function drawFooter(page: PDFPage, fonts: Fonts, brand: BrandConfig, pageNumber:
 
 function drawSectionTitle(page: PDFPage, fonts: Fonts, eyebrow: string, title: string, y: number): number {
   page.drawText(eyebrow.toUpperCase(), { x: MARGIN, y, size: 7.5, font: fonts.bold, color: MUTED });
-  page.drawText(safeText(title), { x: MARGIN, y: y - 28, size: 23, font: fonts.bold, color: INK });
-  return y - 54;
+  return drawWrapped(page, title, {
+    x: MARGIN,
+    y: y - 28,
+    width: PAGE.width - MARGIN * 2,
+    font: fonts.bold,
+    size: 23,
+    lineHeight: 26,
+    maxLines: 3,
+  });
 }
 
 function resultMark(question: AgencyReportQuestion): string {
@@ -432,6 +440,127 @@ export async function buildAgencyReportPdf(snapshot: AgencyReportSnapshotV2, opt
       methodY = drawWrapped(method, body, { x: MARGIN, y: methodY - 22, width: PAGE.width - MARGIN * 2, font: fonts.regular, size: 11, lineHeight: 16, maxLines: 5 }) - 24;
     }
     drawFooter(method, fonts, brand, doc.getPageCount());
+  }
+
+  return doc.save();
+}
+
+/**
+ * Canonical buyer-intelligence artifact rendered through the existing agency PDF mechanics.
+ * Section visibility and wording are already resolved by the shared view model; this layer only
+ * paginates those exact values.
+ */
+export async function buildBuyerIntelligenceAgencyReportPdf(
+  model: BuyerIntelligenceViewModel,
+  options?: {
+    readonly brand?: BrandConfig;
+    readonly heroImageBytes?: Uint8Array | null;
+    readonly heroImageMime?: 'image/png' | 'image/jpeg';
+  },
+): Promise<Uint8Array> {
+  const brand = options?.brand ?? GEO_PULSE_BRAND;
+  const doc = await PDFDocument.create();
+  const fonts: Fonts = {
+    regular: await doc.embedFont(StandardFonts.Helvetica),
+    bold: await doc.embedFont(StandardFonts.HelveticaBold),
+  };
+  const primary = color(brand.primary);
+  const heroImage = options?.heroImageBytes
+    ? await (options.heroImageMime === 'image/png'
+      ? doc.embedPng(options.heroImageBytes)
+      : doc.embedJpg(options.heroImageBytes)).catch(() => null)
+    : null;
+  let pageNumber = 0;
+  let page!: PDFPage;
+  let y = 0;
+
+  function nextPage(eyebrow: string, title: string): void {
+    page = doc.addPage([PAGE.width, PAGE.height]);
+    pageNumber += 1;
+    page.drawRectangle({ x: 0, y: 0, width: PAGE.width, height: PAGE.height, color: PAPER });
+    page.drawRectangle({ x: 0, y: PAGE.height - 8, width: PAGE.width, height: 8, color: primary });
+    y = drawSectionTitle(page, fonts, eyebrow, title, PAGE.height - MARGIN - 18);
+    drawFooter(page, fonts, brand, pageNumber);
+  }
+
+  function block(title: string, body: string, badge?: string): void {
+    const bodyLines = lines(body, fonts.regular, 10, PAGE.width - MARGIN * 2 - 24).length;
+    const required = 46 + bodyLines * 14;
+    if (y - required < 54) nextPage('Continued', model.headline);
+    page.drawRectangle({ x: MARGIN, y: y - required + 10, width: PAGE.width - MARGIN * 2, height: required, color: rgb(1, 1, 1), borderColor: LINE, borderWidth: 0.7 });
+    page.drawText(safeText(title), { x: MARGIN + 12, y: y - 18, size: 10, font: fonts.bold, color: INK });
+    if (badge) page.drawText(safeText(badge.toUpperCase()), { x: PAGE.width - MARGIN - 100, y: y - 18, size: 7, font: fonts.bold, color: primary });
+    drawWrapped(page, body, { x: MARGIN + 12, y: y - 38, width: PAGE.width - MARGIN * 2 - 24, font: fonts.regular, size: 10, lineHeight: 14 });
+    y -= required + 12;
+  }
+
+  doc.setAuthor(brand.companyName);
+  doc.setCreator('GEO-Pulse canonical agency report renderer');
+  doc.setTitle(model.kind === 'agency_portfolio' ? model.headline : model.headline);
+
+  if (model.kind === 'agency_portfolio') {
+    nextPage('Agency portfolio', model.headline);
+    for (const row of model.rows) {
+      const movement = row.improvedSignals === null ? 'Baseline established' : `${String(row.improvedSignals)} improved; ${String(row.regressedSignals)} regressed`;
+      block(row.displayName, row.status === 'ready'
+        ? `${row.canonicalDomain}. ${String(row.supportedQuestions)} of ${String(row.measuredQuestions)} measured buyer questions supported. ${movement}. Next: ${row.nextAction ?? 'Review the latest measurement.'}`
+        : `${row.canonicalDomain}. Held from client reporting until the evidence gate passes.`, row.status);
+    }
+  } else {
+    nextPage(`${brand.companyName} | ${model.kind.replaceAll('_', ' ')}`, model.headline);
+    if (heroImage) {
+      const maxWidth = PAGE.width - MARGIN * 2;
+      const maxHeight = 190;
+      const scale = Math.min(maxWidth / heroImage.width, maxHeight / heroImage.height);
+      const width = heroImage.width * scale;
+      const height = heroImage.height * scale;
+      page.drawRectangle({ x: MARGIN, y: y - height - 8, width: maxWidth, height: height + 16, color: rgb(1, 1, 1), borderColor: LINE, borderWidth: 0.7 });
+      page.drawImage(heroImage, { x: MARGIN + (maxWidth - width) / 2, y: y - height, width, height });
+      y -= height + 28;
+    }
+    block('Prepared for', `${model.identity.displayName} | ${model.identity.canonicalDomain} | ${model.identity.category} | ${model.identity.marketLabel}`);
+    block('Prepared by', brand.footerNote ?? brand.companyName);
+    if (model.manifest.some((section) => section.key === 'summary' && section.visible)) block('Executive readout', model.summary);
+    if (model.manifest.some((section) => section.key === 'observations' && section.visible)) {
+      nextPage('Buyer questions', 'What an AI buyer can verify');
+      for (const observation of model.observations) block(observation.question, observation.answer ?? 'No eligible answer was available in this measurement period.', observation.state);
+    }
+    if (model.manifest.some((section) => section.key === 'benchmark' && section.visible) && model.benchmark) {
+      if (model.benchmark.state === 'eligible') {
+        nextPage('Benchmark', `Compared with ${model.benchmark.label}`);
+        block('Eligible cohort', `${String(model.benchmark.sampleSize)} organizations. Methodology ${model.benchmark.methodologyVersion}. Each metric retains its own denominator.`);
+        for (const comparison of model.benchmark.comparisons) block(comparison.metricKey, `Business ${String(comparison.businessValue)}; cohort median ${String(comparison.cohortMedian)}; denominator ${String(comparison.denominator)}${comparison.percentile === null ? '' : `; percentile ${String(comparison.percentile)}`}.`);
+      } else {
+        nextPage('Benchmark', 'No eligible comparison cohort was attached');
+        block('Cohort unavailable', 'This baseline reports only the measured organization. It does not invent a peer rank or treat a missing cohort as zero.');
+      }
+    }
+    if (model.manifest.some((section) => section.key === 'recommendations' && section.visible)) {
+      nextPage('Action plan', 'What to fix next');
+      for (const recommendation of model.recommendations) block(recommendation.title, recommendation.action, `${recommendation.priority} impact | ${recommendation.effort} effort`);
+    }
+    if (model.manifest.some((section) => section.key === 'change' && section.visible) && model.change) {
+      nextPage('Measured movement', 'Like-for-like change');
+      for (const change of model.change.changes) block(change.metricKey, `${String(change.previousValue ?? 'unavailable')} to ${String(change.currentValue ?? 'unavailable')}`, change.direction);
+    }
+    if (model.manifest.some((section) => section.key === 'verification' && section.visible)) {
+      nextPage('Verification', 'What changed after the work');
+      for (const recommendation of model.recommendations) block(recommendation.title, recommendation.verification.expectedCondition, recommendation.verification.result);
+    }
+    if (model.manifest.some((section) => section.key === 'unavailable_measurements' && section.visible)) {
+      nextPage('Coverage', 'Measurements not available this period');
+      model.unavailableMeasurements.forEach((item) => block(item, 'Excluded from totals and never scored as zero.'));
+    }
+    if (model.manifest.some((section) => section.key === 'provenance' && section.visible) && model.provenance) {
+      nextPage('Provenance', 'How to reproduce this baseline');
+      block('Measurement inputs', `${String(model.provenance.runIds.length)} source runs and ${String(model.provenance.evidenceIds.length)} evidence references. Generated ${model.provenance.generatedAt} with ${model.provenance.generatorVersion}.`);
+    }
+    if (model.manifest.some((section) => section.key === 'limitations' && section.visible)) {
+      nextPage('Limitations', 'What this report does not claim');
+      (model.limitations.length ? model.limitations : ['Results describe the recorded measurement period and do not guarantee future AI placement.'])
+        .forEach((item) => block('Scope limit', item));
+    }
+    if (model.manifest.some((section) => section.key === 'cta' && section.visible) && model.cta) block(model.cta.label, model.cta.href);
   }
 
   return doc.save();

@@ -25,8 +25,8 @@ export function assessBuyerQuestionCoverage(pages: readonly { url: string; textS
   const text = pages.map((p) => p.textSample ?? '').join(' ').toLowerCase();
 
   const serviceCovered =
-    urls.some((u) => /\/(services?|solutions?|managed-|it-support|pricing|plans)/.test(u)) ||
-    /\b(managed it|it support|helpdesk|cybersecurity|backup|cloud migration)\b/.test(text);
+    urls.some((u) => /\/(services?|solutions?|practice-areas?|offerings?|managed-|it-support|pricing|plans)(\/|$)/.test(u)) ||
+    /\b(managed it|it support|helpdesk|cybersecurity|backup|cloud migration|clinical operations|ehr implementation|ai scribe)\b/.test(text);
 
   const locationCovered =
     urls.some((u) => /\/(locations?|areas?|montreal|toronto|laval|quebec|ottawa|[a-z-]+-it-support)/.test(u)) ||
@@ -54,7 +54,7 @@ export function assessBuyerQuestionCoverage(pages: readonly { url: string; textS
       covered: locationCovered,
       evidence: locationCovered
         ? 'Location/service-area coverage found.'
-        : 'No location or service-area coverage detected — engines cannot answer "near me" questions about you.',
+        : 'No location or service-area coverage was detected in the crawl, leaving no direct site evidence for location-specific answers.',
       action: 'A service-area page per city you serve, with LocalBusiness schema naming the area.',
     },
     {
@@ -62,7 +62,7 @@ export function assessBuyerQuestionCoverage(pages: readonly { url: string; textS
       covered: comparisonCovered,
       evidence: comparisonCovered
         ? 'Comparison/decision content found.'
-        : 'No comparison or "how to choose" content — the single highest-cited format (~32.5% of AI citations are comparative listicles, Digital Bloom).',
+        : 'No comparison or "how to choose" content was detected in the crawl.',
       action: 'Publish honest comparison content: "X vs Y", "how to choose an MSP", "best options for …" including competitors.',
     },
     {
@@ -70,7 +70,7 @@ export function assessBuyerQuestionCoverage(pages: readonly { url: string; textS
       covered: proofCovered,
       evidence: proofCovered
         ? 'Proof content (case studies/testimonials/reviews) found.'
-        : 'No case studies, testimonials, or named results detected — engines favor sources with verifiable proof.',
+        : 'No case studies, testimonials, or named results were detected in the crawl.',
       action: 'Publish 2-3 named case studies with real numbers, and a testimonials page.',
     },
   ];

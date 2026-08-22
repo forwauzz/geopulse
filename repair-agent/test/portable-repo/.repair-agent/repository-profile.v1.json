@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "portable-fixture-v1",
+  "repository": "example/portable-site",
+  "defaultBranch": "main",
+  "siteOrigin": "https://portable.example",
+  "allowedPathPrefixes": ["public", "src"],
+  "skillAllowlist": ["ensure-robots-sitemap", "remove-sitemap-url", "replace-broken-internal-link"],
+  "maxFiles": 1,
+  "maxChangedLines": 20,
+  "repositoryAdapter": {
+    "provider": "github",
+    "installationMode": "github_app",
+    "deploymentStrategy": "merge_to_default_branch",
+    "deploymentProvider": "fixture",
+    "checkoutRoot": null,
+    "previewUrlTemplate": "https://preview-{sha}.portable.example/",
+    "previewSmokePaths": ["/", "/robots.txt"],
+    "productionSmokeUrls": ["https://portable.example/", "https://portable.example/robots.txt"]
+  },
+  "requiredChecks": [
+    { "checkName": "verify", "appSlug": "github-actions", "appId": 15368 },
+    { "checkName": "repair-review", "appSlug": "portable-repair-reviewer", "appId": 91001 },
+    { "checkName": "repair-qa", "appSlug": "portable-repair-qa", "appId": 91002 }
+  ],
+  "roleIssuers": {
+    "engineer": [{ "provider": "github", "appSlug": "portable-repair-engineer", "appId": 91000 }],
+    "reviewer": [{ "provider": "github", "appSlug": "portable-repair-reviewer", "appId": 91001 }],
+    "qa": [{ "provider": "github", "appSlug": "portable-repair-qa", "appId": 91002 }],
+    "merge-controller": [{ "provider": "github", "appSlug": "portable-repair-merge", "appId": 91003 }]
+  },
+  "qaCommandPresetId": "portable-static-safe-v1"
+}

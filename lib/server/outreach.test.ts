@@ -191,4 +191,30 @@ describe('sendOutreachEmail', () => {
       reply_to: 'reply@getgeopulse.com',
     });
   });
+
+  it('adds RFC 8058 one-click headers to marketing sends', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ id: 'email_unsubscribe' }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const unsubscribeUrl = 'https://getgeopulse.com/api/outreach/unsubscribe/11111111-1111-4111-8111-111111111111';
+    await sendOutreachEmail(
+      { RESEND_API_KEY: 're_test', RESEND_FROM_EMAIL: 'reports@getgeopulse.com' },
+      'buyer@example.com',
+      'Subject',
+      '<p>Hello</p>',
+      'campaign-send-unsubscribe',
+      undefined,
+      unsubscribeUrl,
+    );
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    });
+  });
 });

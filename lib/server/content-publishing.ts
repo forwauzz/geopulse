@@ -50,6 +50,22 @@ const OVERCLAIM_PATTERNS: RegExp[] = [
   /\bguarantee(?:d)?\s+(?:citations?|rankings?|visibility)\b/i,
   /\b100%\s+(?:citation|ranking|visibility)\b/i,
   /\bproven\s+to\s+rank\b/i,
+  /\bcan make or break\b/i,
+  /\brevolutioni[sz](?:e|es|ed|ing)\b/i,
+  /\bstay(?:ing)? ahead of the competition\b/i,
+  /\bdrive traffic\b/i,
+  /\battract(?:ing)? new clients\b/i,
+  /\bincrease (?:your|their|the) chances\b/i,
+];
+
+const APPROVED_INTERNAL_CONTENT_PATHS = [
+  '/blog/',
+  '/ai-seo-audit',
+  '/ai-visibility-audit',
+  '/generative-engine-optimization',
+  '/methodology/',
+  '/pricing',
+  '/solutions/',
 ];
 
 function readMetadataString(metadata: Record<string, unknown> | null, key: string): string | null {
@@ -95,6 +111,27 @@ function hasInternalBlogLink(markdown: string): boolean {
   }
 
   return false;
+}
+
+function hasUnknownInternalLink(markdown: string): boolean {
+  const markdownLinkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
+  for (const match of markdown.matchAll(markdownLinkPattern)) {
+    const href = match[1]?.trim() ?? '';
+    if (!href.startsWith('/') || href === '/') continue;
+    if (!APPROVED_INTERNAL_CONTENT_PATHS.some((path) => href.startsWith(path))) return true;
+  }
+  return false;
+}
+
+function hasUntrustedGeoPulseSource(sourceLinks: readonly string[]): boolean {
+  return sourceLinks.some((source) => {
+    try {
+      const hostname = new URL(source).hostname.toLowerCase().replace(/^www\./, '');
+      return hostname === 'geopulse.com';
+    } catch {
+      return true;
+    }
+  });
 }
 
 function hasExternalCitationLink(markdown: string): boolean {
@@ -334,6 +371,24 @@ export function evaluateContentPublishChecks(item: PublishableContentSnapshot): 
         category: 'llm_readiness',
         passed: headings.length >= 2,
         hint: 'Add at least two concrete H2 subtopic headings for extractable structure.',
+      })
+    );
+    checks.push(
+      buildCheck({
+        key: 'internal_link_route_validity',
+        label: 'Internal links use known GEO-Pulse routes',
+        category: 'publish_contract',
+        passed: !hasUnknownInternalLink(markdown),
+        hint: 'Replace unknown relative links with a verified GEO-Pulse route.',
+      })
+    );
+    checks.push(
+      buildCheck({
+        key: 'source_domain_identity',
+        label: 'Sources do not confuse GEO-Pulse with geopulse.com',
+        category: 'semantic_quality',
+        passed: !hasUntrustedGeoPulseSource(item.source_links),
+        hint: 'Remove geopulse.com sources; that domain is not getgeopulse.com or an approved GEO-Pulse source.',
       })
     );
     checks.push(

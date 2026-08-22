@@ -3,6 +3,8 @@ import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { processInboundSalesReply } from '@/lib/server/outreach-replies';
 import { structuredLogWithClientAndWait } from '@/lib/server/structured-log';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { reconcileResendLifecycleEvent } from '@/lib/server/lifecycle-email';
+import { z } from 'zod';
 
 export const runtime = 'nodejs';
 
@@ -42,9 +44,20 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'invalid_webhook_signature' }, { status: 400 });
   }
 
-  if (event.type !== 'email.received') {
-    return Response.json({ ok: true, ignored: true });
+  const supabase = createServiceRoleClient(
+    env.NEXT_PUBLIC_SUPABASE_URL,
+    env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  if (event.type === 'email.delivered' || event.type === 'email.bounced' || event.type === 'email.complained') {
+    const parsed = z.object({ email_id: z.string().min(1), to: z.union([z.string(), z.array(z.string())]).optional() }).safeParse(event.data);
+    if (!parsed.success) return Response.json({ error: 'invalid_delivery_event' }, { status: 400 });
+    const to = Array.isArray(parsed.data.to) ? parsed.data.to[0] : parsed.data.to;
+    const reconciled = await reconcileResendLifecycleEvent({
+      supabase, providerEventId: headers.id, type: event.type, messageId: parsed.data.email_id, to,
+    });
+    return Response.json({ ok: true, reconciled });
   }
+  if (event.type !== 'email.received') return Response.json({ ok: true, ignored: true });
   const receivedEvent = event as EmailReceivedEvent;
   const received = await resend.emails.receiving.get(receivedEvent.data.email_id, {
     html_format: 'cid',
@@ -53,10 +66,6 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'inbound_email_retrieval_failed' }, { status: 500 });
   }
 
-  const supabase = createServiceRoleClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
-  );
   const result = await processInboundSalesReply({
     supabase,
     providerEventId: headers.id,

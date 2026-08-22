@@ -1,0 +1,94 @@
+name: Repair Agent
+
+on:
+  pull_request:
+    paths:
+      - 'repair-agent/**'
+      - '.github/workflows/repair-agent.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'repair-agent/**'
+      - '.github/workflows/repair-agent.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: repair-agent-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: repair-agent-verify
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: repair-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Generate Cloudflare binding types
+        run: npm run cf-typegen
+
+      - name: Require generated types to be current
+        run: git diff --exit-code -- worker-configuration.d.ts
+
+      - name: Focused repair policy and evaluator tests
+        run: npm test
+
+      - name: Type check dedicated Worker
+        run: npm run type-check
+
+      - name: Build isolated Sandbox image
+        run: npm run build:container
+
+      - name: Run repair runner inside built image
+        run: npm run smoke:container
+
+      - name: Validate Worker and container deployment bundle
+        run: npm run deploy:dry-run
+
+  deploy-shadow:
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main' &&
+      vars.REPAIR_AGENT_SHADOW_DEPLOY_ENABLED == 'true'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: repair-agent
+        run: npm ci
+
+      - name: Deploy shadow Worker and Sandbox container
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.124.0'
+          workingDirectory: repair-agent
+          command: deploy
+          secrets: |
+            REPAIR_AGENT_API_TOKEN
+        env:
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}

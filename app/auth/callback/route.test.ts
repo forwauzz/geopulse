@@ -5,6 +5,8 @@ const cookiesMock = vi.fn();
 const createServerClientMock = vi.fn();
 const createServiceRoleClientMock = vi.fn();
 const linkGuestPurchasesToUserMock = vi.fn();
+const enqueueLifecycleEmailMock = vi.fn();
+const structuredLogWithClientAndWaitMock = vi.fn();
 
 vi.mock('next/headers', () => ({
   cookies: () => cookiesMock(),
@@ -20,6 +22,14 @@ vi.mock('@/lib/supabase/service-role', () => ({
 
 vi.mock('@/lib/server/link-guest-purchases', () => ({
   linkGuestPurchasesToUser: (...args: unknown[]) => linkGuestPurchasesToUserMock(...args),
+}));
+
+vi.mock('@/lib/server/lifecycle-email', () => ({
+  enqueueLifecycleEmail: (...args: unknown[]) => enqueueLifecycleEmailMock(...args),
+}));
+
+vi.mock('@/lib/server/structured-log', () => ({
+  structuredLogWithClientAndWait: (...args: unknown[]) => structuredLogWithClientAndWaitMock(...args),
 }));
 
 function makeSupabaseClient(overrides?: {
@@ -53,9 +63,11 @@ describe('GET /auth/callback', () => {
         update: vi.fn().mockReturnThis(),
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
-        maybeSingle: vi.fn().mockResolvedValue({ data: { created_at: new Date().toISOString() } }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: { created_at: new Date().toISOString(), email: 'user@example.com', full_name: 'Uzziel Tamon' } }),
       })),
     });
+    enqueueLifecycleEmailMock.mockResolvedValue({ ok: true, id: 'delivery-1', status: 'queued' });
+    structuredLogWithClientAndWaitMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -83,6 +95,12 @@ describe('GET /auth/callback', () => {
       'user-1',
       'user@example.com',
     );
+    expect(enqueueLifecycleEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: 'account-created/user-1',
+      templateKey: 'account_created',
+      to: 'user@example.com',
+      variables: expect.objectContaining({ first_name: 'Uzziel' }),
+    }));
   });
 
   it('verifies token-hash magic links when code is not present', async () => {
@@ -141,6 +159,26 @@ describe('GET /auth/callback', () => {
     expect(response.headers.get('location')).toContain('mode=signup');
     expect(response.headers.get('location')).toContain(
       'error=Email+link+is+invalid+or+has+expired',
+    );
+  });
+
+  it('records an exception without blocking first value when the welcome enqueue needs reconciliation', async () => {
+    const supabase = makeSupabaseClient({
+      getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-queue-fail', email: 'user@example.com' } } }),
+    });
+    createServerClientMock.mockReturnValue(supabase);
+    enqueueLifecycleEmailMock.mockResolvedValueOnce({ ok: false, reason: 'database_unavailable' });
+
+    const { GET } = await import('./route');
+    const response = await GET(new NextRequest('https://example.com/auth/callback?code=abc123&mode=signup'));
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://example.com/dashboard/welcome');
+    expect(structuredLogWithClientAndWaitMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      'account_created_lifecycle_enqueue_failed',
+      expect.objectContaining({ user_id: 'user-queue-fail', reason: 'database_unavailable' }),
+      'error',
     );
   });
 });

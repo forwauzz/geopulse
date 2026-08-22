@@ -7,6 +7,7 @@ import {
 } from './organization-context-change';
 import { IDENTITY_NORMALIZATION_VERSION } from '../intelligence/identity';
 import { canAccessEvidence } from '../intelligence/evidence';
+import { loadConfirmedOrganizationContextByHost } from './organization-measurement-context';
 import {
   ORGANIZATION_CONTEXT_CONTRACT_VERSION,
   ORGANIZATION_CONTEXT_POLICY_VERSION,
@@ -141,6 +142,19 @@ function factCandidate(args: {
   return parsed.success ? parsed.data : null;
 }
 
+/**
+ * Postgres returns `timestamptz` with a numeric offset (`...+00:00`), which the
+ * context schema rejects — it accepts only the canonical `Z` form. Normalising
+ * here rather than loosening the schema also keeps the content hash stable,
+ * since the hash would otherwise vary with the serialisation the driver chose.
+ * `projectedAt` is normalised the same way where the projection is assembled.
+ */
+function canonicalInstant(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
 function evidenceFacts(row: EvidenceRow): OrganizationFactCandidate[] {
   const metadata = record(row.metadata);
   const facts = record(metadata['organization_facts']);
@@ -211,7 +225,13 @@ function contextFactCandidates(rows: OrganizationContextProjectionRows): Organiz
     factCandidate({ field: 'approved_competitors', value: list(ownerContext['approvedCompetitorDomains'] ?? ownerContext['approved_competitor_domains']), sourceTier: ownerTier, confidence: ownerConfirmed ? 1 : 0.7 }),
     factCandidate({ field: 'display_name', value: clean(domainContext['displayName'] ?? domainContext['display_name'] ?? rows.domain.display_name), sourceTier: 'structured_website', confidence: 0.8 }),
     factCandidate({ field: 'canonical_domain', value: rows.domain.normalized_host, sourceTier: 'structured_website', confidence: 1 }),
-    factCandidate({ field: 'category', value: first(domainContext['category'], rows.domain.subvertical, rows.domain.vertical), sourceTier: 'structured_website', confidence: 0.8 }),
+    // A canonical domain can be shared by multiple owners and can carry a broader
+    // classification than a tenant's confirmed measurement category (for example,
+    // `saas` globally and `b2b_saas` for one client). Once the tenant confirms its
+    // category, the shared domain hint must not turn that valid refinement into a
+    // material conflict. Evidence-backed category facts below still participate in
+    // conflict detection.
+    factCandidate({ field: 'category', value: ownerConfirmed ? null : first(domainContext['category'], rows.domain.subvertical, rows.domain.vertical), sourceTier: 'structured_website', confidence: 0.8 }),
     factCandidate({ field: 'services', value: list(domainContext['services']), sourceTier: 'exact_official_website', confidence: 0.9 }),
     factCandidate({ field: 'buyer', value: clean(domainContext['buyer'] ?? domainContext['audience']), sourceTier: 'exact_official_website', confidence: 0.9 }),
     factCandidate({ field: 'market_scope', value: first(domainContext['marketScope'], domainContext['market_scope'], geography['scope']), sourceTier: 'structured_website', confidence: 0.8 }),
@@ -315,7 +335,7 @@ export function projectOrganizationContext(rows: OrganizationContextProjectionRo
       confidence: typeof evidence.metadata?.['confidence'] === 'number'
         ? Math.max(0, Math.min(1, evidence.metadata['confidence']))
         : 0.7,
-      collectedAt: evidence.collected_at,
+      collectedAt: canonicalInstant(evidence.collected_at),
     })).sort((left, right) => left.evidenceId.localeCompare(right.evidenceId)),
     conflicts,
     confirmation: confirmed,
@@ -410,6 +430,78 @@ export function confirmedOrganizationContextMetadata(
  * canonical context back from storage. Retries update the same domain/owner rows and never create a
  * second profile for the same tenant and domain.
  */
+/** Whether two cohorts describe the same set, ignoring order and casing. */
+export function sameCompetitorCohort(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  const normalize = (values: readonly string[]) =>
+    [...new Set(values.map((value) => value.trim().toLowerCase()).filter(Boolean))].sort();
+  const a = normalize(left);
+  const b = normalize(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+/**
+ * Bring a confirmed context's competitor cohort in line with the tenant's current one.
+ *
+ * The cohort is measurement input, but `schedule_run_key` is versioned by the
+ * context — so a cohort saved anywhere else is silently deduped away and the
+ * client keeps being measured against the old set. Re-confirming with the new
+ * cohort moves the context version, which is what lets the next baseline run.
+ *
+ * Returns null when there is nothing to do: no confirmed context, or a cohort that
+ * already matches. Re-confirming an unchanged cohort would churn the version and
+ * force a needless re-measurement.
+ */
+export async function syncConfirmedCompetitorCohort(args: {
+  readonly supabase: SupabaseClient<any, 'public', any>;
+  readonly ownerType: OrganizationOwnerType;
+  readonly ownerId: string;
+  readonly canonicalDomain: string;
+  readonly actorId: string;
+  readonly competitorDomains: readonly string[];
+  readonly now?: Date;
+}): Promise<OrganizationContext | null> {
+  const current = await loadConfirmedOrganizationContextByHost({
+    supabase: args.supabase,
+    ownerType: args.ownerType,
+    ownerId: args.ownerId,
+    canonicalDomain: args.canonicalDomain,
+  }).catch(() => null);
+  if (!current) return null;
+  if (sameCompetitorCohort(current.market.approvedCompetitorDomains, args.competitorDomains)) {
+    return null;
+  }
+  // A confirmed context without a category cannot be re-confirmed without inventing
+  // one, and a guessed category would change what gets measured. Leave it alone.
+  if (!current.organization.category) return null;
+
+  return persistConfirmedOrganizationContext({
+    supabase: args.supabase,
+    now: args.now,
+    input: {
+      ownerType: args.ownerType,
+      ownerId: args.ownerId,
+      actorId: args.actorId,
+      canonicalDomain: current.organization.canonicalDomain,
+      displayName: current.organization.displayName,
+      category: current.organization.category,
+      services: current.organization.services,
+      buyer: current.market.buyer,
+      marketScope: current.market.scope,
+      countryCode: current.market.countryCode,
+      subdivisionCode: current.market.subdivisionCode,
+      locality: current.market.locality,
+      serviceAreas: current.market.serviceAreas,
+      languages: current.market.languages,
+      timezone: current.market.timezone,
+      approvedCompetitorDomains: args.competitorDomains,
+      source: 'agency_client_competitor_cohort_change',
+    },
+  });
+}
+
 export async function persistConfirmedOrganizationContext(args: {
   readonly supabase: SupabaseClient<any, 'public', any>;
   readonly input: ConfirmedOrganizationContextWrite;

@@ -44,6 +44,17 @@ function runModeOf(row: { metrics?: unknown }): string | null {
   return typeof mode === 'string' ? mode : null;
 }
 
+function isCompleteMeasurement(metrics: unknown): boolean {
+  if (!metrics || typeof metrics !== 'object') return false;
+  const value = metrics as Record<string, unknown>;
+  const scheduled = Number(value['scheduled_runs']);
+  const completed = Number(value['completed_runs']);
+  return Number.isFinite(scheduled)
+    && scheduled > 0
+    && Number.isFinite(completed)
+    && completed >= scheduled;
+}
+
 /**
  * Newest citation metric per engine for `domain`, or {} when the domain is not benchmarked.
  * Fail-soft: any query problem reads as "not tracked", never as a dashboard error.
@@ -106,6 +117,9 @@ export async function loadEngineCitationMetrics(args: {
       metrics?: unknown;
       computed_at?: string | null;
     }>) {
+      // A completed run group can still contain failed provider calls. Never
+      // promote a partial denominator to a customer-facing visibility score.
+      if (!isCompleteMeasurement(row.metrics)) continue;
       const modelId = typeof row.model_id === 'string' ? row.model_id : '';
       const engine = engineForModelId(modelId);
       if (!engine || !isPlatformEnabled(args.measurementScope, engine)) continue;

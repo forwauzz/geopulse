@@ -28,7 +28,7 @@ export type VisibilityBaselineInput = VisibilityBaselineOwner & {
   readonly approvedQuerySetId?: string | null;
   /** Confirmed canonical context. Without it configuration may be staged, but measurement fails closed. */
   readonly organizationContext?: OrganizationContext;
-  readonly source: 'startup_onboarding' | 'agency_client_creation' | 'backfill';
+  readonly source: 'startup_onboarding' | 'agency_client_creation' | 'agency_client_profile_update' | 'backfill';
 };
 
 export type VisibilityBaselineResult =
@@ -52,7 +52,7 @@ export type FreeVisibilityWorkspaceResult =
   | { readonly ok: false; readonly reason: string };
 
 const PROVISIONING_VERSION = 'customer-baseline-v3';
-const PROMPT_TEMPLATE_VERSION = 'local-market-v1';
+const PROMPT_TEMPLATE_VERSION = 'service-aware-v2';
 const DEFAULT_VERTICAL = 'business services';
 const DEFAULT_LOCATION = 'your market';
 
@@ -88,8 +88,19 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
-function promptContextVersion(category: string | null, location: string): string {
-  const value = `${PROMPT_TEMPLATE_VERSION}|${category ?? DEFAULT_VERTICAL}|${location}`.trim().toLowerCase();
+function promptContextVersion(args: {
+  readonly category: string | null;
+  readonly location: string;
+  readonly buyer?: string | null;
+  readonly services?: readonly string[];
+}): string {
+  const value = [
+    PROMPT_TEMPLATE_VERSION,
+    args.category ?? DEFAULT_VERTICAL,
+    args.location,
+    args.buyer ?? '',
+    ...(args.services ?? []),
+  ].join('|').trim().toLowerCase();
   let hash = 2166136261;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
@@ -103,9 +114,15 @@ export function buildBaselineBuyerPrompts(input: {
   readonly subvertical?: string | null;
   readonly location?: string | null;
   readonly languages?: readonly string[];
+  readonly buyer?: string | null;
+  readonly services?: readonly string[];
 }): readonly string[] {
   const category = cleanPhrase(input.subvertical, cleanPhrase(input.vertical, DEFAULT_VERTICAL));
   const location = cleanPhrase(input.location, DEFAULT_LOCATION);
+  const buyer = cleanPhrase(input.buyer, 'buyers');
+  const services = unique((input.services ?? []).map((service) => cleanPhrase(service, ''))).slice(0, 2);
+  const primaryService = services[0] ?? category;
+  const servicePair = services.length > 1 ? `${services[0]} and ${services[1]}` : primaryService;
   const languageLabels = unique((input.languages ?? []).map((language) => {
     const code = language.toLowerCase().split('-')[0];
     if (code === 'en') return 'English';
@@ -117,16 +134,16 @@ export function buildBaselineBuyerPrompts(input: {
     ? `Which ${category} providers in ${location} serve customers in ${languageLabels.join(' and ')}?`
     : `Which ${category} providers in ${location} have the strongest customer reviews?`;
   return unique([
-    `What are the best ${category} providers in ${location}?`,
-    `Which ${category} provider should I choose in ${location}?`,
-    `Compare the leading ${category} providers in ${location}.`,
-    `Who is known for trustworthy ${category} services in ${location}?`,
-    `What should I look for when choosing a ${category} provider in ${location}?`,
-    `Which ${category} providers in ${location} have the strongest expertise and proof?`,
-    `What are the best ${category} alternatives in ${location}?`,
+    `What are the best ${category} providers for ${buyer} in ${location}?`,
+    `Which ${category} provider should ${buyer} choose in ${location}?`,
+    `Compare the leading ${category} providers for ${buyer} in ${location}.`,
+    `Which ${category} providers support ${primaryService} for ${buyer} in ${location}?`,
+    `What should ${buyer} look for when choosing a ${category} provider in ${location}?`,
+    `Which ${category} providers in ${location} have the strongest expertise, product evidence, and customer proof?`,
+    `What are the best ${category} alternatives for ${buyer} in ${location}?`,
     languageQuestion,
-    `How much should I expect to pay for ${category} in ${location}?`,
-    `Which ${category} provider is best for my specific needs in ${location}?`,
+    `How much should ${buyer} expect to pay for ${category} in ${location}?`,
+    `Which ${category} provider is the best fit for ${buyer} who need ${servicePair} in ${location}?`,
   ]);
 }
 
@@ -137,6 +154,32 @@ function promptKey(index: number, text: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 54);
   return `baseline-${String(index + 1).padStart(2, '0')}-${slug}`;
+}
+
+/**
+ * Which competitor cohort a baseline should store.
+ *
+ * Two rules, both learned from a client that measured against nobody:
+ *
+ * An empty cohort is not an answer. The bound cohort used to be taken with `??`,
+ * which accepts `[]` as a value, so a confirmed context carrying no competitors
+ * silently discarded the explicit and suggested lists too.
+ *
+ * A cohort already stored is never traded for an empty one. Grounded discovery can
+ * be unavailable — an unbilled key, a market it cannot resolve — and that must not
+ * cost the tenant competitors they already gave us.
+ *
+ * `suggest` stays lazy so a bound cohort still skips the query.
+ */
+export async function resolveCompetitorCohort(args: {
+  readonly bound?: readonly string[] | null;
+  readonly stored: readonly string[];
+  readonly suggest: () => Promise<readonly string[]>;
+}): Promise<readonly string[]> {
+  const bound = args.bound ?? [];
+  if (bound.length > 0) return bound;
+  const suggested = await args.suggest();
+  return suggested.length > 0 ? suggested : args.stored;
 }
 
 async function suggestCompetitors(args: {
@@ -237,8 +280,15 @@ export async function provisionCustomerVisibilityBaseline(
       subvertical,
       location,
       languages: binding?.languages,
+      buyer: binding?.buyer,
+      services: binding?.services,
     })];
-    const querySetVersion = binding?.querySetVersion ?? promptContextVersion(subvertical || vertical, location);
+    const querySetVersion = binding?.querySetVersion ?? promptContextVersion({
+      category: subvertical || vertical,
+      location,
+      buyer: binding?.buyer,
+      services: binding?.services,
+    });
 
     let querySet: { id: string } | null = null;
     let preservedApprovedQuerySet = false;
@@ -387,23 +437,30 @@ export async function provisionCustomerVisibilityBaseline(
     );
     if (promptError) return { ok: false, reason: promptError.message };
 
-    const competitors = binding?.trackedCompetitorDomains ?? await suggestCompetitors({
-      supabase,
-      canonicalDomain,
-      vertical,
-      subvertical,
-      explicit: input.explicitCompetitors ?? [],
-    });
-
     const ownerFilter = input.startupWorkspaceId
       ? { column: 'startup_workspace_id', value: input.startupWorkspaceId }
       : { column: 'agency_account_id', value: input.agencyAccountId };
     const { data: existingConfig } = await supabase
       .from('client_benchmark_configs')
-      .select('id,metadata')
+      .select('id,metadata,competitor_list,report_email,cadence,platforms_enabled')
       .eq(ownerFilter.column, ownerFilter.value)
       .eq('benchmark_domain_id', domainRow.id)
       .maybeSingle();
+    const storedCompetitors = Array.isArray(existingConfig?.competitor_list)
+      ? existingConfig.competitor_list.filter((entry: unknown): entry is string => typeof entry === 'string')
+      : [];
+
+    const competitors = await resolveCompetitorCohort({
+      bound: binding?.trackedCompetitorDomains,
+      stored: storedCompetitors,
+      suggest: () => suggestCompetitors({
+        supabase,
+        canonicalDomain,
+        vertical,
+        subvertical,
+        explicit: input.explicitCompetitors ?? [],
+      }),
+    });
     const existingMetadata =
       existingConfig?.metadata && typeof existingConfig.metadata === 'object'
         ? existingConfig.metadata
@@ -416,9 +473,13 @@ export async function provisionCustomerVisibilityBaseline(
       location,
       query_set_id: querySet.id,
       competitor_list: competitors,
-      cadence: 'monthly',
-      platforms_enabled: ['chatgpt', 'gemini', 'perplexity'],
-      report_email: input.reportEmail?.trim() || null,
+      cadence: typeof existingConfig?.cadence === 'string' ? existingConfig.cadence : 'monthly',
+      platforms_enabled: Array.isArray(existingConfig?.platforms_enabled)
+        && existingConfig.platforms_enabled.length > 0
+        ? existingConfig.platforms_enabled
+        : ['chatgpt', 'gemini', 'perplexity'],
+      report_email: input.reportEmail?.trim()
+        || (typeof existingConfig?.report_email === 'string' ? existingConfig.report_email : null),
       metadata: {
         ...existingMetadata,
         setup_source: input.source,

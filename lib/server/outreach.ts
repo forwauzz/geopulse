@@ -277,6 +277,7 @@ export async function sendOutreachEmail(
   html: string,
   idempotencyKey: string,
   identity?: { readonly from: string; readonly replyTo: string },
+  unsubscribeUrl?: string,
 ): Promise<{ ok: true; providerMessageId: string | null } | { ok: false; detail: string }> {
   const key = env.RESEND_API_KEY?.trim();
   const from = identity?.from.trim() || env.RESEND_FROM_EMAIL?.trim();
@@ -289,6 +290,12 @@ export async function sendOutreachEmail(
     subject,
     html,
     ...(replyTo ? { reply_to: replyTo } : {}),
+    ...(unsubscribeUrl ? {
+      headers: {
+        'List-Unsubscribe': `<${unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    } : {}),
   });
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
@@ -358,8 +365,8 @@ export async function runOutreachForProspect(args: {
       env,
       prospect,
       nowMs,
-      sendEmail: (to, subject, html, idempotencyKey, identity) =>
-        sendOutreachEmail(env, to, subject, html, idempotencyKey, identity),
+      sendEmail: (to, subject, html, idempotencyKey, identity, unsubscribeUrl) =>
+        sendOutreachEmail(env, to, subject, html, idempotencyKey, identity, unsubscribeUrl),
     });
   }
 
@@ -534,6 +541,7 @@ export async function runOutreachForProspect(args: {
             score: scan.output.score,
             grade: scan.output.letterGrade,
             topIssues: topFailed,
+            scanCompletedAt: new Date().toISOString(),
             reportUrl: resultsUrl,
             walkthroughUrl,
             personalizationReason: prospect.personalizationReason,
@@ -560,6 +568,8 @@ export async function runOutreachForProspect(args: {
       message.subject,
       message.html,
       idempotencyKey,
+      undefined,
+      unsubscribeUrl,
     );
   }
 

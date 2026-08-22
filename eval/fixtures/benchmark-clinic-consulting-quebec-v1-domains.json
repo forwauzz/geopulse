@@ -1,0 +1,27 @@
+{
+  "name": "clinic-consulting-quebec-v1-pilot",
+  "vertical": "healthcare",
+  "description": "Internal source-linked Quebec clinic-consulting challenger cohort. Comparison roles stay separate; only Teché is scheduled in the pilot.",
+  "metadata": {
+    "seed_source": "issue_500_live_search_and_official_sites",
+    "seed_status": "internal_pilot",
+    "operating_role": "challenger",
+    "internal_only": true,
+    "public_claims_allowed": false,
+    "schedule_enabled": false,
+    "target_subcohort": "quebec_private_clinic_consulting",
+    "methodology_version": "clinic-consulting-quebec-v1"
+  },
+  "domains": [
+    { "siteUrl": "https://techehealthservices.com/", "domain": "techehealthservices.com", "displayName": "Teché Consulting", "subvertical": "clinical_operations_ai_consulting", "geoRegion": "quebec_ca", "isCustomer": false, "isCompetitor": false, "metadata": { "comparison_role": "target_subject", "source_urls": ["https://techehealthservices.com/"], "schedule_enabled": true, "seed_priority": 1, "internal_dogfood": true, "excluded_from_revenue": true } },
+    { "siteUrl": "http://gestionpromed.ca/", "domain": "gestionpromed.ca", "displayName": "Gestion Promed", "subvertical": "clinic_management_consulting", "geoRegion": "montreal_qc_ca", "isCompetitor": true, "metadata": { "comparison_role": "direct_consultancy", "source_urls": ["http://gestionpromed.ca/"], "schedule_enabled": false } },
+    { "siteUrl": "https://www.healthtech.ca/", "domain": "healthtech.ca", "displayName": "HealthTech Consultants", "subvertical": "healthcare_technology_consulting", "geoRegion": "canada", "isCompetitor": true, "metadata": { "comparison_role": "direct_consultancy", "source_urls": ["https://www.healthtech.ca/"], "schedule_enabled": false } },
+    { "siteUrl": "https://aidolsgroup.com/en/ai-consulting/quebec/healthcare/", "domain": "aidolsgroup.com", "displayName": "AIDOLS", "subvertical": "healthcare_ai_consulting", "geoRegion": "quebec_ca", "isCompetitor": true, "metadata": { "comparison_role": "direct_consultancy", "source_urls": ["https://aidolsgroup.com/en/ai-consulting/quebec/healthcare/"], "schedule_enabled": false } },
+    { "siteUrl": "https://moov.ai/", "domain": "moov.ai", "displayName": "Moov AI", "subvertical": "ai_consulting", "geoRegion": "montreal_qc_ca", "isCompetitor": true, "metadata": { "comparison_role": "adjacent_consultancy", "source_urls": ["https://moov.ai/"], "schedule_enabled": false } },
+    { "siteUrl": "https://www.talsom.com/en/services/artificial-intelligence-and-data-analytics/", "domain": "talsom.com", "displayName": "Talsom", "subvertical": "ai_transformation_consulting", "geoRegion": "quebec_ca", "isCompetitor": true, "metadata": { "comparison_role": "adjacent_consultancy", "source_urls": ["https://www.talsom.com/en/services/artificial-intelligence-and-data-analytics/"], "schedule_enabled": false } },
+    { "siteUrl": "https://baseline.quebec/en/services/ai-consulting/", "domain": "baseline.quebec", "displayName": "Baseline", "subvertical": "ai_consulting", "geoRegion": "quebec_ca", "isCompetitor": true, "metadata": { "comparison_role": "adjacent_consultancy", "source_urls": ["https://baseline.quebec/en/services/ai-consulting/"], "schedule_enabled": false } },
+    { "siteUrl": "https://nexusinno.com/solutions/intelligence-artificielle-et-donnees/", "domain": "nexusinno.com", "displayName": "Nexus Innovations", "subvertical": "ai_consulting", "geoRegion": "quebec_ca", "isCompetitor": true, "metadata": { "comparison_role": "adjacent_consultancy", "source_urls": ["https://nexusinno.com/solutions/intelligence-artificielle-et-donnees/"], "schedule_enabled": false } },
+    { "siteUrl": "https://foragr.ai/", "domain": "foragr.ai", "displayName": "Foragr", "subvertical": "clinic_ai_product", "geoRegion": "canada", "isCompetitor": true, "metadata": { "comparison_role": "product_substitute", "source_urls": ["https://foragr.ai/"], "schedule_enabled": false } },
+    { "siteUrl": "https://ai-clinic.ca/", "domain": "ai-clinic.ca", "displayName": "AI Clinic", "subvertical": "clinic_ai_product", "geoRegion": "canada", "isCompetitor": true, "metadata": { "comparison_role": "product_substitute", "source_urls": ["https://ai-clinic.ca/"], "schedule_enabled": false } }
+  ]
+}

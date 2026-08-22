@@ -15,11 +15,15 @@ import {
 import type { OrganizationContext } from '../intelligence/organization-context';
 import type { ExactDomainResolution } from '../intelligence/organization-resolver';
 import { retrieveIntelligenceEvidence } from '../intelligence/evidence-retrieval';
+import {
+  buildBuyerIntelligenceView,
+  type BuyerIntelligenceReportViewModel,
+} from '../intelligence/buyer-intelligence-view-model';
 import { buildAgencyReportPdf } from './agency-report-pdf';
 import { loadLatestAgencyReport } from './load-agency-report-snapshot';
 import { createOrganizationContextRepository } from './organization-context-repository';
 import { resolveOrganizationWebsite } from './organization-resolver';
-import { loadReportPreviewPayload, type ReportPreviewPayload } from './report-preview-payload';
+import { createBuyerIntelligenceSnapshotRepository } from './buyer-intelligence-snapshot-repository';
 
 type SupabaseLike = SupabaseClient<any, 'public', any>;
 
@@ -74,7 +78,7 @@ export type OrganizationCapabilityResult =
   | CapabilityReady<{ readonly evidence: readonly SanitizedEvidence[]; readonly limitations: readonly string[] }>
   | CapabilityReady<{ readonly explanation: MeasurementExplanation }>
   | CapabilityReady<{ readonly artifact: GeneratedArtifactDraft }>
-  | CapabilityReady<{ readonly preview: ReportPreviewPayload }>
+  | CapabilityReady<{ readonly preview: BuyerIntelligenceReportViewModel }>
   | OrganizationCapabilityFailure;
 
 export type OrganizationCapabilityRuntime = {
@@ -318,13 +322,19 @@ export async function executeOrganizationCapability(args: {
         });
       }
     } else {
-      const preview = await loadReportPreviewPayload({
-        supabase: args.runtime.supabase,
-        agencyClientId: command.agencyClientId,
-      });
-      result = preview
-        ? ready({ preview })
-        : failure('insufficient_evidence', 'insufficient_evidence', 'No stored measurement is available to preview.');
+      const [snapshot] = await createBuyerIntelligenceSnapshotRepository(args.runtime.supabase).list(
+        { type: 'agency_client', id: command.agencyClientId },
+        { eligibility: 'eligible', limit: 1 },
+      );
+      result = snapshot
+        ? ready({
+            preview: buildBuyerIntelligenceView({ kind: 'prospect_preview', snapshot }) as BuyerIntelligenceReportViewModel,
+          })
+        : failure(
+            'insufficient_evidence',
+            'insufficient_evidence',
+            'No eligible buyer-intelligence snapshot is available to preview.',
+          );
     }
     await audit(args.runtime, command, result.status === 'ready' ? 'ready' : 'insufficient_evidence');
     return result;

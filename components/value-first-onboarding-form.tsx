@@ -26,6 +26,8 @@ type Props = {
   readonly eyebrow?: string;
   readonly title?: string;
   readonly description?: string;
+  readonly confirmationLabel?: string;
+  readonly confirmationPendingLabel?: string;
 };
 
 const ALL_EDITABLE_FIELDS: readonly OnboardingMissingField[] = [
@@ -39,7 +41,15 @@ const ALL_EDITABLE_FIELDS: readonly OnboardingMissingField[] = [
   'timezone',
 ];
 
-function SubmitButton({ confirmation }: { readonly confirmation: boolean }) {
+function SubmitButton({
+  confirmation,
+  confirmationLabel = 'Confirm and build the baseline',
+  confirmationPendingLabel = 'Building the first useful baseline…',
+}: {
+  readonly confirmation: boolean;
+  readonly confirmationLabel?: string;
+  readonly confirmationPendingLabel?: string;
+}) {
   const { pending } = useFormStatus();
   return (
     <button
@@ -49,10 +59,10 @@ function SubmitButton({ confirmation }: { readonly confirmation: boolean }) {
     >
       {pending
         ? confirmation
-          ? 'Building the first useful baseline…'
+          ? confirmationPendingLabel
           : 'Reading the site for its name, market, and services…'
         : confirmation
-          ? 'Confirm and build the baseline'
+          ? confirmationLabel
           : 'Detect business details'}
       {!pending ? <span aria-hidden>→</span> : null}
     </button>
@@ -108,10 +118,14 @@ function ConfirmationStep({
   state,
   action,
   hiddenFields,
+  confirmationLabel,
+  confirmationPendingLabel,
 }: {
   readonly state: Extract<ValueFirstOnboardingActionState, { status: 'needs_confirmation' }>;
   readonly action: (formData: FormData) => void;
   readonly hiddenFields?: Props['hiddenFields'];
+  readonly confirmationLabel?: string;
+  readonly confirmationPendingLabel?: string;
 }) {
   const { proposal } = state;
   const optionalEdits = ALL_EDITABLE_FIELDS.filter((field) => !proposal.missingFields.includes(field));
@@ -153,13 +167,43 @@ function ConfirmationStep({
       ) : (
         <p className="rounded-xl bg-primary/8 px-4 py-3 text-sm text-on-background">The website supplied a complete profile. Confirm it once, then GEO-Pulse can keep the same context everywhere.</p>
       )}
+      {/*
+        These fields are already answered by the proposal, so they are edits rather
+        than questions — marking them required made the browser block submit on a
+        field collapsed out of view, which it cannot focus, leaving the button inert
+        with no message. Anything genuinely missing is asked above, not hidden here.
+      */}
       <details className="rounded-xl border border-outline-variant/20 px-4 py-3">
         <summary className="cursor-pointer text-sm font-semibold text-on-background">Edit detected details</summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {optionalEdits.map((field) => <ConfirmationField key={field} field={field} proposal={proposal} required={field !== 'subdivision_code'} />)}
+          {optionalEdits.map((field) => <ConfirmationField key={field} field={field} proposal={proposal} required={false} />)}
+          <label className="block text-sm text-on-background sm:col-span-2">
+            <span className="font-medium">Products or services</span>
+            <textarea
+              name="services"
+              defaultValue={proposal.services.join('\n')}
+              rows={3}
+              placeholder={'Medical chronology automation\nSource-linked evidence extraction'}
+              className="mt-2 w-full rounded-xl border border-outline-variant/25 bg-surface-container-low px-3 py-2.5 text-sm text-on-background outline-none focus:border-primary"
+            />
+            <span className="mt-1 block text-xs text-on-surface-variant">One per line. These make the recurring buyer questions specific to what the business actually sells.</span>
+          </label>
+          <label className="block text-sm text-on-background sm:col-span-2">
+            <span className="font-medium">Primary buyer</span>
+            <input
+              name="buyer"
+              defaultValue={proposal.buyer ?? ''}
+              placeholder="e.g. Plaintiff and defence legal teams"
+              className="mt-2 w-full rounded-xl border border-outline-variant/25 bg-surface-container-low px-3 py-2.5 text-sm text-on-background outline-none focus:border-primary"
+            />
+          </label>
         </div>
       </details>
-      <SubmitButton confirmation />
+      <SubmitButton
+        confirmation
+        confirmationLabel={confirmationLabel}
+        confirmationPendingLabel={confirmationPendingLabel}
+      />
     </form>
   );
 }
@@ -174,10 +218,20 @@ export function ValueFirstOnboardingForm({
   eyebrow = 'Start with value',
   title = 'See what GEO-Pulse will do before you configure anything',
   description = 'Enter the business name and website. GEO-Pulse detects the market and asks only when something important is unclear.',
+  confirmationLabel,
+  confirmationPendingLabel,
 }: Props) {
   const [state, formAction] = useActionState(action, null);
   if (state?.status === 'needs_confirmation') {
-    return <ConfirmationStep state={state} action={formAction} hiddenFields={hiddenFields} />;
+    return (
+      <ConfirmationStep
+        state={state}
+        action={formAction}
+        hiddenFields={hiddenFields}
+        confirmationLabel={confirmationLabel}
+        confirmationPendingLabel={confirmationPendingLabel}
+      />
+    );
   }
   const draft = state?.status === 'error' ? state.draft : undefined;
   return (

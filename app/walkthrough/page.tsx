@@ -32,9 +32,9 @@ function sourceFor(raw: string | undefined) {
 export default async function WalkthroughPage({
   searchParams,
 }: {
-  searchParams: Promise<{ website?: string; source?: string }>;
+  searchParams: Promise<{ website?: string; company?: string; source?: string }>;
 }) {
-  const { website = '', source } = await searchParams;
+  const { website = '', company = '', source } = await searchParams;
 
   return (
     <main className="px-6 py-16 md:px-10 md:py-24">
@@ -67,6 +67,7 @@ export default async function WalkthroughPage({
             siteKey={getTurnstileSiteKey()}
             source={sourceFor(source)}
             defaultWebsite={website}
+            defaultCompany={company}
           />
         </div>
       </section>

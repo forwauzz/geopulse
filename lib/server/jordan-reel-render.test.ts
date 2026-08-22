@@ -53,7 +53,7 @@ function asset(metadata: Record<string, unknown>) {
   } as never;
 }
 
-function supabaseStub() {
+function supabaseStub(recentVideoMetadata: Record<string, unknown>[] = []) {
   return {
     from(table: string) {
       let selectValue = '';
@@ -72,7 +72,11 @@ function supabaseStub() {
           if (table === 'distribution_jobs') {
             return { data: [{ id: 'job-row', publish_mode: 'scheduled', status: 'draft' }] };
           }
-          return { data: selectValue === 'metadata' ? [] : [] };
+          return {
+            data: selectValue === 'metadata'
+              ? recentVideoMetadata.map((metadata) => ({ metadata }))
+              : [],
+          };
         }),
       };
       return chain;
@@ -105,6 +109,22 @@ describe('Jordan Reel render handoff', () => {
         reel_template_id: 'diagnostic-kinetic-v1a',
       }),
     }));
+  });
+
+  it('uses the first template absent from the recent rendered set', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset({ reel_render_status: 'failed', reel_script: script }),
+    ]);
+    repo.upsertAsset.mockImplementation(async (input) => input);
+    const claim = await claimNextJordanReel(
+      supabaseStub([
+        { template_id: 'diagnostic-kinetic-v1a' },
+        { template_id: 'diagnostic-kinetic-v1b' },
+        { template_id: 'diagnostic-kinetic-v1a' },
+      ]),
+      new Date('2026-07-26T14:00:00.000Z')
+    );
+    expect(claim?.templateId).toBe('diagnostic-kinetic-v1c');
   });
 
   it('stores immutable masters and only then promotes the reserved schedule', async () => {

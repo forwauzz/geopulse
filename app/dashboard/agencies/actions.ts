@@ -32,6 +32,7 @@ const clientSchema = z.object({
   vertical: z.string().max(80, 'Vertical is too long.').optional(),
   subvertical: z.string().max(80, 'Subvertical is too long.').optional(),
   icpTag: z.string().max(80, 'ICP tag is too long.').optional(),
+  buyerEmail: z.string().trim().email('Enter a valid buyer email.').max(320, 'Buyer email is too long.').optional(),
 });
 
 const flagSchema = z.object({
@@ -56,7 +57,7 @@ const modelPolicySchema = z.object({
 const agencyUserSchema = z.object({
   agencyAccountId: z.string().uuid('Choose a valid agency account.'),
   email: z.string().email('Enter a valid email address.'),
-  password: z.string().min(8, 'Password must be at least 8 characters.'),
+  password: z.string().optional(),
   role: z.enum(['owner', 'manager', 'member', 'viewer']),
 });
 
@@ -144,6 +145,7 @@ export async function createAgencyClient(
     vertical: normalizeText(formData.get('vertical')),
     subvertical: normalizeText(formData.get('subvertical')),
     icpTag: normalizeText(formData.get('icpTag')),
+    buyerEmail: normalizeText(formData.get('buyerEmail')),
   });
 
   if (!parsed.success) {
@@ -160,6 +162,7 @@ export async function createAgencyClient(
         errors['vertical']?.[0] ??
         errors['subvertical']?.[0] ??
         errors['icpTag']?.[0] ??
+        errors['buyerEmail']?.[0] ??
         'Check the agency client values.',
     };
   }
@@ -175,7 +178,12 @@ export async function createAgencyClient(
     vertical: parsed.data.vertical ?? null,
     subvertical: parsed.data.subvertical ?? null,
     icp_tag: parsed.data.icpTag ?? null,
-    metadata: { source: 'admin_manual' },
+    metadata: {
+      source: 'admin_manual',
+      ...(parsed.data.buyerEmail
+        ? { report_recipients: [parsed.data.buyerEmail.toLowerCase()] }
+        : {}),
+    },
   };
 
   const { error } = await context.adminDb.from('agency_clients').insert(payload);
@@ -356,16 +364,18 @@ export async function createAgencyUser(
 
   let userId = existingUser?.id ?? null;
 
-  if (!context.env.NEXT_PUBLIC_SUPABASE_URL || !context.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { ok: false, message: 'Authentication admin access is not configured.' };
-  }
-
-  const authAdmin = createServiceRoleClient(
-    context.env.NEXT_PUBLIC_SUPABASE_URL,
-    context.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-
   if (!userId) {
+    if (!parsed.data.password || parsed.data.password.length < 8) {
+      return { ok: false, message: 'Password must be at least 8 characters for a new user.' };
+    }
+    if (!context.env.NEXT_PUBLIC_SUPABASE_URL || !context.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return { ok: false, message: 'Authentication admin access is not configured.' };
+    }
+
+    const authAdmin = createServiceRoleClient(
+      context.env.NEXT_PUBLIC_SUPABASE_URL,
+      context.env.SUPABASE_SERVICE_ROLE_KEY
+    );
     const { data: created, error: createError } = await authAdmin.auth.admin.createUser({
       email: normalizedEmail,
       password: parsed.data.password,
@@ -377,15 +387,6 @@ export async function createAgencyUser(
     }
 
     userId = created.user.id;
-  } else {
-    const { error: updateError } = await authAdmin.auth.admin.updateUserById(userId, {
-      password: parsed.data.password,
-      email_confirm: true,
-    });
-
-    if (updateError) {
-      return { ok: false, message: updateError.message };
-    }
   }
 
   const membershipPayload = {

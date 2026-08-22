@@ -1,5 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { AgencyReportQuestion, AgencyReportSnapshotV2 } from '@/lib/server/agency-report-snapshot';
+import type {
+  BuyerIntelligenceReportViewModel,
+  BuyerIntelligenceViewModel,
+} from '@/lib/intelligence/buyer-intelligence-view-model';
 
 export type AgencyReportAction = {
   readonly key: string;
@@ -279,5 +283,192 @@ export function AgencyReportView({
         <span>{showPoweredBy ? 'Powered by GEO-Pulse · ' : ''}{snapshot.profileVersion}</span>
       </footer>
     </article>
+  );
+}
+
+function viewHas(model: BuyerIntelligenceViewModel, key: string): boolean {
+  return model.manifest.some((section) => section.key === key && section.visible);
+}
+
+function StateBadge({ state }: { readonly state: string }) {
+  const positive = state === 'supported' || state === 'verified_improved' || state === 'ready';
+  const caution = state === 'partial' || state === 'verified_unchanged';
+  return (
+    <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${positive ? 'bg-emerald-100 text-emerald-800' : caution ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800'}`}>
+      {state.replaceAll('_', ' ')}
+    </span>
+  );
+}
+
+export type BuyerIntelligenceArtifactBranding = {
+  readonly publisherName: string;
+  readonly preparedBy: string;
+  readonly accentColor: string;
+  readonly logoUrl?: string | null;
+  readonly heroImageUrl?: string | null;
+  readonly footerNote?: string | null;
+};
+
+const DEFAULT_BUYER_INTELLIGENCE_BRANDING: BuyerIntelligenceArtifactBranding = {
+  publisherName: 'GEO-Pulse',
+  preparedBy: 'The GEO-Pulse team, Montreal, Quebec',
+  accentColor: '#3155d9',
+};
+
+function BuyerIntelligenceReport({
+  model,
+  branding,
+}: {
+  readonly model: BuyerIntelligenceReportViewModel;
+  readonly branding: BuyerIntelligenceArtifactBranding;
+}) {
+  return (
+    <article data-view-kind={model.kind} data-snapshot-id={model.snapshotId} className="overflow-hidden rounded-[28px] border border-[#172033]/10 bg-white text-[#111827] shadow-[0_24px_70px_rgba(15,23,42,0.14)] print:rounded-none print:shadow-none">
+      <header className="relative overflow-hidden bg-[#111827] px-6 py-10 text-white md:px-12 md:py-14">
+        <div className="absolute inset-x-0 top-0 h-1.5" style={{ backgroundColor: branding.accentColor }} />
+        <div className="relative flex items-center justify-between gap-6">
+          {branding.logoUrl ? <img src={branding.logoUrl} alt={`${branding.publisherName} logo`} className="h-9 max-w-[180px] object-contain object-left" /> : <p className="font-headline text-lg font-semibold">{branding.publisherName}</p>}
+          <p className="text-right text-[10px] font-bold uppercase tracking-[0.22em] text-[#93a4c4]">{model.kind.replaceAll('_', ' ')}</p>
+        </div>
+        <h1 className="mt-4 max-w-4xl font-headline text-4xl font-semibold leading-tight tracking-[-0.035em] md:text-6xl">{model.headline}</h1>
+        {branding.heroImageUrl ? (
+          <figure data-client-hero-proof className="mt-8 overflow-hidden rounded-2xl border border-white/15 bg-white/5">
+            <img src={branding.heroImageUrl} alt={`${model.identity.displayName} website home page`} className="aspect-[16/7] w-full object-cover object-top" />
+            <figcaption className="border-t border-white/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60">Website captured for this measurement · {model.identity.canonicalDomain}</figcaption>
+          </figure>
+        ) : null}
+        <div className="mt-8 grid gap-2 border-t border-white/15 pt-6 text-sm text-white/70 md:grid-cols-2">
+          <p><strong className="text-white">Prepared for:</strong> {model.identity.displayName}</p>
+          <p className="md:text-right">{model.identity.canonicalDomain} · {model.identity.marketLabel}</p>
+        </div>
+        <p className="mt-2 text-xs text-white/55">Prepared by {branding.preparedBy}</p>
+      </header>
+
+      {viewHas(model, 'summary') ? (
+        <Section eyebrow="Executive readout" title="What the measured evidence supports">
+          <p className="max-w-4xl text-xl font-medium leading-relaxed text-[#20283a]">{model.summary}</p>
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'observations') ? (
+        <Section eyebrow="Buyer questions" title="What an AI buyer can verify">
+          <div className="space-y-3">
+            {model.observations.map((observation) => (
+              <div key={observation.id} className="rounded-2xl border border-[#172033]/10 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h3 className="max-w-3xl font-semibold leading-relaxed text-[#20283a]">{observation.question}</h3>
+                  <StateBadge state={observation.state} />
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-[#596174]">{observation.answer ?? 'No eligible answer was available in this measurement period.'}</p>
+                {observation.evidenceIds.length ? <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7a8293]">{observation.evidenceIds.length} evidence reference{observation.evidenceIds.length === 1 ? '' : 's'} · {observation.runIds.length} source run{observation.runIds.length === 1 ? '' : 's'}</p> : null}
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'benchmark') && model.benchmark ? (
+        model.benchmark.state === 'eligible' ? (
+          <Section eyebrow="Benchmark" title={`Compared with ${model.benchmark.label}`}>
+            <p className="text-sm leading-relaxed text-[#596174]">Eligible cohort: {model.benchmark.sampleSize} organizations · methodology {model.benchmark.methodologyVersion}. Each metric retains its own denominator.</p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {model.benchmark.comparisons.map((comparison) => (
+                <div key={comparison.metricKey} className="rounded-2xl bg-[#f6f7f8] p-5">
+                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#687083]">{comparison.metricKey.replaceAll('_', ' ')}</p>
+                  <p className="mt-3 text-2xl font-bold">{comparison.businessValue} <span className="text-sm font-medium text-[#687083]">vs {comparison.cohortMedian} median</span></p>
+                  <p className="mt-2 text-xs text-[#687083]">n={comparison.denominator}{comparison.percentile === null ? '' : ` · ${comparison.percentile}th percentile`}</p>
+                </div>
+              ))}
+            </div>
+          </Section>
+        ) : (
+          <Section eyebrow="Benchmark" title="No eligible comparison cohort was attached">
+            <p className="max-w-3xl text-sm leading-relaxed text-[#596174]">This baseline reports only the measured organization. It does not invent a peer rank or treat a missing cohort as zero.</p>
+          </Section>
+        )
+      ) : null}
+
+      {viewHas(model, 'recommendations') ? (
+        <Section eyebrow="Action plan" title="What to fix next">
+          <div className="space-y-3">
+            {model.recommendations.map((recommendation, index) => (
+              <div key={recommendation.id} className="grid gap-4 rounded-2xl bg-[#f6f7f8] p-5 md:grid-cols-[40px_minmax(0,1fr)_auto]">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: branding.accentColor }}>{index + 1}</span>
+                <div><h3 className="font-semibold text-[#20283a]">{recommendation.title}</h3><p className="mt-2 text-sm leading-relaxed text-[#596174]">{recommendation.action}</p></div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#687083]">{recommendation.priority} impact · {recommendation.effort} effort</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'change') && model.change ? (
+        <Section eyebrow="Measured movement" title="Like-for-like change">
+          <div className="grid gap-3 md:grid-cols-3">
+            {model.change.changes.map((change) => (
+              <div key={change.metricKey} className="rounded-2xl border border-[#172033]/10 p-5">
+                <StateBadge state={change.direction} />
+                <p className="mt-4 text-sm font-semibold">{change.metricKey.replace('buyer_question:', '').replaceAll('_', ' ')}</p>
+                <p className="mt-2 text-xs text-[#687083]">{change.previousValue ?? '—'} → {change.currentValue ?? '—'}</p>
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'verification') ? (
+        <Section eyebrow="Verification" title="What changed after the work">
+          <div className="space-y-3">{model.recommendations.map((recommendation) => <div key={recommendation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#172033]/10 p-5"><p className="font-semibold">{recommendation.title}</p><StateBadge state={recommendation.verification.result} /></div>)}</div>
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'unavailable_measurements') ? (
+        <Section eyebrow="Coverage" title="Measurements not available this period">
+          <ul className="list-disc space-y-2 pl-5 text-sm text-[#596174]">{model.unavailableMeasurements.map((item) => <li key={item}>{item.replace(':', ': ')}</li>)}</ul>
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'provenance') && model.provenance ? (
+        <Section eyebrow="Provenance" title="How to reproduce this baseline">
+          <dl className="grid gap-3 text-sm text-[#596174] md:grid-cols-2"><div><dt className="font-bold text-[#20283a]">Measurement inputs</dt><dd className="mt-1">{model.provenance.runIds.length} source runs · {model.provenance.evidenceIds.length} evidence references</dd></div><div><dt className="font-bold text-[#20283a]">Generated</dt><dd className="mt-1">{model.provenance.generatedAt} · {model.provenance.generatorVersion}</dd></div></dl>
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'limitations') ? (
+        <Section eyebrow="Limitations" title="What this report does not claim">
+          {model.limitations.length ? <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-[#596174]">{model.limitations.map((item) => <li key={item}>{item}</li>)}</ul> : <p className="text-sm text-[#596174]">Results describe the recorded measurement period and do not guarantee future AI placement.</p>}
+        </Section>
+      ) : null}
+
+      {viewHas(model, 'cta') && model.cta ? <div className="border-t border-[#172033]/10 px-6 py-8 md:px-12"><a href={model.cta.href} className="inline-flex rounded-xl px-5 py-3 text-sm font-bold text-white" style={{ backgroundColor: branding.accentColor }}>{model.cta.label}</a></div> : null}
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-[#172033]/10 px-6 py-6 text-[11px] text-[#7a8293] md:px-12">
+        <span>{branding.footerNote ?? `Prepared for ${model.identity.displayName} by ${branding.preparedBy}.`}</span>
+        <span>{model.contractVersion}</span>
+      </footer>
+    </article>
+  );
+}
+
+export function BuyerIntelligenceAgencyReportView({
+  model,
+  branding = DEFAULT_BUYER_INTELLIGENCE_BRANDING,
+}: {
+  readonly model: BuyerIntelligenceViewModel;
+  readonly branding?: BuyerIntelligenceArtifactBranding;
+}) {
+  if (model.kind !== 'agency_portfolio') return <BuyerIntelligenceReport model={model} branding={branding} />;
+  return (
+    <section data-view-kind={model.kind} className="rounded-[28px] border border-[#172033]/10 bg-white p-6 text-[#111827] shadow-[0_24px_70px_rgba(15,23,42,0.12)] md:p-10" style={{ borderTopColor: branding.accentColor, borderTopWidth: 6 }}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#687083]">{branding.publisherName} · agency portfolio</p>
+      <h1 className="mt-3 font-headline text-4xl font-semibold tracking-[-0.035em]">{model.headline}</h1>
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+        {model.rows.map((row) => (
+          <article key={row.ownerId} data-snapshot-id={row.snapshotId} className="rounded-2xl border border-[#172033]/10 p-5">
+            <div className="flex items-start justify-between gap-4"><div><h2 className="font-semibold text-[#20283a]">{row.displayName}</h2><p className="mt-1 text-xs text-[#687083]">{row.canonicalDomain}</p></div><StateBadge state={row.status} /></div>
+            {row.status === 'ready' ? <><p className="mt-5 text-sm text-[#596174]">{row.supportedQuestions} of {row.measuredQuestions} measured buyer questions supported.</p><p className="mt-3 text-xs font-semibold text-[#3155d9]">{row.improvedSignals === null ? 'Baseline established' : `${row.improvedSignals} improved · ${row.regressedSignals} regressed`}</p><p className="mt-4 text-sm font-medium text-[#20283a]">{row.nextAction ?? 'Review the latest measurement.'}</p></> : <p className="mt-5 text-sm text-[#596174]">Held from client reporting until the evidence gate passes.</p>}
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }

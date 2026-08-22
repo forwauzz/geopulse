@@ -4,13 +4,20 @@ import {
   buildBeforeAfterCandidate,
   buildEducationalCandidate,
   buildIndustryHumorCandidate,
+  buildProductDemoCandidate,
+  assignedSocialCandidate,
+  assignedSocialCandidates,
   filterCampaignAssignedSocial,
   instagramScheduleSlot,
+  latestSocialSequenceAnchor,
   orderAutonomousCandidates,
   preferredAccount,
+  prioritizeRequiredFormatCandidates,
   remainingDailyAssetCapacity,
   reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
+  socialSequenceDimensions,
+  socialSequenceMetadata,
 } from './social-proof-agent';
 
 function scan(overrides: Record<string, unknown> = {}) {
@@ -27,6 +34,99 @@ function scan(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Social Proof Agent safeguards', () => {
+  it('versions assigned carousel inventory and supplies a real multi-slide checklist', () => {
+    const candidate = assignedSocialCandidate({
+      id: 'item-1',
+      content_id: 'content-1',
+      title: 'What MSP buyers ask AI search',
+      brief_markdown: null,
+      metadata: {
+        source_url: 'https://example.com/source',
+        recommendation: 'Answer the buyer question directly.',
+        evidence: 'The source documents the question.',
+        campaign_vertical: 'msp_it_services',
+      },
+      created_at: '2026-08-17T00:00:00.000Z',
+      growth_campaign_id: 'msp-1',
+      growth_intervention_id: null,
+    }, 'https://getgeopulse.com');
+    expect(candidate).toMatchObject({
+      key: 'assigned-carousel-v2-content-1',
+      assetType: 'carousel_post',
+      evidence: { checklist_items: expect.any(Array) },
+    });
+    expect(candidate?.evidence['checklist_items']).toHaveLength(4);
+  });
+
+  it('keeps source-backed assigned carousel inventory non-duplicative after the first version', () => {
+    const candidates = assignedSocialCandidates({
+      id: 'item-1',
+      content_id: 'content-1',
+      title: 'What MSP buyers ask AI search',
+      brief_markdown: null,
+      metadata: {
+        source_url: 'https://example.com/source',
+        source_label: 'First-party MSP source',
+        recommendation: 'Put the direct answer beside the service proof.',
+        evidence: 'The source documents the buyer question and the current evidence gap.',
+        campaign_vertical: 'msp_it_services',
+      },
+      created_at: '2026-08-17T00:00:00.000Z',
+      growth_campaign_id: 'msp-1',
+      growth_intervention_id: null,
+    }, 'https://getgeopulse.com');
+
+    expect(candidates).toHaveLength(3);
+    expect(new Set(candidates.map((candidate) => candidate.key)).size).toBe(3);
+    expect(new Set(candidates.map((candidate) =>
+      JSON.stringify(candidate.evidence['checklist_items'])
+    )).size).toBe(3);
+    expect(candidates.every((candidate) => candidate.assetType === 'carousel_post')).toBe(true);
+    expect(candidates.every((candidate) => candidate.evidence['source_url'] === 'https://example.com/source')).toBe(true);
+  });
+
+  it('puts a missing connected format ahead of covered candidates without changing the cap', () => {
+    const candidate = (
+      key: string,
+      assetType: 'single_image_post' | 'carousel_post',
+    ) => ({
+      key,
+      kind: assetType === 'carousel_post' ? 'carousel' as const : 'educational' as const,
+      title: key,
+      caption: key,
+      ctaUrl: 'https://getgeopulse.com',
+      contentItemId: null,
+      mediaUrl: null,
+      mediaMimeType: null,
+      mediaAlt: null,
+      assetType,
+      evidence: {},
+      safeForAutonomousPublish: true,
+    });
+    const ordered = prioritizeRequiredFormatCandidates([
+      candidate('covered-one', 'single_image_post'),
+      candidate('needed-carousel', 'carousel_post'),
+      candidate('covered-two', 'single_image_post'),
+    ], ['instagram:carousel_post']);
+
+    expect(ordered.map((item) => item.key)).toEqual([
+      'needed-carousel',
+      'covered-one',
+      'covered-two',
+    ]);
+    expect(ordered).toHaveLength(3);
+  });
+
+  it('keeps a first-party grounded Reel source when trend providers are unavailable', () => {
+    const candidate = buildProductDemoCandidate('https://getgeopulse.com/');
+    expect(candidate.evidence).toMatchObject({
+      source_url: 'https://getgeopulse.com/methodology/ai-search-readiness-audit',
+      source_type: 'first_party_methodology',
+      product_truth: true,
+      claim_boundary: 'observable_readiness_signals_no_ranking_guarantee',
+    });
+  });
+
   it('keeps autonomous social candidates inside the active vertical campaigns', () => {
     const items = [
       { id: 'msp', metadata: { growth_campaign_id: 'msp-1', campaign_vertical: 'msp_it_services' } },
@@ -139,7 +239,7 @@ describe('Social Proof Agent safeguards', () => {
     const config = resolveSocialProofAgentConfig({ mode: 'draft' }, true, false);
     expect(config.clientProofEnabled).toBe(false);
     expect(config.auditScreenshotsEnabled).toBe(false);
-    expect(config.reelsEnabled).toBe(false);
+    expect(config.reelsEnabled).toBe(true);
     expect(config.reelsPerWeek).toBe(4);
     expect(config.reelDaysLocal).toEqual([0, 2, 4, 6]);
     expect(config.reelPublishMode).toBe('autonomous');
@@ -222,6 +322,124 @@ describe('Social Proof Agent safeguards', () => {
     expect(ordered.some((item) => item.key === 'educational-one')).toBe(false);
   });
 
+  it('continues the editorial flow from the previous autonomous run', () => {
+    const candidate = (
+      key: string,
+      kind: 'educational' | 'industry_humor' | 'carousel',
+      assetType: 'single_image_post' | 'carousel_post',
+    ) => ({
+      key,
+      kind,
+      title: key,
+      caption: key,
+      ctaUrl: 'https://getgeopulse.com',
+      contentItemId: null,
+      mediaUrl: null,
+      mediaMimeType: null,
+      mediaAlt: null,
+      assetType,
+      evidence: {},
+      safeForAutonomousPublish: true,
+    });
+    const previous = {
+      narrativeKind: 'carousel' as const,
+      assetType: 'carousel_post' as const,
+      visualFamily: 'carousel' as const,
+    };
+
+    const ordered = orderAutonomousCandidates([
+      candidate('carousel-next', 'carousel', 'carousel_post'),
+      candidate('education-next', 'educational', 'single_image_post'),
+      candidate('humor-next', 'industry_humor', 'single_image_post'),
+    ], new Map(), previous);
+
+    expect(ordered[0]).toMatchObject({
+      key: 'humor-next',
+      kind: 'industry_humor',
+      assetType: 'single_image_post',
+    });
+    expect(ordered[1]?.kind).not.toBe(ordered[0]?.kind);
+  });
+
+  it('recovers the last Jordan sequence anchor and ignores failed drafts', () => {
+    const asset = (
+      createdAt: string,
+      kind: 'carousel' | 'industry_humor',
+      status: 'approved' | 'failed',
+      assetType: 'carousel_post' | 'single_image_post',
+    ) => ({
+      id: createdAt,
+      asset_id: createdAt,
+      content_item_id: null,
+      source_type: 'manual' as const,
+      source_key: createdAt,
+      asset_type: assetType,
+      provider_family: 'instagram' as const,
+      title: createdAt,
+      body_markdown: null,
+      body_plaintext: null,
+      caption_text: null,
+      status,
+      cta_url: null,
+      metadata: {
+        created_by_agent: 'jordan',
+        proof_kind: kind,
+        content_sequence: { visual_family: kind === 'carousel' ? 'carousel' : 'humor' },
+      },
+      created_by_user_id: null,
+      approved_by_user_id: null,
+      approved_at: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+
+    expect(latestSocialSequenceAnchor([
+      asset('2026-08-18T02:00:00.000Z', 'industry_humor', 'failed', 'single_image_post'),
+      asset('2026-08-18T01:00:00.000Z', 'carousel', 'approved', 'carousel_post'),
+    ])).toEqual({
+      narrativeKind: 'carousel',
+      assetType: 'carousel_post',
+      visualFamily: 'carousel',
+    });
+  });
+
+  it('records auditable narrative, format, and visual sequence dimensions', () => {
+    const candidate = {
+      key: 'proof-reel',
+      kind: 'proof_demo',
+      title: 'Proof Reel',
+      caption: 'Proof Reel',
+      ctaUrl: 'https://getgeopulse.com',
+      contentItemId: null,
+      mediaUrl: null,
+      mediaMimeType: null,
+      mediaAlt: null,
+      assetType: 'short_video_post',
+      evidence: {},
+      safeForAutonomousPublish: false,
+    } as const;
+    expect(socialSequenceDimensions(candidate)).toEqual({
+      version: 'social-flow-v1',
+      narrativeKind: 'proof_demo',
+      assetType: 'short_video_post',
+      visualFamily: 'proof',
+    });
+    expect(socialSequenceMetadata(candidate, {
+      narrativeKind: 'carousel',
+      assetType: 'carousel_post',
+      visualFamily: 'carousel',
+    }, 2)).toEqual({
+      version: 'social-flow-v1',
+      narrative_kind: 'proof_demo',
+      asset_format: 'short_video_post',
+      visual_family: 'proof',
+      previous_narrative_kind: 'carousel',
+      previous_asset_format: 'carousel_post',
+      previous_visual_family: 'carousel',
+      run_position: 2,
+    });
+  });
+
   it('schedules Toronto posts on an hourly dispatch boundary without bunching missed slots', () => {
     expect(
       instagramScheduleSlot(
@@ -256,7 +474,7 @@ describe('Social Proof Agent safeguards', () => {
     ).toBe('2026-07-23T23:00:00.000Z');
   });
 
-  it('enforces the creative cap across the UTC day instead of once per hourly run', () => {
+  it('enforces the creative cap across the configured local day instead of once per hourly run', () => {
     const asset = (created_at: string, createdBy = 'jordan') => ({
       id: created_at,
       asset_id: created_at,
@@ -277,10 +495,15 @@ describe('Social Proof Agent safeguards', () => {
     });
 
     expect(remainingDailyAssetCapacity([
+      asset('2026-07-27T05:00:00.000Z'),
+      asset('2026-07-27T06:00:00.000Z'),
+      asset('2026-07-27T07:00:00.000Z', 'manual'),
+      asset('2026-07-27T03:00:00.000Z'),
+    ], new Date('2026-07-27T08:00:00.000Z'), 4, 'America/Toronto')).toBe(2);
+
+    expect(remainingDailyAssetCapacity([
       asset('2026-07-27T01:00:00.000Z'),
-      asset('2026-07-27T02:00:00.000Z'),
-      asset('2026-07-27T03:00:00.000Z', 'manual'),
-      asset('2026-07-26T23:00:00.000Z'),
-    ], new Date('2026-07-27T08:00:00.000Z'), 4)).toBe(2);
+      asset('2026-07-27T05:00:00.000Z'),
+    ], new Date('2026-07-27T03:30:00.000Z'), 4, 'America/Toronto')).toBe(3);
   });
 });

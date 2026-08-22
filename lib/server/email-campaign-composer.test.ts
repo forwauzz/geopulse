@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDraftContract, versionChecksum, type EmailCampaignV1 } from './email-campaign-contract';
 import {
+  campaignGreetingName,
   findLiteralTokens,
   renderCampaignPreview,
   unresolvedMergeFields,
@@ -13,7 +14,12 @@ import {
   resolveCampaignSender,
   resolveTestRecipients,
 } from './email-campaign-sender';
-import { interventionStatusFor, saveEmailCampaign, saveValidatedEmailCampaign } from './email-campaign-store';
+import {
+  interventionStatusFor,
+  requiresCompleteEmailCampaignContract,
+  saveEmailCampaign,
+  saveValidatedEmailCampaign,
+} from './email-campaign-store';
 import { withResolvedSender } from './email-campaign-console';
 
 const CONTACT: PreviewContact = {
@@ -66,7 +72,8 @@ describe('preview uses the production renderer', () => {
 
   it('substitutes contact values into the subject and body', () => {
     expect(preview.subject).toBe('AI visibility baseline for Roy Co');
-    expect(preview.html).toContain('Ann Roy');
+    expect(preview.html).toContain('Hi Ann,');
+    expect(preview.html).not.toContain('Hi Ann Roy');
   });
 
   it('carries the brand shell, unsubscribe path, and campaign UTM values', () => {
@@ -82,6 +89,15 @@ describe('preview uses the production renderer', () => {
   it('uses preview-scoped identifiers so a preview never allocates a real send', () => {
     expect(preview.unsubscribeUrl).toContain('/preview-c1');
     expect(preview.links.every((link) => !link.includes('/api/outreach/open/') || link.includes('preview-'))).toBe(true);
+  });
+});
+
+describe('campaignGreetingName', () => {
+  it('normalizes common CRM name formats to a first name', () => {
+    expect(campaignGreetingName('Uzziel Tamon')).toBe('Uzziel');
+    expect(campaignGreetingName('Dr. Uzziel Tamon')).toBe('Uzziel');
+    expect(campaignGreetingName('Tamon, Uzziel')).toBe('Uzziel');
+    expect(campaignGreetingName('  Uzziel   Tamon  ')).toBe('Uzziel');
   });
 });
 
@@ -195,9 +211,18 @@ describe('store', () => {
     expect(interventionStatusFor('stopped')).toBe('stopped');
   });
 
-  it('refuses to store a non-draft contract that does not satisfy the contract', () => {
+  it('allows incremental preparation states but requires completeness after the internal test', () => {
+    expect(requiresCompleteEmailCampaignContract('draft')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('audience_ready')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('content_ready')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('qa_ready')).toBe(false);
+    expect(requiresCompleteEmailCampaignContract('test_passed')).toBe(true);
+    expect(requiresCompleteEmailCampaignContract('scheduled')).toBe(true);
+  });
+
+  it('refuses to store a test-passed contract that does not satisfy the contract', () => {
     const supabase = { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null }) }) }) }) } as never;
-    return saveValidatedEmailCampaign(supabase, { ...contract(), state: 'qa_ready' }).then((result) => {
+    return saveValidatedEmailCampaign(supabase, { ...contract(), state: 'test_passed' }).then((result) => {
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.reason).toBe('contract_invalid');
@@ -264,6 +289,102 @@ describe('store', () => {
     // Asserted on the storage primitive: `saveValidatedEmailCampaign` would reject this fixture at
     // the validation layer first, which would hide whether the lock guard itself works.
     const result = await saveEmailCampaign(supabase, { ...locked, updatedAt: '2026-09-09T00:00:00.000Z' });
+    expect(result).toEqual({ ok: false, reason: 'version_is_locked' });
+  });
+
+  it('allows a locked version to move to stopped without changing its immutable campaign payload', async () => {
+    const locked = { ...contract(), state: 'scheduled' as const };
+    const updates: Record<string, unknown>[] = [];
+    const supabase = {
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { id: 'int-1', metadata: { email_campaign: { current: 1, versions: { '1': locked } } } },
+              }),
+            }),
+          }),
+          update(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return { eq: () => Promise.resolve({ error: null }) };
+          },
+        };
+      },
+    } as never;
+
+    const stopped = {
+      ...locked,
+      state: 'stopped' as const,
+      governance: { ...locked.governance, stopReason: 'zero qualified replies' },
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    };
+    const result = await saveEmailCampaign(supabase, stopped);
+
+    expect(result).toEqual({ ok: true });
+    const stored = (updates[0]?.metadata as { email_campaign: { versions: Record<string, EmailCampaignV1> } })
+      .email_campaign.versions['1'];
+    expect(stored?.state).toBe('stopped');
+    expect(stored?.governance.stopReason).toBe('zero qualified replies');
+  });
+
+  it('accepts an idempotent stopped-state save on the current immutable version', async () => {
+    const stopped = {
+      ...contract(),
+      state: 'stopped' as const,
+      governance: { ...contract().governance, stopReason: 'zero qualified replies' },
+    };
+    const updates: Record<string, unknown>[] = [];
+    const supabase = {
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { id: 'int-1', metadata: { email_campaign: { current: 1, versions: { '1': stopped } } } },
+              }),
+            }),
+          }),
+          update(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return { eq: () => Promise.resolve({ error: null }) };
+          },
+        };
+      },
+    } as never;
+
+    const result = await saveEmailCampaign(supabase, {
+      ...stopped,
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    });
+    expect(result).toEqual({ ok: true });
+    expect(updates).toHaveLength(1);
+  });
+
+  it('still rejects a locked lifecycle update that changes internal campaign scope', async () => {
+    const locked = { ...contract(), state: 'scheduled' as const };
+    const supabase = {
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { id: 'int-1', metadata: { email_campaign: { current: 1, versions: { '1': locked } } } },
+              }),
+            }),
+          }),
+          update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+        };
+      },
+    } as never;
+
+    const result = await saveEmailCampaign(supabase, {
+      ...locked,
+      state: 'stopped',
+      goal: { ...locked.goal, buyer: 'a different buyer' },
+      governance: { ...locked.governance, stopReason: 'zero qualified replies' },
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    });
     expect(result).toEqual({ ok: false, reason: 'version_is_locked' });
   });
 });

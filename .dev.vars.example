@@ -38,6 +38,13 @@ STARTUP_SLACK_APP_INSTALL_URL=https://slack.com/oauth/v2/authorize
 STARTUP_SLACK_CLIENT_ID=your-slack-client-id
 STARTUP_SLACK_CLIENT_SECRET=your-slack-client-secret
 
+# Brevo partner OAuth (contacts:read only).
+# Production callback: https://getgeopulse.com/api/connectors/brevo/callback
+# BREVO_OAUTH_CLIENT_ID=
+# BREVO_OAUTH_CLIENT_SECRET=
+# BREVO_PARTNER_TEST_RECIPIENTS=founder-controlled-test@example.com
+# DISTRIBUTION_TOKEN_ENCRYPTION_KEY=
+
 # Google Gemini API
 # Free tier: 1,000 req/day (Gemini 2.5 Flash-Lite)
 # Get key: https://ai.google.dev/

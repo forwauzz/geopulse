@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import {
   buildTopicHref,
   getArticlesForTopic,
   groupArticlesByTopic,
+  resolveTopicRoute,
 } from '@/lib/server/content-navigation';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { parseArticleMetadata } from '@/lib/server/content-article-metadata';
@@ -93,7 +94,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { topic } = await params;
   const articles = await loadArticles();
   const topicGroups = groupArticlesByTopic(articles);
-  const group = topicGroups.find((item) => item.topicKey === topic);
+  const group = resolveTopicRoute(topicGroups, topic)?.group;
   const env = await getPaymentApiEnv();
 
   if (!group) {
@@ -115,14 +116,16 @@ export default async function BlogTopicPage({ params }: Props) {
   const { topic } = await params;
   const articles = await loadArticles();
   const topicGroups = groupArticlesByTopic(articles);
-  const group = topicGroups.find((item) => item.topicKey === topic);
-  if (!group) notFound();
+  const resolved = resolveTopicRoute(topicGroups, topic);
+  if (!resolved) notFound();
+  if (resolved.redirectRequired) permanentRedirect(buildTopicHref(resolved.group.topicKey));
+  const group = resolved.group;
 
   const [topicMetadata, env] = await Promise.all([
     loadTopicPageMetadata(group.topicKey),
     getPaymentApiEnv(),
   ]);
-  const topicArticles = getArticlesForTopic(articles, topic);
+  const topicArticles = getArticlesForTopic(articles, group.topicKey);
   const fallbackTopicContent = getTopicPageContent(group.topicKey);
   const topicContent = {
     definition: readTopicPageField(

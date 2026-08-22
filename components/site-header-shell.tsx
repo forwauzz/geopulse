@@ -32,7 +32,9 @@ export function SiteHeaderShell({
   // so there's no top header on dashboard routes.
   if (isDashboardRoute) return null;
   const isPublicRoute = isPublicSiteRoute(pathname);
-  const headerClassName = isPublicRoute
+  const headerClassName = isHomeRoute
+    ? 'public-chrome-light sticky top-0 z-50 border-b border-[#ded8cb] bg-[#fbfaf6]/95 shadow-[0_1px_0_rgba(112,95,63,0.06)] backdrop-blur-xl'
+    : isPublicRoute
     ? 'public-chrome-light sticky top-0 z-50 border-b border-gold/30 bg-surface/90 shadow-[0_1px_0_rgb(var(--color-gold)/0.08)] backdrop-blur-xl'
     : 'sticky top-0 z-50 bg-surface';
   const primaryNavLinkClassName =
@@ -45,17 +47,41 @@ export function SiteHeaderShell({
   return (
     <header className={headerClassName}>
       <nav
-        className={`mx-auto flex ${isHomeRoute ? 'max-w-6xl' : 'max-w-screen-2xl'} flex-wrap items-center justify-between gap-3 px-4 sm:px-6 md:px-10 ${
+        className={`mx-auto flex ${isHomeRoute ? 'max-w-[90rem]' : 'max-w-screen-2xl'} flex-wrap items-center justify-between gap-3 px-4 sm:px-6 md:px-10 ${
           isDashboardRoute || isHomeRoute ? 'py-4' : 'py-6'
         }`}
       >
         <Link href="/" className="flex items-center gap-2">
-          <GeoPulseLogo size="md" />
+          <GeoPulseLogo size={isHomeRoute ? 'lg' : 'md'} />
           <span className="sr-only">GEO-Pulse</span>
         </Link>
 
-        <div className="flex items-center gap-3 sm:gap-6 md:gap-10">
-          {isDashboardRoute ? (
+        <div className={isHomeRoute ? 'flex flex-1 items-center justify-end gap-3 sm:gap-4 lg:gap-8' : 'flex items-center gap-3 sm:gap-6 md:gap-10'}>
+          {isHomeRoute ? (
+            <>
+              <div className="hidden flex-1 items-center justify-center gap-7 lg:flex xl:gap-10">
+                <Link href="/#product" className={primaryNavLinkClassName}>Product</Link>
+                <Link href="/solutions/msps" className={primaryNavLinkClassName}>For MSPs</Link>
+                <Link href="/#how-it-works" className={primaryNavLinkClassName}>How It Works</Link>
+                {showPricing ? <Link href="/pricing" className={primaryNavLinkClassName}>Pricing</Link> : null}
+                <Link href="/blog" className={primaryNavLinkClassName}>Resources</Link>
+              </div>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Link
+                  href={isSignedIn ? '/dashboard' : '/login?mode=signin'}
+                  className="hidden font-body text-sm font-semibold text-on-background transition-colors hover:text-primary sm:inline"
+                >
+                  {isSignedIn ? 'Dashboard' : 'Sign in'}
+                </Link>
+                <Link
+                  href="/#audit"
+                  className="rounded-xl bg-[#101827] px-4 py-2.5 font-body text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-[#202b3d] sm:px-5"
+                >
+                  Run free scan
+                </Link>
+              </div>
+            </>
+          ) : isDashboardRoute ? (
             <>
               <Link
                 href="/blog"
@@ -156,7 +182,7 @@ export function SiteHeaderShell({
               {/* Admin link removed — admins use /login then navigate to /admin directly */}
             </>
           )}
-          <ThemeToggle />
+          {isHomeRoute ? null : <ThemeToggle />}
         </div>
       </nav>
     </header>

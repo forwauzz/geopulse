@@ -168,6 +168,7 @@ export async function buildGpmEntitlementsMap(
   // bundle_key keyed by workspace/account ID — most recent active subscription wins
   const bundleByStartup = new Map<string, string>();
   const bundleByAgency = new Map<string, string>();
+  const pilotExemptAgencies = new Set<string>();
 
   if (startupIds.length > 0) {
     const { data } = await (supabase as any)
@@ -184,15 +185,26 @@ export async function buildGpmEntitlementsMap(
   }
 
   if (agencyIds.length > 0) {
-    const { data } = await (supabase as any)
-      .from('user_subscriptions')
-      .select('bundle_key, agency_account_id')
-      .in('agency_account_id', agencyIds)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false });
+    const [{ data }, { data: agencyAccounts }] = await Promise.all([
+      (supabase as any)
+        .from('user_subscriptions')
+        .select('bundle_key, agency_account_id')
+        .in('agency_account_id', agencyIds)
+        .in('status', ['active', 'trialing'])
+        .order('created_at', { ascending: false }),
+      (supabase as any)
+        .from('agency_accounts')
+        .select('id,billing_mode,status')
+        .in('id', agencyIds),
+    ]);
     for (const row of (data ?? []) as { bundle_key: string; agency_account_id: string }[]) {
       if (!bundleByAgency.has(row.agency_account_id)) {
         bundleByAgency.set(row.agency_account_id, row.bundle_key);
+      }
+    }
+    for (const row of (agencyAccounts ?? []) as { id: string; billing_mode: string; status: string }[]) {
+      if (row.billing_mode === 'pilot_exempt' && (row.status === 'pilot' || row.status === 'active')) {
+        pilotExemptAgencies.add(row.id);
       }
     }
   }
@@ -203,7 +215,8 @@ export async function buildGpmEntitlementsMap(
     const bundleKey = config.startup_workspace_id
       ? (bundleByStartup.get(config.startup_workspace_id) ?? null)
       : config.agency_account_id
-        ? (bundleByAgency.get(config.agency_account_id) ?? null)
+        ? (bundleByAgency.get(config.agency_account_id)
+          ?? (pilotExemptAgencies.has(config.agency_account_id) ? 'agency_core' : null))
         : null;
 
     const dbOverride = bundleKey ? (bundleCapOverrides?.[bundleKey] ?? null) : null;
@@ -221,7 +234,10 @@ export async function buildGpmEntitlementsMap(
       allowedCadences: caps.allowedCadences,
       deliverySurfaces: caps.deliverySurfaces,
       platformsAllowed: ALL_PLATFORMS,
-      source: dbOverride ? 'subscription_bundle_db_override' : 'subscription_bundle',
+      source: config.agency_account_id && pilotExemptAgencies.has(config.agency_account_id)
+        && !bundleByAgency.has(config.agency_account_id)
+        ? 'pilot_exempt'
+        : dbOverride ? 'subscription_bundle_db_override' : 'subscription_bundle',
     });
   }
 

@@ -221,6 +221,148 @@ export function statementCard(top, { tag, tagColor, lines, size = 34, italic = f
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Photo poster
+ *
+ * A second layout family: a full-bleed portrait with a heavy condensed
+ * headline set over it. The headline mechanic is borrowed deliberately —
+ * connector words drop to a smaller size in a receding tone, key words stay
+ * large in the accent, and every line is justified to the same measure, so
+ * the block reads as one solid slab of type.
+ *
+ * Widths come from an advance table rather than the estimator above because
+ * this family justifies rather than merely checks for overflow. The table is
+ * still approximate, so each run also carries textLength: the renderer
+ * corrects the residual metric error instead of letting lines drift off the
+ * measure.
+ * ------------------------------------------------------------------ */
+
+export const DARK_GOLD = '#C4AA6C';
+export const DARK_INK = '#E6EBEF';
+export const PRIMARY_CONTRAST = '#F7F7FF';
+
+/** Haettenschweiler is the installed face closest to a condensed poster grotesk. */
+export const DISPLAY = 'Haettenschweiler, Impact, Arial Narrow, sans-serif';
+
+/** Cap height and the tuned gap between cap boxes, as fractions of font size. */
+const CAP = 0.72;
+const CAP_GAP = 0.16;
+
+/** Connector runs sit at this fraction of the line's key size. */
+const SOFT_SCALE = 0.76;
+
+/** Advance widths per 1000 em for DISPLAY, uppercase only. */
+const ADVANCE = {
+  A: 480, B: 480, C: 480, D: 480, E: 420, F: 400, G: 480, H: 480, I: 210,
+  J: 380, K: 460, L: 390, M: 610, N: 500, O: 500, P: 460, Q: 500, R: 480,
+  S: 440, T: 420, U: 480, V: 460, W: 690, X: 440, Y: 420, Z: 400,
+  ' ': 175, '.': 210, ',': 210, '?': 420, '!': 210, '-': 300, '/': 300,
+  '’': 200, "'": 200, $: 460,
+};
+const DIGIT = 460;
+const FALLBACK = 470;
+
+const advanceEm = (text) =>
+  [...text.toUpperCase()].reduce(
+    (sum, ch) => sum + (ADVANCE[ch] ?? (ch >= '0' && ch <= '9' ? DIGIT : FALLBACK)),
+    0,
+  ) / 1000;
+
+/**
+ * One justified headline line. `runs` are `{ text, soft }`; the line's key
+ * size is solved so the runs plus their gaps land exactly on `measure`.
+ */
+function posterLine(capTop, runs, { measure, x, keyFill, softFill }) {
+  const gapEm = 0.1;
+  const naturalEm =
+    runs.reduce((sum, run) => sum + advanceEm(run.text) * (run.soft ? SOFT_SCALE : 1), 0) +
+    gapEm * (runs.length - 1);
+  const size = measure / naturalEm;
+  const baseline = capTop + size * CAP;
+
+  let cursor = x;
+  const svg = runs
+    .map((run) => {
+      const runSize = size * (run.soft ? SOFT_SCALE : 1);
+      const width = advanceEm(run.text) * runSize;
+      const element =
+        `<text x="${cursor.toFixed(1)}" y="${baseline.toFixed(1)}" ` +
+        `fill="${run.soft ? softFill : keyFill}" font-family="${DISPLAY}" ` +
+        `font-size="${runSize.toFixed(1)}" textLength="${width.toFixed(1)}" ` +
+        `lengthAdjust="spacingAndGlyphs">${escapeXml(run.text.toUpperCase())}</text>`;
+      cursor += width + size * gapEm;
+      return element;
+    })
+    .join('\n');
+
+  return { svg, size, bottom: baseline + size * CAP_GAP };
+}
+
+/** Stacks justified lines from the top of the first cap box. */
+export function posterHeadline(capTop, lines, { measure, x = 0, keyFill, softFill }) {
+  let cursor = capTop;
+  let last = 0;
+  const svg = lines
+    .map((runs) => {
+      const line = posterLine(cursor, runs, { measure, x, keyFill, softFill });
+      cursor = line.bottom;
+      last = line.size;
+      return line.svg;
+    })
+    .join('\n');
+  // The trailing cap gap belongs between lines, not below the block.
+  return { svg, bottom: cursor - last * CAP_GAP };
+}
+
+/** The wordmark, in the tone that survives the photo underneath it. */
+export const posterWordmark = (top, x, color) => {
+  const word = textBlock(top, ['GEO-PULSE'], {
+    size: 32,
+    family: SERIF,
+    fill: color,
+    tracking: 4.5,
+    x,
+    label: 'wordmark',
+    maxWidth: 600,
+  });
+  return {
+    svg: `${word.svg}\n<rect x="${x}" y="${word.bottom + 13}" width="84" height="3" fill="${color}"/>`,
+    bottom: word.bottom + 16,
+  };
+};
+
+/**
+ * The closing line: the call on the left, the address on the right, over a
+ * hairline. Deliberately not a button — Instagram and LinkedIn draw their own
+ * action control, and a drawn one competes with it.
+ */
+export function posterFootline(width, height, { x, label, site, fill, siteFill, ruleFill }) {
+  const top = height - 138;
+  const line = textBlock(top + 32, [label], {
+    size: 38,
+    fill,
+    weight: 600,
+    tracking: 0.4,
+    x,
+    label: 'footline',
+    maxWidth: width - x * 2,
+  });
+  const address = textBlock(top + 34, [site], {
+    size: 33,
+    fill: siteFill,
+    weight: 700,
+    tracking: 1.8,
+    x: width - x,
+    anchor: 'end',
+    label: 'footline address',
+    maxWidth: width - x * 2,
+  });
+  return (
+    `<rect x="${x}" y="${top}" width="${width - x * 2}" height="2" fill="${ruleFill}" opacity="0.6"/>\n` +
+    `${line.svg}\n${address.svg}`
+  );
+}
+
 export function footer(right = 'MEASURE · FIX · VERIFY') {
   const left = textBlock(FOOTER_TOP + 34, ['getgeopulse.com'], {
     size: 26,

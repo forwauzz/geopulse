@@ -21,4 +21,13 @@ describe('Mole employee email signatures', () => {
     expect(html).toContain('SEO &amp; Customer Outcomes Strategist');
     expect(html).toContain('https://getgeopulse.com/team/priya-shah.webp');
   });
+
+  it('uses hosted, accessible Instagram and LinkedIn logo images', () => {
+    const html = agentEmailSignatureHtml('elena');
+
+    expect(html).toContain('src="https://getgeopulse.com/branding/email/instagram.png"');
+    expect(html).toContain('alt="Instagram"');
+    expect(html).toContain('src="https://getgeopulse.com/branding/email/linkedin.png"');
+    expect(html).toContain('alt="LinkedIn"');
+  });
 });

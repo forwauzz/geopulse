@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { runAgentLoopControl } from './agent-loop-control';
 import { runSocialProofAgent, type SocialProductionEnv } from './social-proof-agent';
 import { reconcilePublishedDistributionProofs } from './distribution-publication-proof';
+import { loadContentInventoryHealth } from './content-inventory-health';
 
 type Db = SupabaseClient<any, 'public', any>;
 
@@ -58,6 +59,10 @@ export async function runAutonomousCampaignExecution(args: {
   socialStatus: string;
   socialJobsCreated: number;
   publicationProofsRepaired: number;
+  inventoryHealthy: boolean;
+  inventoryReason: string | null;
+  inventoryThrough: string | null;
+  missingFormats: string;
 }> {
   const now = args.now ?? new Date();
   const proofReconciliation = await reconcilePublishedDistributionProofs({
@@ -65,15 +70,16 @@ export async function runAutonomousCampaignExecution(args: {
   });
   const loopControl = await runAgentLoopControl({ db: args.supabase, now });
   const pendingSocial = await pendingSeoSocialDerivatives(args.supabase);
-  const social = pendingSocial.length > 0
-    ? await runSocialProofAgent({
-        supabase: args.supabase,
-        appUrl: args.appUrl,
-        env: args.env,
-        now,
-        campaignOnly: true,
-      })
-    : null;
+  const inventoryBefore = await loadContentInventoryHealth(args.supabase, now);
+  const social = await runSocialProofAgent({
+    supabase: args.supabase,
+    appUrl: args.appUrl,
+    env: args.env,
+    now,
+    campaignOnly: false,
+    campaignScopeRequired: true,
+    requiredFormats: inventoryBefore.missingFormats,
+  });
   const queuedIds = new Set(social?.queuedContentItemIds ?? []);
   if (queuedIds.size > 0) {
     await Promise.all(pendingSocial.filter((item) => queuedIds.has(item.id)).map((item) =>
@@ -88,6 +94,7 @@ export async function runAutonomousCampaignExecution(args: {
       })
     ));
   }
+  const inventory = await loadContentInventoryHealth(args.supabase, now);
 
   return {
     loopsSynced: loopControl.synced,
@@ -95,5 +102,9 @@ export async function runAutonomousCampaignExecution(args: {
     socialStatus: social?.status ?? 'noop',
     socialJobsCreated: social?.jobsCreated ?? 0,
     publicationProofsRepaired: proofReconciliation.repaired,
+    inventoryHealthy: inventory.healthy,
+    inventoryReason: inventory.reason,
+    inventoryThrough: inventory.inventoryThrough,
+    missingFormats: inventory.missingFormats.join(','),
   };
 }

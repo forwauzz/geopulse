@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import type { NextConfig } from 'next';
 import { initOpenNextCloudflareForDev } from '@opennextjs/cloudflare';
+import { PUBLIC_LEGACY_REDIRECTS } from './lib/server/public-legacy-redirects';
 
 // Exposes real Cloudflare bindings to `next dev` by starting a wrangler session. The app depends
 // on these — above all the `vars` feature flags — so this must run in CI too, or every page
@@ -84,7 +85,7 @@ const nextConfig: NextConfig = {
 
   // Redirect http to https (belt + suspenders — CF handles this too)
   async redirects() {
-    return [];
+    return [...PUBLIC_LEGACY_REDIRECTS];
   },
 
   // Image optimization: Cloudflare Workers does not support next/image sharp

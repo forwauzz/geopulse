@@ -22,6 +22,7 @@ function registerSelfAuditFetch(e: Record<string, unknown>): void {
 
 export type ScanApiEnv = {
   SCAN_CACHE: KVNamespace | undefined;
+  SCAN_QUEUE: Queue | undefined;
   NEXT_PUBLIC_APP_URL: string;
   NEXT_PUBLIC_SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
@@ -31,6 +32,17 @@ export type ScanApiEnv = {
   GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL?: string;
   GEOPULSE_CAMPAIGN_SENDER_VERIFIED?: string;
   GEOPULSE_CAMPAIGN_TEST_RECIPIENTS?: string;
+  /** HMAC secret for recipient-specific audit preview -> full report capabilities. */
+  AUDIT_REPORT_CAPABILITY_SECRET?: string;
+  /** Apollo master/API key used only by the admin lead-intake workflow. */
+  APOLLO_API_KEY?: string;
+  BROWSER_RENDERING_API_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  DEEP_AUDIT_BROWSER_RENDER_MODE?: string;
+  DEEP_AUDIT_DEFAULT_PAGE_LIMIT?: string;
+  CF_BROWSER_RENDERING_ACCOUNT_ID?: string;
+  CF_BROWSER_RENDERING_API_TOKEN?: string;
+  DEEP_AUDIT_BROWSER_RENDERING_ENABLED?: string;
   /** OSS de-paywall flag. "true" = legacy paid (Stripe) mode; anything else = full audit free for all. */
   LEGACY_PAID_ENABLED: string;
   /** Local competitor discovery: 'live'/'gemini' = Google-Search grounding (needs billed key); else mock. */
@@ -55,6 +67,11 @@ export type ScanApiEnv = {
   DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT?: string;
   X_OAUTH_CLIENT_ID?: string;
   LINKEDIN_OAUTH_CLIENT_ID?: string;
+  /** Read-only partner CRM OAuth. Secret remains server-side. */
+  BREVO_OAUTH_CLIENT_ID?: string;
+  BREVO_OAUTH_CLIENT_SECRET?: string;
+  /** Dedicated founder-canary allowlist for partner CRM delivery. */
+  BREVO_PARTNER_TEST_RECIPIENTS?: string;
   /** AES-GCM key for distribution account access and refresh tokens. */
   DISTRIBUTION_TOKEN_ENCRYPTION_KEY?: string;
   TURNSTILE_SECRET_KEY: string;
@@ -90,6 +107,8 @@ export type ScanApiEnv = {
 export type PaymentApiEnv = ScanApiEnv & {
   SCAN_QUEUE: Queue | undefined;
   DISTRIBUTION_QUEUE?: Queue | undefined;
+  /** Internal service binding for the durable audit-to-repair coordinator. */
+  REPAIR_AGENT_SERVICE?: { fetch(input: string, init?: RequestInit): Promise<Response> };
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRICE_ID_DEEP_AUDIT: string;
@@ -105,6 +124,8 @@ export type PaymentApiEnv = ScanApiEnv & {
   SALES_OPERATOR_EMAIL?: string;
   /** Resend webhook signing secret for verified inbound email events. */
   RESEND_INBOUND_WEBHOOK_SECRET?: string;
+  /** Recipient for the daily lifecycle delivery exception digest. */
+  LIFECYCLE_EXCEPTION_TO?: string;
   /** Existing operator digest recipient; also receives requested walkthrough alerts. */
   MARKETING_REPORT_TO?: string;
   ANTHROPIC_API_KEY?: string;
@@ -220,9 +241,30 @@ function resolveQueueBinding(e: Record<string, unknown>, key: string): Queue | u
   return undefined;
 }
 
+function resolveFetcherBinding(
+  e: Record<string, unknown>,
+  key: string
+): { fetch(input: string, init?: RequestInit): Promise<Response> } | undefined {
+  const direct = e[key] as { fetch?: unknown } | undefined;
+  if (direct && typeof direct.fetch === 'function') {
+    return direct as { fetch(input: string, init?: RequestInit): Promise<Response> };
+  }
+  try {
+    const { env: syncEnv } = getCloudflareContext({ async: false });
+    const binding = (syncEnv as unknown as Record<string, unknown>)[key] as { fetch?: unknown } | undefined;
+    if (binding && typeof binding.fetch === 'function') {
+      return binding as { fetch(input: string, init?: RequestInit): Promise<Response> };
+    }
+  } catch {
+    /* sync context unavailable */
+  }
+  return undefined;
+}
+
 function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
   return {
     SCAN_CACHE: e['SCAN_CACHE'] as KVNamespace | undefined,
+    SCAN_QUEUE: resolveScanQueue(e),
     NEXT_PUBLIC_APP_URL: String(e['NEXT_PUBLIC_APP_URL'] ?? ''),
     NEXT_PUBLIC_SUPABASE_URL: String(e['NEXT_PUBLIC_SUPABASE_URL'] ?? ''),
     SUPABASE_SERVICE_ROLE_KEY: String(e['SUPABASE_SERVICE_ROLE_KEY'] ?? ''),
@@ -231,6 +273,15 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL: String(e['GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL'] ?? ''),
     GEOPULSE_CAMPAIGN_SENDER_VERIFIED: String(e['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? ''),
     GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: String(e['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? ''),
+    AUDIT_REPORT_CAPABILITY_SECRET: String(e['AUDIT_REPORT_CAPABILITY_SECRET'] ?? ''),
+    APOLLO_API_KEY: String(e['APOLLO_API_KEY'] ?? ''),
+    BROWSER_RENDERING_API_TOKEN: String(e['BROWSER_RENDERING_API_TOKEN'] ?? ''),
+    CLOUDFLARE_ACCOUNT_ID: String(e['CLOUDFLARE_ACCOUNT_ID'] ?? ''),
+    DEEP_AUDIT_BROWSER_RENDER_MODE: String(e['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? ''),
+    DEEP_AUDIT_DEFAULT_PAGE_LIMIT: String(e['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? ''),
+    CF_BROWSER_RENDERING_ACCOUNT_ID: String(e['CF_BROWSER_RENDERING_ACCOUNT_ID'] ?? ''),
+    CF_BROWSER_RENDERING_API_TOKEN: String(e['CF_BROWSER_RENDERING_API_TOKEN'] ?? ''),
+    DEEP_AUDIT_BROWSER_RENDERING_ENABLED: String(e['DEEP_AUDIT_BROWSER_RENDERING_ENABLED'] ?? ''),
     LEGACY_PAID_ENABLED: String(e['LEGACY_PAID_ENABLED'] ?? ''),
     COMPETITOR_DISCOVERY_MODE: String(e['COMPETITOR_DISCOVERY_MODE'] ?? ''),
     COMPETITOR_DISCOVERY_GEMINI_MODEL: String(e['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? ''),
@@ -256,6 +307,9 @@ function readEnvRecord(e: Record<string, unknown>): ScanApiEnv {
     ),
     X_OAUTH_CLIENT_ID: String(e['X_OAUTH_CLIENT_ID'] ?? ''),
     LINKEDIN_OAUTH_CLIENT_ID: String(e['LINKEDIN_OAUTH_CLIENT_ID'] ?? ''),
+    BREVO_OAUTH_CLIENT_ID: String(e['BREVO_OAUTH_CLIENT_ID'] ?? ''),
+    BREVO_OAUTH_CLIENT_SECRET: String(e['BREVO_OAUTH_CLIENT_SECRET'] ?? ''),
+    BREVO_PARTNER_TEST_RECIPIENTS: String(e['BREVO_PARTNER_TEST_RECIPIENTS'] ?? ''),
     DISTRIBUTION_TOKEN_ENCRYPTION_KEY: String(
       e['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? ''
     ),
@@ -301,6 +355,7 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
   } catch {
     return {
       SCAN_CACHE: undefined,
+      SCAN_QUEUE: undefined,
       NEXT_PUBLIC_APP_URL: process.env['NEXT_PUBLIC_APP_URL'] ?? '',
       NEXT_PUBLIC_SUPABASE_URL: process.env['NEXT_PUBLIC_SUPABASE_URL'] ?? '',
       SUPABASE_SERVICE_ROLE_KEY: process.env['SUPABASE_SERVICE_ROLE_KEY'] ?? '',
@@ -309,6 +364,15 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
       GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL: process.env['GEOPULSE_CAMPAIGN_REPLY_TO_EMAIL'] ?? '',
       GEOPULSE_CAMPAIGN_SENDER_VERIFIED: process.env['GEOPULSE_CAMPAIGN_SENDER_VERIFIED'] ?? '',
       GEOPULSE_CAMPAIGN_TEST_RECIPIENTS: process.env['GEOPULSE_CAMPAIGN_TEST_RECIPIENTS'] ?? '',
+      AUDIT_REPORT_CAPABILITY_SECRET: process.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '',
+      APOLLO_API_KEY: process.env['APOLLO_API_KEY'] ?? '',
+      BROWSER_RENDERING_API_TOKEN: process.env['BROWSER_RENDERING_API_TOKEN'] ?? '',
+      CLOUDFLARE_ACCOUNT_ID: process.env['CLOUDFLARE_ACCOUNT_ID'] ?? '',
+      DEEP_AUDIT_BROWSER_RENDER_MODE: process.env['DEEP_AUDIT_BROWSER_RENDER_MODE'] ?? '',
+      DEEP_AUDIT_DEFAULT_PAGE_LIMIT: process.env['DEEP_AUDIT_DEFAULT_PAGE_LIMIT'] ?? '',
+      CF_BROWSER_RENDERING_ACCOUNT_ID: process.env['CF_BROWSER_RENDERING_ACCOUNT_ID'] ?? '',
+      CF_BROWSER_RENDERING_API_TOKEN: process.env['CF_BROWSER_RENDERING_API_TOKEN'] ?? '',
+      DEEP_AUDIT_BROWSER_RENDERING_ENABLED: process.env['DEEP_AUDIT_BROWSER_RENDERING_ENABLED'] ?? '',
       LEGACY_PAID_ENABLED: process.env['LEGACY_PAID_ENABLED'] ?? '',
       COMPETITOR_DISCOVERY_MODE: process.env['COMPETITOR_DISCOVERY_MODE'] ?? '',
       COMPETITOR_DISCOVERY_GEMINI_MODEL: process.env['COMPETITOR_DISCOVERY_GEMINI_MODEL'] ?? '',
@@ -331,6 +395,9 @@ export async function getScanApiEnv(): Promise<ScanApiEnv> {
         process.env['DISTRIBUTION_ENGINE_DISPATCH_BATCH_LIMIT'] ?? '',
       X_OAUTH_CLIENT_ID: process.env['X_OAUTH_CLIENT_ID'] ?? '',
       LINKEDIN_OAUTH_CLIENT_ID: process.env['LINKEDIN_OAUTH_CLIENT_ID'] ?? '',
+      BREVO_OAUTH_CLIENT_ID: process.env['BREVO_OAUTH_CLIENT_ID'] ?? '',
+      BREVO_OAUTH_CLIENT_SECRET: process.env['BREVO_OAUTH_CLIENT_SECRET'] ?? '',
+      BREVO_PARTNER_TEST_RECIPIENTS: process.env['BREVO_PARTNER_TEST_RECIPIENTS'] ?? '',
       DISTRIBUTION_TOKEN_ENCRYPTION_KEY:
         process.env['DISTRIBUTION_TOKEN_ENCRYPTION_KEY'] ?? '',
       TURNSTILE_SECRET_KEY: process.env['TURNSTILE_SECRET_KEY'] ?? '',
@@ -380,6 +447,7 @@ export async function getPaymentApiEnv(): Promise<PaymentApiEnv> {
       ...base,
       SCAN_QUEUE: resolveScanQueue(e),
       DISTRIBUTION_QUEUE: resolveQueueBinding(e, 'DISTRIBUTION_QUEUE'),
+      REPAIR_AGENT_SERVICE: resolveFetcherBinding(e, 'REPAIR_AGENT_SERVICE'),
       STRIPE_SECRET_KEY: pickEnvString(e, 'STRIPE_SECRET_KEY'),
       STRIPE_WEBHOOK_SECRET: pickEnvString(e, 'STRIPE_WEBHOOK_SECRET'),
       STRIPE_PRICE_ID_DEEP_AUDIT: pickEnvString(e, 'STRIPE_PRICE_ID_DEEP_AUDIT'),

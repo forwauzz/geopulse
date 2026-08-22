@@ -33,10 +33,13 @@
     "benchmark:seed:domain-cohort": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-domain-cohort.ts",
     "benchmark:seed:query-set": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts",
     "benchmark:seed:query-set:business-counsel": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts --fixture eval/fixtures/benchmark-law-firms-business-counsel-v1-query-set.json",
+    "benchmark:seed:query-set:msp": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-seed-query-set.ts --fixture eval/fixtures/benchmark-msp-it-services-v1-query-set.json",
+    "benchmark:seed:challenger:clinic-consulting": "node scripts/run-benchmark-seed-clinic-consulting-challenger.cjs",
     "benchmark:schedule:preview": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-preview.ts",
     "benchmark:schedule:capacity": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-capacity.ts",
     "benchmark:schedule:health": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-health.ts",
     "benchmark:schedule:run-now": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-run-now.ts",
+    "benchmark:challenger:run-now": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-challenger-run-now.ts",
     "benchmark:schedule:summary": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-summary.ts",
     "benchmark:schedule:outliers": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-outliers.ts",
     "benchmark:schedule:recurrence": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/benchmark-schedule-recurrence.ts",
@@ -58,8 +61,10 @@
     "operations:hands-off-audit": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/hands-off-readiness-audit.ts",
     "contacts:intake": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/agency-contact-intake.ts",
     "vci8:acceptance": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/vci8-acceptance-packet.ts",
+    "audit-campaign:acceptance": "tsx scripts/audit-campaign-acceptance.ts",
     "report:layer-one:rewrite-prompt": "node ./node_modules/tsx/dist/cli.mjs scripts/layer-one-report-rewrite-prompt.ts",
-    "content:schedule:reconcile": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/reconcile-content-schedule.ts"
+    "content:schedule:reconcile": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/reconcile-content-schedule.ts",
+    "content:amara:render": "node scripts/render-amara-campaign.mjs"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.1.0",

@@ -66,6 +66,13 @@ export type AgencyDashboardData = {
   readonly entitlements: AgencyFeatureEntitlements;
 };
 
+export function canRecoverHistoricalScan(
+  scan: { readonly agency_account_id?: string | null },
+  client: { readonly agency_account_id: string },
+): boolean {
+  return Boolean(scan.agency_account_id) && scan.agency_account_id === client.agency_account_id;
+}
+
 export async function getAgencyDashboardData(args: {
   readonly supabase: SupabaseLike;
   readonly userId: string;
@@ -220,6 +227,7 @@ export async function getAgencyDashboardData(args: {
         const canonical = String(row['domain'] ?? '').toLowerCase().replace(/^www\./, '');
         const matchedClient = clientByDomain.get(canonical);
         if (!matchedClient) continue;
+        if (!canRecoverHistoricalScan(row, matchedClient)) continue;
         combinedScans.push({
           ...row,
           agency_account_id: matchedClient.agency_account_id,

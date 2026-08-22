@@ -201,6 +201,11 @@ export function AgencyAdminControlView({
               <span className="font-medium">ICP tag</span>
               <input name="icpTag" placeholder="medical_clinics" className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2" />
             </label>
+            <label className="flex flex-col gap-2 text-sm text-on-background md:col-span-2">
+              <span className="font-medium">Buyer/report email</span>
+              <input name="buyerEmail" type="email" autoComplete="email" placeholder="buyer@client.com" className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2" />
+              <span className="text-xs text-on-surface-variant">Saved as this client&apos;s report recipient. No email is sent when the client is created.</span>
+            </label>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="submit" disabled={clientPending} className="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-on-primary disabled:opacity-60">
@@ -310,8 +315,11 @@ export function AgencyAdminControlView({
               <input name="email" type="email" required placeholder="pilot@lifter.ca" className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2" />
             </label>
             <label className="flex flex-col gap-2 text-sm text-on-background">
-              <span className="font-medium">Password</span>
-              <input name="password" type="password" required minLength={8} className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2" />
+              <span className="font-medium">Initial password</span>
+              <input name="password" type="password" minLength={8} autoComplete="new-password" aria-describedby="agency-user-password-help" className="rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2" />
+              <span id="agency-user-password-help" className="text-xs text-on-surface-variant">
+                Required only when creating a new login. Existing users keep their current password.
+              </span>
             </label>
             <label className="flex flex-col gap-2 text-sm text-on-background">
               <span className="font-medium">Role</span>

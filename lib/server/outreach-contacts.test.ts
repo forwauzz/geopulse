@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { addSegmentToSequence, normalizeSegment, parseContactImport, staggeredRunTimes } from './outreach-contacts';
+import {
+  addSegmentToSequence,
+  classifyApolloMspContact,
+  importContacts,
+  normalizeSegment,
+  parseContactCsvImport,
+  parseContactImport,
+  planApolloMspPromotion,
+  staggeredRunTimes,
+  type ApolloPromotionContact,
+  type ParsedContact,
+} from './outreach-contacts';
 
 describe('normalizeSegment', () => {
   it('kebab-cases human input and rejects junk', () => {
@@ -49,6 +60,166 @@ describe('parseContactImport', () => {
     );
     expect(invalid.rows).toEqual([]);
     expect(invalid.invalid[0]?.reason).toBe('invalid personalization source url');
+  });
+});
+
+describe('parseContactCsvImport', () => {
+  it('maps Apollo exports, respects quoted commas, deduplicates, and holds missing-email rows out', () => {
+    const out = parseContactCsvImport([
+      'First Name,Last Name,Title,Company Name,Email,Email Status,Primary Email Catch-all Status,Person Linkedin Url,Website,City,State,Country,Apollo Contact Id',
+      'Jane,Roy,"Founder, CEO",Northstar IT,jane@northstar.ca,Verified,Not Catch-all,https://linkedin.com/in/jane,https://northstar.ca,MontrÃ©al,Quebec,Canada,apollo-1',
+      'Jane,Roy,"Founder, CEO",Northstar IT,jane@northstar.ca,Verified,Not Catch-all,https://linkedin.com/in/jane,https://northstar.ca,MontrÃ©al,Quebec,Canada,apollo-1',
+      'No,Email,CEO,Missing Address,,New Data Available,,https://linkedin.com/in/no-email,https://missing.ca,Toronto,Ontario,Canada,apollo-2',
+    ].join('\n'));
+
+    expect(out.rows).toHaveLength(1);
+    expect(out.invalid).toEqual([{ line: 4, text: '', reason: 'missing or invalid email' }]);
+    expect(out.rows[0]).toMatchObject({
+      email: 'jane@northstar.ca',
+      url: 'https://northstar.ca/',
+      name: 'Jane Roy',
+      company: 'Northstar IT',
+      contactTitle: 'Founder, CEO',
+      city: 'MontrÃ©al',
+      region: 'MontrÃ©al, Quebec, Canada',
+      provenance: {
+        provider: 'apollo',
+        provider_email_status: 'Verified',
+        provider_catch_all_status: 'Not Catch-all',
+        provider_contact_id: 'apollo-1',
+      },
+    });
+  });
+});
+
+describe('Apollo MSP qualification', () => {
+  const techso: ParsedContact = {
+    email: 'cfortin@techso.com',
+    url: 'https://techso.com/',
+    name: 'Carl Fortin',
+    company: 'Techso',
+    city: 'Montreal',
+    contactTitle: 'CEO & Co-Founder',
+    region: 'Montreal, Quebec, Canada',
+    provenance: {
+      provider: 'apollo',
+      provider_email_status: 'Verified',
+      provider_catch_all_status: 'Not Catch-all',
+      company_country: 'Canada',
+      company_state: 'Quebec',
+      industry: 'Information Technology & Services',
+      keywords: 'it support services, software, consulting',
+    },
+  };
+  const clearEvidence = {
+    unsubscribedEmails: new Set<string>(),
+    convertedEmails: new Set<string>(),
+    suppressedEmails: new Set<string>(),
+  };
+
+  it('promotes only a verified Quebec MSP decision-maker with matching business identity', () => {
+    expect(classifyApolloMspContact(techso, clearEvidence)).toEqual({
+      status: 'eligible',
+      reason: 'apollo_verified_quebec_msp_decision_maker',
+      targetSegment: 'msp-qc',
+    });
+  });
+
+  it('holds deliverable addresses that are not proven MSPs or use catch-all mailboxes', () => {
+    expect(classifyApolloMspContact({
+      ...techso,
+      company: 'Creative Co',
+      provenance: { ...techso.provenance, industry: 'Marketing & Advertising', keywords: 'branding agency' },
+    }, clearEvidence)).toMatchObject({ status: 'needs_verification', reason: 'not_msp_fit' });
+    expect(classifyApolloMspContact({
+      ...techso,
+      provenance: { ...techso.provenance, provider_catch_all_status: 'Catch-all' },
+    }, clearEvidence)).toMatchObject({ status: 'needs_verification', reason: 'apollo_catch_all_mailbox' });
+    expect(classifyApolloMspContact({
+      ...techso,
+      provenance: { ...techso.provenance, company_state: 'Ontario' },
+    }, clearEvidence)).toMatchObject({ status: 'needs_verification', reason: 'outside_primary_quebec_geography' });
+  });
+
+  it('gives suppression and conversion evidence priority over provider verification', () => {
+    expect(classifyApolloMspContact(techso, {
+      ...clearEvidence,
+      suppressedEmails: new Set([techso.email]),
+    })).toMatchObject({ status: 'suppressed', reason: 'suppression_ledger_match' });
+    expect(classifyApolloMspContact(techso, {
+      ...clearEvidence,
+      convertedEmails: new Set([techso.email]),
+    })).toMatchObject({ status: 'converted', reason: 'active_or_trialing_customer' });
+  });
+
+  it('builds an auditable plan while preserving terminal contact-bank states', () => {
+    const suppressedRow = { ...techso, email: 'suppressed@techso.com' };
+    const contacts: ApolloPromotionContact[] = [
+      {
+        id: 'techso', email: techso.email, segment: 'apollo-import-2026-08', tags: [],
+        eligibilityStatus: 'needs_verification', provenance: {},
+      },
+      {
+        id: 'suppressed', email: suppressedRow.email, segment: 'apollo-import-2026-08', tags: [],
+        eligibilityStatus: 'suppressed', provenance: {},
+      },
+    ];
+    const plan = planApolloMspPromotion({ rows: [techso, suppressedRow], contacts, evidence: clearEvidence });
+    expect(plan.counts).toEqual({
+      sourceRows: 2,
+      providerVerified: 2,
+      eligibleMsp: 1,
+      held: 0,
+      suppressed: 0,
+      converted: 0,
+      terminalPreserved: 1,
+      missingContact: 0,
+    });
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0]).toMatchObject({
+      email: techso.email,
+      status: 'eligible',
+      segment: 'msp-qc',
+      reason: 'apollo_verified_quebec_msp_decision_maker',
+    });
+  });
+});
+
+describe('importContacts', () => {
+  it('inserts only new contacts as held and preserves existing rows', async () => {
+    let insertedPayload: Record<string, unknown>[] = [];
+    const supabase = {
+      from() {
+        return {
+          select() {
+            return {
+              in: async () => ({ data: [{ email: 'existing@example.ca' }], error: null }),
+            };
+          },
+          upsert(payload: Record<string, unknown>[]) {
+            insertedPayload = payload;
+            return {
+              select: async () => ({ data: payload.map((row) => ({ email: row.email })), error: null }),
+            };
+          },
+        };
+      },
+    } as never;
+
+    const result = await importContacts(supabase, [
+      { email: 'existing@example.ca', url: 'https://example.ca', name: null, company: null, city: null },
+      { email: 'new@example.ca', url: 'https://example.ca', name: 'New Owner', company: 'Example', city: 'MontrÃ©al' },
+    ], { segment: 'apollo-import-2026-08', source: 'provider-csv' });
+
+    expect(result).toEqual({ imported: 1, skippedExisting: 1 });
+    expect(insertedPayload).toHaveLength(1);
+    expect(insertedPayload[0]).toMatchObject({
+      email: 'new@example.ca',
+      eligibility_status: 'needs_verification',
+      eligibility_reason: 'founder_authorized_import_requires_verification',
+      source_class: 'operator_manual',
+      segment: 'apollo-import-2026-08',
+    });
   });
 });
 

@@ -10,8 +10,11 @@ vi.mock('../intelligence/evidence-retrieval', () => ({
 vi.mock('./load-agency-report-snapshot', () => ({
   loadLatestAgencyReport: vi.fn(),
 }));
-vi.mock('./report-preview-payload', () => ({
-  loadReportPreviewPayload: vi.fn(),
+vi.mock('./buyer-intelligence-snapshot-repository', () => ({
+  createBuyerIntelligenceSnapshotRepository: vi.fn(),
+}));
+vi.mock('../intelligence/buyer-intelligence-view-model', () => ({
+  buildBuyerIntelligenceView: vi.fn(),
 }));
 vi.mock('./organization-resolver', () => ({
   resolveOrganizationWebsite: vi.fn(),
@@ -25,7 +28,8 @@ import { retrieveIntelligenceEvidence } from '../intelligence/evidence-retrieval
 import { buildAgencyReportPdf } from './agency-report-pdf';
 import { loadLatestAgencyReport } from './load-agency-report-snapshot';
 import { createOrganizationContextRepository } from './organization-context-repository';
-import { loadReportPreviewPayload } from './report-preview-payload';
+import { buildBuyerIntelligenceView } from '../intelligence/buyer-intelligence-view-model';
+import { createBuyerIntelligenceSnapshotRepository } from './buyer-intelligence-snapshot-repository';
 import { executeOrganizationCapability } from './organization-context-capabilities';
 
 const ids = {
@@ -103,6 +107,9 @@ beforeEach(() => {
   vi.mocked(createOrganizationContextRepository).mockReturnValue({
     getByOwnerAndDomain: vi.fn().mockResolvedValue({ status: 'ready', context }),
   });
+  vi.mocked(createBuyerIntelligenceSnapshotRepository).mockReturnValue({
+    list: vi.fn().mockResolvedValue([]),
+  } as never);
 });
 
 describe('Organization capability authorization and safe outputs', () => {
@@ -269,7 +276,7 @@ describe('Organization capability authorization and safe outputs', () => {
         },
       },
     });
-    expect(loadReportPreviewPayload).not.toHaveBeenCalled();
+    expect(createBuyerIntelligenceSnapshotRepository).not.toHaveBeenCalled();
   });
 
   it('enforces preview permission independently of read and generation', async () => {
@@ -283,17 +290,20 @@ describe('Organization capability authorization and safe outputs', () => {
       }),
     });
     expect(result).toMatchObject({ status: 'denied', error: 'permission_denied' });
-    expect(loadReportPreviewPayload).not.toHaveBeenCalled();
+    expect(createBuyerIntelligenceSnapshotRepository).not.toHaveBeenCalled();
   });
 
-  it('previews stored measurement state without generating or delivering an artifact', async () => {
-    vi.mocked(loadReportPreviewPayload).mockResolvedValue({
-      clientName: 'Example Clinic', domain: 'example.ca', topic: null, location: 'Montreal',
-      period: '2026-08', trackedSince: null, readinessScore: null, categories: [], issues: [],
-      questionsTracked: 10, questionsCited: 3, combinedVisibilityPct: 30, engines: [],
-      brandMentions: 3, siteCitations: 3, shareOfAnswersPct: 30, competitors: [], competitorSet: [],
-      hasTrend: false, hasAveragePosition: false,
-    });
+  it('previews only the canonical eligible buyer-intelligence snapshot', async () => {
+    const snapshot = { snapshotId: 'bis-v1:canonical' } as never;
+    vi.mocked(createBuyerIntelligenceSnapshotRepository).mockReturnValue({
+      list: vi.fn().mockResolvedValue([snapshot]),
+    } as never);
+    vi.mocked(buildBuyerIntelligenceView).mockReturnValue({
+      contractVersion: 'buyer-intelligence-view-v1',
+      kind: 'prospect_preview',
+      snapshotId: 'bis-v1:canonical',
+      identity: { canonicalDomain: 'example.ca' },
+    } as never);
     const result = await executeOrganizationCapability({
       runtime,
       access,
@@ -305,8 +315,10 @@ describe('Organization capability authorization and safe outputs', () => {
     });
     expect(result).toMatchObject({
       status: 'ready', externalDeliveryAuthorized: false,
-      value: { preview: { domain: 'example.ca', questionsTracked: 10 } },
+      value: { preview: { snapshotId: 'bis-v1:canonical', identity: { canonicalDomain: 'example.ca' } } },
     });
+    expect(createBuyerIntelligenceSnapshotRepository).toHaveBeenCalledWith(runtime.supabase);
+    expect(buildBuyerIntelligenceView).toHaveBeenCalledWith({ kind: 'prospect_preview', snapshot });
     expect(buildAgencyReportPdf).not.toHaveBeenCalled();
   });
 });

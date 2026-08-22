@@ -4,7 +4,11 @@ vi.mock('./organization-measurement-context', () => ({
   loadConfirmedOrganizationContextByHost: vi.fn().mockResolvedValue(null),
 }));
 
-import { completeAgencyClientBaseline } from './agency-client-baseline';
+import {
+  canReuseRecentClientScan,
+  completeAgencyClientBaseline,
+  organizationContextMarketLabel,
+} from './agency-client-baseline';
 
 function clientOnlySupabase() {
   const client = {
@@ -26,6 +30,21 @@ function clientOnlySupabase() {
 }
 
 describe('agency client baseline context gate', () => {
+  it('uses the confirmed context country for an online business without a locality', () => {
+    expect(organizationContextMarketLabel({
+      market: { locality: null, serviceAreas: [], countryCode: 'CA' },
+    })).toBe('CA');
+  });
+
+  it('prefers the confirmed locality or service area when available', () => {
+    expect(organizationContextMarketLabel({
+      market: { locality: 'Montreal', serviceAreas: ['Quebec'], countryCode: 'CA' },
+    })).toBe('Montreal');
+    expect(organizationContextMarketLabel({
+      market: { locality: null, serviceAreas: ['Quebec'], countryCode: 'CA' },
+    })).toBe('Quebec');
+  });
+
   it('fails closed before provider work when the client has no confirmed Organization Context', async () => {
     const result = await completeAgencyClientBaseline({
       supabase: clientOnlySupabase() as never,
@@ -41,5 +60,37 @@ describe('agency client baseline context gate', () => {
       launchedPlatforms: [],
       reason: 'organization_context_confirmation_required',
     });
+  });
+});
+
+describe('agency client baseline scan reuse', () => {
+  const scope = {
+    agencyAccountId: '00000000-0000-4000-8000-000000000201',
+    clientId: '00000000-0000-4000-8000-000000000202',
+    domain: 'client.example',
+  };
+
+  it('reuses a recent scan only when account, client, and domain all match', () => {
+    expect(canReuseRecentClientScan({
+      agency_account_id: scope.agencyAccountId,
+      agency_client_id: scope.clientId,
+      domain: scope.domain,
+    }, scope)).toBe(true);
+
+    expect(canReuseRecentClientScan({
+      agency_account_id: '00000000-0000-4000-8000-000000000999',
+      agency_client_id: scope.clientId,
+      domain: scope.domain,
+    }, scope)).toBe(false);
+    expect(canReuseRecentClientScan({
+      agency_account_id: scope.agencyAccountId,
+      agency_client_id: '00000000-0000-4000-8000-000000000999',
+      domain: scope.domain,
+    }, scope)).toBe(false);
+    expect(canReuseRecentClientScan({
+      agency_account_id: scope.agencyAccountId,
+      agency_client_id: scope.clientId,
+      domain: 'other.example',
+    }, scope)).toBe(false);
   });
 });

@@ -15,17 +15,34 @@ import {
 import { reserveProviderSpend } from './provider-spend-control';
 
 type Db = { from(table: string): any; rpc?(name: string, args: Record<string, unknown>): any };
+export const AUTONOMOUS_EDITORIAL_SOURCE_TYPE = 'internal_plus_research' as const;
 export type EditorialProvider = {
   readonly heroSpend?: {
     readonly provider: 'openai';
     readonly estimatedCostUsd: number;
   };
-  draft(input: { topic: string; existingTitles: string[] }): Promise<{ title: string; markdown: string; sources: string[] }>;
-  hero(input: { title: string; markdown: string }): Promise<{ url: string; alt: string } | null>;
+  draft(input: { topic: string; existingTitles: string[] }): Promise<{
+    title: string;
+    markdown: string;
+    sources: string[];
+    providerFailure?: string;
+  }>;
+  hero(input: { title: string; markdown: string; allowGenerated: boolean }): Promise<{
+    url: string;
+    alt: string;
+    provider: 'openai' | 'deterministic';
+    providerFailure?: string;
+  } | null>;
   review(input: { title: string; markdown: string; sources: string[]; hero: { url: string; alt: string } }): Promise<{ approved: boolean; reasons: string[] }>;
 };
 
-export type EditorialRunResult = { status: 'created' | 'skipped' | 'rejected' | 'failed'; reason?: string; contentId?: string };
+export type EditorialRunResult = {
+  status: 'created' | 'skipped' | 'rejected' | 'failed';
+  reason?: string;
+  contentId?: string;
+  heroProvider?: 'openai' | 'deterministic';
+  heroProviderFailure?: string;
+};
 
 export function mergeEditorialCandidates(
   retryRows: readonly any[],
@@ -36,6 +53,23 @@ export function mergeEditorialCandidates(
     ...retryRows,
     ...seoRows.filter((row: any) => !retryIds.has(String(row.content_id))),
   ];
+}
+
+const EDITORIAL_FALLBACK_INTERNAL_LINK =
+  '\n\n## Establish an evidence baseline\n\nUse [an AI-search readiness audit](/blog/ai-search-readiness-audit) to identify the public evidence gaps worth fixing first.';
+
+export function ensureEditorialInternalBlogLink(markdown: string): string {
+  const hasInternalBlogLink = [...markdown.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)].some((match) => {
+    const href = match[1]?.trim() ?? '';
+    return href.startsWith('/blog/') || href.startsWith('https://getgeopulse.com/blog/');
+  });
+  return hasInternalBlogLink ? markdown : `${markdown.trimEnd()}${EDITORIAL_FALLBACK_INTERNAL_LINK}`;
+}
+
+function safeEditorialFailureCode(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-z0-9_-]{1,80}$/.test(value)
+    ? value
+    : null;
 }
 
 export async function runAutonomousEditorialEngine(args: {
@@ -109,6 +143,7 @@ export async function runAutonomousEditorialEngine(args: {
   });
   const candidate = orderedCandidates.find((row: any) =>
     row?.status === 'brief' ||
+    row?.metadata?.editorial_retry_required === true ||
     row?.metadata?.proposed_by === 'marketing_autopilot' ||
     // The registry cleanup predates the metadata marker on some rows. An archived article with
     // a topic is still safe to re-enter only through this full draft → hero → review → publish
@@ -118,9 +153,22 @@ export async function runAutonomousEditorialEngine(args: {
   if (!candidate?.content_id || !candidate.topic_cluster) return { status: 'skipped', reason: 'no_candidate' };
 
   const { data: existing } = await args.supabase.from('content_items').select('title').eq('content_type', 'article').limit(250);
-  const draft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
-  if (!draft.title || !draft.markdown || draft.sources.length === 0) return { status: 'rejected', reason: 'incomplete_draft' };
+  const providerDraft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
+  const draft = {
+    ...providerDraft,
+    markdown: providerDraft.markdown
+      ? ensureEditorialInternalBlogLink(providerDraft.markdown)
+      : providerDraft.markdown,
+  };
+  if (!draft.title || !draft.markdown || draft.sources.length === 0) {
+    const providerFailure = safeEditorialFailureCode(draft.providerFailure);
+    return {
+      status: 'rejected',
+      reason: providerFailure ? `incomplete_draft:${providerFailure}` : 'incomplete_draft',
+    };
+  }
 
+  let allowGeneratedHero = false;
   if (args.provider.heroSpend) {
     const reserved = await reserveProviderSpend({
       db: args.supabase,
@@ -130,15 +178,19 @@ export async function runAutonomousEditorialEngine(args: {
       estimatedCostUsd: args.provider.heroSpend.estimatedCostUsd,
       metadata: { content_id: candidate.content_id, topic: candidate.topic_cluster },
     });
-    if (!reserved) return { status: 'skipped', reason: 'openai_spend_cap' };
+    allowGeneratedHero = reserved;
   }
-  const hero = await args.provider.hero({ title: draft.title, markdown: draft.markdown });
+  const hero = await args.provider.hero({
+    title: draft.title,
+    markdown: draft.markdown,
+    allowGenerated: allowGeneratedHero,
+  });
   if (!hero?.url || !hero.alt) return { status: 'rejected', reason: 'missing_clean_hero' };
 
   const review = await args.provider.review({ title: draft.title, markdown: draft.markdown, sources: draft.sources, hero });
   if (!review.approved) return { status: 'rejected', reason: review.reasons.join('; ') || 'review_failed' };
 
-  const metadata = { ...(candidate.metadata ?? {}), editorial_retry_required: false, autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: 'generated' }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
+  const metadata = { ...(candidate.metadata ?? {}), editorial_retry_required: false, autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: hero.provider, hero_provider_failure: hero.providerFailure ?? null }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
   const checks = evaluateContentPublishChecks({
     ...candidate,
     content_type: 'article',
@@ -148,7 +200,7 @@ export async function runAutonomousEditorialEngine(args: {
     source_links: draft.sources,
     canonical_url: candidate.slug ? `/blog/${candidate.slug}` : null,
     cta_goal: 'free_scan',
-    source_type: 'autonomous_editorial',
+    source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
     metadata,
     published_at: null,
   });
@@ -162,11 +214,11 @@ export async function runAutonomousEditorialEngine(args: {
     source_links: draft.sources,
     canonical_url: candidate.slug ? `/blog/${candidate.slug}` : null,
     cta_goal: 'free_scan',
-    source_type: 'autonomous_editorial',
+    source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
     metadata,
     published_at: null,
   });
-  const { error: updateError } = await args.supabase.from('content_items').update({ title: draft.title, draft_markdown: draft.markdown, source_links: draft.sources, status: 'published', canonical_url: publish.canonicalUrl, published_at: publish.publishedAt, metadata }).eq('content_id', candidate.content_id);
+  const { error: updateError } = await args.supabase.from('content_items').update({ title: draft.title, draft_markdown: draft.markdown, source_links: draft.sources, source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE, status: 'published', canonical_url: publish.canonicalUrl, published_at: publish.publishedAt, metadata }).eq('content_id', candidate.content_id);
   if (updateError) return { status: 'failed', reason: updateError.message };
   const opportunityId = String(candidate.metadata?.seo_opportunity_id ?? '');
   if (opportunityId && publish.canonicalUrl) {
@@ -181,5 +233,10 @@ export async function runAutonomousEditorialEngine(args: {
   }
   await reconcileContentLoops(args.supabase, now);
   await closeSatisfiedSeoParents(args.supabase, now);
-  return { status: 'created', contentId: candidate.content_id };
+  return {
+    status: 'created',
+    contentId: candidate.content_id,
+    heroProvider: hero.provider,
+    ...(hero.providerFailure ? { heroProviderFailure: hero.providerFailure } : {}),
+  };
 }

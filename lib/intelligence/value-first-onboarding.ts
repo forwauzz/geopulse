@@ -70,6 +70,13 @@ export type OnboardingConfirmationInput = {
   readonly marketScope?: string | null;
   readonly languages?: string | null;
   readonly timezone?: string | null;
+  readonly services?: string | null;
+  readonly buyer?: string | null;
+};
+
+export type LegacyOnboardingHints = {
+  readonly category?: string | null;
+  readonly location?: string | null;
 };
 
 export type ValueFirstOnboardingActionState =
@@ -144,6 +151,57 @@ function isValidTimeZone(value: string | null): value is string {
   }
 }
 
+/**
+ * The IANA zone a market implies, where it implies exactly one.
+ *
+ * Only unambiguous cases are listed. A country that spans zones is absent unless
+ * the subdivision settles it, because asking is better than reporting a client's
+ * schedule in the wrong time. Canada and the United States are enumerated by
+ * subdivision since those are the markets onboarding actually sees; anything else
+ * still asks.
+ */
+const MARKET_TIME_ZONES: Readonly<Record<string, string>> = {
+  // Canada
+  'CA-NL': 'America/St_Johns',
+  'CA-NS': 'America/Halifax', 'CA-NB': 'America/Moncton', 'CA-PE': 'America/Halifax',
+  'CA-QC': 'America/Toronto', 'CA-ON': 'America/Toronto',
+  'CA-MB': 'America/Winnipeg', 'CA-SK': 'America/Regina',
+  'CA-AB': 'America/Edmonton', 'CA-NT': 'America/Edmonton', 'CA-NU': 'America/Iqaluit',
+  'CA-BC': 'America/Vancouver', 'CA-YT': 'America/Whitehorse',
+  // United States
+  'US-CT': 'America/New_York', 'US-DE': 'America/New_York', 'US-DC': 'America/New_York',
+  'US-FL': 'America/New_York', 'US-GA': 'America/New_York', 'US-ME': 'America/New_York',
+  'US-MD': 'America/New_York', 'US-MA': 'America/New_York', 'US-MI': 'America/New_York',
+  'US-NH': 'America/New_York', 'US-NJ': 'America/New_York', 'US-NY': 'America/New_York',
+  'US-NC': 'America/New_York', 'US-OH': 'America/New_York', 'US-PA': 'America/New_York',
+  'US-RI': 'America/New_York', 'US-SC': 'America/New_York', 'US-VT': 'America/New_York',
+  'US-VA': 'America/New_York', 'US-WV': 'America/New_York',
+  'US-AL': 'America/Chicago', 'US-AR': 'America/Chicago', 'US-IL': 'America/Chicago',
+  'US-IA': 'America/Chicago', 'US-LA': 'America/Chicago', 'US-MN': 'America/Chicago',
+  'US-MS': 'America/Chicago', 'US-MO': 'America/Chicago', 'US-OK': 'America/Chicago',
+  'US-WI': 'America/Chicago',
+  'US-AZ': 'America/Phoenix', 'US-CO': 'America/Denver', 'US-MT': 'America/Denver',
+  'US-NM': 'America/Denver', 'US-UT': 'America/Denver', 'US-WY': 'America/Denver',
+  'US-CA': 'America/Los_Angeles', 'US-NV': 'America/Los_Angeles',
+  'US-OR': 'America/Los_Angeles', 'US-WA': 'America/Los_Angeles',
+  'US-AK': 'America/Anchorage', 'US-HI': 'Pacific/Honolulu',
+  // Single-zone countries this product already serves
+  GB: 'Europe/London', IE: 'Europe/Dublin', FR: 'Europe/Paris', NL: 'Europe/Amsterdam',
+  BE: 'Europe/Brussels', CH: 'Europe/Zurich', SG: 'Asia/Singapore', NZ: 'Pacific/Auckland',
+};
+
+/** The zone a confirmed market implies, or null when the market does not settle it. */
+export function timeZoneForMarket(
+  countryCode: string | null,
+  subdivisionCode: string | null,
+): string | null {
+  const subdivision = subdivisionCode?.trim().toUpperCase();
+  if (subdivision && MARKET_TIME_ZONES[subdivision]) return MARKET_TIME_ZONES[subdivision]!;
+  const country = countryCode?.trim().toUpperCase();
+  if (country && MARKET_TIME_ZONES[country]) return MARKET_TIME_ZONES[country]!;
+  return null;
+}
+
 function normalizeLanguages(raw: string | null | undefined, countryCode: string): string[] {
   const values = clean(raw)?.split(',') ?? [];
   return unique(values.map((value) => {
@@ -203,11 +261,88 @@ export function buildOrganizationOnboardingProposal(args: {
   return { ...base, missingFields: proposalMissingFields(base) };
 }
 
+/**
+ * Fill exact-site gaps from the client record the agency already curated.
+ *
+ * These are hints, not a second resolver: exact-site facts always win, and a
+ * legacy location is kept as a service area instead of being promoted to a
+ * locality, country, or timezone that the stored data never proved.
+ */
+export function proposalWithLegacyHints(
+  proposal: OrganizationOnboardingProposal,
+  hints: LegacyOnboardingHints,
+): OrganizationOnboardingProposal {
+  const category = proposal.category ?? clean(hints.category);
+  const legacyLocation = clean(hints.location);
+  const serviceAreas = proposal.serviceAreas.length > 0
+    ? [...proposal.serviceAreas]
+    : legacyLocation ? [legacyLocation] : [];
+  const base = {
+    ...proposal,
+    category,
+    serviceAreas,
+  } satisfies Omit<OrganizationOnboardingProposal, 'missingFields'>;
+  return { ...base, missingFields: proposalMissingFields(base) };
+}
+
+/**
+ * Re-render a confirmation from what the person typed rather than from what was
+ * originally detected, so a retry keeps their corrections.
+ */
+export function proposalWithCorrections(
+  proposal: OrganizationOnboardingProposal,
+  failure: {
+    readonly missingFields: readonly OnboardingMissingField[];
+    readonly submitted: Partial<Record<OnboardingMissingField, string>>;
+  },
+): OrganizationOnboardingProposal {
+  const { submitted } = failure;
+  const scope = submitted.market_scope;
+  return {
+    ...proposal,
+    displayName: submitted.display_name ?? proposal.displayName,
+    category: submitted.category ?? proposal.category,
+    countryCode: submitted.country_code ?? proposal.countryCode,
+    subdivisionCode: submitted.subdivision_code ?? proposal.subdivisionCode,
+    locality: submitted.locality ?? proposal.locality,
+    marketScope: scope && MARKET_SCOPES.has(scope as OnboardingMarketScope)
+      ? scope as OnboardingMarketScope
+      : proposal.marketScope,
+    languages: submitted.languages
+      ? unique(submitted.languages.split(',').map((value) => value.trim()).filter(Boolean))
+      : proposal.languages,
+    timezone: submitted.timezone ?? proposal.timezone,
+    missingFields: failure.missingFields,
+  };
+}
+
+/** Actionable guidance for a field the person answered with something unusable. */
+export function onboardingCorrectionMessage(
+  invalidFields: readonly OnboardingMissingField[],
+): string | null {
+  if (invalidFields.includes('timezone')) {
+    return 'That time zone is not one GEO-Pulse recognizes. Use an IANA name such as America/Toronto or America/Los_Angeles.';
+  }
+  return null;
+}
+
 export function confirmOrganizationOnboarding(
   proposal: OrganizationOnboardingProposal,
   input: OnboardingConfirmationInput,
 ): { readonly ok: true; readonly value: ConfirmedOrganizationOnboarding }
-  | { readonly ok: false; readonly missingFields: readonly OnboardingMissingField[] } {
+  | {
+      readonly ok: false;
+      readonly missingFields: readonly OnboardingMissingField[];
+      /**
+       * What the person actually typed, so a second attempt starts from their
+       * corrections. Returning only the failing fields meant the form fell back to
+       * the originally detected proposal and silently discarded every other answer,
+       * which is what made a single bad time zone look like an unbreakable loop.
+       */
+      readonly submitted: Partial<Record<OnboardingMissingField, string>>;
+      /** Fields the person answered with something unusable, as opposed to left blank. */
+      readonly invalidFields: readonly OnboardingMissingField[];
+    } {
   const displayName = clean(input.displayName) ?? clean(proposal.displayName);
   const category = clean(input.category) ?? clean(proposal.category);
   const countryCode = normalizeCountryCode(input.countryCode ?? proposal.countryCode);
@@ -218,7 +353,19 @@ export function confirmOrganizationOnboarding(
     ? rawScope as OnboardingMarketScope
     : null;
   const languages = normalizeLanguages(input.languages ?? proposal.languages.join(', '), countryCode ?? '');
-  const timezone = clean(input.timezone) ?? clean(proposal.timezone);
+  const services = input.services === undefined || input.services === null
+    ? proposal.services
+    : unique(input.services.split(/[\r\n,]+/).map((value) => value.trim()).filter(Boolean));
+  const buyer = clean(input.buyer) ?? proposal.buyer;
+
+  // A blank time zone the market already settles is not a question worth asking.
+  // A wrong one is: silently replacing it would report a client's schedule in a
+  // time they did not choose.
+  const typedTimezone = clean(input.timezone);
+  const timezone = typedTimezone ?? clean(proposal.timezone) ?? timeZoneForMarket(countryCode, subdivisionCode);
+  // Only what the person typed can be called invalid. A detected value that fails
+  // is our problem to re-ask, not their mistake to correct.
+  const timezoneInvalid = Boolean(typedTimezone) && !isValidTimeZone(typedTimezone);
   const missing = new Set<OnboardingMissingField>();
   if (!displayName) missing.add('display_name');
   if (!category) missing.add('category');
@@ -233,7 +380,28 @@ export function confirmOrganizationOnboarding(
     missing.add('locality');
   }
   const missingFields = FIELD_ORDER.filter((field) => missing.has(field));
-  if (missingFields.length > 0) return { ok: false, missingFields };
+  if (missingFields.length > 0) {
+    // Everything the person typed goes back, not just what failed, so a retry does
+    // not cost them the answers that were already right.
+    const submitted: Partial<Record<OnboardingMissingField, string>> = {};
+    const keep = (field: OnboardingMissingField, value: string | null | undefined) => {
+      if (value) submitted[field] = value;
+    };
+    keep('display_name', clean(input.displayName));
+    keep('category', clean(input.category));
+    keep('country_code', clean(input.countryCode));
+    keep('subdivision_code', clean(input.subdivisionCode));
+    keep('locality', clean(input.locality));
+    keep('market_scope', clean(input.marketScope));
+    keep('languages', clean(input.languages));
+    keep('timezone', clean(input.timezone));
+    return {
+      ok: false,
+      missingFields,
+      submitted,
+      invalidFields: timezoneInvalid ? ['timezone'] : [],
+    };
+  }
 
   return {
     ok: true,
@@ -244,8 +412,8 @@ export function confirmOrganizationOnboarding(
       canonicalDomain: proposal.canonicalDomain,
       displayName: displayName!,
       category: category!,
-      services: proposal.services,
-      buyer: proposal.buyer,
+      services,
+      buyer,
       marketScope: marketScope!,
       countryCode: countryCode!,
       subdivisionCode,

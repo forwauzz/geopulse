@@ -207,13 +207,13 @@ async function getDispatchableContentItem(
 
 export function canDispatchApprovedManualInstagramAsset(
   account: Pick<DistributionAccountRow, 'provider_name'>,
-  asset: Pick<DistributionAssetRow, 'source_type' | 'provider_family' | 'status'>
+  asset: Pick<DistributionAssetRow, 'source_type' | 'provider_family' | 'status' | 'approved_at'>
 ): boolean {
   return (
     account.provider_name === 'instagram' &&
     asset.source_type === 'manual' &&
     asset.provider_family === 'instagram' &&
-    asset.status === 'approved'
+    (asset.status === 'approved' || (asset.status === 'scheduled' && Boolean(asset.approved_at)))
   );
 }
 

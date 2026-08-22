@@ -6,11 +6,11 @@ import {
 import type { OrganizationContext } from './organization-context';
 
 export const ORGANIZATION_MEASUREMENT_POLICY_VERSION = 'organization-measurement-v1';
-export const ORGANIZATION_QUERY_GENERATOR_VERSION = 'organization-query-v1';
+export const ORGANIZATION_QUERY_GENERATOR_VERSION = 'organization-query-v2';
 
 const measurementBindingSchema = z.object({
   policyVersion: z.literal(ORGANIZATION_MEASUREMENT_POLICY_VERSION),
-  queryGeneratorVersion: z.literal(ORGANIZATION_QUERY_GENERATOR_VERSION),
+  queryGeneratorVersion: z.enum(['organization-query-v1', ORGANIZATION_QUERY_GENERATOR_VERSION]),
   organizationIdentityId: z.string().uuid(),
   contextId: z.string().min(1),
   contextVersion: z.string().min(1),
@@ -26,7 +26,7 @@ const measurementBindingSchema = z.object({
   languages: z.array(z.string().min(1)).min(1),
   timezone: z.string().min(1),
   buyer: z.string().min(1).nullable(),
-  querySetVersion: z.string().regex(/^oqs1-[0-9a-f]{8}-g1$/),
+  querySetVersion: z.string().regex(/^oqs1-[0-9a-f]{8}-g[12]$/),
   competitorCohortVersion: z.string().regex(/^occ1-[0-9a-f]{8}$/),
   trackedCompetitorDomains: z.array(z.string().min(1)),
 });
@@ -145,7 +145,7 @@ export function deriveOrganizationMeasurementBinding(
       languages: sortedUnique(context.market.languages),
       timezone: context.market.timezone,
       buyer: context.market.buyer,
-      querySetVersion: `oqs1-${suffix}-g1`,
+      querySetVersion: `oqs1-${suffix}-g2`,
       competitorCohortVersion: `occ1-${suffix}`,
       trackedCompetitorDomains: competitors,
     }),

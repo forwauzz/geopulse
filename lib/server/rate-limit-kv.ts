@@ -95,3 +95,23 @@ export async function checkSessionEventRateLimit(
   await kv.put(key, String(n + 1), { expirationTtl: SESSION_EVENT_WINDOW_SEC * 2 });
   return { ok: true };
 }
+
+const UNSUBSCRIBE_WINDOW_SEC = 60;
+const UNSUBSCRIBE_MAX_PER_RECIPIENT = 5;
+
+/** Limit repeated POSTs for one recipient/network pair without blocking a shared scanner IP. */
+export async function checkUnsubscribeRateLimit(
+  kv: KVNamespace | undefined,
+  recipientId: string,
+  ip: string
+): Promise<RateLimitResult> {
+  if (!kv) return { ok: true };
+  const key = `rl:unsubscribe:${recipientId}:${ip}:${minuteBucket()}`;
+  const raw = await kv.get(key);
+  const n = raw ? Number.parseInt(raw, 10) : 0;
+  if (Number.isFinite(n) && n >= UNSUBSCRIBE_MAX_PER_RECIPIENT) {
+    return { ok: false, code: 'ip', retryAfterSec: UNSUBSCRIBE_WINDOW_SEC };
+  }
+  await kv.put(key, String(n + 1), { expirationTtl: UNSUBSCRIBE_WINDOW_SEC * 2 });
+  return { ok: true };
+}

@@ -1,7 +1,19 @@
 import Link from 'next/link';
 import { loadAdminPageContext } from '@/lib/server/admin-runtime';
-import { loadEmailCampaignList } from '@/lib/server/email-campaign-console';
+import {
+  loadEmailCampaignComposerOptions,
+  loadEmailCampaignList,
+  type EmailCampaignSegmentOption,
+} from '@/lib/server/email-campaign-console';
 import { resolveCampaignSender } from '@/lib/server/email-campaign-sender';
+import { PRESET_OUTREACH_TEMPLATES } from '@/lib/server/outreach-templates';
+import {
+  createAuditEmailCampaignAction,
+  createEmailCampaignAction,
+  importCampaignContactsAction,
+  prepareApolloCampaignContactsAction,
+  prepareSavedApolloCampaignContactsAction,
+} from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,13 +37,59 @@ const STATE_STYLE: Record<string, string> = {
   stopped: 'bg-red-500/15 text-red-700 dark:text-red-300',
 };
 
-export default async function EmailCampaignsPage() {
+function campaignSegments(vertical: string, segments: readonly EmailCampaignSegmentOption[]) {
+  const pattern = vertical === 'msp_it_services' ? /(^|-)msp(s)?($|-)/i : /marketing-agenc/i;
+  return segments.filter((segment) => pattern.test(segment.segment));
+}
+
+function auditCampaignSegments(segments: readonly EmailCampaignSegmentOption[]) {
+  return segments.filter((segment) => /(^|-)msp(s)?($|-)|^apollo-import-/i.test(segment.segment));
+}
+
+function draftKey(campaignKey: string): string {
+  return `${campaignKey}-email-pilot-v1`.replace(/[^a-z0-9-]+/gi, '-').toLowerCase();
+}
+
+export default async function EmailCampaignsPage({
+  searchParams,
+}: {
+  readonly searchParams?: Promise<{
+    error?: string;
+    contactsEligible?: string;
+    contactsHeld?: string;
+    contactsSuppressed?: string;
+    contactsSkipped?: string;
+    contactsInvalid?: string;
+    contactsError?: string;
+    apolloSearched?: string;
+    apolloCredits?: string;
+    apolloEligible?: string;
+    apolloHeld?: string;
+    apolloAuditsQueued?: string;
+    apolloAuditsReady?: string;
+    apolloAuditFailures?: string;
+    apolloError?: string;
+    savedApolloSelected?: string;
+    savedApolloHeld?: string;
+    savedApolloAuditsQueued?: string;
+    savedApolloAuditsReady?: string;
+    savedApolloAuditFailures?: string;
+    savedApolloError?: string;
+  }>;
+}) {
   const ctx = await loadAdminPageContext('/admin/campaigns/email');
   if (!ctx.ok) return <p className="text-error">{ctx.message}</p>;
 
   const env = ctx.env as unknown as Record<string, string | undefined>;
-  const campaigns = await loadEmailCampaignList(ctx.adminDb, env);
+  const [campaigns, composer] = await Promise.all([
+    loadEmailCampaignList(ctx.adminDb, env),
+    loadEmailCampaignComposerOptions(ctx.adminDb),
+  ]);
   const sender = resolveCampaignSender(env);
+  const query = (await searchParams) ?? {};
+  const mspPreset = PRESET_OUTREACH_TEMPLATES.find((template) => template.key === 'msp-evidence-first')!;
+  const agencyPreset = PRESET_OUTREACH_TEMPLATES.find((template) => template.key === 'first-scorecard')!;
+  const savedApolloSegments = composer.segments.filter((segment) => /^apollo-import-/i.test(segment.segment));
 
   return (
     <div className="space-y-6">
@@ -64,6 +122,268 @@ export default async function EmailCampaignsPage() {
           </div>
         </section>
       ) : null}
+
+      {query.error ? (
+        <p role="alert" className="rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-700 dark:text-red-300">
+          The draft was not created ({query.error.replaceAll('_', ' ')}). No audience was frozen and nothing was sent.
+        </p>
+      ) : null}
+
+      <section aria-label="Campaign workflow" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ['1', 'Contacts', 'Import, suppress, and qualify MSPs'],
+          ['2', 'Campaign', 'Choose name, segment, and message'],
+          ['3', 'Preview & test', 'Confirm the exact rendered email'],
+          ['4', 'Schedule', 'Release only after every gate passes'],
+        ].map(([step, label, detail]) => (
+          <div key={step} className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-primary">Step {step}</p>
+            <p className="mt-1 font-headline text-base font-bold text-on-background">{label}</p>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">{detail}</p>
+          </div>
+        ))}
+      </section>
+
+      <details id="import-contacts" open={query.contactsHeld !== undefined || Boolean(query.contactsError)} className="group rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 md:p-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Audience</p>
+            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Import and qualify contacts</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">CSV in, suppression and MSP-fit checks applied. No enrollment and no send.</p>
+          </div>
+          <span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary">Upload CSV</span>
+        </summary>
+        <div className="border-t border-outline-variant/15 p-5 md:p-6">
+          {query.contactsHeld !== undefined ? (
+            <p className="mb-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
+              Qualified {query.contactsEligible ?? '0'} Quebec MSP{query.contactsEligible === '1' ? '' : 's'} · held {query.contactsHeld} · suppressed {query.contactsSuppressed ?? '0'} · {query.contactsSkipped ?? '0'} already saved · {query.contactsInvalid ?? '0'} unusable. Nothing was enrolled or sent.
+            </p>
+          ) : null}
+          {query.contactsError ? (
+            <p role="alert" className="mb-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              Import needs attention: {query.contactsError.replaceAll('_', ' ')}.
+            </p>
+          ) : null}
+          <form action={importCampaignContactsAction} className="grid gap-4 md:grid-cols-2">
+            <label className="block md:col-span-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Contact CSV</span>
+              <input name="file" type="file" accept=".csv,text/csv" required className="mt-1 block w-full rounded-xl border border-dashed border-outline-variant/40 bg-surface-container-low px-4 py-5 text-sm" />
+              <span className="mt-1 block text-xs text-on-surface-variant">Apollo exports are recognized automatically. Missing or invalid email rows are reported, never fabricated.</span>
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Held segment</span>
+              <input name="segment" required defaultValue="apollo-import-2026-08" className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">Tags</span>
+              <input name="tags" defaultValue="apollo, imported-2026-08" className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" />
+            </label>
+            <div className="flex flex-wrap items-center justify-between gap-3 md:col-span-2">
+              <p className="max-w-2xl text-xs leading-5 text-on-surface-variant">Apollo Verified contacts qualify automatically only when they are named decision-makers at an explicit Quebec MSP, use a matching business domain, and clear suppression and catch-all checks. Everything else stays held with a reason.</p>
+              <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Import and qualify</button>
+            </div>
+          </form>
+        </div>
+      </details>
+
+      <section id="apollo-intake" className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 shadow-float md:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Apollo intake</p>
+            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Find, qualify, and prepare report-ready MSP contacts</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
+              Searches Quebec owner-level MSP contacts, reveals verified business email only, applies suppression and fit checks,
+              then queues personalized audits without enrolling or emailing anyone.
+            </p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${env['APOLLO_API_KEY'] ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200' : 'bg-amber-500/10 text-amber-800 dark:text-amber-200'}`}>
+            {env['APOLLO_API_KEY'] ? 'Apollo connected' : 'Apollo key required'}
+          </span>
+        </div>
+        {query.apolloSearched !== undefined ? (
+          <p className="mt-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
+            Searched {query.apolloSearched} candidates · used up to {query.apolloCredits ?? '0'} credits · qualified {query.apolloEligible ?? '0'} · held {query.apolloHeld ?? '0'} · audits queued {query.apolloAuditsQueued ?? '0'} · already ready {query.apolloAuditsReady ?? '0'} · failures {query.apolloAuditFailures ?? '0'}. No enrollment and no send.
+          </p>
+        ) : null}
+        {query.apolloError ? (
+          <p role="alert" className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            Apollo intake needs attention: {query.apolloError.replaceAll('_', ' ')}.
+          </p>
+        ) : null}
+        <form action={prepareApolloCampaignContactsAction} className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="min-w-56 text-sm font-semibold text-on-background">
+            New contacts to prepare
+            <input name="requested" type="number" min="1" max="10" defaultValue="8" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" />
+          </label>
+          <button type="submit" disabled={!env['APOLLO_API_KEY']} className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary disabled:cursor-not-allowed disabled:opacity-50">
+            Find contacts and queue audits
+          </button>
+          <p className="basis-full text-xs leading-5 text-on-surface-variant">
+            Credit guardrail: at most one email-only enrichment per requested contact; no personal emails, phone numbers, or waterfall providers.
+          </p>
+        </form>
+      </section>
+
+      {savedApolloSegments.length > 0 ? (
+        <section id="saved-apollo-intake" className="rounded-2xl border border-primary/25 bg-primary/5 p-5 md:p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Saved Apollo audience</p>
+          <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Prepare uploaded contacts without calling Apollo again</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">
+            Selects a bounded set of named business contacts from the existing import, checks live suppression and company-domain identity,
+            and queues personalized campaign-preview audits. It consumes no Apollo credits, enrolls nobody, and sends no prospect email.
+          </p>
+          {query.savedApolloSelected !== undefined ? (
+            <p className="mt-4 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200">
+              Selected {query.savedApolloSelected} contacts | held {query.savedApolloHeld ?? '0'} | audits queued {query.savedApolloAuditsQueued ?? '0'} | already ready {query.savedApolloAuditsReady ?? '0'} | failures {query.savedApolloAuditFailures ?? '0'} | Apollo credits 0. No enrollment and no send.
+            </p>
+          ) : null}
+          {query.savedApolloError ? (
+            <p role="alert" className="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+              Saved Apollo intake needs attention: {query.savedApolloError.replaceAll('_', ' ')}.
+            </p>
+          ) : null}
+          <form action={prepareSavedApolloCampaignContactsAction} className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="min-w-72 flex-1 text-sm font-semibold text-on-background">
+              Uploaded contact segment
+              <select name="segment" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm">
+                {savedApolloSegments.map((segment) => (
+                  <option key={segment.segment} value={segment.segment}>{segment.segment} | {segment.total} saved</option>
+                ))}
+              </select>
+            </label>
+            <label className="w-44 text-sm font-semibold text-on-background">
+              Contacts to prepare
+              <input name="requested" type="number" min="1" max="10" defaultValue="8" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
+            </label>
+            <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Prepare saved contacts</button>
+          </form>
+        </section>
+      ) : null}
+
+      {composer.campaigns.find((campaign) => campaign.role === 'primary') ? (
+        <section className="rounded-2xl border border-primary/25 bg-primary/5 p-5 md:p-6">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Prepared-audit pilot</p>
+          <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Create the personalized 10-page audit campaign</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">Uses each recipient’s completed scan, website hero, brand colour, first name, and signed full-report link. Choose a bounded cap after the reports are ready.</p>
+          <form action={createAuditEmailCampaignAction} className="mt-4 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="campaignId" value={composer.campaigns.find((campaign) => campaign.role === 'primary')!.id} />
+            <label className="min-w-72 flex-1 text-sm font-semibold text-on-background">
+              Qualified contact segment
+              <select name="segment" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm">
+                {auditCampaignSegments(composer.segments).map((segment) => (
+                  <option key={segment.segment} value={segment.segment}>{segment.segment} — {segment.eligible} eligible / {segment.total} total</option>
+                ))}
+              </select>
+            </label>
+            <label className="w-36 text-sm font-semibold text-on-background">
+              Recipient cap
+              <input name="recipientCap" type="number" min="1" max="25" defaultValue="8" required className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
+            </label>
+            <button type="submit" className="rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary">Create audit campaign</button>
+          </form>
+        </section>
+      ) : null}
+
+      <details id="new-campaign" open={Boolean(query.error)} className="group rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
+        <summary className="flex cursor-pointer list-none flex-wrap items-start justify-between gap-3 p-5 md:p-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Compose</p>
+            <h2 className="mt-1 font-headline text-xl font-bold text-on-background">Create campaign</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">Start with a name and reviewed audience. Message rules stay tucked away until needed.</p>
+          </div>
+          <span className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-on-primary">Create campaign</span>
+        </summary>
+
+        <div className="border-t border-outline-variant/15 p-5 md:p-6">
+          {composer.warnings.length > 0 ? (
+            <ul className="space-y-1 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-on-surface-variant">
+              {composer.warnings.map((warning) => <li key={warning}>- {warning}</li>)}
+            </ul>
+          ) : null}
+
+        <div className="mt-5 grid gap-5 xl:grid-cols-2">
+          {composer.campaigns.map((campaign) => {
+            const segments = campaignSegments(campaign.vertical, composer.segments);
+            const preset = campaign.vertical === 'msp_it_services' ? mspPreset : agencyPreset;
+            return (
+              <form key={campaign.id} action={createEmailCampaignAction} className="space-y-4 rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4 md:p-5">
+                <input type="hidden" name="campaignId" value={campaign.id} />
+                <input type="hidden" name="buyer" value={campaign.buyer_role} />
+                <input type="hidden" name="offerKey" value={campaign.offer_key} />
+                <input type="hidden" name="ctaGoal" value={campaign.cta_goal} />
+                <input type="hidden" name="bodyFormat" value={preset.bodyFormat} />
+                <input type="hidden" name="hypothesis" value="A governed evidence-first message can earn a qualified reply without unsupported claims." />
+                <input type="hidden" name="objective" value="Earn one qualified human reply from the active vertical." />
+                <input type="hidden" name="closureCondition" value="Record the declared success or stop result with provider and funnel evidence." />
+                <input type="hidden" name="sendWindowStartHour" value="9" />
+                <input type="hidden" name="sendWindowEndHour" value="17" />
+                <input type="hidden" name="spacingMinutes" value="60" />
+                <input type="hidden" name="dailyCap" value="25" />
+                <input type="hidden" name="utmContent" value={campaign.vertical === 'msp_it_services' ? 'msp-evidence-first' : 'agency-scorecard'} />
+
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant">{campaign.role}</p>
+                    <h3 className="mt-1 font-headline text-lg font-bold text-on-background">{campaign.campaign_key}</h3>
+                    <p className="mt-1 text-xs text-on-surface-variant">{campaign.vertical.replaceAll('_', ' ')} - {campaign.allocation_percent}% allocation</p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">held until preflight</span>
+                </div>
+
+                <label className="block text-sm font-semibold text-on-background">
+                  Draft name
+                  <input name="name" required defaultValue={`${campaign.role === 'primary' ? 'MSP' : 'Agency'} evidence-first pilot`} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm" />
+                </label>
+                <input type="hidden" name="interventionKey" value={draftKey(campaign.campaign_key)} />
+                <label className="block text-sm font-semibold text-on-background">
+                  Contact segment
+                  <select name="segment" required disabled={segments.length === 0} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-3 py-2 text-sm disabled:opacity-60">
+                    {segments.map((segment) => (
+                      <option key={segment.segment} value={segment.segment}>
+                        {segment.segment} - {segment.eligible} eligible / {segment.total} total
+                      </option>
+                    ))}
+                    {segments.length === 0 ? <option value="">No matching segment</option> : null}
+                  </select>
+                </label>
+
+                {segments.map((segment) => (
+                  <div key={segment.segment} className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+                    {[
+                      ['Eligible', segment.eligible],
+                      ['Verify', segment.needsVerification],
+                      ['Excluded', segment.excluded],
+                      ['In sequence', segment.inSequence],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-lg bg-surface-container-lowest px-2.5 py-2">
+                        <p className="font-bold text-on-background">{value}</p>
+                        <p className="text-on-surface-variant">{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+
+                <details className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-on-background">Message and safeguards</summary>
+                  <div className="grid gap-4 border-t border-outline-variant/15 p-4">
+                    <label className="block text-sm font-semibold text-on-background">One meaningful variable<input name="meaningfulVariable" required defaultValue="Evidence-first email through the governed campaign workflow." className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <label className="block text-sm font-semibold text-on-background">Success condition<input name="successCondition" required defaultValue={campaign.success_condition} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <label className="block text-sm font-semibold text-on-background">Stop condition<input name="stopCondition" required defaultValue={campaign.stop_condition} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <label className="block text-sm font-semibold text-on-background">Subject<input name="subject" required defaultValue={preset.subject} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-sm" /></label>
+                    <input type="hidden" name="previewText" value="A dated public-site readiness audit with an evidence boundary." />
+                    <label className="block text-sm font-semibold text-on-background">First message<textarea name="bodyTemplate" required defaultValue={preset.body} rows={10} className="mt-1 w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-3 py-2 font-mono text-xs leading-5" /></label>
+                  </div>
+                </details>
+                <input type="hidden" name="owner" value="elena" />
+                <button type="submit" disabled={segments.length === 0} className="w-full rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-on-primary disabled:opacity-50">
+                  Create held draft
+                </button>
+              </form>
+            );
+          })}
+        </div>
+        </div>
+      </details>
 
       <section className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-float">
         <div className="border-b border-outline-variant/15 px-5 py-4 md:px-6">

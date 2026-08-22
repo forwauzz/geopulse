@@ -76,6 +76,18 @@ export type AgencyClientBaselineResult = {
   readonly reason: string | null;
 };
 
+export function organizationContextMarketLabel(context: {
+  readonly market: {
+    readonly locality: string | null;
+    readonly serviceAreas: readonly string[];
+    readonly countryCode: string;
+  };
+}): string {
+  return context.market.locality?.trim()
+    || context.market.serviceAreas.find((area) => area.trim())?.trim()
+    || context.market.countryCode.trim();
+}
+
 export type AgencyBaselineSweepResult = {
   readonly eligible: number;
   readonly attempted: number;
@@ -107,8 +119,18 @@ function clientProfile(input: {
   };
 }
 
+export function canReuseRecentClientScan(
+  scan: { agency_account_id?: string | null; agency_client_id?: string | null; domain?: string | null },
+  scope: { agencyAccountId: string; clientId: string; domain: string },
+): boolean {
+  return scan.agency_account_id === scope.agencyAccountId
+    && scan.agency_client_id === scope.clientId
+    && canonicalDomain(scan.domain ?? '') === canonicalDomain(scope.domain);
+}
+
 async function recentClientScan(
   supabase: SupabaseClient<any, 'public', any>,
+  agencyAccountId: string,
   clientId: string,
   domain: string,
   now: Date,
@@ -116,17 +138,21 @@ async function recentClientScan(
   const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from('scans')
-    .select('id,score,created_at')
-    .or(`agency_client_id.eq.${clientId},domain.eq.${domain}`)
+    .select('id,score,created_at,agency_account_id,agency_client_id,domain')
+    .eq('agency_account_id', agencyAccountId)
+    .eq('agency_client_id', clientId)
+    .eq('domain', domain)
     .eq('status', 'complete')
     .gte('created_at', cutoff)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data ? { id: String(data.id), score: data.score === null ? null : Number(data.score) } : null;
+  return data && canReuseRecentClientScan(data, { agencyAccountId, clientId, domain })
+    ? { id: String(data.id), score: data.score === null ? null : Number(data.score) }
+    : null;
 }
 
-async function runAndPersistReadinessScan(args: {
+export async function runAndPersistReadinessScan(args: {
   supabase: SupabaseClient<any, 'public', any>;
   env: BaselineEnv;
   clientId: string;
@@ -265,7 +291,7 @@ export async function completeAgencyClientBaseline(args: {
     };
   }
 
-  const clientLocation = typeof client.metadata?.['location'] === 'string'
+  const legacyClientLocation = typeof client.metadata?.['location'] === 'string'
     ? String(client.metadata['location'])
     : null;
   const existingLocation = typeof existingConfig?.location === 'string'
@@ -276,7 +302,7 @@ export async function completeAgencyClientBaseline(args: {
   const profile = clientProfile({
     vertical: client.vertical,
     subvertical: client.subvertical,
-    location: clientLocation || existingLocation,
+    location: organizationContextMarketLabel(organizationContext),
   });
   const discovery = resolveDiscoveryMode(args.env) === 'gemini'
     ? await discoverCompetitorsLive(args.env, profile, domain)
@@ -287,7 +313,7 @@ export async function completeAgencyClientBaseline(args: {
     ? existingConfig.competitor_list.filter((item: unknown): item is string => typeof item === 'string')
     : [];
   const market = resolveClientMarketContext({
-    clientLocation,
+    clientLocation: organizationContextMarketLabel(organizationContext) || legacyClientLocation,
     existingLocation,
     clientCategory: client.subvertical || client.vertical,
     existingCategory: existingConfig?.topic || existingDomain?.subvertical || existingDomain?.vertical,
@@ -334,7 +360,13 @@ export async function completeAgencyClientBaseline(args: {
     };
   }
 
-  const recent = await recentClientScan(args.supabase, args.clientId, domain, now);
+  const recent = await recentClientScan(
+    args.supabase,
+    args.agencyAccountId,
+    args.clientId,
+    domain,
+    now,
+  );
   const scan = recent ?? await runAndPersistReadinessScan({
     supabase: args.supabase,
     env: args.env,

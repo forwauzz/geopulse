@@ -21,7 +21,7 @@ import {
 } from './email-campaign-contract';
 
 /** Fields that only exist once a site has been scanned for this recipient. */
-export const SCAN_MERGE_FIELDS: readonly string[] = ['score', 'grade', 'top_issues', 'report_url'];
+export const SCAN_MERGE_FIELDS: readonly string[] = ['score', 'grade', 'top_issues', 'report_url', 'report_thumbnail', 'scan_preview'];
 
 export interface PreviewContact {
   readonly contactId: string;
@@ -33,11 +33,51 @@ export interface PreviewContact {
   readonly personalizationSourceUrl: string | null;
 }
 
+/** Reduce a CRM display name to a human greeting without mutating the contact record. */
+export function campaignGreetingName(value: string | null | undefined): string | null {
+  const normalized = value?.trim().replace(/\s+/g, ' ');
+  if (!normalized) return null;
+  const withoutHonorific = normalized.replace(/^(?:mr|mrs|ms|miss|dr|prof)\.?\s+/i, '');
+  const commaParts = withoutHonorific.split(',').map((part) => part.trim()).filter(Boolean);
+  const givenName = commaParts.length > 1 ? commaParts[1] : commaParts[0];
+  return givenName?.split(/\s+/)[0] || null;
+}
+
 export interface PreviewScanContext {
+  readonly scanId?: string;
+  readonly siteUrl?: string;
   readonly score: number;
   readonly grade: string;
   readonly topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
+  readonly completedAt?: string;
+  readonly passedChecks?: number;
+  readonly totalChecks?: number;
+  readonly eligibleDestinations?: number;
+  readonly testedDestinations?: number;
+  readonly retrievalScore?: number;
+  readonly understandingTrustScore?: number;
   readonly reportUrl: string;
+  readonly reportThumbnailUrl?: string;
+}
+
+function hasSiteSpecificProof(scan: PreviewScanContext | null | undefined): boolean {
+  return Boolean(
+    scan?.siteUrl &&
+    scan.completedAt &&
+    scan.topIssues.length >= 2 &&
+    typeof scan.passedChecks === 'number' &&
+    typeof scan.totalChecks === 'number' &&
+    scan.totalChecks > 0 &&
+    scan.passedChecks >= 0 &&
+    scan.passedChecks <= scan.totalChecks &&
+    typeof scan.eligibleDestinations === 'number' &&
+    typeof scan.testedDestinations === 'number' &&
+    scan.testedDestinations > 0 &&
+    scan.eligibleDestinations >= 0 &&
+    scan.eligibleDestinations <= scan.testedDestinations &&
+    typeof scan.retrievalScore === 'number' &&
+    typeof scan.understandingTrustScore === 'number'
+  );
 }
 
 export interface CampaignPreview {
@@ -49,6 +89,12 @@ export interface CampaignPreview {
   readonly unsubscribeUrl: string;
   readonly links: readonly string[];
   readonly unresolved: readonly { readonly field: string; readonly why: string }[];
+}
+
+export function requiresScanContext(contract: EmailCampaignV1, sequenceStep = 1): boolean {
+  const step = stepContent(contract.content, sequenceStep);
+  return extractMergeFields(step.subject, step.previewText, step.bodyTemplate)
+    .some((field) => SCAN_MERGE_FIELDS.includes(field));
 }
 
 /**
@@ -81,6 +127,12 @@ export function unresolvedMergeFields(args: {
     }
     if (SCAN_MERGE_FIELDS.includes(field) && !args.scan) {
       unresolved.push({ field, why: 'requires a completed scan for this recipient, and none exists' });
+    }
+    if (field === 'scan_preview' && args.scan && !hasSiteSpecificProof(args.scan)) {
+      unresolved.push({ field, why: 'requires URL, check counts, retrieval evidence, diagnostic scores, and two observed fixes from the same completed scan' });
+    }
+    if (field === 'report_thumbnail' && args.scan && !args.scan.reportThumbnailUrl) {
+      unresolved.push({ field, why: 'requires the signed first-page JPEG for this recipient' });
     }
     if (field === 'personalization_reason' && !args.contact.personalizationReason) {
       unresolved.push({ field, why: 'no verified personalization evidence for this contact' });
@@ -124,7 +176,11 @@ export function renderCampaignPreview(args: {
   const sequenceStep = args.sequenceStep ?? 1;
   const query = campaignUtmQuery(args.contract, sequenceStep);
   const domain = args.contact.companyDomain ?? args.contact.email.slice(args.contact.email.indexOf('@') + 1);
-  const walkthroughUrl = `${appUrl}/walkthrough?${query}&source=outreach`;
+  const walkthroughParams = new URLSearchParams(query);
+  walkthroughParams.set('source', 'outreach');
+  walkthroughParams.set('website', `https://${domain}`);
+  if (args.contact.company) walkthroughParams.set('company', args.contact.company);
+  const walkthroughUrl = `${appUrl}/walkthrough?${walkthroughParams.toString()}`;
   // Preview identifiers, not ledger rows: a preview must never allocate a real send id.
   const unsubscribeId = args.trackingIds?.prospectId ?? `preview-${args.contact.contactId}`;
   const sendId = args.trackingIds?.sendId ?? `preview-${args.contact.contactId}`;
@@ -132,13 +188,22 @@ export function renderCampaignPreview(args: {
   const pixelUrl = `${appUrl}/api/outreach/open/${sendId}`;
 
   const vars: OutreachTemplateVars = {
-    name: args.contact.name,
+    name: campaignGreetingName(args.contact.name),
     company: args.contact.company,
     domain,
+    siteUrl: args.scan?.siteUrl ?? null,
     score: args.scan?.score ?? 0,
     grade: args.scan?.grade ?? '—',
     topIssues: args.scan?.topIssues ?? [],
+    scanCompletedAt: args.scan?.completedAt ?? null,
+    passedChecks: args.scan?.passedChecks ?? null,
+    totalChecks: args.scan?.totalChecks ?? null,
+    eligibleDestinations: args.scan?.eligibleDestinations ?? null,
+    testedDestinations: args.scan?.testedDestinations ?? null,
+    retrievalScore: args.scan?.retrievalScore ?? null,
+    understandingTrustScore: args.scan?.understandingTrustScore ?? null,
     reportUrl: args.scan?.reportUrl ?? `${appUrl}/results/preview?${query}`,
+    reportThumbnailUrl: args.scan?.reportThumbnailUrl ?? null,
     walkthroughUrl,
     personalizationReason: args.contact.personalizationReason,
     personalizationSourceUrl: args.contact.personalizationSourceUrl,
@@ -148,6 +213,7 @@ export function renderCampaignPreview(args: {
   const rendered = renderOutreachTemplate(
     {
       subjectTemplate: step.subject,
+      previewText: step.previewText,
       bodyFormat: args.contract.content.bodyFormat,
       bodyTemplate: step.bodyTemplate,
     },
@@ -161,7 +227,7 @@ export function renderCampaignPreview(args: {
   return {
     subject: rendered.subject,
     html: rendered.html,
-    previewText: step.previewText,
+    previewText: rendered.previewText,
     senderLine: `${args.contract.sender.displayName} <${args.resolvedSender?.from ?? (args.contract.sender.authenticated ? args.contract.sender.fromAddressRef : 'no authenticated sender configured')}>`,
     replyToLine: args.resolvedSender?.replyTo ?? (args.contract.sender.authenticated ? args.contract.sender.replyToRef : 'no authenticated reply-to configured'),
     unsubscribeUrl,

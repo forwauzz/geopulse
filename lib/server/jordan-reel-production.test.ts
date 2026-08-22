@@ -34,6 +34,11 @@ const source = {
 };
 
 describe('Jordan autonomous Reel production', () => {
+  it('enables brief creation by default while preserving an explicit kill switch', () => {
+    expect(resolveJordanReelConfig({}).enabled).toBe(true);
+    expect(resolveJordanReelConfig({ reels_enabled: false }).enabled).toBe(false);
+  });
+
   it('defaults to four weekly slots without changing the four-post daily schedule', () => {
     const config = resolveJordanReelConfig({ reels_enabled: true });
     expect(config).toMatchObject({
@@ -62,7 +67,7 @@ describe('Jordan autonomous Reel production', () => {
     })).toBe(false);
   });
 
-  it('does not plan on disabled days or above the weekly cap', () => {
+  it('catches up stale Reel inventory off-schedule but still enforces the weekly cap', () => {
     const config = resolveJordanReelConfig({
       reels_enabled: true,
       reels_per_week: 1,
@@ -73,7 +78,7 @@ describe('Jordan autonomous Reel production', () => {
       timezone: 'America/Toronto',
       config,
       existingAssets: [],
-    })).toBe(false);
+    })).toBe(true);
     expect(shouldPlanJordanReel({
       now: new Date('2026-07-26T14:00:00.000Z'),
       timezone: 'America/Toronto',
@@ -83,6 +88,32 @@ describe('Jordan autonomous Reel production', () => {
         metadata: { reel_slot_key: '2026-07-25-d6' },
       })],
     })).toBe(false);
+  });
+
+  it('keeps normal weekday scheduling when Reel inventory is recent', () => {
+    const config = resolveJordanReelConfig({
+      reels_enabled: true,
+      reel_days_local: [0, 2],
+    });
+    expect(shouldPlanJordanReel({
+      now: new Date('2026-07-27T14:00:00.000Z'),
+      timezone: 'America/Toronto',
+      config,
+      existingAssets: [asset({
+        created_at: '2026-07-20T14:00:00.000Z',
+        metadata: { reel_slot_key: '2026-07-20-d1' },
+      })],
+    })).toBe(false);
+    expect(shouldPlanJordanReel({
+      now: new Date('2026-07-27T14:00:00.000Z'),
+      timezone: 'America/Toronto',
+      config,
+      coverageRequired: true,
+      existingAssets: [asset({
+        created_at: '2026-07-20T14:00:00.000Z',
+        metadata: { reel_slot_key: '2026-07-20-d1' },
+      })],
+    })).toBe(true);
   });
 
   it('requires a grounded source and produces bounded crop-safe template copy', () => {
@@ -96,6 +127,26 @@ describe('Jordan autonomous Reel production', () => {
     expect(script.hook.length).toBeLessThanOrEqual(72);
     expect(script.tension.length).toBeLessThanOrEqual(100);
     expect(script.url).toBe('getgeopulse.com');
+  });
+
+  it('rotates away from a previously rendered script instead of repeating its media', () => {
+    const alternate = {
+      ...source,
+      key: 'sofia-service-proof',
+      title: 'Show the service evidence before the promise',
+      evidence: {
+        ...source.evidence,
+        hook: 'Lead with the service evidence an MSP buyer can verify.',
+        original_angle: 'Make the offer, service area, proof, and next action agree.',
+      },
+    };
+    const existing = asset({
+      metadata: { reel_script: buildJordanReelScript(source) },
+    });
+
+    expect(chooseJordanReelSource([source, alternate], ['timely'], [existing]))
+      .toEqual(alternate);
+    expect(chooseJordanReelSource([source], ['timely'], [existing])).toBeNull();
   });
 
   it('never truncates a Reel line in the middle of a word', () => {
@@ -166,23 +217,4 @@ describe('Jordan autonomous Reel production', () => {
     expect(withContrast.comparisonBottom).toBe('ABSENT FROM AI');
   });
 
-  it('rotates away from sources a recent Reel already used', () => {
-    const other = {
-      ...source,
-      key: 'sofia-second',
-      title: 'Directories decide who AI recommends',
-      evidence: { ...source.evidence, source_url: 'https://example.com/second' },
-    };
-    expect(
-      chooseJordanReelSource([source, other], ['timely'], [source.evidence.source_url])
-    ).toEqual(other);
-    // When every candidate is recent, still ship rather than skipping the slot.
-    expect(
-      chooseJordanReelSource(
-        [source, other],
-        ['timely'],
-        [source.evidence.source_url, 'https://example.com/second']
-      )
-    ).toEqual(source);
-  });
 });

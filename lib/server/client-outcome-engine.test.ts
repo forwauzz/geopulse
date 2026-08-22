@@ -50,6 +50,25 @@ describe('buildOutcomeActions', () => {
 });
 
 describe('scoped customer outcome', () => {
+  it('fails closed before reading domain metrics when an agency client has no measurement scope', async () => {
+    const requestedTables: string[] = [];
+    const outcome = await loadClientOutcomeEngine({
+      supabase: {
+        from(table: string) {
+          requestedTables.push(table);
+          throw new Error('No database read is allowed without a tenant measurement scope.');
+        },
+      },
+      domain: 'shared.example',
+      requireMeasurementScope: true,
+    });
+
+    expect(requestedTables).toEqual([]);
+    expect(outcome.measured).toBe(false);
+    expect(outcome.visibilityPct).toBeNull();
+    expect(outcome.actions).toEqual([]);
+  });
+
   it('does not average a stale ChatGPT run from another SanoMed query set', async () => {
     type Row = Record<string, unknown>;
     const seed: Record<string, Row[]> = {

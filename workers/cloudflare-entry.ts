@@ -10,13 +10,18 @@ import { sendWeeklyReport } from '../services/marketing-attribution/weekly-repor
 import { createClient } from '@supabase/supabase-js';
 import { structuredError, structuredLog } from '../lib/server/structured-log';
 import { createBenchmarkExecutionAdapter } from '../lib/server/benchmark-execution';
-import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
+import {
+  runScheduledBenchmarkSweep,
+  toBenchmarkChallengerScheduleEnv,
+  type ChallengerScheduleEnvLike,
+} from '../lib/server/benchmark-schedule';
 import { runScheduledDistributionDispatch } from '../lib/server/distribution-job-schedule';
 import { runScheduledStartupExecutionDispatch } from '../lib/server/startup-execution-dispatch-schedule';
 import { runScheduledStartupSlackAutoPost } from '../lib/server/startup-slack-schedule';
 import { runGpmScheduledSweep } from '../lib/server/geo-performance-schedule';
 import { buildGpmEntitlementsMap } from '../lib/server/geo-performance-entitlements';
 import { runAgencyBaselineCompletionSweep } from '../lib/server/agency-client-baseline';
+import { runMonthlyBuyerIntelligenceSweep } from '../lib/server/monthly-buyer-intelligence';
 import {
   fetchAndBuildBenchmarkDailyRecap,
   sendBenchmarkDailyRecap,
@@ -52,6 +57,8 @@ import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-st
 import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
 import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
+import { enqueueDailyLifecycleExceptionDigest, enqueueMissingAccountCreatedEmails, enqueueOnboardingReminders, processLifecycleEmailQueue } from '../lib/server/lifecycle-email';
+import { persistAndDeliverRepairAudit, retryPendingRepairAudits } from '../lib/server/repair-audit-intake';
 
 /**
  * Route audits of our OWN domain through the self-reference service binding so the scan engine
@@ -205,6 +212,21 @@ export default {
         structuredError('distribution_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
+      }
+
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('lifecycle_email');
+        const date = new Date().toISOString().slice(0, 10);
+        await enqueueDailyLifecycleExceptionDigest({ supabase, env, date });
+        await enqueueMissingAccountCreatedEmails({ supabase, env });
+        await enqueueOnboardingReminders({ supabase, env });
+        const result = await processLifecycleEmailQueue({ supabase, env });
+        structuredLog('lifecycle_email_sweep', result, result.failed > 0 ? 'warning' : 'info');
+      } catch (err) {
+        structuredError('lifecycle_email_sweep_failed', { error: err instanceof Error ? err.message : 'unknown' });
       }
 
       try {
@@ -392,6 +414,17 @@ export default {
           triggerSource: 'worker_cron',
           reportBucket: (env as any).REPORT_FILES,
         });
+        if ((env as any).REPORT_FILES) {
+          const monthly = await runMonthlyBuyerIntelligenceSweep({
+            supabase,
+            env: env as unknown as Parameters<typeof runMonthlyBuyerIntelligenceSweep>[0]['env'],
+            reportBucket: (env as any).REPORT_FILES,
+            limit: 1,
+          });
+          if (monthly.eligible > 0) {
+            structuredLog('monthly_buyer_intelligence_tick', monthly, monthly.failed > 0 ? 'warning' : 'info');
+          }
+        }
       } catch (err) {
         structuredError('gpm_schedule_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
@@ -405,7 +438,16 @@ export default {
       try {
         const selfEnv = env as unknown as SelfImprovementEnvLike;
         const selfCfg = resolveSelfImprovementEnvConfig(selfEnv);
+        const repairService = (env as unknown as Record<string, unknown>)['REPAIR_AGENT_SERVICE'] as { fetch(input: string, init?: RequestInit): Promise<Response> } | undefined;
         stage('self_improvement');
+        const repairRetries = await retryPendingRepairAudits({
+          kv: env.SCAN_CACHE,
+          service: repairService,
+          limit: 5,
+        });
+        for (const retry of repairRetries) {
+          structuredLog('self_improvement_repair_retry', retry, retry.delivered ? 'info' : 'error');
+        }
         if (new Date().getUTCHours() === selfCfg.hourUtc) {
           const supabase = createClient(supaUrl, supaKey, {
             auth: { persistSession: false, autoRefreshToken: false },
@@ -415,6 +457,16 @@ export default {
             env: selfEnv,
             triggerSource: 'worker_cron',
           });
+          if (result.ok) {
+            const repairDelivery = await persistAndDeliverRepairAudit({
+              kv: env.SCAN_CACHE,
+              service: repairService,
+              result,
+              targetUrl: selfCfg.targetUrl,
+              generatedAt: new Date().toISOString(),
+            });
+            structuredLog('self_improvement_repair_intake', repairDelivery, repairDelivery.delivered ? 'info' : 'error');
+          }
           if (result.status !== 'skipped') {
             structuredLog('self_improvement_cron_run', {
               status: result.status,
@@ -697,14 +749,68 @@ export default {
           auth: { persistSession: false, autoRefreshToken: false },
         });
         stage('benchmark');
-        await runScheduledBenchmarkSweep({
+        const benchmarkResult = await runScheduledBenchmarkSweep({
           supabase,
           env,
           adapter: createBenchmarkExecutionAdapter(env),
           triggerSource: 'worker_cron',
         });
+        if (benchmarkResult.launchedRuns > 0) {
+          const qualityRefresh = await supabase.rpc('refresh_recent_benchmark_intelligence_quality', {
+            p_recent_hours: 72,
+          });
+          if (qualityRefresh.error) {
+            structuredError('intelligence_quality_after_benchmark_error', {
+              error: qualityRefresh.error.message,
+            });
+          }
+          const learningResult = await runIntelligenceLearningLoop(supabase);
+          structuredLog('intelligence_learning_after_benchmark', {
+            benchmark_launched_runs: benchmarkResult.launchedRuns,
+            benchmark_failed_runs: benchmarkResult.failedRuns,
+            benchmark_quality_refresh: qualityRefresh.error ? 'failed_closed' : qualityRefresh.data,
+            ...learningResult,
+          }, learningResult.criticalQuarantined > 0 ? 'warning' : 'info');
+        }
       } catch (err) {
         structuredError('benchmark_schedule_worker_error', {
+          error: err instanceof Error ? err.message : 'unknown',
+        });
+      }
+
+      // One bounded challenger lane may reuse the same scheduler without changing the
+      // primary MSP protocol. It must name explicit domains and keeps its own run key,
+      // caps, query set and cadence window. Missing domains disable it fail-closed.
+      try {
+        const supabase = createClient(supaUrl, supaKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+        stage('benchmark_challenger');
+        const challengerResult = await runScheduledBenchmarkSweep({
+          supabase,
+          env: toBenchmarkChallengerScheduleEnv(env as unknown as ChallengerScheduleEnvLike),
+          adapter: createBenchmarkExecutionAdapter(env),
+          triggerSource: 'worker_cron',
+        });
+        if (challengerResult.launchedRuns > 0) {
+          const qualityRefresh = await supabase.rpc('refresh_recent_benchmark_intelligence_quality', {
+            p_recent_hours: 72,
+          });
+          if (qualityRefresh.error) {
+            structuredError('intelligence_quality_after_challenger_error', {
+              error: qualityRefresh.error.message,
+            });
+          }
+          const learningResult = await runIntelligenceLearningLoop(supabase);
+          structuredLog('intelligence_learning_after_challenger', {
+            benchmark_launched_runs: challengerResult.launchedRuns,
+            benchmark_failed_runs: challengerResult.failedRuns,
+            benchmark_quality_refresh: qualityRefresh.error ? 'failed_closed' : qualityRefresh.data,
+            ...learningResult,
+          }, learningResult.criticalQuarantined > 0 ? 'warning' : 'info');
+        }
+      } catch (err) {
+        structuredError('benchmark_challenger_worker_error', {
           error: err instanceof Error ? err.message : 'unknown',
         });
       }
@@ -720,7 +826,7 @@ export default {
       const recapHour = Number.parseInt(recapHourRaw ?? '19', 10);
       const recapHourGate = Number.isFinite(recapHour) ? recapHour : 19;
       const recapTimezone = envRecord['BENCHMARK_DAILY_RECAP_TIMEZONE'] ?? 'America/Toronto';
-      const recapVertical = envRecord['BENCHMARK_SCHEDULE_VERTICAL'] ?? 'marketing_firms';
+      const recapVertical = envRecord['BENCHMARK_DAILY_RECAP_VERTICAL']?.trim();
 
       let currentLocalHour: number;
       try {
@@ -737,7 +843,13 @@ export default {
         currentLocalHour = new Date().getUTCHours();
       }
 
-      if (recapTo && resendKey && resendFrom && currentLocalHour === recapHourGate) {
+      if (recapTo && resendKey && resendFrom && currentLocalHour === recapHourGate && !recapVertical) {
+        structuredError('benchmark_daily_recap_configuration_error', {
+          reason: 'BENCHMARK_DAILY_RECAP_VERTICAL is required',
+        });
+      }
+
+      if (recapTo && resendKey && resendFrom && currentLocalHour === recapHourGate && recapVertical) {
         try {
           const supabase = createClient(supaUrl, supaKey, {
             auth: { persistSession: false, autoRefreshToken: false },

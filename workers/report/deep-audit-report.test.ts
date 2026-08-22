@@ -4,6 +4,7 @@ import { buildDeepAuditReportPayload } from './deep-audit-report-payload';
 import { DEEP_AUDIT_ATTACH_MAX_BYTES } from './deep-audit-delivery-policy';
 import { parseIssues } from './deep-audit-report-helpers';
 import { publicObjectUrl } from './r2-report-storage';
+import { buildTecheHealthServicesFixture } from './fixtures/teche-health-services';
 
 describe('buildDeepAuditReportPayload', () => {
   it('returns version 1 payload with section on pages', () => {
@@ -94,6 +95,20 @@ describe('buildDeepAuditReportPayload', () => {
 });
 
 describe('buildDeepAuditMarkdown', () => {
+  it('keeps the Teché regression truthful and actionable', () => {
+    const md = buildDeepAuditMarkdown(buildTecheHealthServicesFixture());
+
+    expect(md).toContain('AI engines can reach you');
+    expect(md).toContain('**Service coverage: Covered**');
+    expect(md).toContain('Now — fix the highest-priority findings');
+    expect(md).not.toMatch(/access-level|unblock access|confirm retrieval/i);
+    expect(md).not.toContain('102 checks');
+    expect(md).toContain('| AI Readiness | — | N/A | Not recorded |');
+    expect(md).not.toMatch(/48\.7%|1\.2%|35\.9%|52%|3x|nearly half of AI citations/i);
+    expect(md).toContain('**Copy-paste instruction:**');
+    expect(md).toContain('**Verify:**');
+  });
+
   it('includes domain, score line, and section label', () => {
     const payload = buildDeepAuditReportPayload({
       scanId: 's',

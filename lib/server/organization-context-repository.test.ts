@@ -5,6 +5,7 @@ import {
   confirmedOrganizationContextMetadata,
   createOrganizationContextRepository,
   projectOrganizationContext,
+  sameCompetitorCohort,
   type OrganizationContextProjectionRows,
 } from './organization-context-repository';
 
@@ -34,6 +35,22 @@ const confirmedContext = {
   },
   versionReasonCodes: ['initial_projection', 'tenant_confirmation'],
 };
+
+describe('competitor cohort equality', () => {
+  it('ignores order, casing, blanks, and duplicates', () => {
+    expect(sameCompetitorCohort(
+      ['UnionMD.ca', 'clinique360.com', ''],
+      ['clinique360.com', 'unionmd.ca', 'unionmd.ca'],
+    )).toBe(true);
+  });
+
+  it('separates a genuine change from a reordering', () => {
+    expect(sameCompetitorCohort(['a.com', 'b.com'], ['b.com', 'a.com'])).toBe(true);
+    expect(sameCompetitorCohort(['a.com', 'b.com'], ['a.com', 'c.com'])).toBe(false);
+    // A cohort losing a member is a change; the client would be measured differently.
+    expect(sameCompetitorCohort(['a.com', 'b.com'], ['a.com'])).toBe(false);
+  });
+});
 
 describe('confirmed Organization Context writes', () => {
   it('creates an auditable, normalized tenant confirmation payload', () => {
@@ -126,6 +143,25 @@ describe('Organization Context projection', () => {
     expect(result.context.organization.aliases).not.toContainEqual(expect.objectContaining({ host: 'sanomed.co.uk' }));
   });
 
+  it('accepts a tenant-confirmed category that refines the shared domain classification', () => {
+    const base = projectionRows();
+    const result = projectOrganizationContext(projectionRows({
+      domain: { ...base.domain, subvertical: 'saas' },
+      owner: {
+        ...base.owner,
+        metadata: {
+          organization_context: { ...confirmedContext, category: 'b2b_saas' },
+        },
+      },
+    }));
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.context.organization.category).toBe('b2b_saas');
+    expect(result.context.status).toBe('confirmed');
+    expect(result.context.conflicts).toEqual([]);
+  });
+
   it('keeps the tenant-confirmed Canadian value but fails closed on UK evidence', () => {
     const result = projectOrganizationContext(projectionRows({
       evidence: [{
@@ -143,6 +179,24 @@ describe('Organization Context projection', () => {
       code: 'country_conflict', retainedValue: 'CA', proposedValue: 'GB', material: true,
     }));
     expect(result.context.versionReasonCodes).toContain('material_conflict_detected');
+  });
+
+  it('projects evidence timestamps that arrive with a Postgres offset rather than a Z suffix', () => {
+    // Every other fixture uses the canonical Z form, which is why this reached
+    // production: `timestamptz` comes back as `+00:00`, and the schema rejects
+    // offsets. The projection threw instead of returning needs_review, so the
+    // backfill preview could not classify a single record.
+    const result = projectOrganizationContext(projectionRows({
+      evidence: [{
+        stable_evidence_id: 'ev-offset', source_kind: 'website', source_id: 'sanomed-ca',
+        evidence_kind: 'official_website_profile', artifact_status: 'present', privacy: 'public',
+        tenant_type: null, tenant_id: null, collected_at: '2026-08-04 14:01:59.900828+00',
+        metadata: { source_tier: 'exact_official_website', confidence: 0.9 },
+      }],
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.context.evidence[0]?.collectedAt).toBe('2026-08-04T14:01:59.900Z');
   });
 
   it('does not change the context version merely because it is projected later', () => {

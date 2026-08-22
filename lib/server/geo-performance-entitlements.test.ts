@@ -245,13 +245,19 @@ describe('enforceGeoPerformanceLimits', () => {
 
 // ── buildGpmEntitlementsMap ───────────────────────────────────────────────────
 
-function makeSupabaseMock(subscriptions: Record<string, unknown>[]) {
+function makeSupabaseMock(
+  subscriptions: Record<string, unknown>[],
+  agencyAccounts: Record<string, unknown>[] = [],
+) {
   return {
-    from(_table: string) {
+    from(table: string) {
       return {
         select(_cols: string) {
           return {
             in(_col: string, _vals: string[]) {
+              if (table === 'agency_accounts') {
+                return Promise.resolve({ data: agencyAccounts, error: null });
+              }
               return {
                 in(_col2: string, _vals2: string[]) {
                   return {
@@ -296,6 +302,29 @@ describe('buildGpmEntitlementsMap', () => {
     expect(e.enabled).toBe(true);
     expect(e.tier).toBe('agency_core');
     expect(e.allowedCadences).toContain('biweekly');
+  });
+
+  it('returns agency_core entitlement for an approved pilot-exempt account', async () => {
+    const supabase = makeSupabaseMock([], [
+      { id: 'acct-pilot', billing_mode: 'pilot_exempt', status: 'pilot' },
+    ]);
+    const map = await buildGpmEntitlementsMap(supabase, [
+      { id: 'cfg-pilot', startup_workspace_id: null, agency_account_id: 'acct-pilot' },
+    ]);
+    const entitlement = map.get('cfg-pilot')!;
+    expect(entitlement.enabled).toBe(true);
+    expect(entitlement.tier).toBe('agency_core');
+    expect(entitlement.source).toBe('pilot_exempt');
+  });
+
+  it('does not grant pilot access to an inactive account', async () => {
+    const supabase = makeSupabaseMock([], [
+      { id: 'acct-inactive', billing_mode: 'pilot_exempt', status: 'inactive' },
+    ]);
+    const map = await buildGpmEntitlementsMap(supabase, [
+      { id: 'cfg-inactive', startup_workspace_id: null, agency_account_id: 'acct-inactive' },
+    ]);
+    expect(map.get('cfg-inactive')).toMatchObject({ enabled: false, source: 'no_active_subscription' });
   });
 
   it('returns disabled entitlement when no subscription matches', async () => {

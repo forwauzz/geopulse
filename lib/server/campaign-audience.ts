@@ -29,6 +29,7 @@ export interface AudienceCandidate {
   readonly email: string;
   readonly name: string | null;
   readonly company: string | null;
+  readonly companyDomain: string | null;
   readonly contactTitle: string | null;
   readonly segment: string;
   readonly eligibilityStatus: ContactEligibility;
@@ -229,7 +230,7 @@ export async function loadAudienceCandidates(supabase: SupabaseClient, segment: 
   const data = await fetchAllRows<Record<string, unknown>>(
     () => supabase
       .from('outreach_contacts')
-      .select('id,email,name,company,contact_title,segment,eligibility_status')
+      .select('id,email,name,company,company_domain,contact_title,segment,eligibility_status')
       .eq('segment', segment),
     `outreach_contacts segment ${segment}`,
   );
@@ -238,6 +239,7 @@ export async function loadAudienceCandidates(supabase: SupabaseClient, segment: 
     email: String(row.email).toLowerCase(),
     name: (row.name as string | null) ?? null,
     company: (row.company as string | null) ?? null,
+    companyDomain: (row.company_domain as string | null) ?? null,
     contactTitle: (row.contact_title as string | null) ?? null,
     segment: String(row.segment ?? ''),
     eligibilityStatus: (row.eligibility_status as ContactEligibility) ?? 'needs_verification',
@@ -267,6 +269,9 @@ export async function freezeCampaignAudience(args: {
     .eq('audience_key', audienceKey)
     .maybeSingle();
   if (existing?.id) {
+    if (Number(existing.recipient_count) < 1) {
+      return { ok: false, reason: 'empty_audience_snapshot' };
+    }
     return {
       ok: true,
       created: false,
@@ -278,6 +283,10 @@ export async function freezeCampaignAudience(args: {
         checksum: String(existing.checksum),
       },
     };
+  }
+
+  if (args.selection.members.length < 1) {
+    return { ok: false, reason: 'no_eligible_recipients' };
   }
 
   const { data: inserted, error } = await args.supabase

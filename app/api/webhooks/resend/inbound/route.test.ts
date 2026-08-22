@@ -5,6 +5,7 @@ const getReceivingEmail = vi.fn();
 const forwardReceivingEmail = vi.fn();
 const processInboundSalesReply = vi.fn();
 const structuredLogWithClientAndWait = vi.fn();
+const reconcileResendLifecycleEvent = vi.fn();
 const supabase = { from: vi.fn() };
 
 vi.mock('resend', () => ({
@@ -41,6 +42,10 @@ vi.mock('@/lib/server/outreach-replies', () => ({
 
 vi.mock('@/lib/server/structured-log', () => ({
   structuredLogWithClientAndWait,
+}));
+
+vi.mock('@/lib/server/lifecycle-email', () => ({
+  reconcileResendLifecycleEvent,
 }));
 
 function request() {
@@ -97,6 +102,7 @@ describe('POST /api/webhooks/resend/inbound', () => {
       error: null,
     });
     structuredLogWithClientAndWait.mockResolvedValue(undefined);
+    reconcileResendLifecycleEvent.mockResolvedValue(true);
   });
 
   it('verifies, classifies, stops the matched sequence, and forwards the original reply', async () => {
@@ -137,5 +143,42 @@ describe('POST /api/webhooks/resend/inbound', () => {
     expect(response.status).toBe(400);
     expect(getReceivingEmail).not.toHaveBeenCalled();
     expect(processInboundSalesReply).not.toHaveBeenCalled();
+  });
+
+  it.each(['email.delivered', 'email.bounced', 'email.complained'] as const)(
+    'reconciles signed %s provider evidence without retrieving inbound content',
+    async (type) => {
+      verify.mockReturnValueOnce({
+        type,
+        created_at: '2026-08-10T20:00:00.000Z',
+        data: { email_id: 'provider-email-1', to: ['buyer@example.com'] },
+      });
+      const { POST } = await import('./route');
+
+      const response = await POST(request());
+
+      expect(response.status).toBe(200);
+      expect(reconcileResendLifecycleEvent).toHaveBeenCalledWith(expect.objectContaining({
+        providerEventId: 'msg_webhook_1',
+        type,
+        messageId: 'provider-email-1',
+        to: 'buyer@example.com',
+      }));
+      expect(getReceivingEmail).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects malformed signed delivery events', async () => {
+    verify.mockReturnValueOnce({
+      type: 'email.delivered',
+      created_at: '2026-08-10T20:00:00.000Z',
+      data: { to: ['buyer@example.com'] },
+    });
+    const { POST } = await import('./route');
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(400);
+    expect(reconcileResendLifecycleEvent).not.toHaveBeenCalled();
   });
 });

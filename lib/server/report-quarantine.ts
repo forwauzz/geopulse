@@ -17,3 +17,56 @@ export function isClientReportSharingHeld(metadata: unknown): boolean {
   const status = hold['status'];
   return typeof status === 'string' && (status === 'held' || status.startsWith('held_'));
 }
+
+/**
+ * Project the current delivery hold without rewriting immutable report history.
+ * A report generated while its client was held keeps that historical status,
+ * but the client-level release supersedes that one reason. Every other artifact
+ * hold and the current client hold still fail closed.
+ */
+export function isReportDeliveryHeld(
+  reportMetadata: unknown,
+  clientMetadata: unknown,
+): boolean {
+  if (isClientReportSharingHeld(clientMetadata)) return true;
+  const metadata = record(reportMetadata);
+  const status = metadata['email_status'];
+  const reason = metadata['delivery_block_reason'];
+  const releasedClientReview = status === 'held_client_review'
+    && reason === 'client_report_sharing_held';
+  if (releasedClientReview) return false;
+  return (typeof status === 'string' && status.startsWith('held_'))
+    || metadata['delivery_blocked'] === true;
+}
+
+export const CLIENT_REPORT_RELEASED_STATUS = 'released';
+
+/**
+ * Client metadata with the review hold released.
+ *
+ * The original hold is kept rather than overwritten: the reason a client was held,
+ * and by whom, is the audit trail for anything that was published afterwards. The
+ * release records its own actor and time alongside it.
+ *
+ * Returns null when there is nothing held, so a caller cannot manufacture a release
+ * record for a client that was never under review.
+ */
+export function releaseClientReportHold(
+  metadata: unknown,
+  actor: { readonly userId: string; readonly at: string },
+): Record<string, unknown> | null {
+  if (!isClientReportSharingHeld(metadata)) return null;
+  const current = record(metadata);
+  const hold = record(current[CLIENT_REPORT_HOLD_KEY]);
+  return {
+    ...current,
+    [CLIENT_REPORT_HOLD_KEY]: {
+      ...hold,
+      status: CLIENT_REPORT_RELEASED_STATUS,
+      released_by_user_id: actor.userId,
+      released_at: actor.at,
+      // Preserved verbatim so the release never erases what it overrode.
+      previous_status: hold['status'] ?? null,
+    },
+  };
+}

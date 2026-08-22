@@ -5,7 +5,7 @@ test.describe('public smoke flows', () => {
     await page.goto('/');
 
     await expect(
-      page.getByRole('heading', { name: /ai visibility you can prove, fix, and report/i })
+      page.getByRole('heading', { name: /see where ai recommends competitors.+and what to fix next/i })
     ).toBeVisible();
     await expect(page.getByLabel('Website URL')).toBeVisible();
     await expect(page.getByRole('button', { name: /audit website/i })).toBeVisible();

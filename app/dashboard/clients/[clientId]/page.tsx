@@ -9,14 +9,17 @@ import { loadEngineCitationMetrics, type EngineKey } from '@/lib/server/dashboar
 import { loadCurrentAgencyWorkspace } from '@/lib/server/current-agency-workspace';
 import { getTrackedPromptPanel } from '@/lib/server/tracked-prompts';
 import { loadClientOutcomeEngine } from '@/lib/server/client-outcome-engine';
-import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, runClientVisibilityCheck, saveClientMonitoring, updateOutcomeActionStatus } from './actions';
+import { activateClientMonitoring, completeClientBaseline, createClientShareLink, importClientPromptCsv, releaseClientSharingHold, runClientVisibilityCheck, saveClientMonitoring, sendClientReportNow, updateOutcomeActionStatus } from './actions';
 import { PendingSubmitButton } from '@/components/pending-submit-button';
 import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
-import { isClientReportSharingHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
+import { isClientReportSharingHeld, isReportDeliveryHeld, isReportQuarantined } from '@/lib/server/report-quarantine';
 import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
 import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
 import { OnboardingFirstValueReveal } from '@/components/onboarding-first-value-reveal';
 import { resolveClientMonitoringState } from '@/lib/server/client-monitoring-state';
+import { loadConfirmedOrganizationContextByHost } from '@/lib/server/organization-measurement-context';
+import { ValueFirstOnboardingForm } from '@/components/value-first-onboarding-form';
+import { confirmAgencyClientMarket } from '../../actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,11 +35,11 @@ export default async function ClientScorecardPage({
   searchParams,
 }: {
   readonly params: Promise<{ clientId: string }>;
-  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string }>;
+  readonly searchParams?: Promise<{ agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string; reportDelivery?: string }>;
 }) {
   const [{ clientId }, sp] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string }),
+    searchParams ?? Promise.resolve({} as { agencyAccount?: string; prompt?: string; monitoring?: string; visibility?: string; share?: string; promptImport?: string; baseline?: string; activation?: string; market?: string; release?: string; reportDelivery?: string }),
   ]);
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -73,6 +76,27 @@ export default async function ClientScorecardPage({
     ? data.scans.find((scan) => scan.agencyClientId === clientId && scan.id !== latestScan.id) ?? null
     : null;
   const domain = client.canonicalDomain ?? latestScan?.domain ?? null;
+
+  // The baseline refuses without this, so the page offers the confirmation up
+  // front rather than making the agency discover it by pressing a button that
+  // returns organization_context_confirmation_required.
+  //
+  // A failed lookup is not treated as a missing context: only a successful read
+  // that finds nothing prompts, so a transient error cannot invent this state.
+  // The baseline action stays visible either way — this prompt is additive, and
+  // hiding the primary action on the strength of one read would lock the agency
+  // out whenever the read is wrong.
+  const organizationContextLookup = domain
+    ? await loadConfirmedOrganizationContextByHost({
+        // The workspace loader hands back a narrowed query surface; this reader
+        // only uses .from(...).select(...).eq(...).maybeSingle().
+        supabase: admin as unknown as Parameters<typeof loadConfirmedOrganizationContextByHost>[0]['supabase'],
+        ownerType: 'agency_client',
+        ownerId: clientId,
+        canonicalDomain: domain,
+      }).then((context) => ({ read: true, context })).catch(() => ({ read: false, context: null }))
+    : { read: false, context: null };
+  const needsMarketConfirmation = organizationContextLookup.read && !organizationContextLookup.context;
 
   const configResult = domain
     ? await admin
@@ -138,6 +162,7 @@ export default async function ClientScorecardPage({
         configMetadata,
         latestScan: latestScanDetail,
         measurementScope,
+        requireMeasurementScope: true,
       })
     : null;
   const { data: currentRunGroups } = configId && querySetId
@@ -154,7 +179,7 @@ export default async function ClientScorecardPage({
   const { data: storedGpmReports } = configId && currentRunGroupIds.length > 0
     ? await admin
         .from('gpm_reports')
-        .select('id,pdf_url,generated_at,platform,metadata')
+        .select('id,pdf_url,pdf_r2_key,generated_at,platform,metadata')
         .eq('config_id', configId)
         .in('run_group_id', currentRunGroupIds)
         .order('generated_at', { ascending: false })
@@ -163,7 +188,10 @@ export default async function ClientScorecardPage({
   const gpmReports = (storedGpmReports ?? [])
     .filter((report: { metadata: Record<string, unknown> | null }) => !isReportQuarantined(report.metadata))
     .slice(0, 6);
-  const reportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
+  const configuredReportRecipients = recipientsFromMetadata(reportEmail, configMetadata);
+  const reportRecipients = configuredReportRecipients.length > 0
+    ? configuredReportRecipients
+    : recipientsFromMetadata(null, clientMetadata);
   const latestGpmReport = gpmReports?.[0] ?? null;
   const baselineStatus = typeof configMetadata['onboarding_loop_status'] === 'string'
     ? String(configMetadata['onboarding_loop_status'])
@@ -188,8 +216,13 @@ export default async function ClientScorecardPage({
     ? latestGpmReport.metadata as Record<string, unknown>
     : {};
   const latestReportEmailStatus = String(latestReportMetadata['email_status'] ?? 'generated');
-  const latestReportHeld = reportSharingHeld || latestReportEmailStatus.startsWith('held_')
-    || latestReportMetadata['delivery_blocked'] === true;
+  const clientReviewHoldReleased = !reportSharingHeld
+    && latestReportEmailStatus === 'held_client_review'
+    && latestReportMetadata['delivery_block_reason'] === 'client_report_sharing_held';
+  const latestReportHeld = isReportDeliveryHeld(latestReportMetadata, clientMetadata);
+  const latestReportDownloadUrl = latestGpmReport?.pdf_r2_key && shareToken
+    ? `/api/client-reports/${latestGpmReport.id}/download?share=${encodeURIComponent(shareToken)}`
+    : null;
   const activationReport = sp.activation === '1'
     ? await loadLatestAgencyReport({ supabase: admin, agencyClientId: client.id })
     : null;
@@ -209,6 +242,9 @@ export default async function ClientScorecardPage({
           <div className="flex flex-wrap gap-2">
             <Link href={`/dashboard/clients/${client.id}/report-profile`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
               Report profile
+            </Link>
+            <Link href={`/dashboard/clients/${client.id}/buyer-intelligence?agencyAccount=${account.id}`} className="inline-flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/5 px-4 py-2.5 text-sm font-semibold text-primary">
+              Buyer intelligence assets
             </Link>
             <Link href={`/dashboard/new-scan?agencyAccount=${account.id}&agencyClient=${client.id}&url=${encodeURIComponent(domain ? `https://${domain}` : '')}`} className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-2.5 text-sm font-semibold text-on-background">
               Check again
@@ -236,7 +272,36 @@ export default async function ClientScorecardPage({
         ) : null}
         {reportSharingHeld ? (
           <div className="mt-4 rounded-xl border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
-            Client sharing is held for review. Nothing here can be opened publicly or emailed until the review is released.
+            <p>
+              Client sharing is held for review. Nothing here can be opened publicly or emailed until the review is released.
+            </p>
+            <form action={releaseClientSharingHold} className="mt-3">
+              <input type="hidden" name="clientId" value={client.id} />
+              <input type="hidden" name="agencyAccountId" value={account.id} />
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-on-primary transition hover:bg-primary-dim"
+              >
+                Release for sharing
+              </button>
+              <span className="ml-3 text-xs text-amber-900 dark:text-amber-200">
+                Releasing does not send anything. It allows a link or email to be created.
+              </span>
+            </form>
+          </div>
+        ) : null}
+        {sp.release ? (
+          <div
+            role="status"
+            className="mt-4 rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-3 text-sm text-on-background"
+          >
+            {sp.release === 'released'
+              ? 'Review released. This client can now be shared by link or email.'
+              : sp.release === 'not_permitted'
+                ? 'Only an agency owner or admin can release a client for sharing.'
+                : sp.release === 'not_held'
+                  ? 'This client was not held for review, so nothing was released.'
+                  : 'The review could not be released. Nothing was shared.'}
           </div>
         ) : null}
         {sp.activation === '1' ? (
@@ -286,6 +351,45 @@ export default async function ClientScorecardPage({
                 ? 'Baseline complete and recurring monitoring scheduled.'
                 : `Baseline needs attention: ${sp.baseline.replaceAll('_', ' ')}.`}
             </p>
+          ) : null}
+          {sp.market === 'confirmed' && !needsMarketConfirmation ? (
+            <p className="mt-3 text-sm font-medium text-primary">
+              Market confirmed. Run the baseline when you are ready.
+            </p>
+          ) : null}
+          {needsMarketConfirmation ? (
+            <div className="mt-5">
+              <ValueFirstOnboardingForm
+                action={confirmAgencyClientMarket}
+                fixedIntent="agency"
+                defaultName={client.name}
+                defaultWebsite={domain ?? ''}
+                hiddenFields={{ agencyAccountId: account.id, agencyClientId: String(client.id) }}
+                eyebrow="One step before measuring"
+                title="Confirm the market GEO-Pulse should measure"
+                description="This client predates market confirmation. Confirm the business and market once to bind future measurements; historical reports remain available."
+                confirmationLabel="Save market"
+                confirmationPendingLabel="Saving the confirmed market…"
+              />
+            </div>
+          ) : organizationContextLookup.context ? (
+            <details className="mt-5 rounded-xl border border-outline-variant/20 bg-surface-container-low px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-on-background">Update what this business sells and who buys it</summary>
+              <div className="mt-4">
+                <ValueFirstOnboardingForm
+                  action={confirmAgencyClientMarket}
+                  fixedIntent="agency"
+                  defaultName={client.name}
+                  defaultWebsite={domain ?? ''}
+                  hiddenFields={{ agencyAccountId: account.id, agencyClientId: String(client.id) }}
+                  eyebrow="Measurement profile"
+                  title="Keep buyer questions specific"
+                  description="Confirm the category, products or services, primary buyer, and market. Saving creates a new versioned question set; historical reports stay unchanged and no email is sent."
+                  confirmationLabel="Save profile and rebuild questions"
+                  confirmationPendingLabel="Rebuilding the buyer questionsâ€¦"
+                />
+              </div>
+            </details>
           ) : null}
         </div>
         ) : null}
@@ -409,6 +513,7 @@ export default async function ClientScorecardPage({
               <input type="hidden" name="clientId" value={client.id} />
               <input type="hidden" name="agencyAccountId" value={account.id} />
               <input type="hidden" name="configId" value={configId} />
+              <input type="hidden" name="reportId" value={latestGpmReport?.id ?? ''} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm text-on-surface-variant">Schedule
                   <select name="cadence" defaultValue={cadence ?? 'monthly'} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background">
@@ -432,6 +537,11 @@ export default async function ClientScorecardPage({
                 <p className="mt-1">Tracking: {platformsEnabled.map((platform) => platform === 'chatgpt' ? 'ChatGPT' : platform === 'gemini' ? 'Gemini' : platform).join(' + ') || 'Not configured'}</p>
               </div>
               <div className="rounded-xl bg-surface-container-low p-3 text-sm">
+                {sp.reportDelivery ? (
+                  <p className={`mb-3 rounded-lg px-3 py-2 text-xs font-semibold ${sp.reportDelivery === 'sent' ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error'}`}>
+                    {sp.reportDelivery === 'sent' ? 'Report email sent.' : sp.reportDelivery === 'blocked' ? 'Delivery is blocked until the report, recipient, and client share link are ready.' : 'Report email failed. Try again or check delivery operations.'}
+                  </p>
+                ) : null}
                 {latestGpmReport ? (
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -440,7 +550,12 @@ export default async function ClientScorecardPage({
                         {new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(new Date(latestGpmReport.generated_at))} · {ENGINE_LABEL[String(latestGpmReport.platform) as EngineKey] ?? String(latestGpmReport.platform)}
                       </p>
                     </div>
-                    {latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : <span className="text-xs text-on-surface-variant">{latestReportHeld ? 'Held for review' : latestReportEmailStatus === 'sent' ? 'Sent by email' : 'Generated'}</span>}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {latestReportDownloadUrl ? <Link href={latestReportDownloadUrl} target="_blank" className="font-semibold text-primary hover:underline">Download PDF</Link> : latestGpmReport.pdf_url ? <Link href={latestGpmReport.pdf_url} target="_blank" className="font-semibold text-primary hover:underline">Preview PDF</Link> : null}
+                      {!reportSharingHeld && latestReportEmailStatus !== 'sent' ? (
+                        <button formAction={sendClientReportNow} className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-on-primary">Send report now</button>
+                      ) : <span className="text-xs text-on-surface-variant">{latestReportEmailStatus === 'sent' ? 'Sent by email' : latestReportHeld ? 'Held for review' : clientReviewHoldReleased ? 'Ready in client scorecard' : 'Generated'}</span>}
+                    </div>
                   </div>
                 ) : <p className="text-on-surface-variant">The first report will appear after a visibility check.</p>}
                 {(gpmReports ?? []).length > 0 ? (
@@ -489,13 +604,15 @@ export default async function ClientScorecardPage({
                 <textarea name="competitorList" rows={3} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
               </label>
               <label className="block text-sm text-on-surface-variant">Send reports to
-                <textarea name="reportEmail" required rows={3} defaultValue={user.email ?? ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
+                <textarea name="reportEmail" required rows={3} defaultValue={reportRecipients.join('\n') || user.email || ''} className="mt-1 w-full rounded-xl border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-on-background" />
                 <span className="mt-1 block text-xs">Up to 5 emails, one per line.</span>
               </label>
               <button className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-on-primary">
                 <span className="material-symbols-outlined text-[18px]" aria-hidden>monitoring</span> Start tracking
               </button>
-              <p className="text-xs leading-relaxed text-on-surface-variant">Uses ChatGPT, Gemini, and Perplexity. The first complete measurement becomes the baseline; later checks show improvement or regression.</p>
+              <p className="text-xs leading-relaxed text-on-surface-variant">
+                Uses the currently configured engines ({platformsEnabled.map((platform) => ENGINE_LABEL[platform as EngineKey] ?? platform).join(', ') || 'none available'}). The first complete measurement becomes the baseline; later checks show improvement or regression.
+              </p>
             </form>
           )}
         </div>

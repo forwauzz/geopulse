@@ -3,7 +3,11 @@ import { parseReportQueueMessage } from '../../lib/queue/report-job';
 import { rewriteLayerOneReportInternal } from '../../lib/server/layer-one-report-internal-rewrite';
 import { createServiceRoleClient } from '../../lib/supabase/service-role';
 import { writeGeneratedReportEval } from '../../lib/server/report-eval-writer';
-import { structuredLog } from '../../lib/server/structured-log';
+import {
+  structuredLog,
+  structuredLogAndWait,
+  structuredLogWithClientAndWait,
+} from '../../lib/server/structured-log';
 import { getMarketPosition } from '../../lib/server/market-position';
 import { buildDeepAuditMarkdown } from '../report/build-deep-audit-markdown';
 import { buildDeepAuditPdfFromPayload } from '../report/build-deep-audit-pdf';
@@ -26,7 +30,7 @@ import { bucketOf } from '../scan-engine/check-catalog';
 import { deriveCheckCounts } from '../report/check-counts';
 import { resolveReportContradictions, runReportQaGate, type GateIssue } from '../report/report-qa-gate';
 import { buildCoverDesign } from '../report/design-agent';
-import { replayReportJobFromDlq } from './dlq-replay';
+import { replayReportJobFromDlq, reportDlqReplayKey } from './dlq-replay';
 import { resolveStartupRolloutFlagsFromMetadata } from '../../lib/server/startup-rollout-flags';
 import { resolveStartupWorkspaceBundleKey } from '../../lib/server/startup-github-integration';
 import { resolveServiceEntitlement } from '../../lib/server/service-entitlements';
@@ -41,11 +45,14 @@ import {
 } from '../../lib/server/startup-slack-integration';
 import { formatStartupSlackMessage, type StartupSlackMessagePayload } from '../../lib/server/startup-slack-message';
 import { emitMarketingEvent } from '../../services/marketing-attribution/emit';
+import { enqueueLifecycleEmail } from '../../lib/server/lifecycle-email';
 
 const DLQ_NAME = 'geo-pulse-dlq';
+const REPORT_QUEUE_MAX_ATTEMPTS = 3;
 
 type QueueMessage = {
   readonly body: string | ArrayBuffer | Uint8Array;
+  readonly attempts?: number;
   ack(): void;
   retry(): void;
 };
@@ -56,6 +63,49 @@ export type ReportQueueBatch = {
   readonly messages: readonly QueueMessage[];
 };
 
+async function persistReportJobFailure(args: {
+  readonly rawBody: string;
+  readonly message: QueueMessage;
+  readonly error: unknown;
+  readonly env: CloudflareEnv;
+}): Promise<void> {
+  const job = parseReportQueueMessage(args.rawBody);
+  const attempts = args.message.attempts ?? null;
+  let replayedFromDlq = false;
+  if (job && args.env.SCAN_CACHE) {
+    try {
+      replayedFromDlq = Boolean(await args.env.SCAN_CACHE.get(reportDlqReplayKey(job.paymentId)));
+    } catch {
+      // Failure logging must not replace the original queue retry with a KV error.
+    }
+  }
+  const terminal = Boolean(
+    replayedFromDlq && attempts !== null && attempts >= REPORT_QUEUE_MAX_ATTEMPTS
+  );
+  const event = terminal ? 'report_job_terminal_failure' : 'report_job_failed';
+  const errorName = args.error instanceof Error ? args.error.name : 'UnknownError';
+  const errorMessage = args.error instanceof Error ? args.error.message : 'unknown';
+  const data = {
+    scanId: job?.scanId ?? null,
+    paymentId: job?.paymentId ?? null,
+    errorName,
+    message: errorMessage.slice(0, 500),
+    attempts,
+    replayedFromDlq,
+    terminal,
+  };
+
+  if (args.env.NEXT_PUBLIC_SUPABASE_URL && args.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const supabase = createServiceRoleClient(
+      args.env.NEXT_PUBLIC_SUPABASE_URL,
+      args.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+    await structuredLogWithClientAndWait(supabase, event, data, 'error');
+    return;
+  }
+  await structuredLogAndWait(event, data, 'error');
+}
+
 export function planDeepAuditCrawlRecovery(
   fetchedPageCount: number,
   hasPendingContinuation: boolean
@@ -64,6 +114,25 @@ export function planDeepAuditCrawlRecovery(
   return {
     shouldRunCrawl: !hasFetchedPages || hasPendingContinuation,
     clearFailedPages: !hasFetchedPages && !hasPendingContinuation,
+  };
+}
+
+export function shouldDeliverReportEmail(job: ReportQueueMessage): boolean {
+  return !(job.v === 3 && job.deliveryMode === 'campaign_preview');
+}
+
+export function completedDeepAuditScanFields(args: {
+  readonly score: number;
+  readonly letterGrade: string;
+  readonly issues: unknown;
+  readonly fullResults: unknown;
+}) {
+  return {
+    status: 'complete' as const,
+    score: args.score,
+    letter_grade: args.letterGrade,
+    issues_json: args.issues,
+    full_results_json: args.fullResults,
   };
 }
 
@@ -432,7 +501,7 @@ async function resolveScanRunId(
   supabase: ReturnType<typeof createServiceRoleClient>,
   job: ReportQueueMessage
 ): Promise<string> {
-  if (job.v === 2) return job.scanRunId;
+  if (job.v === 2 || job.v === 3) return job.scanRunId;
 
   const { data: existing } = await supabase
     .from('scan_runs')
@@ -485,13 +554,12 @@ export async function dispatchQueueBatch(batch: ReportQueueBatch, env: Cloudflar
   }
 
   for (const m of batch.messages) {
+    const rawBody = bodyToString(m.body);
     try {
-      await processReportJob(bodyToString(m.body), env);
+      await processReportJob(rawBody, env);
       m.ack();
     } catch (err) {
-      structuredLog('report_job_failed', {
-        message: err instanceof Error ? err.message.slice(0, 200) : 'unknown',
-      });
+      await persistReportJobFailure({ rawBody, message: m, error: err, env });
       m.retry();
     }
   }
@@ -505,6 +573,13 @@ async function handleDlqMessage(rawBody: string, env: CloudflareEnv): Promise<vo
   }
   if (!env.SCAN_QUEUE || !env.SCAN_CACHE) {
     throw new Error('dlq_missing_queue_or_kv');
+  }
+  const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  if (!(job.v === 3 && job.deliveryMode === 'campaign_preview')) {
+    const { data: scan } = await supabase.from('scans').select('domain').eq('id', job.scanId).maybeSingle();
+    await enqueueLifecycleEmail({ supabase, to: job.customerEmail, subjectId: job.scanId,
+      idempotencyKey: `report-delayed/${job.scanId}`, eventType: 'report_delayed', templateKey: 'report_delayed',
+      variables: { domain: scan?.domain ?? 'your website', cta_url: `${env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com'}/dashboard` } });
   }
   await replayReportJobFromDlq(job, { SCAN_QUEUE: env.SCAN_QUEUE, SCAN_CACHE: env.SCAN_CACHE });
 }
@@ -525,7 +600,7 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error('supabase_not_configured');
   }
-  if (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL) {
+  if (job.v !== 3 && (!env.RESEND_API_KEY || !env.RESEND_FROM_EMAIL)) {
     throw new Error('resend_not_configured');
   }
   if (!env.GEMINI_API_KEY || !env.GEMINI_ENDPOINT) {
@@ -745,12 +820,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
 
   const { error: scanUpdErr } = await supabase
     .from('scans')
-    .update({
+    .update(completedDeepAuditScanFields({
       score: aggregateScore,
-      letter_grade: aggLetter,
-      issues_json: issuesForScan,
-      full_results_json: fullResults,
-    })
+      letterGrade: aggLetter,
+      issues: issuesForScan,
+      fullResults,
+    }))
     .eq('id', job.scanId);
 
   if (scanUpdErr) {
@@ -850,35 +925,37 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       weight: typeof r['weight'] === 'number' ? r['weight'] : undefined,
     }));
 
-  const emailResult = await sendDeepAuditEmail({
-    apiKey: env.RESEND_API_KEY,
-    from: env.RESEND_FROM_EMAIL,
-    to: job.customerEmail,
-    domain: scan.domain,
-    url: scan.url,
-    pdfBytes,
-    filename: `geo-pulse-deep-audit-${job.scanId}.pdf`,
-    idempotencyKey: `deep-audit/${job.scanId}/${job.paymentId}`,
-    attachPdf,
-    downloadLinks,
-    score: aggregateScore,
-    grade: aggLetter,
-    topIssues: failedForEmail,
-    appUrl: (env.NEXT_PUBLIC_APP_URL ?? '').trim() || undefined,
-    totalChecks: deriveCheckCounts(allIssueRows as GateIssue[]).total,
-    passedChecks: deriveCheckCounts(allIssueRows as GateIssue[]).passed,
-    scanId: job.scanId,
-  });
+  const campaignPreview = !shouldDeliverReportEmail(job);
+  if (!campaignPreview) {
+    const emailResult = await sendDeepAuditEmail({
+      apiKey: env.RESEND_API_KEY,
+      from: env.RESEND_FROM_EMAIL,
+      to: job.customerEmail,
+      domain: scan.domain,
+      url: scan.url,
+      pdfBytes,
+      filename: `geo-pulse-deep-audit-${job.scanId}.pdf`,
+      idempotencyKey: `deep-audit/${job.scanId}/${job.paymentId}`,
+      attachPdf,
+      downloadLinks,
+      score: aggregateScore,
+      grade: aggLetter,
+      topIssues: failedForEmail,
+      appUrl: (env.NEXT_PUBLIC_APP_URL ?? '').trim() || undefined,
+      totalChecks: deriveCheckCounts(allIssueRows as GateIssue[]).total,
+      passedChecks: deriveCheckCounts(allIssueRows as GateIssue[]).passed,
+      scanId: job.scanId,
+    });
 
-  if (!emailResult.ok) {
-    throw new Error(emailResult.message);
+    if (!emailResult.ok) throw new Error(emailResult.message);
+    structuredLog('report_job_email_sent', {
+      scanId: job.scanId,
+      attachedPdf: attachPdf,
+      usedDownloadLinks: !!downloadLinks?.pdfUrl,
+    }, 'info');
+  } else {
+    structuredLog('campaign_preview_report_generated_without_delivery', { scanId: job.scanId }, 'info');
   }
-
-  structuredLog('report_job_email_sent', {
-    scanId: job.scanId,
-    attachedPdf: attachPdf,
-    usedDownloadLinks: !!downloadLinks?.pdfUrl,
-  }, 'info');
 
   const now = new Date().toISOString();
   const { data: insertedReport, error: repErr } = await supabase
@@ -889,12 +966,12 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
       agency_account_id: scan.agency_account_id ?? null,
       agency_client_id: scan.agency_client_id ?? null,
       startup_workspace_id: scan.startup_workspace_id ?? null,
-      guest_email: job.customerEmail.trim().toLowerCase(),
+      guest_email: campaignPreview ? null : job.customerEmail.trim().toLowerCase(),
       pdf_url: pdfUrl,
       markdown_url: downloadLinks?.markdownUrl ?? null,
       report_payload_version: payload.version,
       pdf_generated_at: now,
-      email_delivered_at: now,
+      email_delivered_at: campaignPreview ? null : now,
       type: 'deep_audit',
     })
     .select('id')
@@ -905,18 +982,20 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   }
   const reportId = typeof insertedReport?.id === 'string' ? insertedReport.id : null;
 
-  await emitMarketingEvent(supabase as never, 'report_delivered', {
-    scan_id: job.scanId,
-    payment_id: job.paymentId,
-    email: job.customerEmail,
-    idempotency_key: `report:${reportId ?? `${job.scanId}:${job.paymentId}`}:delivered`,
-    metadata: {
-      kind: 'deep_audit',
-      report_id: reportId,
-      payload_version: payload.version,
-      attached_pdf: attachPdf,
-    },
-  });
+  if (!campaignPreview) {
+    await emitMarketingEvent(supabase as never, 'report_delivered', {
+      scan_id: job.scanId,
+      payment_id: job.paymentId,
+      email: job.customerEmail,
+      idempotency_key: `report:${reportId ?? `${job.scanId}:${job.paymentId}`}:delivered`,
+      metadata: {
+        kind: 'deep_audit',
+        report_id: reportId,
+        payload_version: payload.version,
+        attached_pdf: attachPdf,
+      },
+    });
+  }
 
   try {
     await writeGeneratedReportEval(supabase as any, {

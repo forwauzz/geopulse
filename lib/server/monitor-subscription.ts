@@ -16,8 +16,9 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type Stripe from 'stripe';
 import { randomUUID } from 'node:crypto';
 import { ctaButton, emailShell, escapeEmailHtml, scoreBlock } from './email-theme';
-import { mintShareSlug, type RecurringEnvLike } from './recurring-audits';
+import { mintShareSlug, recurringDeltaForScan, type RecurringEnvLike } from './recurring-audits';
 import { fetchLatestVisibilityForDomain, renderVisibilitySummary } from './visibility-report';
+import { loadCanonicalMonitorSummary } from './monitor-buyer-intelligence-summary';
 import { runFreeScan } from '../../workers/scan-engine/run-scan';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
@@ -370,13 +371,13 @@ export async function runDueMonitorAudits(args: {
   const nowIso = new Date(nowMs).toISOString();
   const { data } = await supabase
     .from('monitoring_subscriptions')
-    .select('id, email, monitored_url, next_audit_at')
+    .select('id, email, monitored_url, next_audit_at, origin_scan_id')
     .eq('status', 'active')
     .lte('next_audit_at', nowIso)
     .order('next_audit_at', { ascending: true })
     .limit(args.limit ?? 3);
 
-  const due = (data ?? []) as Pick<MonitorSubscriptionRow, 'id' | 'email' | 'monitored_url'>[];
+  const due = (data ?? []) as Pick<MonitorSubscriptionRow, 'id' | 'email' | 'monitored_url' | 'origin_scan_id'>[];
   const llm = buildLlm(env);
   let ran = 0;
   let failed = 0;
@@ -398,6 +399,16 @@ export async function runDueMonitorAudits(args: {
         .select('id')
         .eq('email', sub.email.trim().toLowerCase())
         .maybeSingle();
+      const auditDelta = await recurringDeltaForScan({
+        supabase,
+        userId: owner?.id ?? null,
+        domain: scan.domain,
+        runSource: 'monitor',
+        originScanId: sub.origin_scan_id,
+        finalUrl: scan.finalUrl,
+        issues: scan.output.issues,
+        generatedAt: nowIso,
+      });
       const { data: scanRow, error: scanInsertError } = await supabase
         .from('scans')
         .insert({
@@ -413,6 +424,7 @@ export async function runDueMonitorAudits(args: {
             pageSample: scan.textSample.slice(0, 6000),
             monitoringSubscriptionId: sub.id,
             generatedAt: nowIso,
+            auditDelta,
           },
           user_id: owner?.id ?? null,
           run_source: 'monitor',
@@ -426,8 +438,14 @@ export async function runDueMonitorAudits(args: {
 
       // Display-only visibility (free path): include the AI Visibility Performance block when the
       // domain already has benchmark data. Reads existing metrics — runs no new benchmark.
-      const vis = await fetchLatestVisibilityForDomain(supabase, scan.domain);
-      const visibilityHtml = vis ? renderVisibilitySummary({ domain: scan.domain, metrics: vis }).html : '';
+      const canonicalSummary = await loadCanonicalMonitorSummary({
+        supabase,
+        userId: owner?.id ?? null,
+        domain: scan.domain,
+      });
+      const vis = canonicalSummary ? null : await fetchLatestVisibilityForDomain(supabase, scan.domain);
+      const visibilityHtml = canonicalSummary
+        ?? (vis ? renderVisibilitySummary({ domain: scan.domain, metrics: vis }).html : '');
       const delivered = await sendMonitorAuditEmail(
         env,
         sub.email,

@@ -8,6 +8,15 @@ import {
   loadRevenueAgencySnapshot,
   type RevenueAgencySnapshot,
 } from './revenue-agency-agent';
+import {
+  isExcludedRevenueIdentity,
+  isVerifiedStripeSubscriptionId,
+} from './revenue-identity';
+
+export {
+  isExcludedRevenueIdentity,
+  isVerifiedStripeSubscriptionId,
+} from './revenue-identity';
 
 export type DepartmentId =
   | 'maya'
@@ -78,7 +87,8 @@ export type DailyCompanyStandup = {
     readonly outreachOpens: number;
     readonly replies: number;
     readonly meetings: number;
-    readonly activatedWorkspaces: number;
+    readonly workspaceRecordsCreated: number;
+    readonly qualifiedWorkspaceActivations: number;
     readonly checkoutStarts: number;
     readonly paidSubscriptionsStarted: number;
     readonly cancellations: number;
@@ -103,7 +113,7 @@ export const DEPARTMENT_RUBRICS: Readonly<Record<DepartmentId, readonly string[]
     'Every open item has one owner, next action, deadline, and closure condition.',
     'Accepts completion only when evidence verifies the outcome.',
     'Escalates only genuine founder decisions.',
-    'Sends one complete daily company standup.',
+    'Records one complete daily company standup and sends only qualifying exceptions.',
   ],
   noah: [
     'Moves real signups through onboarding to a visible useful baseline.',
@@ -276,8 +286,8 @@ function strongestSignal(snapshot: RevenueAgencySnapshot, verifiedRecurring: num
   if (snapshot.meetingsBooked > 0) return `${snapshot.meetingsBooked} meeting(s) booked.`;
   if (snapshot.repliesReceived > 0) return `${snapshot.repliesReceived} human reply/replies received.`;
   if (snapshot.checkoutStarts > 0) return `${snapshot.checkoutStarts} checkout start(s) recorded.`;
-  if (snapshot.activatedWorkspaces > 0) {
-    return `${snapshot.activatedWorkspaces} workspace(s) activated.`;
+  if (snapshot.qualifiedWorkspaceActivations > 0) {
+    return `${snapshot.qualifiedWorkspaceActivations} workspace(s) reached qualified first value.`;
   }
   if (snapshot.deliveredReports > 0) {
     return `${snapshot.deliveredReports} qualified report(s) delivered.`;
@@ -300,7 +310,7 @@ function departmentOutcome(
     case 'maya':
       return `${open} company work item(s) open; focus is ${snapshot.focus}.`;
     case 'noah':
-      return `${snapshot.activatedLeads} activated lead(s) and ${snapshot.activatedWorkspaces} activated workspace(s) in ${snapshot.windowDays} days.`;
+      return `${snapshot.workspaceRecordsCreated} workspace record(s) created and ${snapshot.qualifiedWorkspaceActivations} qualified first-value activation(s) in ${snapshot.windowDays} days.`;
     case 'priya':
       return `${snapshot.completedScans} qualified scan(s) and ${snapshot.deliveredReports} delivered report(s) in ${snapshot.windowDays} days.`;
     case 'elena':
@@ -573,7 +583,8 @@ export function buildDailyCompanyStandup(args: {
       outreachOpens: args.snapshot.outreachOpens,
       replies: args.snapshot.repliesReceived,
       meetings: args.snapshot.meetingsBooked,
-      activatedWorkspaces: args.snapshot.activatedWorkspaces,
+      workspaceRecordsCreated: args.snapshot.workspaceRecordsCreated,
+      qualifiedWorkspaceActivations: args.snapshot.qualifiedWorkspaceActivations,
       checkoutStarts: args.snapshot.checkoutStarts,
       paidSubscriptionsStarted: args.snapshot.paidSubscriptionsStarted,
       cancellations: args.snapshot.cancellations,
@@ -613,66 +624,6 @@ type ActiveWorkspaceSubscription = {
   readonly stripe_subscription_id: string | null;
   readonly metadata: SubscriptionMetadata;
 };
-
-const INTERNAL_REVENUE_EMAILS = new Set([
-  'tamonuzziel@gmail.com',
-  'uzzielt@techehealthservices.com',
-]);
-const INTERNAL_REVENUE_DOMAINS = new Set([
-  'getgeopulse.com',
-  'techehealthservices.com',
-  'lifter.ca',
-  'example.com',
-]);
-
-function normalizedDomain(value: string | null | undefined): string {
-  if (!value) return '';
-  const candidate = value.trim().toLowerCase();
-  if (!candidate) return '';
-  try {
-    return new URL(candidate.includes('://') ? candidate : `https://${candidate}`).hostname
-      .replace(/^www\./, '');
-  } catch {
-    return candidate.replace(/^www\./, '').split('/')[0] ?? '';
-  }
-}
-
-export function isExcludedRevenueIdentity(args: {
-  readonly email: string | null | undefined;
-  readonly domain?: string | null;
-  readonly metadata?: SubscriptionMetadata;
-}): boolean {
-  const email = args.email?.trim().toLowerCase() ?? '';
-  const emailDomain = email.split('@')[1] ?? '';
-  const siteDomain = normalizedDomain(args.domain);
-  const metadata = args.metadata ?? {};
-  const explicitInternal = [
-    metadata['internal'],
-    metadata['is_internal'],
-    metadata['test'],
-    metadata['is_test'],
-  ].some((value) => value === true || value === 'true');
-  const classification = [
-    metadata['account_type'],
-    metadata['revenue_classification'],
-    metadata['environment'],
-  ].map((value) => String(value ?? '').toLowerCase());
-  const source = String(metadata['source'] ?? '').trim().toLowerCase();
-
-  return !email
-    || INTERNAL_REVENUE_EMAILS.has(email)
-    || INTERNAL_REVENUE_DOMAINS.has(emailDomain)
-    || INTERNAL_REVENUE_DOMAINS.has(siteDomain)
-    || email.startsWith('test@')
-    || email.includes('+test@')
-    || explicitInternal
-    || ['admin_assign_plan', 'admin_comp'].includes(source)
-    || classification.some((value) => ['internal', 'test', 'sandbox'].includes(value));
-}
-
-export function isVerifiedStripeSubscriptionId(value: string | null | undefined): boolean {
-  return /^sub_[A-Za-z0-9]+$/.test(value?.trim() ?? '');
-}
 
 async function loadVerifiedRecurringCustomers(
   supabase: SupabaseClient
@@ -843,7 +794,8 @@ export function renderDailyCompanyStandupHtml(report: DailyCompanyStandup): stri
         <tbody>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Outreach sent / opened</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.outreachSends} / ${report.revenue.outreachOpens}</strong></td></tr>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Human replies / meetings</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.replies} / ${report.revenue.meetings}</strong></td></tr>
-          <tr><td style="padding:9px;border:1px solid #e5e7eb">Activated workspaces / checkouts</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.activatedWorkspaces} / ${report.revenue.checkoutStarts}</strong></td></tr>
+          <tr><td style="padding:9px;border:1px solid #e5e7eb">Workspace records created / qualified first value</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.workspaceRecordsCreated} / ${report.revenue.qualifiedWorkspaceActivations}</strong></td></tr>
+          <tr><td style="padding:9px;border:1px solid #e5e7eb">Checkout starts</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.checkoutStarts}</strong></td></tr>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Paid subscriptions started / cancellations</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.paidSubscriptionsStarted} / ${report.revenue.cancellations}</strong></td></tr>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Verified non-internal recurring customers</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.verifiedRecurringCustomers}</strong></td></tr>
         </tbody>

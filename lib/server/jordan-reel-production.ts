@@ -76,7 +76,9 @@ export function resolveJordanReelConfig(config: Record<string, unknown>): Jordan
     );
 
   return {
-    enabled: bool(config['reels_enabled'], false),
+    // Reel brief creation is part of the normal production mix. Rendering and
+    // publication still remain fail-closed behind the validation and provider gates.
+    enabled: bool(config['reels_enabled'], true),
     reelsPerWeek: int(config['reels_per_week'], 4, 7),
     daysLocal: daysLocal.length > 0 ? daysLocal : DEFAULT_REEL_DAYS_LOCAL,
     categories: categories.length > 0
@@ -130,10 +132,10 @@ export function shouldPlanJordanReel(args: {
   readonly timezone: string;
   readonly config: JordanReelConfig;
   readonly existingAssets: ReadonlyArray<DistributionAssetRow>;
+  readonly coverageRequired?: boolean;
 }): boolean {
   if (!args.config.enabled) return false;
   const local = localDateParts(args.now, args.timezone);
-  if (!args.config.daysLocal.includes(local.weekday)) return false;
   const slotKey = jordanReelSlotKey(args.now, args.timezone);
   if (args.existingAssets.some((asset) => asset.metadata['reel_slot_key'] === slotKey)) {
     return false;
@@ -148,7 +150,17 @@ export function shouldPlanJordanReel(args: {
     const created = new Date(asset.created_at);
     return Number.isFinite(created.getTime()) && created >= start;
   }).length;
-  return producedThisWeek < args.config.reelsPerWeek;
+  if (producedThisWeek >= args.config.reelsPerWeek) return false;
+
+  const staleBefore = args.now.getTime() - (14 * 24 * 60 * 60 * 1000);
+  const hasRecentReel = args.existingAssets.some((asset) => {
+    if (asset.asset_type !== 'short_video_post') return false;
+    const created = new Date(asset.created_at).getTime();
+    return Number.isFinite(created) && created >= staleBefore;
+  });
+  return args.coverageRequired === true
+    || !hasRecentReel
+    || args.config.daysLocal.includes(local.weekday);
 }
 
 function cleanLine(value: string, max: number): string {
@@ -224,40 +236,28 @@ function categoryFor(kind: string): JordanReelCategory {
   return 'educational';
 }
 
-export function jordanReelSourceUrl(asset: DistributionAssetRow): string | null {
-  const meta = asset.metadata ?? {};
-  const script = meta['reel_script'];
-  if (script && typeof script === 'object' && !Array.isArray(script)) {
-    const fromScript = (script as Record<string, unknown>)['sourceUrl'];
-    if (typeof fromScript === 'string' && fromScript.length > 0) return fromScript;
-  }
-  const evidence = meta['evidence'];
-  if (evidence && typeof evidence === 'object' && !Array.isArray(evidence)) {
-    const fromEvidence = (evidence as Record<string, unknown>)['source_url'];
-    if (typeof fromEvidence === 'string' && fromEvidence.length > 0) return fromEvidence;
-  }
-  return null;
-}
-
-// `recentSourceUrls` is what stops the same top-ranked candidate winning every slot.
-// Without it this was a plain `.find()`, and August 2026 shipped the same Reel seven
-// times running. Falls back to the best eligible candidate rather than skipping a slot.
+// `existingAssets` is what stops the same top-ranked candidate winning every slot: a
+// candidate whose rendered script matches one already produced is skipped. Without it this
+// was a plain `.find()`, and August 2026 shipped the same Reel seven times running.
 export function chooseJordanReelSource<T extends ReelSource>(
   candidates: ReadonlyArray<T>,
   categories: readonly JordanReelCategory[],
-  recentSourceUrls: readonly string[] = []
+  existingAssets: ReadonlyArray<DistributionAssetRow> = []
 ): T | null {
-  const eligible = (candidate: T): boolean => {
+  const usedScripts = new Set(
+    existingAssets
+      .filter((asset) => asset.asset_type === 'short_video_post')
+      .map((asset) => reelScriptSignature(asset.metadata['reel_script']))
+      .filter((signature): signature is string => signature !== null)
+  );
+  return candidates.find((candidate) => {
     const sourceUrl = candidate.evidence['source_url'];
     return categories.includes(categoryFor(candidate.kind)) &&
       typeof sourceUrl === 'string' &&
       /^https:\/\//.test(sourceUrl) &&
-      candidate.title.trim().length > 0;
-  };
-  const recent = new Set(recentSourceUrls.filter((url) => url.length > 0));
-  return candidates.find(
-    (candidate) => eligible(candidate) && !recent.has(String(candidate.evidence['source_url']))
-  ) ?? candidates.find(eligible) ?? null;
+      candidate.title.trim().length > 0 &&
+      !usedScripts.has(reelScriptSignature(buildJordanReelScript(candidate)) ?? '');
+  }) ?? null;
 }
 
 // The compare scene renders `top ≠ bottom`. A contrast the source did not actually make
@@ -276,6 +276,24 @@ function firstDistinctPhrase(
     if (built && !taken.some((existing) => sameLine(existing, built))) return built;
   }
   return '';
+}
+
+function reelScriptSignature(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  const fields = [
+    'hook',
+    'tension',
+    'comparisonTop',
+    'comparisonBottom',
+    'diagnostic',
+    'cta',
+    'url',
+    'sourceUrl',
+    'sourceLabel',
+  ] as const;
+  if (fields.some((field) => typeof row[field] !== 'string')) return null;
+  return JSON.stringify(fields.map((field) => String(row[field]).trim()));
 }
 
 export function buildJordanReelScript(source: ReelSource): JordanReelScript {

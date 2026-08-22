@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ctaButton, emailShell, escapeEmailHtml } from './email-theme';
 import type { LeadEmailEnv } from './lead-email';
+import { enqueueLifecycleEmail } from './lifecycle-email';
 
 type LifecycleEmailEnv = LeadEmailEnv & { readonly NEXT_PUBLIC_APP_URL?: string };
 
@@ -56,28 +57,6 @@ export function buildTrialEndingEmail(args: {
   };
 }
 
-async function sendLifecycleEmail(args: {
-  env: LifecycleEmailEnv;
-  to: string;
-  email: { subject: string; html: string };
-  idempotencyKey: string;
-}): Promise<boolean> {
-  const key = args.env.RESEND_API_KEY?.trim();
-  const from = args.env.RESEND_FROM_EMAIL?.trim();
-  if (!key || !from) return false;
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-      'Idempotency-Key': args.idempotencyKey,
-    },
-    body: JSON.stringify({ from, to: args.to, ...args.email }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  return response.ok;
-}
-
 async function userEmail(supabase: SupabaseClient, userId: string): Promise<string | null> {
   const { data } = await supabase.from('users').select('email').eq('id', userId).maybeSingle();
   return typeof data?.email === 'string' ? data.email : null;
@@ -93,16 +72,13 @@ export async function sendSubscriptionWelcome(args: {
 }): Promise<boolean> {
   const to = await userEmail(args.supabase, args.userId);
   if (!to) return false;
-  return sendLifecycleEmail({
-    env: args.env,
-    to,
-    email: buildSubscriptionWelcomeEmail({
-      appUrl: args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
-      bundleKey: args.bundleKey,
-      organizationName: args.organizationName,
-    }),
-    idempotencyKey: `subscription-welcome/${args.subscriptionId}`,
-  });
+  const result = await enqueueLifecycleEmail({ supabase: args.supabase, to, userId: args.userId,
+    subjectId: args.subscriptionId, idempotencyKey: `subscription-welcome/${args.subscriptionId}`,
+    eventType: 'subscription_activated', templateKey: 'subscription_activated', variables: {
+      plan_name: planName(args.bundleKey), organization_name: args.organizationName ?? '',
+      cta_url: `${(args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard`,
+    } });
+  return result.ok;
 }
 
 export async function sendTrialEndingReminder(args: {
@@ -114,13 +90,11 @@ export async function sendTrialEndingReminder(args: {
 }): Promise<boolean> {
   const to = await userEmail(args.supabase, args.userId);
   if (!to) return false;
-  return sendLifecycleEmail({
-    env: args.env,
-    to,
-    email: buildTrialEndingEmail({
-      appUrl: args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com',
-      bundleKey: args.bundleKey,
-    }),
-    idempotencyKey: `subscription-trial-ending/${args.subscriptionId}`,
-  });
+  const result = await enqueueLifecycleEmail({ supabase: args.supabase, to, userId: args.userId,
+    subjectId: args.subscriptionId, idempotencyKey: `subscription-trial-ending/${args.subscriptionId}`,
+    eventType: 'trial_ending', templateKey: 'trial_ending', variables: {
+      plan_name: planName(args.bundleKey),
+      cta_url: `${(args.env.NEXT_PUBLIC_APP_URL ?? 'https://getgeopulse.com').replace(/\/$/, '')}/dashboard/billing`,
+    } });
+  return result.ok;
 }

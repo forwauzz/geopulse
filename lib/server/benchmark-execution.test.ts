@@ -77,6 +77,15 @@ describe('resolveBenchmarkExecutionConfig', () => {
     });
   });
 
+  it('does not let the gemini adapter claim non-gemini models from a shared allowlist', () => {
+    const config = resolveBenchmarkExecutionConfig({
+      BENCHMARK_EXECUTION_PROVIDER: 'gemini',
+      BENCHMARK_EXECUTION_MODEL: 'gemini-2.5-flash-lite',
+      BENCHMARK_EXECUTION_ENABLED_MODELS: 'gemini-2.5-flash-lite,gpt-4o-mini,sonar',
+    });
+    expect(config.enabledModels).toEqual(['gemini-2.5-flash-lite']);
+  });
+
   it('resolves openai config with defaults', () => {
     const config = resolveBenchmarkExecutionConfig({
       BENCHMARK_EXECUTION_PROVIDER: 'openai',
@@ -420,6 +429,35 @@ describe('GeminiBenchmarkExecutionAdapter', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('fails fast when a 429 says prepaid quota is depleted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => JSON.stringify({ error: { message: 'Your prepayment credits are depleted.' } }),
+    });
+    const adapter = new GeminiBenchmarkExecutionAdapter(
+      {
+        provider: 'gemini',
+        apiKey: 'benchmark-key',
+        model: 'gemini-2.0-flash',
+        enabledModels: ['gemini-2.0-flash'],
+        endpoint: 'https://example.test/models',
+      },
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, sampleContext);
+
+    expect(result.status).toBe('failed');
+    expect(result.errorMessage).toBe('benchmark_gemini_http_429');
+    expect(result.responseMetadata).toMatchObject({
+      attempts: 1,
+      retryable: false,
+      quota_state: 'depleted',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   // Regression: the prior `fetchImpl: FetchLike = fetch` default bound `this`
   // to the adapter instance when called via `this.fetchImpl(...)`, which
   // Cloudflare Workers reject with "Illegal invocation". The default must
@@ -612,6 +650,31 @@ describe('OpenAiCompatibleBenchmarkExecutionAdapter — openai', () => {
     expect(result.errorMessage).toBe('benchmark_openai_http_429');
     expect(result.responseMetadata['attempts']).toBe(3);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('fails fast when an OpenAI-compatible 429 reports depleted credits', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      text: async () => JSON.stringify({
+        error: { message: 'You have no credits remaining.', type: 'insufficient_quota', code: 'credit_balance_exhausted' },
+      }),
+    });
+    const adapter = new OpenAiCompatibleBenchmarkExecutionAdapter(
+      'openai',
+      openaiConfig,
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, openaiContext);
+
+    expect(result.status).toBe('failed');
+    expect(result.responseMetadata).toMatchObject({
+      attempts: 1,
+      retryable: false,
+      quota_state: 'depleted',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('fails with openai-prefixed error message on http error', async () => {
@@ -901,6 +964,29 @@ describe('createBenchmarkExecutionAdapter', () => {
       PERPLEXITY_API_KEY: 'pplx-test',
     });
     expect(adapter).toBeInstanceOf(MultiProviderBenchmarkExecutionAdapter);
+  });
+
+  it('routes an OpenAI model through OpenAI when the shared allowlist contains multiple providers', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'OpenAI response.' } }] }),
+    });
+    const adapter = createBenchmarkExecutionAdapter({
+      BENCHMARK_EXECUTION_PROVIDER: 'multi',
+      BENCHMARK_EXECUTION_ENABLED_MODELS: 'gemini-2.0-flash,gpt-4o-mini',
+      GEMINI_API_KEY: 'gemini-key',
+      GEMINI_MODEL: 'gemini-2.0-flash',
+      OPENAI_API_KEY: 'sk-test',
+      OPENAI_MODEL: 'gpt-4o-mini',
+    }, fetchMock as unknown as typeof fetch);
+
+    const result = await adapter.executeQuery(sampleQuery, {
+      ...sampleContext,
+      modelId: 'gpt-4o-mini',
+    });
+
+    expect(result.status).toBe('completed');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://api.openai.com/v1/chat/completions');
   });
 
   it('creates a multi-provider stub when no api keys are provided for multi', () => {

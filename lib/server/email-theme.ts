@@ -27,7 +27,7 @@ const EMAIL_AGENTS: Record<EmailAgentKey, { name: string; role: string; avatar: 
   maya: { name: 'Maya Brooks', role: 'AI Chief of Staff', avatar: '/team/maya-brooks.webp' },
   noah: { name: 'Noah Carter', role: 'Activation Manager', avatar: '/team/noah-carter.webp' },
   priya: { name: 'Priya Shah', role: 'SEO & Customer Outcomes Strategist', avatar: '/team/priya-shah.webp' },
-  elena: { name: 'Elena Park', role: 'Customer Intelligence Lead', avatar: '/team/elena-park.webp' },
+  elena: { name: 'Elena Park', role: 'Customer Intelligence Lead', avatar: '/team/elena-park.jpg' },
   sofia: { name: 'Sofia Chen', role: 'Trend & Audience Researcher', avatar: '/team/sofia-chen.webp' },
   jordan: { name: 'Jordan Reyes', role: 'Social Producer & Publisher', avatar: '/team/jordan-reyes.webp' },
   marcus: { name: 'Marcus Reed', role: 'Reliability Engineer', avatar: '/team/marcus-reed.webp' },
@@ -52,6 +52,7 @@ export function agentEmailSignatureHtml(agentKey: EmailAgentKey): string {
     '<td style="vertical-align:middle;padding-left:10px;font-family:Arial,sans-serif;">',
     `<p style="margin:0;color:${EMAIL_COLORS.ink};font-size:14px;font-weight:700;">${escapeEmailHtml(agent.name)}</p>`,
     `<p style="margin:3px 0 0;color:${EMAIL_COLORS.muted};font-size:12px;">${escapeEmailHtml(agent.role)} · GEO-Pulse</p>`,
+    `<p style="margin:8px 0 0;color:${EMAIL_COLORS.muted};font-size:11px;line-height:1.6;"><a href="https://getgeopulse.com" style="color:${EMAIL_COLORS.primary};text-decoration:none;vertical-align:middle;">Website</a><span style="color:${EMAIL_COLORS.faint};padding:0 7px;">·</span><a href="https://www.instagram.com/get_geopulse/" aria-label="GEO-Pulse on Instagram" style="color:${EMAIL_COLORS.primary};text-decoration:none;vertical-align:middle;"><img src="https://getgeopulse.com/branding/email/instagram.png" width="18" height="18" alt="Instagram" style="display:inline-block;width:18px;height:18px;border:0;vertical-align:middle;" /></a><span style="display:inline-block;width:8px;">&nbsp;</span><a href="https://www.linkedin.com/company/143052018/" aria-label="GEO-Pulse on LinkedIn" style="color:${EMAIL_COLORS.primary};text-decoration:none;vertical-align:middle;"><img src="https://getgeopulse.com/branding/email/linkedin.png" width="18" height="18" alt="LinkedIn" style="display:inline-block;width:18px;height:18px;border:0;vertical-align:middle;" /></a></p>`,
     '</td>',
     '</tr>',
     '</table>',
@@ -104,6 +105,8 @@ export function issueListHtml(items: ReadonlyArray<{ check?: string; fix?: strin
 export function emailShell(input: {
   kicker: string;
   bodyHtml: string;
+  /** Hidden inbox preheader. It must already be resolved for the recipient. */
+  previewText?: string;
   /** The Mole employee accountable for this email. */
   sender: EmailAgentKey;
   /** e.g. 'Daily self-improvement report' — right side of the masthead. */
@@ -111,10 +114,17 @@ export function emailShell(input: {
   footerNote?: string;
   unsubscribeUrl?: string;
   pixelUrl?: string;
+  /** Optional human sign-off immediately before the accountable sender signature. */
+  signoff?: string;
+  /** Commercial outreach footer: French first, then English. */
+  confidentialityNotice?: boolean;
 }): string {
   return [
     `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>`,
     `<body style="margin:0;padding:0;background:${EMAIL_COLORS.bg};">`,
+    input.previewText
+      ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${escapeEmailHtml(input.previewText)}</div>`
+      : '',
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${EMAIL_COLORS.bg};padding:32px 0;"><tr><td align="center">`,
     `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background:${EMAIL_COLORS.card};border-radius:12px;overflow:hidden;max-width:600px;width:100%;">`,
     // Masthead — navy band, wordmark, note.
@@ -131,13 +141,19 @@ export function emailShell(input: {
     // Body card.
     `<tr><td style="padding:12px 32px 24px;font-family:Georgia,serif;color:${EMAIL_COLORS.body};font-size:15px;line-height:1.6;">`,
     input.bodyHtml,
+    input.signoff
+      ? `<p style="margin:22px 0 0;color:${EMAIL_COLORS.body};font-family:Georgia,serif;font-size:15px;line-height:1.6;">${escapeEmailHtml(input.signoff)}</p>`
+      : '',
     agentEmailSignatureHtml(input.sender),
     `</td></tr>`,
     // Editorial footer.
     `<tr><td style="padding:20px 32px 24px;border-top:1px solid ${EMAIL_COLORS.bg};">`,
-    `<p style="margin:0;color:${EMAIL_COLORS.faint};font-size:12px;font-family:Arial,sans-serif;line-height:1.6;">— GEO-Pulse · editorial intelligence for AI search readiness<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:${EMAIL_COLORS.faint};">getgeopulse.com</a>${input.footerNote ? `<br/>${escapeEmailHtml(input.footerNote)}` : ''}</p>`,
+    `<p style="margin:0;color:${EMAIL_COLORS.faint};font-size:12px;font-family:Arial,sans-serif;line-height:1.6;">— GEO-Pulse · AI visibility you can prove, fix, and report<br/>Montréal, Québec, Canada · <a href="https://getgeopulse.com" style="color:${EMAIL_COLORS.faint};">getgeopulse.com</a>${input.footerNote ? `<br/>${escapeEmailHtml(input.footerNote)}` : ''}</p>`,
     input.unsubscribeUrl
-      ? `<p style="margin:8px 0 0;color:${EMAIL_COLORS.faint};font-size:11px;font-family:Arial,sans-serif;">No longer want these audits? <a href="${input.unsubscribeUrl}" style="color:${EMAIL_COLORS.faint};">Unsubscribe</a> — one click, effective immediately.</p>`
+      ? `<p style="margin:8px 0 0;color:${EMAIL_COLORS.faint};font-size:11px;font-family:Arial,sans-serif;">No longer want these audits? <a href="${input.unsubscribeUrl}" style="color:${EMAIL_COLORS.faint};">Unsubscribe</a>.</p>`
+      : '',
+    input.confidentialityNotice
+      ? `<div style="margin-top:14px;padding-top:12px;border-top:1px solid ${EMAIL_COLORS.track};color:${EMAIL_COLORS.faint};font-family:Arial,sans-serif;font-size:9px;line-height:1.5;"><p style="margin:0 0 7px;"><strong>AVIS DE CONFIDENTIALITÉ</strong> — Ce courriel et ses pièces jointes sont destinés uniquement à leur destinataire et peuvent contenir des renseignements confidentiels. Si vous l’avez reçu par erreur, veuillez en aviser l’expéditeur et le supprimer.</p><p style="margin:0 0 7px;"><strong>CONFIDENTIALITY NOTICE</strong> — This email and any attachments are intended only for the recipient and may contain confidential information. If you received it in error, please notify the sender and delete it.</p><p style="margin:0;"><a href="https://getgeopulse.com/privacy" style="color:${EMAIL_COLORS.faint};">Politique de confidentialité / Privacy policy</a></p></div>`
       : '',
     `</td></tr>`,
     `</table>`,

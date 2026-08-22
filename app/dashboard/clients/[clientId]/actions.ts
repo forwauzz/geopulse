@@ -13,7 +13,13 @@ import { parsePromptCsv } from '@/lib/server/prompt-csv';
 import { parseReportRecipients } from '@/lib/shared/report-recipients';
 import { completeAgencyClientBaseline } from '@/lib/server/agency-client-baseline';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
-import { isClientReportSharingHeld } from '@/lib/server/report-quarantine';
+import { isClientReportSharingHeld, isReportQuarantined, releaseClientReportHold } from '@/lib/server/report-quarantine';
+import { loadLatestAgencyReport } from '@/lib/server/load-agency-report-snapshot';
+import { syncConfirmedCompetitorCohort } from '@/lib/server/organization-context-repository';
+import { structuredError, structuredLog } from '@/lib/server/structured-log';
+import { recipientsFromMetadata } from '@/lib/shared/report-recipients';
+import { resolveReportBrand } from '@/workers/report/resolve-report-brand';
+import { sendAgencyReportEmail } from '@/workers/report/agency-report-email-delivery';
 
 const schema = z.object({
   clientId: z.string().uuid(),
@@ -72,7 +78,7 @@ async function authorizedAdmin(args: {
   const env = await getScanApiEnv();
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return null;
   const admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  const [{ data: membership }, { data: client }] = await Promise.all([
+  const [{ data: membership }, { data: client }, { data: account }] = await Promise.all([
     admin
       .from('agency_users')
       .select('role')
@@ -87,9 +93,106 @@ async function authorizedAdmin(args: {
       .eq('agency_account_id', args.agencyAccountId)
       .eq('status', 'active')
       .maybeSingle(),
+    admin
+      .from('agency_accounts')
+      .select('metadata')
+      .eq('id', args.agencyAccountId)
+      .maybeSingle(),
   ]);
   if (!membership || membership.role === 'viewer' || !client) return null;
-  return { admin, user };
+  return {
+    admin,
+    user,
+    role: String(membership.role),
+    accountMetadata: account?.metadata && typeof account.metadata === 'object'
+      ? account.metadata as Record<string, unknown>
+      : {},
+  };
+}
+
+/**
+ * Releasing a review hold is the one action here that can make a client's report
+ * publicly reachable, so it is restricted further than the rest: an editor may
+ * change what is measured, but only an owner or admin may decide it can leave the
+ * workspace.
+ */
+const SHARING_RELEASE_ROLES = new Set(['owner', 'admin']);
+
+export async function sendClientReportNow(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    clientId: z.string().uuid(), agencyAccountId: z.string().uuid(),
+    configId: z.string().uuid(), reportId: z.string().uuid(),
+  }).safeParse({
+    clientId: formData.get('clientId'), agencyAccountId: formData.get('agencyAccountId'),
+    configId: formData.get('configId'), reportId: formData.get('reportId'),
+  });
+  if (!parsed.success) return;
+  const auth = await authorizedAdmin(parsed.data);
+  const memberDeliveryEnabled = auth?.accountMetadata['member_report_delivery_enabled'] === true;
+  if (!auth || (!SHARING_RELEASE_ROLES.has(auth.role) && !memberDeliveryEnabled)) return;
+
+  const { admin, user } = auth;
+  const [latest, clientResult, configResult, reportResult] = await Promise.all([
+    loadLatestAgencyReport({ supabase: admin, agencyClientId: parsed.data.clientId }),
+    admin.from('agency_clients').select('id,metadata')
+      .eq('id', parsed.data.clientId).eq('agency_account_id', parsed.data.agencyAccountId).maybeSingle(),
+    admin.from('client_benchmark_configs').select('id,startup_workspace_id,agency_account_id,report_email,metadata')
+      .eq('id', parsed.data.configId).eq('agency_account_id', parsed.data.agencyAccountId).maybeSingle(),
+    admin.from('gpm_reports').select('id,config_id,agency_client_id,metadata')
+      .eq('id', parsed.data.reportId).eq('config_id', parsed.data.configId)
+      .eq('agency_client_id', parsed.data.clientId).eq('platform', 'combined')
+      .eq('report_payload_version', '2').maybeSingle(),
+  ]);
+  const client = clientResult.data;
+  const config = configResult.data;
+  const storedReport = reportResult.data;
+  const clientMetadata = client?.metadata && typeof client.metadata === 'object'
+    ? client.metadata as Record<string, unknown> : {};
+  const configMetadata = config?.metadata && typeof config.metadata === 'object'
+    ? config.metadata as Record<string, unknown> : {};
+  const reportMetadata = storedReport?.metadata && typeof storedReport.metadata === 'object'
+    ? storedReport.metadata as Record<string, unknown> : {};
+  if (!client || !config || !storedReport || latest?.reportId !== parsed.data.reportId
+    || isClientReportSharingHeld(clientMetadata) || isReportQuarantined(reportMetadata)) {
+    redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&reportDelivery=blocked`);
+  }
+  const shareToken = typeof clientMetadata['client_summary_share_token'] === 'string'
+    ? clientMetadata['client_summary_share_token'].trim() : '';
+  const recipients = recipientsFromMetadata(config.report_email, configMetadata);
+  if (!shareToken || recipients.length === 0) {
+    redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&reportDelivery=blocked`);
+  }
+
+  const env = await getPaymentApiEnv();
+  const brand = await resolveReportBrand({
+    supabase: admin as never,
+    scan: {
+      agency_client_id: parsed.data.clientId,
+      agency_account_id: parsed.data.agencyAccountId,
+      startup_workspace_id: typeof config.startup_workspace_id === 'string' ? config.startup_workspace_id : null,
+    },
+    bucket: null,
+  });
+  const secureReportUrl = `${env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, '')}/client-summary/${encodeURIComponent(parsed.data.clientId)}?share=${encodeURIComponent(shareToken)}`;
+  const sentAt = new Date().toISOString();
+  const result = await sendAgencyReportEmail({
+    apiKey: env.RESEND_API_KEY, from: env.RESEND_FROM_EMAIL, recipients,
+    replyTo: brand.brand.replyToEmail, brand: brand.brand, snapshot: latest.snapshot,
+    secureReportUrl, idempotencyKey: `agency-report-manual/${parsed.data.reportId}`,
+  });
+  const emailStatus = result.ok ? 'sent' : 'failed';
+  await admin.from('gpm_reports').update({ metadata: {
+    ...reportMetadata, email_status: emailStatus, email_status_at: sentAt,
+    delivery_trigger: 'partner_manual', delivered_by_user_id: user.id,
+    delivery_recipient_count: recipients.length,
+    ...(result.ok ? {} : { delivery_error: result.message }),
+  } }).eq('id', parsed.data.reportId);
+  structuredLog('agency_report_manual_delivery', {
+    agency_account_id: parsed.data.agencyAccountId, agency_client_id: parsed.data.clientId,
+    report_id: parsed.data.reportId, recipient_count: recipients.length, email_status: emailStatus,
+  });
+  revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
+  redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&reportDelivery=${emailStatus}`);
 }
 
 export async function saveClientMonitoring(formData: FormData): Promise<void> {
@@ -137,6 +240,40 @@ export async function saveClientMonitoring(formData: FormData): Promise<void> {
     })
     .eq('id', parsed.data.configId)
     .eq('agency_account_id', parsed.data.agencyAccountId);
+
+  // The cohort is measurement input, but the run key is versioned by the confirmed
+  // context — so a cohort saved only here is deduped away and the client keeps
+  // being measured against the old set. Re-confirming moves the context version,
+  // which is what lets the next baseline actually run.
+  const { data: client } = await admin
+    .from('agency_clients')
+    .select('canonical_domain,website_domain')
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  const canonicalDomain = String(client?.canonical_domain || client?.website_domain || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^www\./, '');
+  if (canonicalDomain) {
+    // Best effort: the delivery settings are already saved, and a context that
+    // cannot be re-confirmed should not lose the agency that change.
+    await syncConfirmedCompetitorCohort({
+      supabase: admin,
+      ownerType: 'agency_client',
+      ownerId: parsed.data.clientId,
+      canonicalDomain,
+      actorId: auth.user.id,
+      competitorDomains: competitors,
+    }).catch((error) => {
+      structuredError('agency_client_cohort_context_sync_failed', {
+        agency_client_id: parsed.data.clientId,
+        canonical_domain: canonicalDomain,
+        message: error instanceof Error ? error.message : 'unknown',
+      });
+      return null;
+    });
+  }
 
   revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
   redirect(`/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&monitoring=saved`);
@@ -417,6 +554,66 @@ export async function completeClientBaseline(formData: FormData): Promise<void> 
   redirect(
     `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}` +
     `&baseline=${result.ok ? 'complete' : encodeURIComponent(result.reason ?? 'failed')}`,
+  );
+}
+
+/**
+ * Release a client's review hold so its scorecard and summary can be shared.
+ *
+ * Deliberately separate from creating a share link. Releasing is the judgement that
+ * a report is fit to leave the workspace; creating a link is the act of sending it.
+ * Keeping them apart means nothing is published as a side effect of a review.
+ */
+export async function releaseClientSharingHold(formData: FormData): Promise<void> {
+  const parsed = z.object({
+    clientId: z.string().uuid(),
+    agencyAccountId: z.string().uuid(),
+  }).safeParse({
+    clientId: formData.get('clientId'),
+    agencyAccountId: formData.get('agencyAccountId'),
+  });
+  if (!parsed.success) return;
+  const auth = await authorizedAdmin(parsed.data);
+  if (!auth) return;
+  if (!SHARING_RELEASE_ROLES.has(auth.role)) {
+    redirect(
+      `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=not_permitted`
+    );
+  }
+  const { data: client } = await auth.admin
+    .from('agency_clients')
+    .select('metadata')
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId)
+    .maybeSingle();
+  const released = releaseClientReportHold(client?.metadata, {
+    userId: auth.user.id,
+    at: new Date().toISOString(),
+  });
+  // Nothing held: say so rather than reporting a release that never happened.
+  if (!released) {
+    redirect(
+      `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=not_held`
+    );
+  }
+  const { error } = await auth.admin
+    .from('agency_clients')
+    .update({ metadata: released, updated_at: new Date().toISOString() })
+    .eq('id', parsed.data.clientId)
+    .eq('agency_account_id', parsed.data.agencyAccountId);
+  if (error) {
+    redirect(
+      `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=failed`
+    );
+  }
+  structuredLog('agency_client_sharing_released', {
+    agency_account_id: parsed.data.agencyAccountId,
+    agency_client_id: parsed.data.clientId,
+    released_by_user_id: auth.user.id,
+  });
+  revalidatePath(`/dashboard/clients/${parsed.data.clientId}`);
+  redirect(
+    `/dashboard/clients/${parsed.data.clientId}?agencyAccount=${parsed.data.agencyAccountId}&release=released`
   );
 }
 

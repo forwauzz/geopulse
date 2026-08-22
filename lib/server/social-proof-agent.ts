@@ -14,6 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 import { reserveProviderSpend } from './provider-spend-control';
+import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
 import { loadAutomationSetting } from './automation-settings';
 import {
   createDistributionEngineRepository,
@@ -43,7 +44,7 @@ import { structuredLogWithClientAndWait } from './structured-log';
 import {
   buildJordanReelScript,
   chooseJordanReelSource,
-  jordanReelSourceUrl,
+  JORDAN_REEL_VALIDATION_VERSION,
   jordanReelSlotKey,
   resolveJordanReelConfig,
   shouldPlanJordanReel,
@@ -117,6 +118,14 @@ export type SocialProofAgentResult = {
   readonly reason?: string;
 };
 
+export const SOCIAL_SEQUENCE_VERSION = 'social-flow-v1';
+
+export type SocialSequenceAnchor = {
+  readonly narrativeKind: SocialProofCandidate['kind'];
+  readonly assetType: DistributionAssetType;
+  readonly visualFamily: 'timely' | 'humor' | 'carousel' | 'proof' | 'educational';
+};
+
 export type SocialProductionEnv = SocialTrendEnv & {
   readonly BROWSER?: BrowserRunBinding;
   readonly REPORT_FILES?: SocialMediaBucket;
@@ -151,6 +160,8 @@ type AssignedSocialRow = {
   readonly brief_markdown: string | null;
   readonly metadata: Record<string, unknown> | null;
   readonly created_at: string;
+  readonly growth_campaign_id: string | null;
+  readonly growth_intervention_id: string | null;
 };
 
 const CAMPAIGN_SOCIAL_VERTICALS = new Set([
@@ -176,16 +187,30 @@ export function remainingDailyAssetCapacity(
   assets: readonly Pick<DistributionAssetRow, 'created_at' | 'metadata'>[],
   now: Date,
   dailyCap: number,
+  timezone = 'UTC',
 ): number {
-  const day = now.toISOString().slice(0, 10);
-  const createdToday = assets.filter((asset) =>
-    asset.created_at.slice(0, 10) === day
-    && asset.metadata['created_by_agent'] === 'jordan'
-  ).length;
+  const localDay = (value: Date): string => {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(value);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((candidate) => candidate.type === type)?.value ?? '';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  };
+  const day = localDay(now);
+  const createdToday = assets.filter((asset) => {
+    const created = new Date(asset.created_at);
+    return Number.isFinite(created.getTime())
+      && localDay(created) === day
+      && asset.metadata['created_by_agent'] === 'jordan';
+  }).length;
   return Math.max(0, dailyCap - createdToday);
 }
 
-function assignedSocialCandidate(
+export function assignedSocialCandidate(
   item: AssignedSocialRow,
   appUrl: string,
 ): SocialProofCandidate | null {
@@ -208,7 +233,7 @@ function assignedSocialCandidate(
     'Measure it at getgeopulse.com.',
   ].join('\n').slice(0, 1_900);
   return {
-    key: `assigned-${item.content_id}`,
+    key: `assigned-carousel-v2-${item.content_id}`,
     kind: 'carousel',
     title: item.title,
     caption,
@@ -227,9 +252,89 @@ function assignedSocialCandidate(
       intelligence_evidence_ids: Array.isArray(metadata['intelligence_evidence_ids'])
         ? metadata['intelligence_evidence_ids']
         : [],
+      growth_campaign_id: item.growth_campaign_id ?? metadata['growth_campaign_id'] ?? null,
+      growth_intervention_id:
+        item.growth_intervention_id ?? metadata['growth_intervention_id'] ?? null,
+      campaign_key: metadata['campaign_key'] ?? null,
+      campaign_role: metadata['campaign_role'] ?? null,
+      campaign_vertical: metadata['campaign_vertical'] ?? null,
+      checklist_items: [
+        'State the buyer question in plain language',
+        'Put the direct answer near the top',
+        'Support the claim with visible evidence',
+        'Route the reader to one next action',
+      ],
     },
     safeForAutonomousPublish: true,
   };
+}
+
+export function assignedSocialCandidates(
+  item: AssignedSocialRow,
+  appUrl: string,
+): SocialProofCandidate[] {
+  const primary = assignedSocialCandidate(item, appUrl);
+  if (!primary) return [];
+
+  const metadata = item.metadata ?? {};
+  const recommendation = String(metadata['recommendation'] ?? '').trim();
+  const evidence = String(metadata['evidence'] ?? '').trim();
+  const sharedEvidence = {
+    ...primary.evidence,
+    source_excerpt: evidence.slice(0, 800),
+  };
+
+  return [
+    primary,
+    {
+      ...primary,
+      key: `assigned-carousel-evidence-v1-${item.content_id}`,
+      title: `Proof before promise: ${item.title}`,
+      caption: [
+        `Proof before promise: ${item.title}`,
+        '',
+        evidence,
+        '',
+        'Use the source, show the limitation, and route the buyer to one measurable next action.',
+        '',
+        'Run a free GEO-Pulse scan — link in bio.',
+      ].join('\n').slice(0, 1_900),
+      evidence: {
+        ...sharedEvidence,
+        content_variant: 'evidence_before_claim',
+        checklist_items: [
+          'Name the buyer question precisely',
+          evidence.slice(0, 100),
+          'Separate observed evidence from inference',
+          'Offer one measurable next action',
+        ],
+      },
+    },
+    {
+      ...primary,
+      key: `assigned-carousel-action-v1-${item.content_id}`,
+      title: `Turn this MSP question into a clearer page`,
+      caption: [
+        'Turn this MSP question into a clearer page.',
+        '',
+        recommendation,
+        '',
+        'The goal is clarity and verifiable evidence—not a ranking or citation promise.',
+        '',
+        'Save the checklist, then run a free GEO-Pulse scan.',
+      ].join('\n').slice(0, 1_900),
+      evidence: {
+        ...sharedEvidence,
+        content_variant: 'buyer_question_to_action',
+        checklist_items: [
+          'Lead with the direct answer',
+          recommendation.slice(0, 100),
+          'Place visible proof beside the claim',
+          'End with one concrete next step',
+        ],
+      },
+    },
+  ];
 }
 
 function readBoolean(config: Record<string, unknown>, key: string, fallback: boolean): boolean {
@@ -597,6 +702,8 @@ export function buildProductDemoCandidate(appUrl: string): SocialProofCandidate 
     assetType: 'single_image_post',
     evidence: {
       source_label: 'GEO-Pulse product behavior',
+      source_url: `${appUrl.replace(/\/+$/, '')}/methodology/ai-search-readiness-audit`,
+      source_type: 'first_party_methodology',
       product_truth: true,
       claim_boundary: 'observable_readiness_signals_no_ranking_guarantee',
     },
@@ -656,6 +763,91 @@ function cardKind(candidate: SocialProofCandidate):
     return 'proof';
   }
   return candidate.kind === 'timely' ? 'timely' : 'educational';
+}
+
+function candidateAssetType(candidate: SocialProofCandidate): DistributionAssetType {
+  return candidate.assetType ??
+    (candidate.media || candidate.mediaUrl ? 'single_image_post' : 'link_post');
+}
+
+export function socialSequenceDimensions(
+  candidate: SocialProofCandidate,
+): SocialSequenceAnchor & { readonly version: typeof SOCIAL_SEQUENCE_VERSION } {
+  return {
+    version: SOCIAL_SEQUENCE_VERSION,
+    narrativeKind: candidate.kind,
+    assetType: candidateAssetType(candidate),
+    visualFamily: cardKind(candidate),
+  };
+}
+
+export function socialSequenceMetadata(
+  candidate: SocialProofCandidate,
+  previous: SocialSequenceAnchor | null,
+  runPosition: number,
+): Record<string, unknown> {
+  const current = socialSequenceDimensions(candidate);
+  return {
+    version: current.version,
+    narrative_kind: current.narrativeKind,
+    asset_format: current.assetType,
+    visual_family: current.visualFamily,
+    previous_narrative_kind: previous?.narrativeKind ?? null,
+    previous_asset_format: previous?.assetType ?? null,
+    previous_visual_family: previous?.visualFamily ?? null,
+    run_position: runPosition,
+  };
+}
+
+function isSocialProofKind(value: unknown): value is SocialProofCandidate['kind'] {
+  return value === 'before_after' ||
+    value === 'aggregate' ||
+    value === 'educational' ||
+    value === 'industry_humor' ||
+    value === 'timely' ||
+    value === 'carousel' ||
+    value === 'proof_demo';
+}
+
+function visualFamilyForKind(
+  kind: SocialProofCandidate['kind'],
+): SocialSequenceAnchor['visualFamily'] {
+  if (kind === 'industry_humor') return 'humor';
+  if (kind === 'carousel') return 'carousel';
+  if (kind === 'before_after' || kind === 'aggregate' || kind === 'proof_demo') {
+    return 'proof';
+  }
+  return kind === 'timely' ? 'timely' : 'educational';
+}
+
+export function latestSocialSequenceAnchor(
+  assets: ReadonlyArray<DistributionAssetRow>,
+): SocialSequenceAnchor | null {
+  const latest = [...assets]
+    .filter((asset) =>
+      asset.metadata['created_by_agent'] === 'jordan' &&
+      asset.status !== 'failed' &&
+      asset.status !== 'archived' &&
+      isSocialProofKind(asset.metadata['proof_kind'])
+    )
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  if (!latest) return null;
+
+  const narrativeKind = latest.metadata['proof_kind'] as SocialProofCandidate['kind'];
+  const sequence = readRecord(latest.metadata['content_sequence']);
+  const visualFamily = sequence['visual_family'];
+  return {
+    narrativeKind,
+    assetType: latest.asset_type,
+    visualFamily:
+      visualFamily === 'timely' ||
+      visualFamily === 'humor' ||
+      visualFamily === 'carousel' ||
+      visualFamily === 'proof' ||
+      visualFamily === 'educational'
+        ? visualFamily
+        : visualFamilyForKind(narrativeKind),
+  };
 }
 
 function candidateBullets(candidate: SocialProofCandidate): string[] {
@@ -891,7 +1083,8 @@ function candidateCanPublish(
 
 export function orderAutonomousCandidates(
   candidates: ReadonlyArray<SocialProofCandidate>,
-  historicalPerformance: ReadonlyMap<SocialProofCandidate['kind'], number> = new Map()
+  historicalPerformance: ReadonlyMap<SocialProofCandidate['kind'], number> = new Map(),
+  previous: SocialSequenceAnchor | null = null,
 ): SocialProofCandidate[] {
   const ranked = [...candidates].sort(
     (a, b) =>
@@ -929,7 +1122,59 @@ export function orderAutonomousCandidates(
     if (candidate.mediaUrl && usedMedia.has(candidate.mediaUrl)) continue;
     add(candidate);
   }
-  return ordered;
+  const diversified: SocialProofCandidate[] = [];
+  const remaining = [...ordered];
+  let anchor = previous;
+  while (remaining.length > 0) {
+    let selectedIndex = 0;
+    if (anchor) {
+      selectedIndex = remaining
+        .map((candidate, index) => {
+          const dimensions = socialSequenceDimensions(candidate);
+          return {
+            index,
+            sameNarrative: dimensions.narrativeKind === anchor?.narrativeKind ? 1 : 0,
+            sameFormat: dimensions.assetType === anchor?.assetType ? 1 : 0,
+            sameVisual: dimensions.visualFamily === anchor?.visualFamily ? 1 : 0,
+          };
+        })
+        .sort((a, b) =>
+          a.sameNarrative - b.sameNarrative ||
+          a.sameFormat - b.sameFormat ||
+          a.sameVisual - b.sameVisual ||
+          a.index - b.index
+        )[0]!.index;
+    }
+    const [selected] = remaining.splice(selectedIndex, 1);
+    if (!selected) break;
+    diversified.push(selected);
+    anchor = socialSequenceDimensions(selected);
+  }
+  return diversified;
+}
+
+export function prioritizeRequiredFormatCandidates(
+  candidates: ReadonlyArray<SocialProofCandidate>,
+  requiredFormats: readonly string[] = [],
+): SocialProofCandidate[] {
+  const requiredAssetTypes = [...new Set(requiredFormats
+    .filter((format) => format.startsWith('instagram:'))
+    .map((format) => format.slice('instagram:'.length))
+    .filter((format) => format !== 'short_video_post'))];
+  if (requiredAssetTypes.length === 0) return [...candidates];
+
+  const prioritized: SocialProofCandidate[] = [];
+  const selected = new Set<SocialProofCandidate>();
+  for (const assetType of requiredAssetTypes) {
+    const candidate = candidates.find((item) =>
+      !selected.has(item) &&
+      (item.assetType ?? (item.media || item.mediaUrl ? 'single_image_post' : 'link_post')) === assetType
+    );
+    if (!candidate) continue;
+    prioritized.push(candidate);
+    selected.add(candidate);
+  }
+  return [...prioritized, ...candidates.filter((candidate) => !selected.has(candidate))];
 }
 
 function historicalPerformanceByKind(
@@ -972,6 +1217,10 @@ export async function runSocialProofAgent(args: {
   readonly force?: boolean;
   readonly now?: Date;
   readonly campaignOnly?: boolean;
+  /** Scheduled production must never create an unscoped asset. */
+  readonly campaignScopeRequired?: boolean;
+  /** Missing connected-channel formats that this run should replenish. */
+  readonly requiredFormats?: readonly string[];
 }): Promise<SocialProofAgentResult> {
   const setting = await loadAutomationSetting(args.supabase, 'social_proof_agent');
   const config = resolveSocialProofAgentConfig(setting.config, setting.enabled, setting.killSwitch);
@@ -991,7 +1240,7 @@ export async function runSocialProofAgent(args: {
   try {
     const repo = createDistributionEngineRepository(args.supabase as never);
     const now = args.now ?? new Date();
-    const [scanResult, contentResult, assignedSocialResult, accounts, existingAssets] = await Promise.all([
+    const [scanResult, contentResult, assignedSocialResult, accounts, existingAssets, activeCampaigns] = await Promise.all([
       args.supabase
         .from('scans')
         .select('id,domain,score,letter_grade,issues_json,run_source,created_at')
@@ -1006,7 +1255,7 @@ export async function runSocialProofAgent(args: {
         .limit(25),
       args.supabase
         .from('content_items')
-        .select('id,content_id,title,brief_markdown,metadata,created_at')
+        .select('id,content_id,title,brief_markdown,metadata,created_at,growth_campaign_id,growth_intervention_id')
         .eq('content_type', 'social_post')
         .in('status', ['idea', 'brief', 'draft', 'approved'])
         .eq('metadata->>proposed_by', 'seo_agent')
@@ -1014,6 +1263,7 @@ export async function runSocialProofAgent(args: {
         .limit(10),
       repo.listAccounts({ status: 'connected' }),
       repo.listAssets({ providerFamily: 'instagram' }),
+      args.campaignScopeRequired ? loadActiveGrowthCampaigns(args.supabase as any) : Promise.resolve([]),
     ]);
     if (scanResult.error) throw scanResult.error;
     if (contentResult.error) throw contentResult.error;
@@ -1039,6 +1289,9 @@ export async function runSocialProofAgent(args: {
     const assignedSocial = args.campaignOnly
       ? filterCampaignAssignedSocial(allAssignedSocial) : allAssignedSocial;
     const candidates: SocialProofCandidate[] = [];
+    const primaryCampaign: GrowthCampaign | null = activeCampaigns.find(
+      (campaign) => campaign.role === 'primary',
+    ) ?? null;
     const opportunityIds = assignedSocial
       .map((item) => item.metadata?.['seo_opportunity_id'])
       .filter((value): value is string => typeof value === 'string' && Boolean(value));
@@ -1070,14 +1323,13 @@ export async function runSocialProofAgent(args: {
       const opportunityId = typeof item.metadata?.['seo_opportunity_id'] === 'string'
         ? item.metadata['seo_opportunity_id']
         : '';
-      const candidate = assignedSocialCandidate({
+      candidates.push(...assignedSocialCandidates({
         ...item,
         metadata: {
           ...(item.metadata ?? {}),
           intelligence_evidence_ids: proofEvidenceByOpportunity.get(opportunityId) ?? [],
         },
-      }, args.appUrl);
-      if (candidate) candidates.push(candidate);
+      }, args.appUrl));
     }
 
     if (!args.campaignOnly && config.beforeAfterEnabled) {
@@ -1169,10 +1421,16 @@ export async function runSocialProofAgent(args: {
         instagramScheduleSlot(now, config.timezone, hourLocal),
         occupiedInstagramSlots
       );
-    const baseOrderedCandidates =
-      mode === 'autonomous'
-        ? orderAutonomousCandidates(candidates, historicalPerformanceByKind(existingAssets))
-        : candidates;
+    const previousSequenceAnchor = latestSocialSequenceAnchor(existingAssets);
+    const historicalPerformance = historicalPerformanceByKind(existingAssets);
+    const baseOrderedCandidates = prioritizeRequiredFormatCandidates(
+      orderAutonomousCandidates(
+        candidates,
+        mode === 'autonomous' ? historicalPerformance : new Map(),
+        previousSequenceAnchor,
+      ),
+      args.requiredFormats,
+    );
     const reelConfig = {
       enabled: config.reelsEnabled,
       reelsPerWeek: config.reelsPerWeek,
@@ -1180,24 +1438,18 @@ export async function runSocialProofAgent(args: {
       categories: config.reelCategories,
       publishMode: config.reelPublishMode,
     };
-    // Sources already used by a recent Reel, so the same candidate cannot win every slot.
-    const recentReelSourceUrls = existingAssets
-      .filter((asset) => asset.asset_type === 'short_video_post')
-      .map((asset) => jordanReelSourceUrl(asset))
-      .filter((url): url is string => typeof url === 'string');
-    const reelSource =
-      account?.provider_name === 'instagram' &&
-      shouldPlanJordanReel({
+    const reelPlanEligible = account?.provider_name === 'instagram'
+      ? shouldPlanJordanReel({
         now,
         timezone: config.timezone,
         config: reelConfig,
         existingAssets,
+        coverageRequired: args.requiredFormats?.includes('instagram:short_video_post'),
       })
-        ? chooseJordanReelSource(
-            baseOrderedCandidates,
-            config.reelCategories,
-            recentReelSourceUrls
-          )
+      : false;
+    const reelSource =
+      reelPlanEligible
+        ? chooseJordanReelSource(baseOrderedCandidates, config.reelCategories, existingAssets)
         : null;
     const reelCandidate: SocialProofCandidate | null = reelSource
       ? {
@@ -1221,12 +1473,28 @@ export async function runSocialProofAgent(args: {
         }
       : null;
     const orderedCandidates = reelCandidate
-      ? [reelCandidate, ...baseOrderedCandidates.filter((candidate) => candidate !== reelSource)]
+      ? [
+          reelCandidate,
+          ...prioritizeRequiredFormatCandidates(
+            orderAutonomousCandidates(
+              baseOrderedCandidates.filter((candidate) => candidate !== reelSource),
+              historicalPerformance,
+              socialSequenceDimensions(reelCandidate),
+            ),
+            args.requiredFormats,
+          ),
+        ]
       : baseOrderedCandidates;
     let assetsCreated = 0;
     let jobsCreated = 0;
     const queuedContentItemIds: string[] = [];
-    const dailyCapacity = remainingDailyAssetCapacity(existingAssets, now, config.dailyCap);
+    const dailyCapacity = remainingDailyAssetCapacity(
+      existingAssets,
+      now,
+      config.dailyCap,
+      config.timezone,
+    );
+    let sequenceAnchor = previousSequenceAnchor;
 
     for (const rawCandidate of orderedCandidates) {
       if (assetsCreated >= dailyCapacity) break;
@@ -1235,6 +1503,12 @@ export async function runSocialProofAgent(args: {
       // rendering so retries never spend Browser Run time on an existing post.
       if (await repo.getAssetByAssetId(assetId)) continue;
       let candidate = rawCandidate;
+      const explicitCampaignId = readString(candidate.evidence['growth_campaign_id']);
+      const campaign = activeCampaigns.find((item) => item.id === explicitCampaignId)
+        ?? (args.campaignScopeRequired ? primaryCampaign : null);
+      if (args.campaignScopeRequired && !campaign) continue;
+      const growthCampaignId = explicitCampaignId || campaign?.id || null;
+      const growthInterventionId = readString(candidate.evidence['growth_intervention_id']) || null;
       if (account?.provider_name === 'instagram' && args.env) {
         try {
           candidate = await materializeCandidateMedia({
@@ -1254,6 +1528,7 @@ export async function runSocialProofAgent(args: {
           );
         }
       }
+      const sequenceDimensions = socialSequenceDimensions(candidate);
       // A deterministic asset is immutable from the agent's perspective. This both rotates
       // through the candidate pool on later runs and prevents a mode change from silently
       // promoting a previously reviewed/rejected draft.
@@ -1275,13 +1550,26 @@ export async function runSocialProofAgent(args: {
             ? 'review'
             : assetStatusForMode(mode),
         ctaUrl: trackedProviderCta(candidate.ctaUrl, account?.provider_name ?? 'social', candidate.key),
+        growthCampaignId,
+        growthInterventionId,
         metadata: {
           created_by_agent: 'jordan',
           researched_by_agent:
             candidate.evidence['research_agent'] === 'sofia' ? 'sofia' : null,
           proof_kind: candidate.kind,
+          content_sequence: socialSequenceMetadata(
+            candidate,
+            sequenceAnchor,
+            assetsCreated + 1,
+          ),
           evidence: candidate.evidence,
           claim_boundary: 'observed_or_directional_no_ranking_guarantee',
+          growth_campaign_id: growthCampaignId,
+          growth_intervention_id: growthInterventionId,
+          campaign_key: candidate.evidence['campaign_key'] ?? campaign?.campaign_key ?? null,
+          campaign_role: candidate.evidence['campaign_role'] ?? campaign?.role ?? null,
+          campaign_vertical:
+            candidate.evidence['campaign_vertical'] ?? campaign?.vertical ?? null,
           client_safe: true,
           client_proof_enabled: config.clientProofEnabled,
           audit_screenshots_enabled: config.auditScreenshotsEnabled,
@@ -1297,7 +1585,7 @@ export async function runSocialProofAgent(args: {
           reel_render_status:
             candidate.assetType === 'short_video_post' ? 'pending' : null,
           reel_validation_version:
-            candidate.assetType === 'short_video_post' ? 'jordan-reel-v1' : null,
+            candidate.assetType === 'short_video_post' ? JORDAN_REEL_VALIDATION_VERSION : null,
           industry_humor_enabled: config.industryHumorEnabled,
           trend_research_enabled: config.trendResearchEnabled,
           learning_enabled: config.learningEnabled,
@@ -1311,6 +1599,7 @@ export async function runSocialProofAgent(args: {
         },
       });
       assetsCreated += 1;
+      sequenceAnchor = sequenceDimensions;
 
       if (candidate.media && candidate.media.length > 0) {
         await repo.replaceAssetMedia(
@@ -1437,6 +1726,15 @@ export async function runSocialProofAgent(args: {
         performance_checked: performanceLearning.checked,
         performance_updated: performanceLearning.updated,
         performance_failed: performanceLearning.failed,
+        reel_plan_eligible: reelPlanEligible,
+        reel_plan_decision:
+          account?.provider_name !== 'instagram'
+            ? 'instagram_account_unavailable'
+            : !reelPlanEligible
+              ? 'schedule_or_inventory_gate'
+              : reelSource
+                ? 'planned'
+                : 'no_grounded_source',
       },
       'info'
     );

@@ -14,6 +14,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { EMAIL_COLORS, emailShell, issueListHtml, scoreBlock } from './email-theme';
 import { runFreeScan, type FreeScanOutput, type ScanIssueJson } from '../../workers/scan-engine/run-scan';
+import { isAiCrawlerExplicitPolicyDrift } from '../shared/repair-signals';
 import { GeminiProvider } from '../../workers/providers/gemini';
 import type { LLMProvider } from '../../workers/lib/interfaces/providers';
 
@@ -101,10 +102,18 @@ export type ImprovementItem = {
   category: string;
   finding: string;
   fix: string;
+  status: ScanIssueJson['status'];
+  bucket: ScanIssueJson['bucket'];
+  confidence: NonNullable<ScanIssueJson['confidence']>;
 };
 
 function isActionableFailure(i: ScanIssueJson): boolean {
-  if (i.passed) return false;
+  const repairablePolicyDrift = i.passed
+    && i.checkId === 'ai-crawler-access'
+    && i.status === 'WARNING'
+    && i.confidence === 'high'
+    && isAiCrawlerExplicitPolicyDrift(i.finding);
+  if (i.passed && !repairablePolicyDrift) return false;
   if (i.status === 'BLOCKED' || i.status === 'NOT_EVALUATED') return false;
   // Skip LLM checks that merely failed to fetch (finding like "http_403").
   if (i.status === 'LOW_CONFIDENCE' && /^http_\d+$/.test(i.finding.trim())) return false;
@@ -124,6 +133,9 @@ export function buildImprovementPlan(output: FreeScanOutput, max = 8): Improveme
       category: i.category,
       finding: i.finding,
       fix: i.fix ?? 'Review this check on the site.',
+      status: i.status,
+      bucket: i.bucket,
+      confidence: i.confidence ?? 'low',
     }));
 }
 
@@ -197,12 +209,14 @@ export async function sendSelfImprovementReport(input: {
 export type SelfImprovementRunResult = {
   ok: boolean;
   status: 'audited' | 'skipped' | 'failed';
+  triggerSource: 'worker_cron' | 'admin_manual' | 'ci';
   runId?: string;
   score?: number;
   letterGrade?: string;
   plan?: ImprovementItem[];
   emailed?: boolean;
   reason?: string;
+  checkCatalogVersion?: string;
 };
 
 function buildLlm(env: SelfImprovementEnvLike): LLMProvider | undefined {
@@ -296,10 +310,10 @@ export async function runSelfImprovementAudit(args: {
   const settings = await loadSelfImprovementSettings(supabase);
 
   if (settings.killSwitch) {
-    return { ok: false, status: 'skipped', reason: 'kill_switch' };
+    return { ok: false, status: 'skipped', triggerSource, reason: 'kill_switch' };
   }
   if (!args.force && !(cfg.envEnabled && settings.enabled)) {
-    return { ok: false, status: 'skipped', reason: 'disabled' };
+    return { ok: false, status: 'skipped', triggerSource, reason: 'disabled' };
   }
 
   const llm = buildLlm(env) ?? NOOP_LLM;
@@ -310,7 +324,7 @@ export async function runSelfImprovementAudit(args: {
       .insert({ trigger_source: triggerSource, target_url: cfg.targetUrl, status: 'failed', error: scan.reason })
       .select('id')
       .single();
-    return { ok: false, status: 'failed', runId: data?.id, reason: scan.reason };
+    return { ok: false, status: 'failed', triggerSource, runId: data?.id, reason: scan.reason };
   }
 
   const plan = buildImprovementPlan(scan.output);
@@ -345,16 +359,18 @@ export async function runSelfImprovementAudit(args: {
     .single();
 
   if (error) {
-    return { ok: false, status: 'failed', reason: error.message, score: scan.output.score, letterGrade: scan.output.letterGrade, plan };
+    return { ok: false, status: 'failed', triggerSource, reason: error.message, score: scan.output.score, letterGrade: scan.output.letterGrade, plan };
   }
 
   return {
     ok: true,
     status: 'audited',
+    triggerSource,
     runId: data?.id,
     score: scan.output.score,
     letterGrade: scan.output.letterGrade,
     plan,
     emailed,
+    checkCatalogVersion: scan.output.checkCatalogVersion,
   };
 }

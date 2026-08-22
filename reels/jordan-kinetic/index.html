@@ -35,7 +35,7 @@
       #scene-compare .panel{position:absolute;left:135px;width:810px;height:430px;border:3px solid rgba(196,170,108,.38);padding:42px;display:flex;align-items:center}
       #scene-compare .hero{width:100%;font-size:72px;line-height:.95}#scene-compare .top{top:315px}#scene-compare .bottom{bottom:445px;text-align:right}.neq{position:absolute;z-index:4;top:720px;left:410px;width:260px;color:var(--gold);font-size:240px;font-weight:900;text-align:center}
       #scene-diagnostic .meta{position:absolute;top:315px;left:135px}#scene-diagnostic .copy{position:absolute;top:610px;left:135px;width:790px}#scene-diagnostic .hero{font-size:98px}.box{display:inline-block;margin-top:38px;padding:25px 30px;border:4px solid var(--gold);color:var(--gold)}
-      #scene-cta .copy{position:absolute;top:540px;left:135px;width:810px}#scene-cta .support{margin-bottom:42px}#scene-cta .hero{font-size:92px}.url{position:absolute;top:1120px;right:135px;font-size:58px;font-weight:900;color:var(--gold)}
+      #scene-cta .copy{position:absolute;top:540px;left:135px;width:810px}#scene-cta .support{margin-bottom:42px}#scene-cta .hero{font-size:92px}.url{position:absolute;top:1120px;right:135px;font-size:58px;font-weight:900;color:var(--gold);transform-origin:right center}
       #scene-cta .source{position:absolute;right:135px;bottom:490px;max-width:760px;text-align:right;font-size:20px;color:var(--muted)}
     </style>
   </head>
@@ -60,6 +60,10 @@
       tl.to("#scene-compare",{opacity:1,duration:.16},10.6).fromTo("#scene-compare .top",{opacity:0,x:-160},{opacity:1,x:0,duration:.75,ease:"power4.out"},10.85).fromTo("#scene-compare .bottom",{opacity:0,x:160},{opacity:1,x:0,duration:.78,ease:"expo.out"},11.25).fromTo(".neq",{opacity:0,scale:.45},{opacity:1,scale:1,duration:.58,ease:"back.out(1.6)"},11.85).to("#scene-compare",{opacity:0,duration:.22},15.6);
       tl.to("#scene-diagnostic",{opacity:1,duration:.16},15.85).fromTo("#scene-diagnostic .copy",{opacity:0,y:110},{opacity:1,y:0,duration:.85,ease:"power4.out"},16.1).to(".scan",{y:390,duration:1.15,ease:"sine.inOut"},16).to("#scene-diagnostic",{opacity:0,duration:.22},20.85);
       tl.to("#scene-cta",{opacity:1,duration:.16},21.1).fromTo("#scene-cta .hero",{opacity:0,scale:.72,x:-80},{opacity:1,scale:1,x:0,duration:.9,ease:"back.out(1.5)"},21.35).fromTo("#scene-cta .url",{opacity:0,y:80},{opacity:1,y:0,duration:.7,ease:"expo.out"},22.45).fromTo("#scene-cta .source",{opacity:0},{opacity:1,duration:.6},23.25).to(".scan",{y:330,opacity:0,duration:.8},21.5).to(".frame-fill",{scale:1.015,duration:6.7,ease:"sine.inOut"},21.1);
+      const pulseScan=(at)=>tl.to(".scan",{scaleX:.9,duration:.24,ease:"power2.in"},at).to(".scan",{scaleX:1,duration:.32,ease:"power2.out"},at+.24);
+      [2.15,3.65,7.15,8.6,13,14.4,17.75,19.15].forEach(pulseScan);
+      const pulseCta=(at)=>tl.to("#scene-cta .url",{scale:1.035,duration:.24,ease:"power2.out"},at).to("#scene-cta .url",{scale:1,duration:.32,ease:"power2.inOut"},at+.24);
+      [24.3,26.1].forEach(pulseCta);
       tl.seek(0);window.__timelines["jordan-kinetic-reel"]=tl;
     </script>
   </body>

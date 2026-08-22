@@ -22,6 +22,7 @@ function candidate(overrides: Partial<AudienceCandidate> & { contactId: string; 
   return {
     name: 'Ann Roy',
     company: 'Roy Co',
+    companyDomain: 'royco.ca',
     contactTitle: 'Owner',
     segment: 'agency-ca-qc-montreal-published-2026-08',
     eligibilityStatus: 'eligible',
@@ -263,6 +264,23 @@ describe('freezing persistence', () => {
       created: false,
       audience: { id: 'aud-existing', audienceKey: 'agency-reporting-montreal-v1@v1', campaignVersion: 1, recipientCount: 25, checksum: 'frozen' },
     });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('refuses to persist a zero-recipient snapshot', async () => {
+    const { supabase, calls } = stubSupabase();
+    const emptySelection = selectCampaignAudience({ candidates: [], evidence: NO_EVIDENCE, limit: 25 });
+    const result = await freezeCampaignAudience({ supabase, ...freezeArgs, selection: emptySelection });
+    expect(result).toEqual({ ok: false, reason: 'no_eligible_recipients' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('does not treat a previously written empty header as a frozen audience', async () => {
+    const { supabase, calls } = stubSupabase({
+      existing: { id: 'aud-empty', audience_key: 'agency-reporting-montreal-v1@v1', campaign_version: 1, recipient_count: 0, checksum: audienceChecksum([]) },
+    });
+    const result = await freezeCampaignAudience({ supabase, ...freezeArgs });
+    expect(result).toEqual({ ok: false, reason: 'empty_audience_snapshot' });
     expect(calls).toHaveLength(0);
   });
 

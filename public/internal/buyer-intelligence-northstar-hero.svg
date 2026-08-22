@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="630" viewBox="0 0 1440 630" role="img" aria-labelledby="title desc">
+  <title id="title">Synthetic Northstar Technology Services home page</title>
+  <desc id="desc">A fictional managed technology provider website used only for internal report QA.</desc>
+  <rect width="1440" height="630" fill="#f5f8fb"/>
+  <rect width="1440" height="92" fill="#ffffff"/>
+  <circle cx="72" cy="46" r="22" fill="#0e7490"/>
+  <path d="M61 47l8 8 16-20" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="112" y="57" fill="#102a43" font-family="Arial, sans-serif" font-size="30" font-weight="700">Northstar Technology Services</text>
+  <text x="1000" y="54" fill="#52667a" font-family="Arial, sans-serif" font-size="18">Managed IT</text>
+  <text x="1130" y="54" fill="#52667a" font-family="Arial, sans-serif" font-size="18">Cybersecurity</text>
+  <rect x="1290" y="25" width="116" height="44" rx="10" fill="#0e7490"/>
+  <text x="1315" y="54" fill="#fff" font-family="Arial, sans-serif" font-size="17" font-weight="700">Talk to us</text>
+  <rect x="0" y="92" width="1440" height="538" fill="#102a43"/>
+  <circle cx="1190" cy="340" r="260" fill="#0e7490" opacity=".24"/>
+  <circle cx="1130" cy="300" r="164" fill="#38bdf8" opacity=".16"/>
+  <text x="84" y="198" fill="#67e8f9" font-family="Arial, sans-serif" font-size="20" font-weight="700" letter-spacing="3">MONTREAL MANAGED TECHNOLOGY</text>
+  <text x="84" y="280" fill="#fff" font-family="Arial, sans-serif" font-size="58" font-weight="700">Technology that keeps</text>
+  <text x="84" y="348" fill="#fff" font-family="Arial, sans-serif" font-size="58" font-weight="700">your business moving.</text>
+  <text x="84" y="405" fill="#c8d7e6" font-family="Arial, sans-serif" font-size="23">Practical IT support, security, and cloud guidance for growing teams.</text>
+  <rect x="84" y="460" width="224" height="62" rx="12" fill="#14b8a6"/>
+  <text x="119" y="500" fill="#062b2b" font-family="Arial, sans-serif" font-size="20" font-weight="700">Book a consultation</text>
+  <rect x="332" y="460" width="184" height="62" rx="12" fill="none" stroke="#8fa8bf" stroke-width="2"/>
+  <text x="370" y="500" fill="#fff" font-family="Arial, sans-serif" font-size="20">Our services</text>
+</svg>

@@ -1,0 +1,599 @@
+name: repair-loop-canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      open_pr:
+        description: Open a PR after all individual role tests and the live shadow repair pass
+        type: boolean
+        default: true
+      repair_id:
+        description: Existing repair lineage to retry; blank starts a fresh canary
+        type: string
+        default: ''
+      repair_branch:
+        description: Existing agent-owned canary branch for the repair lineage
+        type: string
+        default: ''
+      repair_pr:
+        description: Existing pull request number, if PR creation already succeeded
+        type: string
+        default: ''
+      repair_issue:
+        description: Existing bounded GitHub issue number for this repair lineage
+        type: string
+        default: ''
+
+concurrency:
+  group: repair-loop-canary
+  cancel-in-progress: false
+
+jobs:
+  dispatch-policy:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require an immutable default-branch dispatch
+        shell: bash
+        env:
+          EXPECTED_REF: refs/heads/${{ github.event.repository.default_branch }}
+          OBSERVED_REF: ${{ github.ref }}
+          REPAIR_LOOP_ENABLED: ${{ vars.REPAIR_LOOP_ENABLED }}
+          REPAIR_ID: ${{ inputs.repair_id }}
+          REPAIR_BRANCH: ${{ inputs.repair_branch }}
+          REPAIR_PR: ${{ inputs.repair_pr }}
+          REPAIR_ISSUE: ${{ inputs.repair_issue }}
+        run: |
+          set -euo pipefail
+          test "$OBSERVED_REF" = "$EXPECTED_REF"
+          test "$REPAIR_LOOP_ENABLED" = 'false'
+          if [ -z "$REPAIR_ID" ]; then
+            test -z "$REPAIR_BRANCH"
+            test -z "$REPAIR_PR"
+            test -z "$REPAIR_ISSUE"
+          else
+            [[ "$REPAIR_ID" =~ ^[a-f0-9]{32}$ ]]
+            [[ "$REPAIR_BRANCH" =~ ^repair-agent/canary-[A-Za-z0-9._-]+$ ]]
+            test -z "$REPAIR_PR" || [[ "$REPAIR_PR" =~ ^[0-9]+$ ]]
+            test -z "$REPAIR_ISSUE" || [[ "$REPAIR_ISSUE" =~ ^[0-9]+$ ]]
+          fi
+
+  individual-role-tests:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - name: Audit intake and scoper tests
+        run: npx vitest run test/loop-roles.test.ts -t "audit intake and scoper"
+        working-directory: repair-agent
+      - name: Engineer sandbox and policy tests
+        run: npx vitest run test/runner.test.ts test/contracts-policy.test.ts
+        working-directory: repair-agent
+      - name: Reviewer tests
+        run: npx vitest run test/loop-roles.test.ts -t "authenticated reviewer role"
+        working-directory: repair-agent
+      - name: QA and feedback tests
+        run: npx vitest run test/loop-roles.test.ts -t "authenticated QA role"
+        working-directory: repair-agent
+      - name: Merge controller and portability tests
+        run: npx vitest run test/loop-roles.test.ts test/portable-loop.test.ts -t "deterministic merge controller|repository profile registry and command policy|deployment QA|disposable repository adapter canary"
+        working-directory: repair-agent
+      - run: npm run type-check
+        working-directory: repair-agent
+
+  reviewer-principal-canary:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions: {}
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: reviewer-token
+        with:
+          app-id: ${{ vars.REPAIR_REVIEWER_APP_ID }}
+          private-key: ${{ secrets.REPAIR_REVIEWER_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Prove reviewer App identity and Checks write permission
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.reviewer-token.outputs.token }}
+          EXPECTED_APP_ID: ${{ vars.REPAIR_REVIEWER_APP_ID }}
+        run: |
+          set -euo pipefail
+          RESPONSE="$(gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='repair-review-principal-canary' \
+            -f head_sha="$GITHUB_SHA" \
+            -f status='completed' \
+            -f conclusion='success' \
+            -f 'output[title]=Reviewer principal canary' \
+            -f 'output[summary]=Exact-SHA permission proof only; not a production review verdict.')"
+          test "$(jq -r '.head_sha' <<<"$RESPONSE")" = "$GITHUB_SHA"
+          test "$(jq -r '.app.id' <<<"$RESPONSE")" = "$EXPECTED_APP_ID"
+          test "$(jq -r '.app.slug' <<<"$RESPONSE")" = 'geo-pulse-repair-reviewer'
+          test "$(jq -r '.name' <<<"$RESPONSE")" = 'repair-review-principal-canary'
+          test "$(jq -r '.status' <<<"$RESPONSE")" = 'completed'
+          test "$(jq -r '.conclusion' <<<"$RESPONSE")" = 'success'
+
+  qa-principal-canary:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions: {}
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: qa-token
+        with:
+          app-id: ${{ vars.REPAIR_QA_APP_ID }}
+          private-key: ${{ secrets.REPAIR_QA_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+      - name: Prove QA App identity and Checks write permission
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.qa-token.outputs.token }}
+          EXPECTED_APP_ID: ${{ vars.REPAIR_QA_APP_ID }}
+        run: |
+          set -euo pipefail
+          RESPONSE="$(gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='repair-qa-principal-canary' \
+            -f head_sha="$GITHUB_SHA" \
+            -f status='completed' \
+            -f conclusion='success' \
+            -f 'output[title]=QA principal canary' \
+            -f 'output[summary]=Exact-SHA permission proof only; not a production QA verdict.')"
+          test "$(jq -r '.head_sha' <<<"$RESPONSE")" = "$GITHUB_SHA"
+          test "$(jq -r '.app.id' <<<"$RESPONSE")" = "$EXPECTED_APP_ID"
+          test "$(jq -r '.app.slug' <<<"$RESPONSE")" = 'geo-pulse-repair-qa'
+          test "$(jq -r '.name' <<<"$RESPONSE")" = 'repair-qa-principal-canary'
+          test "$(jq -r '.status' <<<"$RESPONSE")" = 'completed'
+          test "$(jq -r '.conclusion' <<<"$RESPONSE")" = 'success'
+
+  merge-principal-canary:
+    needs: dispatch-policy
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions: {}
+    steps:
+      - uses: actions/create-github-app-token@v3
+        id: merge-token
+        with:
+          app-id: ${{ vars.REPAIR_MERGE_APP_ID }}
+          private-key: ${{ secrets.REPAIR_MERGE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-checks: write
+          permission-actions-variables: read
+      - name: Prove merge App identity, Actions variable read, and Checks write
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.merge-token.outputs.token }}
+          EXPECTED_APP_ID: ${{ vars.REPAIR_MERGE_APP_ID }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/variables/REPAIR_LOOP_ENABLED" --jq '.value')" = 'false'
+          RESPONSE="$(gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
+            -f name='repair-merge-principal-canary' \
+            -f head_sha="$GITHUB_SHA" \
+            -f status='completed' \
+            -f conclusion='success' \
+            -f 'output[title]=Merge principal canary' \
+            -f 'output[summary]=Exact-SHA permission proof with activation disabled; this job cannot merge.')"
+          test "$(jq -r '.head_sha' <<<"$RESPONSE")" = "$GITHUB_SHA"
+          test "$(jq -r '.app.id' <<<"$RESPONSE")" = "$EXPECTED_APP_ID"
+          test "$(jq -r '.app.slug' <<<"$RESPONSE")" = 'geo-pulse-repair-merge'
+          test "$(jq -r '.name' <<<"$RESPONSE")" = 'repair-merge-principal-canary'
+          test "$(jq -r '.status' <<<"$RESPONSE")" = 'completed'
+          test "$(jq -r '.conclusion' <<<"$RESPONSE")" = 'success'
+
+  engineer:
+    needs: [dispatch-policy, individual-role-tests]
+    if: ${{ inputs.open_pr && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      branch: ${{ steps.publish.outputs.branch }}
+      pr: ${{ steps.publish.outputs.pr }}
+      head_sha: ${{ steps.publish.outputs.head_sha }}
+      base_sha: ${{ steps.publish.outputs.base_sha }}
+      patch_digest: ${{ steps.publish.outputs.patch_digest }}
+      issue: ${{ steps.publish.outputs.issue }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Reassert trusted dispatch before loading dependencies or secrets
+        shell: bash
+        env:
+          EXPECTED_REF: refs/heads/${{ github.event.repository.default_branch }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - name: Run live Cloudflare shadow repair and apply only its verified fixture artifact
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_CANARY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          REPAIR_CANARY_ROOT: test/portable-repo
+          REPAIR_CANARY_OUTPUT: ${{ runner.temp }}/repair-canary-raw.json
+          REPAIR_EXISTING_REPAIR_ID: ${{ inputs.repair_id }}
+        run: node scripts/run-shadow-canary.mjs
+        working-directory: repair-agent
+      - name: Publish bounded repair PR
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RAW_EVIDENCE: ${{ runner.temp }}/repair-canary-raw.json
+          ENGINEER_EVIDENCE: ${{ runner.temp }}/repair-engineer.json
+          RETRY_REPAIR_ID: ${{ inputs.repair_id }}
+          RETRY_BRANCH: ${{ inputs.repair_branch }}
+          RETRY_PR: ${{ inputs.repair_pr }}
+          RETRY_ISSUE: ${{ inputs.repair_issue }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXPECTED='repair-agent/test/portable-repo/public/robots.txt'
+          CHANGED="$(git diff --name-only)"
+          test "$CHANGED" = "$EXPECTED"
+          grep -Fx 'Sitemap: https://getgeopulse.com/sitemap.xml' "$EXPECTED"
+          BRANCH="${RETRY_BRANCH:-repair-agent/canary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -b "repair-attempt-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git add -- "$EXPECTED"
+          ATTEMPT="$(jq -r '.attempt' "$RAW_EVIDENCE")"
+          REPAIR_ID="$(jq -r '.repairId' "$RAW_EVIDENCE")"
+          DUE_AT="$(jq -r '.issue.dueAt' "$RAW_EVIDENCE")"
+          NEXT_ACTION="$(jq -r '.issue.nextAction' "$RAW_EVIDENCE")"
+          POSTCONDITION="$(jq -r '.issue.postcondition' "$RAW_EVIDENCE")"
+          ISSUE="$RETRY_ISSUE"
+          if [ -n "$ISSUE" ]; then
+            test "$(gh issue view "$ISSUE" --repo "${{ github.repository }}" --json state --jq '.state')" = 'OPEN'
+          else
+            ISSUE_URL="$(gh issue create --repo "${{ github.repository }}" --title "[REPAIR CANARY] robots sitemap ${REPAIR_ID}" --body "Controlled repair-loop issue for lineage \`$REPAIR_ID\`. Owner: engineer. Reviewer: independent repair reviewer. Retry policy: maximum three SHA-bound attempts. Due: $DUE_AT. Next action: $NEXT_ACTION Acceptance: $POSTCONDITION This issue is not authority to merge or deploy.")"
+            ISSUE="${ISSUE_URL##*/}"
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "issue=$ISSUE" >> "$GITHUB_OUTPUT"
+          git commit -m "test(repair-loop): apply verified shadow canary attempt ${ATTEMPT}"
+          BASE_SHA="$GITHUB_SHA"
+          HEAD_SHA="$(git rev-parse HEAD)"
+          PATCH_DIGEST="$(git diff --binary --full-index "$BASE_SHA" "$HEAD_SHA" | sha256sum | cut -d' ' -f1)"
+          CHANGED_LINES="$(git diff --numstat "$BASE_SHA" "$HEAD_SHA" -- "$EXPECTED" | awk '{ print $1 + $2 }')"
+          REPAIR_CANARY_EVIDENCE="$RAW_EVIDENCE" \
+          REPAIR_ENGINEER_OUTPUT="$ENGINEER_EVIDENCE" \
+          REPAIR_BASE_SHA="$BASE_SHA" \
+          REPAIR_HEAD_SHA="$HEAD_SHA" \
+          REPAIR_PATCH_DIGEST="$PATCH_DIGEST" \
+          REPAIR_CHANGED_PATH="$EXPECTED" \
+          REPAIR_CHANGED_LINES="$CHANGED_LINES" \
+            node repair-agent/scripts/write-engineer-artifact.mjs
+          if [ -n "$RETRY_REPAIR_ID" ]; then
+            OLD_HEAD="$(git ls-remote --heads origin "refs/heads/$BRANCH" | awk '{print $1}')"
+            if [ -n "$RETRY_PR" ]; then
+              test -n "$OLD_HEAD"
+              PR_STATE="$(gh pr view "$RETRY_PR" --repo "${{ github.repository }}" --json state,headRefName --jq '.state + " " + .headRefName')"
+              test "$PR_STATE" = "OPEN $BRANCH"
+            fi
+            if [ -n "$OLD_HEAD" ]; then
+              git push --force-with-lease="refs/heads/$BRANCH:$OLD_HEAD" origin "HEAD:refs/heads/$BRANCH"
+            else
+              git push --set-upstream origin "HEAD:$BRANCH"
+            fi
+            PR="$RETRY_PR"
+          else
+            git push --set-upstream origin "HEAD:$BRANCH"
+            PR=''
+          fi
+          if [ -z "$PR" ]; then
+            OPEN_PRS="$(gh pr list --repo "${{ github.repository }}" --state open --base main --head "$BRANCH" --json number,baseRefName,headRefName,headRefOid)"
+            test "$(jq 'length' <<<"$OPEN_PRS")" -le 1
+            PR="$(jq -r '.[0].number // empty' <<<"$OPEN_PRS")"
+            if [ -n "$PR" ]; then
+              test "$(jq -r '.[0].baseRefName' <<<"$OPEN_PRS")" = 'main'
+              test "$(jq -r '.[0].headRefName' <<<"$OPEN_PRS")" = "$BRANCH"
+              test "$(jq -r '.[0].headRefOid' <<<"$OPEN_PRS")" = "$HEAD_SHA"
+            else
+              PR_URL="$(gh pr create --base main --head "$BRANCH" --title '[REPAIR CANARY] Apply verified robots fixture repair' --body "Tracks repair issue #$ISSUE under issue #520. The Cloudflare engineer changed only the portable fixture after audit intake, scoping, sandbox execution, and deterministic evaluation. Runtime auto-merge remains disabled until independent GitHub identities and branch rules exist; do not merge this fixture canary.")"
+              PR="${PR_URL##*/}"
+            fi
+          fi
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "patch_digest=$PATCH_DIGEST" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/repair-engineer.json
+          if-no-files-found: error
+
+  reviewer:
+    needs: engineer
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.engineer.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable review target before executing branch code
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.engineer.outputs.head_sha }}
+          BASE_SHA: ${{ needs.engineer.outputs.base_sha }}
+          EXPECTED_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          ACTUAL_DIGEST="$(git diff --binary --full-index "$BASE_SHA" "$EXPECTED_SHA" | sha256sum | cut -d' ' -f1)"
+          CHANGED="$(git diff --name-only "$BASE_SHA" "$EXPECTED_SHA")"
+          test "$ACTUAL_DIGEST" = "$EXPECTED_DIGEST"
+          test "$CHANGED" = 'repair-agent/test/portable-repo/public/robots.txt'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/engineer
+      - name: SHA-bound independent logical review
+        run: npm test -- --run test/loop-roles.test.ts -t 'authenticated reviewer role'
+        working-directory: repair-agent
+      - name: Emit structured SHA-bound review verdict
+        env:
+          REPAIR_ROLE: reviewer
+          REPAIR_ROLE_IDENTITY: repair-reviewer-logical-shadow
+          REPAIR_HEAD_SHA: ${{ needs.engineer.outputs.head_sha }}
+          REPAIR_PATCH_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-engineer.json
+          REPAIR_ROLE_OUTPUT: ${{ runner.temp }}/repair-review.json
+        run: node scripts/write-canary-verdict.mjs
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repair-review-verdict
+          path: ${{ runner.temp }}/repair-review.json
+          if-no-files-found: error
+
+  qa:
+    needs: engineer
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.engineer.outputs.head_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify immutable QA target before executing branch code
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ needs.engineer.outputs.head_sha }}
+          BASE_SHA: ${{ needs.engineer.outputs.base_sha }}
+          EXPECTED_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          ACTUAL_DIGEST="$(git diff --binary --full-index "$BASE_SHA" "$EXPECTED_SHA" | sha256sum | cut -d' ' -f1)"
+          CHANGED="$(git diff --name-only "$BASE_SHA" "$EXPECTED_SHA")"
+          test "$ACTUAL_DIGEST" = "$EXPECTED_DIGEST"
+          test "$CHANGED" = 'repair-agent/test/portable-repo/public/robots.txt'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repair-agent/package-lock.json
+      - run: npm ci
+        working-directory: repair-agent
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/engineer
+      - name: Finding-specific QA and regression suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -Fc 'Sitemap: https://getgeopulse.com/sitemap.xml' test/portable-repo/public/robots.txt)" = '1'
+          npm test
+          npm run type-check
+        working-directory: repair-agent
+      - name: Emit structured SHA-bound QA verdict
+        env:
+          REPAIR_ROLE: qa
+          REPAIR_ROLE_IDENTITY: repair-qa-logical-shadow
+          REPAIR_HEAD_SHA: ${{ needs.engineer.outputs.head_sha }}
+          REPAIR_PATCH_DIGEST: ${{ needs.engineer.outputs.patch_digest }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-engineer.json
+          REPAIR_ROLE_OUTPUT: ${{ runner.temp }}/repair-qa.json
+        run: node scripts/write-canary-verdict.mjs
+        working-directory: repair-agent
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repair-qa-verdict
+          path: ${{ runner.temp }}/repair-qa.json
+          if-no-files-found: error
+
+  merge-controller-shadow:
+    needs: [engineer, reviewer, qa]
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/engineer
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: repair-*-verdict
+          path: ${{ runner.temp }}/verdicts
+          merge-multiple: true
+      - name: Validate formal artifacts, acknowledge the scope, and record a fail-closed merge verdict
+        env:
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-engineer.json
+          REPAIR_REVIEW_VERDICT: ${{ runner.temp }}/verdicts/repair-review.json
+          REPAIR_QA_VERDICT: ${{ runner.temp }}/verdicts/repair-qa.json
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_AUTONOMOUS_MERGE_ENABLED: 'false'
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          REPAIR_PR_NUMBER: ${{ needs.engineer.outputs.pr }}
+        run: node scripts/validate-shadow-gate.mjs
+        working-directory: repair-agent
+
+  feedback:
+    if: ${{ always() && needs.engineer.result == 'success' && (needs.reviewer.result != 'success' || needs.qa.result != 'success' || needs.merge-controller-shadow.result != 'success') }}
+    needs: [engineer, reviewer, qa, merge-controller-shadow]
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: repair-engineer-evidence
+          path: ${{ runner.temp }}/engineer
+      - name: Return structured failure evidence to the same repair scope
+        id: submit-feedback
+        shell: bash
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_ENGINEER_EVIDENCE: ${{ runner.temp }}/engineer/repair-engineer.json
+          REPAIR_REVIEW_RESULT: ${{ needs.reviewer.result }}
+          REPAIR_QA_RESULT: ${{ needs.qa.result }}
+          REPAIR_GATE_RESULT: ${{ needs.merge-controller-shadow.result }}
+        run: |
+          set -euo pipefail
+          RESULT="$(node scripts/submit-shadow-feedback.mjs)"
+          echo "$RESULT"
+          echo "requeued=$(jq -r '.requeued' <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "repair_id=$(jq -r '.repairId' <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+        working-directory: repair-agent
+      - name: Feed review or QA failure back to the same repair PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.engineer.outputs.pr }}
+          REVIEW_RESULT: ${{ needs.reviewer.result }}
+          QA_RESULT: ${{ needs.qa.result }}
+          GATE_RESULT: ${{ needs.merge-controller-shadow.result }}
+        run: |
+          gh pr comment "$PR" --repo "${{ github.repository }}" --body "Repair-loop feedback for the same SHA: reviewer=$REVIEW_RESULT; qa=$QA_RESULT; merge-gate=$GATE_RESULT. The engineer must update this PR under the same repair lineage; maximum three attempts. No merge occurred."
+      - name: Re-dispatch the same repair lineage when attempts remain
+        if: ${{ steps.submit-feedback.outputs.requeued == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR_ID: ${{ steps.submit-feedback.outputs.repair_id }}
+          REPAIR_BRANCH: ${{ needs.engineer.outputs.branch }}
+          REPAIR_PR: ${{ needs.engineer.outputs.pr }}
+          REPAIR_ISSUE: ${{ needs.engineer.outputs.issue }}
+        run: |
+          gh workflow run repair-loop-canary.yml --repo "${{ github.repository }}" --ref "${{ github.event.repository.default_branch }}" -f open_pr=true -f repair_id="$REPAIR_ID" -f repair_branch="$REPAIR_BRANCH" -f repair_pr="$REPAIR_PR" -f repair_issue="$REPAIR_ISSUE"
+
+  engineer-failure-feedback:
+    if: ${{ always() && needs.engineer.result == 'failure' }}
+    needs: engineer
+    runs-on: ubuntu-latest
+    environment: repair-agent-shadow
+    permissions:
+      actions: write
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Return engineer failure to the leased scope
+        id: submit-engineer-failure
+        shell: bash
+        env:
+          REPAIR_AGENT_URL: https://geo-pulse-repair-agent-shadow.uzzielt.workers.dev
+          REPAIR_AGENT_API_TOKEN: ${{ secrets.REPAIR_AGENT_API_TOKEN }}
+          REPAIR_CANARY_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          REPAIR_EXISTING_REPAIR_ID: ${{ inputs.repair_id }}
+          REPAIR_ENGINEER_RESULT: ${{ needs.engineer.result }}
+        run: |
+          set -euo pipefail
+          RESULT="$(node scripts/submit-engineer-failure.mjs)"
+          echo "$RESULT"
+          echo "requeued=$(jq -r '.requeued' <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+          echo "repair_id=$(jq -r '.repairId // empty' <<<"$RESULT")" >> "$GITHUB_OUTPUT"
+        working-directory: repair-agent
+      - name: Re-dispatch the failed engineer attempt when attempts remain
+        if: ${{ steps.submit-engineer-failure.outputs.requeued == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPAIR_ID: ${{ steps.submit-engineer-failure.outputs.repair_id }}
+          PRIOR_BRANCH: ${{ inputs.repair_branch }}
+          PRIOR_PR: ${{ inputs.repair_pr }}
+          PRIOR_ISSUE: ${{ inputs.repair_issue }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="${PRIOR_BRANCH:-repair-agent/canary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}}"
+          ISSUE="$PRIOR_ISSUE"
+          if [ -z "$ISSUE" ]; then
+            ISSUE="$(gh issue list --repo "${{ github.repository }}" --state open --search "[REPAIR CANARY] robots sitemap $REPAIR_ID in:title" --json number --jq '.[0].number // empty')"
+          fi
+          gh workflow run repair-loop-canary.yml --repo "${{ github.repository }}" --ref "${{ github.event.repository.default_branch }}" -f open_pr=true -f repair_id="$REPAIR_ID" -f repair_branch="$BRANCH" -f repair_pr="$PRIOR_PR" -f repair_issue="$ISSUE"

@@ -14,6 +14,7 @@ import { classifyPageTier, sortPagesByTier, TIER_LABELS } from './page-tiers';
 import { assessBuyerQuestionCoverage } from './buyer-question-coverage';
 import { buildCadencePlan } from './cadence-plan';
 import { ownerRoleFor, remediationFor } from './remediation-catalog';
+import { credibleCheckCount } from './category-score-truth';
 
 const CATEGORY_LABELS: Record<string, string> = {
   ai_readiness: 'AI Readiness',
@@ -231,9 +232,10 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     lines.push('|----------|-------|-------|--------|');
     for (const cs of cats) {
       const label = CATEGORY_LABELS[cs.category] ?? cs.category;
-      const scoreStr = cs.score >= 0 && cs.checkCount > 0 ? String(cs.score) : '—';
-      const gradeStr = cs.score >= 0 && cs.checkCount > 0 ? cs.letterGrade : 'N/A';
-      lines.push(`| ${label} | ${scoreStr} | ${gradeStr} | ${String(cs.checkCount)} |`);
+      const checkCount = credibleCheckCount(cs.category, cs.checkCount);
+      const scoreStr = cs.score >= 0 && checkCount !== null ? String(cs.score) : '—';
+      const gradeStr = cs.score >= 0 && checkCount !== null ? cs.letterGrade : 'N/A';
+      lines.push(`| ${label} | ${scoreStr} | ${gradeStr} | ${checkCount === null ? 'Not recorded' : String(checkCount)} |`);
     }
     lines.push('');
   }
@@ -418,7 +420,6 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
     lines.push(`- **Owner:** ${lever.ownerRole}`);
     lines.push(`- **Do:** ${markdownInline(lever.what)}`);
     lines.push(`- **Why:** ${markdownInline(lever.why)}`);
-    if (lever.stat) lines.push(`- **Evidence:** ${markdownInline(lever.stat.claim)} — _${lever.stat.source}_`);
     lines.push('');
   }
   lines.push(`_${OFFSITE_MODULE.reviewsNote}_`);
@@ -427,7 +428,7 @@ export function buildDeepAuditMarkdown(payload: DeepAuditReportPayload): string 
   // The report ends with the dated plan + re-scan hook (spec C11).
   lines.push('## Your Next 90 Days');
   lines.push('');
-  for (const phase of buildCadencePlan(payload.generatedAt)) {
+  for (const phase of buildCadencePlan(payload.generatedAt, allIssues)) {
     lines.push(`### ${phase.date} — ${phase.title}`);
     lines.push('');
     for (const action of phase.actions) lines.push(`- ${action}`);

@@ -2,8 +2,8 @@
  * Engagement digest (issue #131) — the "someone is biting" ping.
  *
  * Once a day, ONLY when something happened, email the operator a short branded summary of
- * the last 24h of funnel activity: outreach sends, pixel opens, report views, completed
- * full audits, and new lead captures. Silence means nothing happened — the operator never
+ * the last 24h of evidence: provider-accepted sends, tracking-image loads, deduplicated possible
+ * report visits, verified external audit requests, and new lead captures. Silence means nothing happened — the operator never
  * has to poll /admin/outreach to know whether to get involved.
  *
  * Internal-only notification (never contacts third parties), so the 'engagement_digest'
@@ -15,35 +15,79 @@ import { isAgentEnabled } from './agent-flags';
 import { loadAutomationSetting, updateAutomationSetting } from './automation-settings';
 import { loadSelfImprovementSettings } from './self-improvement';
 import { emailShell, escapeEmailHtml } from './email-theme';
+import { isVerifiedExternalAuditRequest, uniqueReportViewScanIds } from './engagement-evidence';
+import { normalizedRevenueDomain } from './revenue-identity';
 import { structuredLog } from './structured-log';
 
 export const DIGEST_HOUR_UTC = 12; // 8 AM Montréal in summer
 
 export type DigestStats = {
-  sends: { company: string; score: number | null }[];
-  opens: { company: string }[];
-  views: number;
-  fullAudits: { domain: string }[];
+  providerAccepted: { company: string; score: number | null }[];
+  pixelLoads: { company: string }[];
+  possibleReportVisits: number;
+  verifiedAuditRequests: { domain: string }[];
   newLeads: { email: string; url: string }[];
 };
 
+type ProspectRelation = { company?: string | null } | { company?: string | null }[];
+export type DigestAuditRow = {
+  guest_email?: string | null;
+  user_id?: string | null;
+  scan?: { domain?: string; run_source?: string } | { domain?: string; run_source?: string }[];
+};
+
+export function assembleDigestStats(input: {
+  sends: readonly { score: number | null; prospect?: ProspectRelation }[];
+  pixelLoads: readonly { prospect?: ProspectRelation }[];
+  reportViews: readonly { data?: { scanId?: string | null } | null }[];
+  audits: readonly DigestAuditRow[];
+  users: readonly { id: string; email: string }[];
+  prospects: readonly { email: string; url: string }[];
+  leads: readonly { email: string; url: string }[];
+}): DigestStats {
+  const companyOf = (row: { prospect?: ProspectRelation }): string => {
+    const one = Array.isArray(row.prospect) ? row.prospect[0] : row.prospect;
+    return one?.company?.trim() || 'Unknown prospect';
+  };
+  const userEmails = new Map(input.users.map((user) => [user.id, user.email]));
+
+  return {
+    providerAccepted: input.sends.map((row) => ({ company: companyOf(row), score: row.score })),
+    pixelLoads: input.pixelLoads.map((row) => ({ company: companyOf(row) })),
+    possibleReportVisits: uniqueReportViewScanIds(input.reportViews).length,
+    verifiedAuditRequests: input.audits.flatMap((row) => {
+      const scan = Array.isArray(row.scan) ? row.scan[0] : row.scan;
+      const reportEmail = row.guest_email ?? (row.user_id ? userEmails.get(row.user_id) : null);
+      const scanDomain = normalizedRevenueDomain(scan?.domain);
+      const matchingProspectEmails = input.prospects
+        .filter((prospect) => normalizedRevenueDomain(prospect.url) === scanDomain)
+        .map((prospect) => prospect.email);
+      return isVerifiedExternalAuditRequest({
+        domain: scan?.domain,
+        runSource: scan?.run_source,
+        reportEmail,
+        prospectEmails: matchingProspectEmails,
+      }) ? [{ domain: scan?.domain ?? 'unknown domain' }] : [];
+    }),
+    newLeads: input.leads.map((lead) => ({ email: lead.email, url: lead.url })),
+  };
+}
+
 export function digestHasActivity(stats: DigestStats): boolean {
   return (
-    stats.sends.length > 0 ||
-    stats.opens.length > 0 ||
-    stats.views > 0 ||
-    stats.fullAudits.length > 0 ||
+    stats.pixelLoads.length > 0 ||
+    stats.possibleReportVisits > 0 ||
+    stats.verifiedAuditRequests.length > 0 ||
     stats.newLeads.length > 0
   );
 }
 
 export function digestSubject(stats: DigestStats): string {
   const parts: string[] = [];
-  if (stats.fullAudits.length > 0) parts.push(`${String(stats.fullAudits.length)} full audit${stats.fullAudits.length > 1 ? 's' : ''}`);
-  if (stats.views > 0) parts.push(`${String(stats.views)} report view${stats.views > 1 ? 's' : ''}`);
-  if (stats.opens.length > 0) parts.push(`${String(stats.opens.length)} open${stats.opens.length > 1 ? 's' : ''}`);
+  if (stats.verifiedAuditRequests.length > 0) parts.push(`${String(stats.verifiedAuditRequests.length)} verified audit request${stats.verifiedAuditRequests.length > 1 ? 's' : ''}`);
+  if (stats.possibleReportVisits > 0) parts.push(`${String(stats.possibleReportVisits)} possible report visit${stats.possibleReportVisits > 1 ? 's' : ''}`);
+  if (stats.pixelLoads.length > 0) parts.push(`${String(stats.pixelLoads.length)} tracking-image load${stats.pixelLoads.length > 1 ? 's' : ''}`);
   if (stats.newLeads.length > 0) parts.push(`${String(stats.newLeads.length)} new lead${stats.newLeads.length > 1 ? 's' : ''}`);
-  if (parts.length === 0 && stats.sends.length > 0) parts.push(`${String(stats.sends.length)} sends delivered`);
   return `GEO-Pulse engagement: ${parts.join(' · ')}`;
 }
 
@@ -55,25 +99,25 @@ function listHtml(title: string, rows: string[]): string {
 
 export function buildEngagementDigestHtml(stats: DigestStats): string {
   const body = [
-    `<p style="margin:0 0 6px;">Here is what moved in the last 24 hours. The people below are engaging — a short personal follow-up lands best while it is fresh.</p>`,
+    `<p style="margin:0 0 6px;">Here are the evidence signals recorded in the last 24 hours. Measurement limits are stated explicitly; only verified requests, replies, and conversions should be treated as high intent.</p>`,
     listHtml(
-      'Ran the FULL audit (hottest signal)',
-      stats.fullAudits.map((f) => `<strong>${escapeEmailHtml(f.domain)}</strong>`)
+      'Verified external full-audit requests',
+      stats.verifiedAuditRequests.map((f) => `<strong>${escapeEmailHtml(f.domain)}</strong>`)
     ),
-    stats.views > 0
-      ? `<p style="margin:14px 0 4px;font-weight:700;">Report views</p><p style="margin:0;">Cadence reports were opened in a browser ${String(stats.views)} time${stats.views > 1 ? 's' : ''}.</p>`
+    stats.possibleReportVisits > 0
+      ? `<p style="margin:14px 0 4px;font-weight:700;">Possible report visits</p><p style="margin:0;">${String(stats.possibleReportVisits)} unique report${stats.possibleReportVisits > 1 ? 's were' : ' was'} served. Duplicate server loads were collapsed; a mail-security scanner may still be responsible.</p>`
       : '',
     listHtml(
-      'Opened their email (pixel floor)',
-      stats.opens.map((o) => escapeEmailHtml(o.company))
+      'Tracking image loaded (weak signal; automation possible)',
+      stats.pixelLoads.map((o) => escapeEmailHtml(o.company))
     ),
     listHtml(
       'New leads captured on the site',
       stats.newLeads.map((l) => `${escapeEmailHtml(l.email)} — ${escapeEmailHtml(l.url)}`)
     ),
     listHtml(
-      'Scorecards delivered',
-      stats.sends.map((s) => `${escapeEmailHtml(s.company)}${s.score != null ? ` — scored ${String(s.score)}` : ''}`)
+      'Scorecards accepted by the email provider (not confirmed delivered)',
+      stats.providerAccepted.map((s) => `${escapeEmailHtml(s.company)}${s.score != null ? ` — scored ${String(s.score)}` : ''}`)
     ),
     `<p style="margin:16px 0 0;font-size:13px;color:#6b7280;">Full funnel detail lives in /admin/outreach. This digest only arrives when something happened.</p>`,
   ]
@@ -89,30 +133,29 @@ export function buildEngagementDigestHtml(stats: DigestStats): string {
 }
 
 export async function collectDigestStats(supabase: SupabaseClient, sinceIso: string): Promise<DigestStats> {
-  const [sendsRes, opensRes, viewsRes, auditsRes, leadsRes] = await Promise.all([
-    supabase.from('outreach_sends').select('score, sent_at, prospect:outreach_prospects(company)').gt('sent_at', sinceIso).limit(50),
-    supabase.from('outreach_sends').select('prospect:outreach_prospects(company), opened_at').gt('opened_at', sinceIso).limit(50),
-    supabase.from('app_logs').select('id').eq('event', 'outreach_report_viewed').gt('created_at', sinceIso).limit(200),
-    supabase.from('reports').select('created_at, scan:scans(domain)').eq('type', 'deep_audit').gt('created_at', sinceIso).limit(50),
+  const [sendsRes, opensRes, viewsRes, auditsRes, leadsRes, prospectsRes] = await Promise.all([
+    supabase.from('outreach_sends').select('score, sent_at, prospect:outreach_prospects(company)').eq('delivery_status', 'sent').gt('sent_at', sinceIso).limit(50),
+    supabase.from('outreach_sends').select('prospect:outreach_prospects(company), opened_at').eq('delivery_status', 'sent').gt('opened_at', sinceIso).limit(50),
+    supabase.from('app_logs').select('data').eq('event', 'outreach_report_viewed').gt('created_at', sinceIso).limit(200),
+    supabase.from('reports').select('created_at,guest_email,user_id,scan:scans(domain,run_source)').eq('type', 'deep_audit').gt('created_at', sinceIso).limit(50),
     supabase.from('leads').select('email, url, created_at').gt('created_at', sinceIso).limit(50),
+    supabase.from('outreach_prospects').select('email,url').limit(1000),
   ]);
 
-  const companyOf = (row: unknown): string => {
-    const prospect = (row as { prospect?: { company?: string | null } | { company?: string | null }[] }).prospect;
-    const one = Array.isArray(prospect) ? prospect[0] : prospect;
-    return one?.company?.trim() || 'Unknown prospect';
-  };
-
-  return {
-    sends: ((sendsRes.data ?? []) as { score: number | null }[]).map((r) => ({ company: companyOf(r), score: r.score })),
-    opens: (opensRes.data ?? []).map((r) => ({ company: companyOf(r) })),
-    views: (viewsRes.data ?? []).length,
-    fullAudits: ((auditsRes.data ?? []) as { scan?: { domain?: string } | { domain?: string }[] }[]).map((r) => {
-      const scan = Array.isArray(r.scan) ? r.scan[0] : r.scan;
-      return { domain: scan?.domain ?? 'unknown domain' };
-    }),
-    newLeads: ((leadsRes.data ?? []) as { email: string; url: string }[]).map((l) => ({ email: l.email, url: l.url })),
-  };
+  const auditRows = (auditsRes.data ?? []) as DigestAuditRow[];
+  const userIds = [...new Set(auditRows.map((row) => row.user_id).filter((id): id is string => Boolean(id)))];
+  const usersRes = userIds.length > 0
+    ? await supabase.from('users').select('id,email').in('id', userIds)
+    : { data: [] as { id: string; email: string }[] };
+  return assembleDigestStats({
+    sends: (sendsRes.data ?? []) as { score: number | null; prospect?: ProspectRelation }[],
+    pixelLoads: (opensRes.data ?? []) as { prospect?: ProspectRelation }[],
+    reportViews: (viewsRes.data ?? []) as { data?: { scanId?: string | null } | null }[],
+    audits: auditRows,
+    users: (usersRes.data ?? []) as { id: string; email: string }[],
+    prospects: (prospectsRes.data ?? []) as { email: string; url: string }[],
+    leads: (leadsRes.data ?? []) as { email: string; url: string }[],
+  });
 }
 
 type DigestEnvLike = { RESEND_API_KEY?: string; RESEND_FROM_EMAIL?: string };

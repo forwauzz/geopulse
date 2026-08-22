@@ -123,7 +123,7 @@ export async function claimNextJordanReel(
     'diagnostic-kinetic-v1c',
   ];
   const templateId =
-    templateIds.find((id) => id !== recentTemplateIds[0]) ?? 'diagnostic-kinetic-v1a';
+    templateIds.find((id) => !recentTemplateIds.includes(id)) ?? 'diagnostic-kinetic-v1a';
   await repo.upsertAsset({
     assetId: candidate.asset_id,
     contentItemId: candidate.content_item_id,

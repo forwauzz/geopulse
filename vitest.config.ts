@@ -11,6 +11,7 @@ export default defineConfig({
       '**/.tmp-build-repro/**',
       '**/.open-next/**',
       '**/.next/**',
+      '**/repair-agent/**',
     ],
   },
   resolve: {

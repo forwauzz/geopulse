@@ -16,9 +16,12 @@ import {
 } from './email-campaign-contract';
 import { loadEmailCampaign, listEmailCampaigns, type EmailCampaignRecord } from './email-campaign-store';
 import { resolveCampaignSender, resolveTestRecipients, type SenderEnvLike, type SenderResolution } from './email-campaign-sender';
-import { renderCampaignPreview, type CampaignPreview, type PreviewContact } from './email-campaign-preview';
+import { renderCampaignPreview, requiresScanContext, type CampaignPreview, type PreviewContact } from './email-campaign-preview';
 import { runCampaignPreflight, type PreflightResult } from './email-campaign-preflight';
 import { loadCampaignResults, type CampaignResults } from './email-campaign-results';
+import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
+import { loadCampaignScanContext, loadCampaignScanContexts } from './email-campaign-scan-context';
+import { fetchAllRows } from './supabase-page';
 
 export interface EmailCampaignListItem {
   readonly interventionKey: string;
@@ -32,6 +35,79 @@ export interface EmailCampaignListItem {
   readonly owner: string;
   readonly readyToSchedule: boolean;
   readonly locked: boolean;
+}
+
+export interface EmailCampaignSegmentOption {
+  readonly segment: string;
+  readonly total: number;
+  readonly eligible: number;
+  readonly needsVerification: number;
+  readonly excluded: number;
+  readonly inSequence: number;
+}
+
+export interface EmailCampaignComposerOptions {
+  readonly campaigns: readonly GrowthCampaign[];
+  readonly segments: readonly EmailCampaignSegmentOption[];
+  readonly warnings: readonly string[];
+}
+
+type SegmentSummaryRow = {
+  readonly segment?: string | null;
+  readonly eligibility_status?: string | null;
+  readonly added_to_sequence_at?: string | null;
+};
+
+export function summarizeEmailCampaignSegments(
+  rows: readonly SegmentSummaryRow[],
+): EmailCampaignSegmentOption[] {
+  const summaries = new Map<string, EmailCampaignSegmentOption>();
+  for (const row of rows) {
+    const segment = row.segment?.trim();
+    if (!segment) continue;
+    const current = summaries.get(segment) ?? {
+      segment,
+      total: 0,
+      eligible: 0,
+      needsVerification: 0,
+      excluded: 0,
+      inSequence: 0,
+    };
+    const status = row.eligibility_status ?? 'needs_verification';
+    summaries.set(segment, {
+      ...current,
+      total: current.total + 1,
+      eligible: current.eligible + (status === 'eligible' ? 1 : 0),
+      needsVerification: current.needsVerification + (status === 'needs_verification' ? 1 : 0),
+      excluded: current.excluded + (['suppressed', 'rejected', 'converted'].includes(status) ? 1 : 0),
+      inSequence: current.inSequence + (row.added_to_sequence_at ? 1 : 0),
+    });
+  }
+  return [...summaries.values()].sort((left, right) => left.segment.localeCompare(right.segment));
+}
+
+export async function loadEmailCampaignComposerOptions(
+  supabase: SupabaseClient,
+): Promise<EmailCampaignComposerOptions> {
+  const [campaigns, contacts] = await Promise.all([
+    loadActiveGrowthCampaigns(supabase),
+    fetchAllRows<SegmentSummaryRow>(
+      () => supabase.from('outreach_contacts').select('segment,eligibility_status,added_to_sequence_at'),
+      'campaign composer contact segments',
+    ).then((data) => ({ data, error: null as Error | null }))
+      .catch((error: unknown) => ({
+        data: [] as SegmentSummaryRow[],
+        error: error instanceof Error ? error : new Error(String(error)),
+      })),
+  ]);
+  const warnings: string[] = [];
+  if (campaigns.length === 0) warnings.push('No active primary or challenger growth campaign is available.');
+  if (contacts.error) warnings.push('Contact segment counts are unavailable; draft creation remains held.');
+  return {
+    campaigns,
+    segments: summarizeEmailCampaignSegments(contacts.data),
+    warnings,
+  };
 }
 
 export interface EmailCampaignDetail {
@@ -154,21 +230,45 @@ export async function loadEmailCampaignDetail(args: {
 
   const sender = resolveCampaignSender(args.env);
   const contract = withResolvedSender(record.contract, sender);
-  const previewContacts = await loadPreviewContacts(args.supabase, contract);
-  const selected = args.previewContactId
-    ? previewContacts.find((contact) => contact.contactId === args.previewContactId) ?? previewContacts[0]
-    : previewContacts[0];
-
+  const loadedPreviewContacts = await loadPreviewContacts(args.supabase, contract);
   const appUrl = args.appUrl ?? args.env['NEXT_PUBLIC_APP_URL'] ?? 'https://getgeopulse.com';
   const previewSequenceStep = Math.max(1, Math.min(
     args.previewSequenceStep ?? 1,
     contract.schedule.maxSequenceSteps,
   ));
+  const auditPreview = contract.tracking.tags.includes('audit-led')
+    ? { secret: args.env['AUDIT_REPORT_CAPABILITY_SECRET'] ?? '', campaignId: contract.campaignId }
+    : null;
+  const auditScans = requiresScanContext(contract, previewSequenceStep) && auditPreview
+    ? await loadCampaignScanContexts({
+        supabase: args.supabase,
+        contacts: loadedPreviewContacts,
+        appUrl,
+        auditPreview,
+      })
+    : new Map<string, Awaited<ReturnType<typeof loadCampaignScanContext>>>();
+  const previewContacts = auditPreview
+    ? [...loadedPreviewContacts].sort((left, right) =>
+        Number(auditScans.has(right.contactId)) - Number(auditScans.has(left.contactId)))
+    : loadedPreviewContacts;
+  const selected = args.previewContactId
+    ? previewContacts.find((contact) => contact.contactId === args.previewContactId) ?? previewContacts[0]
+    : previewContacts[0];
+
+  const scan = selected && requiresScanContext(contract, previewSequenceStep)
+    ? auditScans.get(selected.contactId) ?? await loadCampaignScanContext({
+        supabase: args.supabase,
+        contact: selected,
+        appUrl,
+        auditPreview,
+      })
+    : null;
   const preview = selected
     ? renderCampaignPreview({
         contract,
         contact: selected,
         appUrl,
+        scan,
         sequenceStep: previewSequenceStep,
         ...(sender.resolvedFromAddress && sender.resolvedReplyToAddress
           ? { resolvedSender: { from: sender.resolvedFromAddress, replyTo: sender.resolvedReplyToAddress } }

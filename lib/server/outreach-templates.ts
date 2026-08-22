@@ -2,7 +2,7 @@
  * Outreach message templates (spec §9) — admin-authored subject/body with variables,
  * rendered into the branded email shell.
  *
- * Variables: {{name}} {{company}} {{domain}} {{score}} {{grade}} {{top_issues}} {{report_url}} {{walkthrough_url}} {{personalization_reason}} {{personalization_source_url}}
+ * Variables: {{name}} {{company}} {{domain}} {{score}} {{grade}} {{top_issues}} {{report_url}} {{report_thumbnail}} {{walkthrough_url}} {{personalization_reason}} {{personalization_source_url}}
  *   - All variable VALUES are HTML-escaped except {{top_issues}} and {{report_url}}
  *     (we generate that markup ourselves).
  *   - 'text' bodies are escaped and paragraph-wrapped, then branded — an admin can
@@ -13,7 +13,7 @@
  * yet) or empty, callers fall back to the built-in scorecard email.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { emailShell } from './email-theme';
+import { ctaButton, emailShell, issueListHtml, scoreBlock } from './email-theme';
 
 export type OutreachTemplateFormat = 'text' | 'html';
 
@@ -30,10 +30,19 @@ export interface OutreachTemplateVars {
   name: string | null;
   company: string | null;
   domain: string;
+  siteUrl?: string | null;
   score: number;
   grade: string;
   topIssues: ReadonlyArray<{ check?: string; fix?: string }>;
+  scanCompletedAt: string | null;
+  passedChecks?: number | null;
+  totalChecks?: number | null;
+  eligibleDestinations?: number | null;
+  testedDestinations?: number | null;
+  retrievalScore?: number | null;
+  understandingTrustScore?: number | null;
   reportUrl: string;
+  reportThumbnailUrl?: string | null;
   walkthroughUrl: string;
   personalizationReason: string | null;
   personalizationSourceUrl: string | null;
@@ -61,6 +70,63 @@ function topIssuesHtml(topIssues: OutreachTemplateVars['topIssues']): string {
   return items ? `<ul style="padding-left:18px;">${items}</ul>` : '';
 }
 
+function scanPreviewHtml(vars: OutreachTemplateVars): string {
+  if (
+    !vars.siteUrl ||
+    !vars.scanCompletedAt ||
+    vars.topIssues.length < 2 ||
+    typeof vars.passedChecks !== 'number' ||
+    typeof vars.totalChecks !== 'number' ||
+    typeof vars.eligibleDestinations !== 'number' ||
+    typeof vars.testedDestinations !== 'number' ||
+    typeof vars.retrievalScore !== 'number' ||
+    typeof vars.understandingTrustScore !== 'number'
+  ) return '';
+  const date = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(vars.scanCompletedAt));
+  const exactUrl = escapeHtml(vars.siteUrl);
+  const verificationPlan = {
+    check: 'Verify the change',
+    fix: `Publish the two changes, then re-run ${vars.domain} and compare these same checks against this baseline.`,
+  };
+  return [
+    '<div style="margin:22px 0;padding:20px;border:1px solid #E5E9E9;border-radius:12px;background:#FAFBFB;">',
+    `<p style="margin:0 0 10px;color:#586162;font-family:Arial,sans-serif;font-size:12px;line-height:1.55;"><strong style="color:#2C3435;">Scanned URL:</strong> <a href="${exactUrl}" style="color:#565E74;">${exactUrl}</a><br/><strong style="color:#2C3435;">Completed:</strong> ${escapeHtml(date)}</p>`,
+    scoreBlock(vars.score, vars.grade, 'Public-site readiness result'),
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0 0;border-collapse:separate;border-spacing:6px 0;">',
+    `<tr><td style="width:33%;padding:10px 8px;background:#FFFFFF;border:1px solid #E5E9E9;border-radius:8px;text-align:center;font-family:Arial,sans-serif;"><strong style="display:block;color:#1A1A1A;font-size:16px;">${String(vars.passedChecks)}/${String(vars.totalChecks)}</strong><span style="color:#586162;font-size:11px;">checks passed</span></td>`,
+    `<td style="width:33%;padding:10px 8px;background:#FFFFFF;border:1px solid #E5E9E9;border-radius:8px;text-align:center;font-family:Arial,sans-serif;"><strong style="display:block;color:#1A1A1A;font-size:16px;">${String(vars.eligibleDestinations)}/${String(vars.testedDestinations)}</strong><span style="color:#586162;font-size:11px;">retrieval destinations eligible</span></td>`,
+    `<td style="width:34%;padding:10px 8px;background:#FFFFFF;border:1px solid #E5E9E9;border-radius:8px;text-align:center;font-family:Arial,sans-serif;"><strong style="display:block;color:#1A1A1A;font-size:16px;">${String(vars.retrievalScore)} vs ${String(vars.understandingTrustScore)}</strong><span style="color:#586162;font-size:11px;">retrieval vs understanding</span></td></tr></table>`,
+    `<p style="margin:14px 0 0;color:#2C3435;font-family:Arial,sans-serif;font-size:13px;line-height:1.55;">What this means: access is the stronger side of this scan. Retrieval scored <strong>${String(vars.retrievalScore)}/100</strong>; AI Understanding &amp; Trust scored <strong>${String(vars.understandingTrustScore)}/100</strong>. The first work should improve how clearly the site describes and structures the business, then verify the same URL again.</p>`,
+    issueListHtml([...vars.topIssues.slice(0, 2), verificationPlan], 'A practical first pass'),
+    '<p style="margin:16px 0 0;color:#586162;font-family:Arial,sans-serif;font-size:12px;line-height:1.55;">This is a technical readiness snapshot of public evidence, not a promise of rankings or citations. The full PDF is intentionally not attached.</p>',
+    '</div>',
+  ].join('');
+}
+
+function richBlocks(vars: OutreachTemplateVars): Readonly<Record<string, string>> {
+  const reportThumbnail = vars.reportThumbnailUrl
+    ? [
+        '<div style="margin:22px 0 18px;text-align:center;">',
+        `<a href="${escapeHtml(vars.reportUrl)}" style="display:block;text-decoration:none;" aria-label="Open the private audit prepared for ${escapeHtml(vars.company ?? vars.domain)}">`,
+        `<img src="${escapeHtml(vars.reportThumbnailUrl)}" width="480" alt="First page of the private audit prepared for ${escapeHtml(vars.company ?? vars.domain)}" style="display:block;width:100%;max-width:480px;height:auto;margin:0 auto;border:1px solid #D9DEDE;border-radius:8px;box-shadow:0 8px 24px rgba(26,26,26,0.10);"/>`,
+        '</a>',
+        `<p style="margin:10px 0 0;color:#586162;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;"><a href="${escapeHtml(vars.reportUrl)}" style="color:#565E74;font-weight:700;">Open your private 10-page audit</a></p>`,
+        '</div>',
+      ].join('')
+    : '';
+  return {
+    '{{top_issues}}': topIssuesHtml(vars.topIssues),
+    '{{report_thumbnail}}': reportThumbnail,
+    '{{scan_preview}}': scanPreviewHtml(vars),
+    '{{walkthrough_cta}}': ctaButton('Review the scan with us', vars.walkthroughUrl),
+  };
+}
+
 function substitute(template: string, vars: OutreachTemplateVars, opts: { escape: boolean }): string {
   const esc = (v: string) => (opts.escape ? escapeHtml(v) : v);
   return template
@@ -70,10 +136,15 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
     .replaceAll('{{score}}', esc(String(vars.score)))
     .replaceAll('{{grade}}', esc(vars.grade))
     .replaceAll('{{report_url}}', vars.reportUrl)
+    .replaceAll('{{report_thumbnail}}', opts.escape ? '{{report_thumbnail}}' : vars.reportThumbnailUrl ?? '')
     .replaceAll('{{walkthrough_url}}', vars.walkthroughUrl)
     .replaceAll('{{personalization_reason}}', esc(vars.personalizationReason ?? 'This site matches the current audit cohort.'))
     .replaceAll('{{personalization_source_url}}', vars.personalizationSourceUrl ?? '')
-    .replaceAll('{{top_issues}}', topIssuesHtml(vars.topIssues));
+    .replaceAll('{{scan_preview}}', opts.escape ? '{{scan_preview}}' : `${String(vars.score)}/100 (grade ${vars.grade})`)
+    .replaceAll('{{walkthrough_cta}}', opts.escape ? '{{walkthrough_cta}}' : vars.walkthroughUrl)
+    .replaceAll('{{top_issues}}', opts.escape
+      ? '{{top_issues}}'
+      : vars.topIssues.map((issue) => issue.check ?? '').filter(Boolean).join('; '));
 }
 
 /**
@@ -81,11 +152,19 @@ function substitute(template: string, vars: OutreachTemplateVars, opts: { escape
  * CASL: the footer is part of the shell so no template — however custom — can ship
  * a commercial email without identification and a working unsubscribe (issue #97).
  */
-export function brandShell(innerHtml: string, pixelUrl: string, unsubscribeUrl?: string): string {
+export function brandShell(
+  innerHtml: string,
+  pixelUrl: string,
+  unsubscribeUrl?: string,
+  previewText?: string,
+): string {
   return emailShell({
     kicker: 'AI search readiness',
     bodyHtml: innerHtml,
+    previewText,
     sender: 'elena',
+    signoff: 'Regards,',
+    confidentialityNotice: true,
     unsubscribeUrl,
     pixelUrl,
   });
@@ -93,29 +172,40 @@ export function brandShell(innerHtml: string, pixelUrl: string, unsubscribeUrl?:
 
 /** Render a template into { subject, html } ready for sending. */
 export function renderOutreachTemplate(
-  template: Pick<OutreachTemplate, 'subjectTemplate' | 'bodyFormat' | 'bodyTemplate'>,
+  template: Pick<OutreachTemplate, 'subjectTemplate' | 'bodyFormat' | 'bodyTemplate'> & { readonly previewText?: string },
   vars: OutreachTemplateVars,
   pixelUrl: string,
   unsubscribeUrl?: string
-): { subject: string; html: string } {
+): { subject: string; html: string; previewText: string } {
   const subject = substitute(template.subjectTemplate, vars, { escape: false });
+  const previewText = template.previewText
+    ? substitute(template.previewText, vars, { escape: false })
+    : '';
 
   let body: string;
   if (template.bodyFormat === 'html') {
     body = substitute(template.bodyTemplate, vars, { escape: true });
+    for (const [token, html] of Object.entries(richBlocks(vars))) body = body.replaceAll(token, html);
   } else {
     // Plain text: substitute with escaped values on the escaped body, then paragraphize.
     const escaped = escapeHtml(template.bodyTemplate);
     // Escaping turned {{...}} braces into themselves (braces are not escaped), so
     // substitution still works; values get escaped, the issues block stays HTML.
     const substituted = substitute(escaped, vars, { escape: true });
+    const blocks = richBlocks(vars);
     body = substituted
       .split(/\n{2,}/)
-      .map((p) => `<p>${p.replaceAll('\n', '<br/>')}</p>`)
+      .map((paragraph) => {
+        const trimmed = paragraph.trim();
+        if (trimmed in blocks) return blocks[trimmed];
+        let rendered = paragraph.replaceAll('\n', '<br/>');
+        for (const [token, html] of Object.entries(blocks)) rendered = rendered.replaceAll(token, html);
+        return `<p>${rendered}</p>`;
+      })
       .join('\n');
   }
 
-  return { subject, html: brandShell(body, pixelUrl, unsubscribeUrl) };
+  return { subject, html: brandShell(body, pixelUrl, unsubscribeUrl, previewText), previewText };
 }
 
 type TemplateRow = {
@@ -196,23 +286,19 @@ export const PRESET_OUTREACH_TEMPLATES: ReadonlyArray<{
 }> = [
   {
     key: 'msp-evidence-first',
-    name: 'MSP evidence-first - walkthrough opener',
-    description: 'MSP-specific first touch: public evidence, transparent boundary, and a human next step.',
-    subject: '{{company}}: an AI-search readiness audit of {{domain}}',
+    name: 'MSP baseline offer - evidence before claims',
+    description: 'MSP-specific first touch that offers a baseline without pretending an audit already exists.',
+    subject: '{{company}}: one AI visibility baseline for {{domain}}',
     bodyFormat: 'text',
     body: `Hi {{name}},
 
-We ran a public-site AI-search readiness audit of {{domain}} because it matches our current managed-services cohort.
+When a business asks an AI assistant for a managed IT provider, the answer depends on what the system can retrieve and verify about each company.
 
-The site scored {{score}}/100 (grade {{grade}}). That score summarizes observable access, structure, content, and trust checks; it does not predict or guarantee an AI citation.
+GEO-Pulse measures that for MSPs. We check the public signals on {{domain}}, run blind buyer questions across supported answer engines, and return the evidence behind each finding: what was observed, where a competitor appeared, and what to fix first.
 
-The highest-confidence gaps were:
+It is a baseline, not a promise of rankings or citations.
 
-{{top_issues}}
-
-The full report is free to view, with no account required: {{report_url}}
-
-If it would help, request a focused walkthrough and we will review the public evidence before replying: {{walkthrough_url}}`,
+Would it be useful if I prepared the first baseline for {{company}}? You can also see the short walkthrough here: {{walkthrough_url}}`,
   },
   {
     key: 'first-scorecard',
@@ -288,13 +374,22 @@ export const SAMPLE_TEMPLATE_VARS: OutreachTemplateVars = {
   name: 'Alex',
   company: 'Acme IT Services',
   domain: 'acme-it.example',
+  siteUrl: 'https://acme-it.example/',
   score: 61,
   grade: 'D',
   topIssues: [
     { check: 'AI retrieval agent access', fix: 'Allow OAI-SearchBot, Claude-SearchBot and PerplexityBot in robots.txt.' },
     { check: 'Structured data validity', fix: 'Add LocalBusiness schema with your name and address.' },
   ],
+  scanCompletedAt: '2026-08-08T20:00:00.000Z',
+  passedChecks: 20,
+  totalChecks: 24,
+  eligibleDestinations: 5,
+  testedDestinations: 5,
+  retrievalScore: 100,
+  understandingTrustScore: 62,
   reportUrl: 'https://getgeopulse.com/results/sample',
+  reportThumbnailUrl: 'https://getgeopulse.com/api/audit-preview/thumbnail/sample',
   walkthroughUrl: 'https://getgeopulse.com/walkthrough?source=outreach',
   personalizationReason: 'The site matches the current managed-services audit cohort.',
   personalizationSourceUrl: 'https://acme-it.example/about',
