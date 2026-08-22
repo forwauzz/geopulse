@@ -15,6 +15,7 @@ export const SITE_EDITORIAL_NAME = 'GEO-Pulse Editorial';
  */
 export const SITE_SAME_AS: readonly string[] = [
   'https://github.com/forwauzz/geopulse',
+  'https://www.linkedin.com/company/getgeopulse',
 ];
 
 export function normalizeBaseUrl(value: string | null | undefined): string {
