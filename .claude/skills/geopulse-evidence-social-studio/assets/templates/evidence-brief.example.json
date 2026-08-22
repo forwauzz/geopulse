@@ -1,0 +1,34 @@
+{
+  "brief_version": "geopulse-social-evidence-v1",
+  "content_lane": "market_stat",
+  "audience": "MSP owner",
+  "visual_family": "editorial_core",
+  "claims": [
+    {
+      "claim_id": "claim-001",
+      "claim_type": "market_stat",
+      "evidence_grade": "A",
+      "publishable": false,
+      "public_claim": "Replace with the exact source-supported public claim.",
+      "source_title": "Replace with the primary source title.",
+      "source_location": "https://primary-source.example/report",
+      "source_owner": "Primary source publisher",
+      "source_date": "2026-01-01",
+      "accessed_at": "2026-08-22",
+      "metric_name": "weekly active users",
+      "value": "replace",
+      "unit": "people per week",
+      "population_or_cohort": "replace",
+      "denominator": "not_applicable",
+      "sample_size": "not_applicable",
+      "time_window": "replace",
+      "method": "replace",
+      "scope_and_limitations": "Replace with the boundaries that must survive publication.",
+      "privacy_classification": "public",
+      "privacy_treatment": "none",
+      "allowed_public_wording": "Replace with the strongest wording the evidence supports.",
+      "prohibited_inference": "Do not infer that the audience statistic guarantees rankings, leads, or revenue."
+    }
+  ]
+}
+

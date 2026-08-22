@@ -1,0 +1,34 @@
+{
+  "brief_version": "geopulse-social-evidence-v1",
+  "content_lane": "buyer_intelligence",
+  "audience": "agency owner",
+  "visual_family": "editorial_dark",
+  "claims": [
+    {
+      "claim_id": "evidence-catalog-preview-2026-07-25",
+      "claim_type": "buyer_intelligence",
+      "evidence_grade": "B",
+      "publishable": true,
+      "public_claim": "A GEO-Pulse production backfill preview indexed 18,335 evidence candidates and explicitly identified 6,073 missing artifacts.",
+      "source_title": "Geo Intelligence Evidence Catalog",
+      "source_location": "docs/27-geo-intelligence-evidence-catalog.md",
+      "source_owner": "GEO-Pulse",
+      "source_date": "2026-07-25",
+      "accessed_at": "2026-08-22",
+      "metric_name": "evidence candidates and explicit missing artifacts",
+      "value": "18,335 candidates; 6,073 missing artifacts",
+      "unit": "evidence records",
+      "population_or_cohort": "production evidence-catalog backfill candidates",
+      "denominator": "18,335 evidence candidates",
+      "sample_size": "18,335",
+      "time_window": "production preview completed 2026-07-25",
+      "method": "Idempotent preview indexed operational evidence identities and marked absent artifacts as missing without moving source data.",
+      "scope_and_limitations": "This is an internal evidence-lineage operation, not a count of audited businesses and not a customer outcome metric.",
+      "privacy_classification": "internal",
+      "privacy_treatment": "aggregate counts only; redact source records, tenants, domains, IDs, and excerpts",
+      "allowed_public_wording": "Good intelligence tracks what is missing, not only what succeeded. In one production preview, GEO-Pulse explicitly marked 6,073 absent artifacts instead of treating them as empty success.",
+      "prohibited_inference": "Do not present evidence records as audited sites, market coverage, benchmark authority, or customer results."
+    }
+  ]
+}
+

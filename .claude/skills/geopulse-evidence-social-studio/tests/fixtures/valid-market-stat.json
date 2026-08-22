@@ -1,0 +1,34 @@
+{
+  "brief_version": "geopulse-social-evidence-v1",
+  "content_lane": "market_stat",
+  "audience": "MSP owner",
+  "visual_family": "editorial_core",
+  "claims": [
+    {
+      "claim_id": "chatgpt-weekly-users-2026-02",
+      "claim_type": "market_stat",
+      "evidence_grade": "A",
+      "publishable": true,
+      "public_claim": "ChatGPT has more than 900 million weekly active users.",
+      "source_title": "Scaling AI for everyone",
+      "source_location": "https://openai.com/index/scaling-ai-for-everyone/",
+      "source_owner": "OpenAI",
+      "source_date": "2026-02-27",
+      "accessed_at": "2026-08-22",
+      "metric_name": "ChatGPT weekly active users",
+      "value": "more than 900 million",
+      "unit": "weekly active users",
+      "population_or_cohort": "global ChatGPT users",
+      "denominator": "not_applicable",
+      "sample_size": "not_applicable",
+      "time_window": "weekly active users as disclosed on 2026-02-27",
+      "method": "OpenAI company disclosure; no underlying measurement method is provided on the page",
+      "scope_and_limitations": "The statistic establishes product reach, not local service-search intent, recommendation likelihood, rankings, leads, or revenue.",
+      "privacy_classification": "public",
+      "privacy_treatment": "none required for a public aggregate",
+      "allowed_public_wording": "More than 900 million people use ChatGPT each week. When one asks for an MSP in your area, is your firm part of the measured answer?",
+      "prohibited_inference": "Do not infer local purchase intent, model recommendation, first position, leads, or revenue from global weekly usage."
+    }
+  ]
+}
+

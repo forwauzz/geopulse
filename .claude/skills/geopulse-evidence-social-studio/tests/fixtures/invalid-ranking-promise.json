@@ -1,0 +1,34 @@
+{
+  "brief_version": "geopulse-social-evidence-v1",
+  "content_lane": "market_stat",
+  "audience": "local business owner",
+  "visual_family": "editorial_core",
+  "claims": [
+    {
+      "claim_id": "invalid-ranking-promise",
+      "claim_type": "market_stat",
+      "evidence_grade": "A",
+      "publishable": true,
+      "public_claim": "More than 900 million people use ChatGPT weekly, so use GEO-Pulse to show up first.",
+      "source_title": "Scaling AI for everyone",
+      "source_location": "https://openai.com/index/scaling-ai-for-everyone/",
+      "source_owner": "OpenAI",
+      "source_date": "2026-02-27",
+      "accessed_at": "2026-08-22",
+      "metric_name": "ChatGPT weekly active users",
+      "value": "more than 900 million",
+      "unit": "weekly active users",
+      "population_or_cohort": "global ChatGPT users",
+      "denominator": "not_applicable",
+      "sample_size": "not_applicable",
+      "time_window": "weekly active users as disclosed on 2026-02-27",
+      "method": "OpenAI company disclosure",
+      "scope_and_limitations": "The statistic does not establish recommendation order.",
+      "privacy_classification": "public",
+      "privacy_treatment": "none required for a public aggregate",
+      "allowed_public_wording": "Use GEO-Pulse to show up first.",
+      "prohibited_inference": "Ranking order is unsupported."
+    }
+  ]
+}
+

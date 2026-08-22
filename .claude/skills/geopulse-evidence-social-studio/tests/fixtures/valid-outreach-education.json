@@ -1,0 +1,34 @@
+{
+  "brief_version": "geopulse-social-evidence-v1",
+  "content_lane": "outreach_asset",
+  "audience": "MSP owner preparing for a prospect conversation",
+  "visual_family": "amara_education",
+  "claims": [
+    {
+      "claim_id": "product-truth-free-audit",
+      "claim_type": "product_truth",
+      "evidence_grade": "B",
+      "publishable": true,
+      "public_claim": "GEO-Pulse measures observable AI-search readiness and visibility signals, identifies crawl, structure, content, and trust issues, and connects findings to practical fixes and repeat measurement.",
+      "source_title": "GEO-Pulse product marketing context and shipped audit contracts",
+      "source_location": ".agents/product-marketing-context.md",
+      "source_owner": "GEO-Pulse",
+      "source_date": "2026-03-31",
+      "accessed_at": "2026-08-22",
+      "metric_name": "not_applicable",
+      "value": "not_applicable",
+      "unit": "not_applicable",
+      "population_or_cohort": "GEO-Pulse product capabilities",
+      "denominator": "not_applicable",
+      "sample_size": "not_applicable",
+      "time_window": "current shipped product truth checked 2026-08-22",
+      "method": "Repository product context cross-checked against audit interfaces and current application behavior.",
+      "scope_and_limitations": "The product observes readiness and measured visibility signals; it does not predict or guarantee rankings, citations, leads, or revenue.",
+      "privacy_classification": "public",
+      "privacy_treatment": "none required for product truth",
+      "allowed_public_wording": "Before your next prospect call, check what the site gives AI systems to work with: clear services, crawl access, structure, and visible proof. Run the free audit and bring the findings into the conversation.",
+      "prohibited_inference": "Do not claim that passing readiness checks guarantees inclusion, first position, leads, or revenue."
+    }
+  ]
+}
+
