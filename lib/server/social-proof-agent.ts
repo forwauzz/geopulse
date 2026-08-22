@@ -43,6 +43,7 @@ import { structuredLogWithClientAndWait } from './structured-log';
 import {
   buildJordanReelScript,
   chooseJordanReelSource,
+  jordanReelSourceUrl,
   jordanReelSlotKey,
   resolveJordanReelConfig,
   shouldPlanJordanReel,
@@ -1179,6 +1180,11 @@ export async function runSocialProofAgent(args: {
       categories: config.reelCategories,
       publishMode: config.reelPublishMode,
     };
+    // Sources already used by a recent Reel, so the same candidate cannot win every slot.
+    const recentReelSourceUrls = existingAssets
+      .filter((asset) => asset.asset_type === 'short_video_post')
+      .map((asset) => jordanReelSourceUrl(asset))
+      .filter((url): url is string => typeof url === 'string');
     const reelSource =
       account?.provider_name === 'instagram' &&
       shouldPlanJordanReel({
@@ -1187,7 +1193,11 @@ export async function runSocialProofAgent(args: {
         config: reelConfig,
         existingAssets,
       })
-        ? chooseJordanReelSource(baseOrderedCandidates, config.reelCategories)
+        ? chooseJordanReelSource(
+            baseOrderedCandidates,
+            config.reelCategories,
+            recentReelSourceUrls
+          )
         : null;
     const reelCandidate: SocialProofCandidate | null = reelSource
       ? {

@@ -27,12 +27,28 @@ try {
   mkdirSync(join(working, 'renders'), { recursive: true });
   mkdirSync(join(working, 'previews'), { recursive: true });
 
+  // An A-minor bed (A1/A2 sub + A3/C4/E4 triad) normalised to the -16 LUFS target social
+  // platforms expect. The previous bed was a single 72Hz sine at volume 0.055 — it existed
+  // only to satisfy the `audioTrackCount >= 1` gate and measured -49.5 dB mean, which is
+  // inaudible once Instagram normalises. Reels delivered with no audible track get almost
+  // no distribution, which is the likeliest reason these have never cleared 56 views.
   execFileSync('ffmpeg', [
     '-y',
-    '-f', 'lavfi',
-    '-i', 'sine=frequency=72:sample_rate=48000:duration=28',
+    '-f', 'lavfi', '-i', 'sine=frequency=55:sample_rate=48000:duration=28',
+    '-f', 'lavfi', '-i', 'sine=frequency=110:sample_rate=48000:duration=28',
+    '-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=48000:duration=28',
+    '-f', 'lavfi', '-i', 'sine=frequency=261.63:sample_rate=48000:duration=28',
+    '-f', 'lavfi', '-i', 'sine=frequency=329.63:sample_rate=48000:duration=28',
     '-filter_complex',
-    'volume=0.055,tremolo=f=2.4:d=0.68,afade=t=in:st=0:d=0.35,afade=t=out:st=27:d=1',
+    '[0]volume=0.22[sub];[1]volume=0.10,tremolo=f=2:d=0.35[bass];' +
+    '[2]volume=0.055,tremolo=f=4:d=0.55[a3];[3]volume=0.040,tremolo=f=4:d=0.55[c4];' +
+    '[4]volume=0.045,tremolo=f=4:d=0.55[e4];' +
+    '[sub][bass][a3][c4][e4]amix=inputs=5:normalize=0[mix];' +
+    '[mix]highpass=f=35,lowpass=f=6000,' +
+    'acompressor=threshold=0.15:ratio=4:attack=8:release=180,' +
+    'loudnorm=I=-16:TP=-1.5:LRA=11,' +
+    'afade=t=in:st=0:d=1.2,afade=t=out:st=26.4:d=1.6[out]',
+    '-map', '[out]', '-ac', '2', '-ar', '48000',
     join(working, 'assets', 'pulse-bed.wav'),
   ], { stdio: 'inherit' });
 
@@ -124,9 +140,12 @@ try {
   const thumbnailPath = join(working, 'previews', 'thumbnail.jpg');
   const feedPath = join(working, 'previews', 'feed-4x5.jpg');
   const gridPath = join(working, 'previews', 'grid-1x1.jpg');
-  execFileSync('ffmpeg', ['-y', '-ss', '14', '-i', videoPath, '-frames:v', '1', '-update', '1', '-q:v', '2', thumbnailPath], { stdio: 'inherit' });
-  execFileSync('ffmpeg', ['-y', '-ss', '14', '-i', videoPath, '-vf', 'crop=1080:1350:0:285', '-frames:v', '1', '-update', '1', '-q:v', '2', feedPath], { stdio: 'inherit' });
-  execFileSync('ffmpeg', ['-y', '-ss', '14', '-i', videoPath, '-vf', 'crop=1080:1080:0:420', '-frames:v', '1', '-update', '1', '-q:v', '2', gridPath], { stdio: 'inherit' });
+  // Grab the hook scene, not t=14s. The compare panel that sat at 14s rendered as a
+  // near-black frame with no headline, so every grid tile looked like the same smudge.
+  const previewAt = '3.2';
+  execFileSync('ffmpeg', ['-y', '-ss', previewAt, '-i', videoPath, '-frames:v', '1', '-update', '1', '-q:v', '2', thumbnailPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', previewAt, '-i', videoPath, '-vf', 'crop=1080:1350:0:285', '-frames:v', '1', '-update', '1', '-q:v', '2', feedPath], { stdio: 'inherit' });
+  execFileSync('ffmpeg', ['-y', '-ss', previewAt, '-i', videoPath, '-vf', 'crop=1080:1080:0:420', '-frames:v', '1', '-update', '1', '-q:v', '2', gridPath], { stdio: 'inherit' });
 
   const form = new FormData();
   form.set('assetId', claim.assetId);
