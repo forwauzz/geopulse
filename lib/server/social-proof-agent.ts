@@ -14,7 +14,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { retrieveIntelligenceEvidence } from '@/lib/intelligence/evidence-retrieval';
 import { reserveProviderSpend } from './provider-spend-control';
-import { loadActiveGrowthCampaigns, type GrowthCampaign } from './growth-campaign-intelligence';
+import {
+  classifyCampaignVertical,
+  loadActiveGrowthCampaigns,
+  type GrowthCampaign,
+} from './growth-campaign-intelligence';
 import { loadAutomationSetting } from './automation-settings';
 import {
   createDistributionEngineRepository,
@@ -181,6 +185,27 @@ export function filterCampaignAssignedSocial<T extends {
     const vertical = String(metadata['campaign_vertical'] ?? metadata['vertical'] ?? '').trim();
     return Boolean(campaignId) && CAMPAIGN_SOCIAL_VERTICALS.has(vertical);
   });
+}
+
+export function growthCampaignForSocialCandidate(
+  candidate: Pick<SocialProofCandidate, 'title' | 'caption' | 'evidence'>,
+  campaigns: readonly GrowthCampaign[],
+): GrowthCampaign | null {
+  const explicitCampaignId = readString(candidate.evidence['growth_campaign_id']);
+  const classification = classifyCampaignVertical({
+    id: 'social-candidate',
+    title: candidate.title,
+    evidence: candidate.caption,
+    metadata: candidate.evidence,
+    growth_campaign_id: explicitCampaignId || null,
+  });
+  if (classification.vertical === 'background') return null;
+
+  const campaign = explicitCampaignId
+    ? campaigns.find((item) => item.id === explicitCampaignId)
+    : campaigns.find((item) => item.vertical === classification.vertical);
+  if (!campaign || campaign.vertical !== classification.vertical) return null;
+  return campaign;
 }
 
 export function remainingDailyAssetCapacity(
@@ -1289,9 +1314,6 @@ export async function runSocialProofAgent(args: {
     const assignedSocial = args.campaignOnly
       ? filterCampaignAssignedSocial(allAssignedSocial) : allAssignedSocial;
     const candidates: SocialProofCandidate[] = [];
-    const primaryCampaign: GrowthCampaign | null = activeCampaigns.find(
-      (campaign) => campaign.role === 'primary',
-    ) ?? null;
     const opportunityIds = assignedSocial
       .map((item) => item.metadata?.['seo_opportunity_id'])
       .filter((value): value is string => typeof value === 'string' && Boolean(value));
@@ -1504,8 +1526,9 @@ export async function runSocialProofAgent(args: {
       if (await repo.getAssetByAssetId(assetId)) continue;
       let candidate = rawCandidate;
       const explicitCampaignId = readString(candidate.evidence['growth_campaign_id']);
-      const campaign = activeCampaigns.find((item) => item.id === explicitCampaignId)
-        ?? (args.campaignScopeRequired ? primaryCampaign : null);
+      const campaign = args.campaignScopeRequired
+        ? growthCampaignForSocialCandidate(candidate, activeCampaigns)
+        : activeCampaigns.find((item) => item.id === explicitCampaignId) ?? null;
       if (args.campaignScopeRequired && !campaign) continue;
       const growthCampaignId = explicitCampaignId || campaign?.id || null;
       const growthInterventionId = readString(candidate.evidence['growth_intervention_id']) || null;

@@ -8,6 +8,7 @@ import {
   assignedSocialCandidate,
   assignedSocialCandidates,
   filterCampaignAssignedSocial,
+  growthCampaignForSocialCandidate,
   instagramScheduleSlot,
   latestSocialSequenceAnchor,
   orderAutonomousCandidates,
@@ -135,6 +136,64 @@ describe('Social Proof Agent safeguards', () => {
       { id: 'untagged', metadata: {} },
     ];
     expect(filterCampaignAssignedSocial(items).map((item) => item.id)).toEqual(['msp', 'agency']);
+  });
+
+  it('refuses to stamp an active campaign onto content from another vertical', () => {
+    const campaigns = [
+      {
+        id: 'msp-1',
+        campaign_key: 'quebec-msp',
+        role: 'primary' as const,
+        status: 'active' as const,
+        vertical: 'msp_it_services' as const,
+        subvertical: null,
+        geo_region: 'Quebec',
+        buyer_role: 'MSP owner',
+        primary_problem: 'Buyer proof',
+        offer_key: 'free_scan',
+        cta_goal: 'scan',
+        allocation_percent: 80,
+        success_condition: 'qualified scan',
+        stop_condition: 'three placements without action',
+      },
+      {
+        id: 'agency-1',
+        campaign_key: 'agency-challenger',
+        role: 'challenger' as const,
+        status: 'active' as const,
+        vertical: 'marketing_agencies' as const,
+        subvertical: null,
+        geo_region: 'Quebec',
+        buyer_role: 'Agency owner',
+        primary_problem: 'Client reporting',
+        offer_key: 'free_scan',
+        cta_goal: 'scan',
+        allocation_percent: 20,
+        success_condition: 'qualified scan',
+        stop_condition: 'three placements without action',
+      },
+    ];
+
+    expect(growthCampaignForSocialCandidate({
+      title: 'AI-Search Readiness for Legal and Professional Services',
+      caption: 'A practical guide for law firms and professional-services buyers.',
+      evidence: {},
+    }, campaigns)).toBeNull();
+
+    expect(growthCampaignForSocialCandidate({
+      title: 'What MSP buyers need to verify',
+      caption: 'Managed service providers should put the proof beside the promise.',
+      evidence: {},
+    }, campaigns)?.id).toBe('msp-1');
+
+    expect(growthCampaignForSocialCandidate({
+      title: 'What MSP buyers need to verify',
+      caption: 'Managed service providers should put the proof beside the promise.',
+      evidence: {
+        growth_campaign_id: 'agency-1',
+        campaign_vertical: 'msp_it_services',
+      },
+    }, campaigns)).toBeNull();
   });
 
   it('prefers a social account over connected newsletter accounts', () => {
