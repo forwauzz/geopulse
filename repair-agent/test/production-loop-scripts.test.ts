@@ -89,7 +89,7 @@ describe('production repair orchestration scripts', () => {
     expect(qa).not.toContain('REPAIR_MERGE_PRIVATE_KEY');
     expect(merge).not.toContain('REPAIR_REVIEWER_PRIVATE_KEY');
     expect(merge).not.toContain('REPAIR_QA_PRIVATE_KEY');
-    expect(merge).toContain('gh api "repos/$GITHUB_REPOSITORY/actions/variables/REPAIR_LOOP_ENABLED"');
+    expect(merge).not.toContain('/actions/variables/REPAIR_LOOP_ENABLED');
   });
 
   it('uses a distinct idempotent rollback lineage for every bounded attempt', async () => {

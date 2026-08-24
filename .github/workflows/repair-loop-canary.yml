@@ -174,14 +174,13 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-checks: write
-      - name: Prove merge App identity, Actions variable read, and Checks write
+      - name: Prove merge App identity and Checks write
         shell: bash
         env:
           GH_TOKEN: ${{ steps.merge-token.outputs.token }}
           EXPECTED_APP_ID: ${{ vars.REPAIR_MERGE_APP_ID }}
         run: |
           set -euo pipefail
-          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/variables/REPAIR_LOOP_ENABLED" --jq '.value')" = 'false'
           RESPONSE="$(gh api --method POST "repos/$GITHUB_REPOSITORY/check-runs" \
             -f name='repair-merge-principal-canary' \
             -f head_sha="$GITHUB_SHA" \
