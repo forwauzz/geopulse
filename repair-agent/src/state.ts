@@ -41,10 +41,11 @@ export type RepairAgentState = {
   auditHistory?: AuditDisposition[];
   scopeTransitions?: ScopeTransition[];
   exhaustedRepairIds?: string[];
+  satisfiedRepairIds?: string[];
 };
 
 export type ScopeTransition = {
-  kind: 'merge_intent' | 'merged' | 'rollback_intent' | 'rolled_back' | 'acknowledged' | 'feedback';
+  kind: 'merge_intent' | 'merged' | 'rollback_intent' | 'rolled_back' | 'acknowledged' | 'feedback' | 'satisfied';
   repairId: string;
   attempt: number;
   leaseId: string;
@@ -96,7 +97,7 @@ export type AuditDisposition = {
   auditRunId: string;
   producer?: RepairScope['producer'];
   recordedAt: string;
-  outcome: 'queued' | 'duplicate' | 'unsupported' | 'rejected' | 'changes_requested' | 'exhausted' | 'acknowledged';
+  outcome: 'queued' | 'duplicate' | 'unsupported' | 'rejected' | 'changes_requested' | 'exhausted' | 'acknowledged' | 'satisfied';
   repairId: string | null;
   reasons: string[];
 };
@@ -113,6 +114,7 @@ export function initialRepairState(): RepairAgentState {
     auditHistory: [],
     scopeTransitions: [],
     exhaustedRepairIds: [],
+    satisfiedRepairIds: [],
   };
 }
 
@@ -157,6 +159,7 @@ export function normalizeRepairState(state: RepairAgentState, now: string): Repa
     || state.auditHistory === undefined
     || state.scopeTransitions === undefined
     || state.exhaustedRepairIds === undefined
+    || state.satisfiedRepairIds === undefined
     || retained.length !== queue.length
     || recent.some((item, index) => item.artifact !== state.recent?.[index]?.artifact);
   if (!needsNormalization) return state;
@@ -176,6 +179,7 @@ export function normalizeRepairState(state: RepairAgentState, now: string): Repa
     auditHistory: [...quarantineEvents, ...(state.auditHistory ?? [])].slice(0, 50),
     scopeTransitions: state.scopeTransitions ?? [],
     exhaustedRepairIds: state.exhaustedRepairIds ?? [],
+    satisfiedRepairIds: state.satisfiedRepairIds ?? [],
     updatedAt: quarantined.length > 0 ? now : state.updatedAt ?? null,
   };
   validateRepairState(normalized);
@@ -193,6 +197,7 @@ export function validateRepairState(state: RepairAgentState): void {
   if ((state.auditHistory?.length ?? 0) > 50) throw new Error('audit history exceeds retention limit');
   if ((state.scopeTransitions?.length ?? 0) > 50) throw new Error('scope transition history exceeds retention limit');
   if ((state.exhaustedRepairIds?.length ?? 0) > 100) throw new Error('exhausted repair lineage history exceeds retention limit');
+  if ((state.satisfiedRepairIds?.length ?? 0) > 100) throw new Error('satisfied repair lineage history exceeds retention limit');
   const repairIds = (state.pendingScopes ?? []).map((item) => item.scope.repairId);
   if (new Set(repairIds).size !== repairIds.length) throw new Error('pending scope queue contains duplicate repair ids');
   for (const item of state.pendingScopes ?? []) {
@@ -328,6 +333,45 @@ export function acknowledgeRepairScope(
     pendingScopes: (state.pendingScopes ?? []).filter((candidate) => candidate.scope.repairId !== repairId),
     exhaustedRepairIds: (state.exhaustedRepairIds ?? []).filter((candidate) => candidate !== repairId),
     auditHistory: [{ auditRunId: item.scope.auditRunId, producer: item.scope.producer, recordedAt: now, outcome: 'acknowledged' as const, repairId, reasons: [] }, ...(state.auditHistory ?? [])].slice(0, 50),
+    scopeTransitions: [transition, ...(state.scopeTransitions ?? [])].slice(0, 50),
+    updatedAt: now,
+  };
+  validateRepairState(next);
+  return { state: next, replayed: false };
+}
+
+export function recordSatisfiedRepairScope(
+  state: RepairAgentState,
+  repairId: string,
+  attempt: number,
+  leaseId: string,
+  evidenceDigest: string,
+  reasons: string[],
+  now: string
+): { state: RepairAgentState; replayed: boolean } {
+  validateTransitionInput(attempt, evidenceDigest);
+  if (reasons.length < 1 || reasons.length > 10 || reasons.some((reason) => reason.length < 1 || reason.length > 500)) {
+    throw new Error('satisfied-scope reasons are invalid');
+  }
+  const replay = priorTransition(state, 'satisfied', repairId, attempt, leaseId, evidenceDigest);
+  if (replay) return { state, replayed: true };
+  const item = (state.pendingScopes ?? []).find((candidate) => candidate.scope.repairId === repairId);
+  if (!item || item.state !== 'leased' || item.leaseId !== leaseId || item.scope.attempt !== attempt) {
+    throw new Error('scope is not leased by this production run');
+  }
+  const transition: ScopeTransition = {
+    kind: 'satisfied', repairId, attempt, leaseId, evidenceDigest, recordedAt: now,
+    result: { requeued: false, nextAttempt: null, exhausted: false },
+  };
+  const next = {
+    ...state,
+    pendingScopes: (state.pendingScopes ?? []).filter((candidate) => candidate.scope.repairId !== repairId),
+    exhaustedRepairIds: (state.exhaustedRepairIds ?? []).filter((candidate) => candidate !== repairId),
+    satisfiedRepairIds: [repairId, ...(state.satisfiedRepairIds ?? []).filter((candidate) => candidate !== repairId)].slice(0, 100),
+    auditHistory: [{
+      auditRunId: item.scope.auditRunId, producer: item.scope.producer, recordedAt: now,
+      outcome: 'satisfied' as const, repairId, reasons,
+    }, ...(state.auditHistory ?? [])].slice(0, 50),
     scopeTransitions: [transition, ...(state.scopeTransitions ?? [])].slice(0, 50),
     updatedAt: now,
   };

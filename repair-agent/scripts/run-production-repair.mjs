@@ -119,6 +119,31 @@ try {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 2_000));
   }
   if (!completed || completed.outcome !== 'verified_shadow') {
+    const reasons = Array.isArray(completed?.reasons) ? completed.reasons.map(String) : [];
+    if (completed?.outcome === 'blocked' && reasons.includes('approved retrieval-agent rules already exist')) {
+      const satisfactionEvidence = {
+        schemaVersion: 1,
+        repairId: scope.repairId,
+        attempt: scope.attempt,
+        leaseId,
+        beforeDigest: sha256(original),
+        reasons: ['approved retrieval-agent rules already exist'],
+      };
+      const evidenceDigest = sha256(JSON.stringify(satisfactionEvidence));
+      await request('/v1/scopes/satisfied', {
+        method: 'POST',
+        body: JSON.stringify({
+          repairId: scope.repairId,
+          attempt: scope.attempt,
+          leaseId,
+          evidenceDigest,
+          reasons: satisfactionEvidence.reasons,
+        }),
+      });
+      await writeEvidence({ ...satisfactionEvidence, queued: false, evidenceDigest, reason: 'repair postcondition is already satisfied' });
+      console.log(JSON.stringify({ queued: false, repairId: scope.repairId, satisfied: true }));
+      break productionRun;
+    }
     throw new Error(`repair did not produce a verified artifact: ${JSON.stringify(completed)}`);
   }
   const artifact = (await request(`/v1/artifacts/${submitted.jobId}`)).artifact;

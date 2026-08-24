@@ -207,6 +207,29 @@ async function handleScopeAck(request: Request, env: RepairWorkerEnv): Promise<R
   }
 }
 
+async function handleScopeSatisfied(request: Request, env: RepairWorkerEnv): Promise<Response> {
+  const denied = await requireAuthorization(request, env);
+  if (denied) return denied;
+  let body: unknown;
+  try { body = await readBoundedJson(request); } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'invalid request' }, { status: 400 });
+  }
+  const repairId = stringField(body, 'repairId');
+  const leaseId = stringField(body, 'leaseId');
+  const attempt = integerField(body, 'attempt');
+  const evidenceDigest = stringField(body, 'evidenceDigest');
+  const reasons = stringArrayField(body, 'reasons');
+  if (!repairId || !leaseId || !attempt || !evidenceDigest || !reasons) {
+    return json({ ok: false, error: 'complete satisfied-scope evidence is required' }, { status: 400 });
+  }
+  try {
+    const result = await env.REPAIR_AGENT.getByName(SITE_AGENT_NAME).markScopeSatisfied(repairId, attempt, leaseId, evidenceDigest, reasons);
+    return json({ ok: true, ...result });
+  } catch (error) {
+    return json({ ok: false, error: error instanceof Error ? error.message : 'satisfied transition failed' }, { status: 409 });
+  }
+}
+
 function integerArrayField(body: unknown, field: string): number[] | null {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
   const value = (body as Record<string, unknown>)[field];
@@ -392,6 +415,9 @@ export default {
     }
     if (request.method === 'POST' && url.pathname === '/v1/scopes/ack') {
       return handleScopeAck(request, env);
+    }
+    if (request.method === 'POST' && url.pathname === '/v1/scopes/satisfied') {
+      return handleScopeSatisfied(request, env);
     }
     if (request.method === 'POST' && url.pathname === '/v1/scopes/merge-intent') {
       return handleMergeIntent(request, env);

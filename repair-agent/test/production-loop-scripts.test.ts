@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { createServer } from 'node:http';
 import type { RequestListener } from 'node:http';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -139,6 +139,63 @@ describe('production repair orchestration scripts', () => {
       expect(JSON.parse(await readFile(outputPath, 'utf8'))).toMatchObject({ queued: false, auditRunId: 'audit-fresh' });
       stale = true;
       await expect(execFileAsync(process.execPath, [productionRepairScript], { env })).rejects.toBeTruthy();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('retires a claimed repair when the checked-out default branch already satisfies it', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'repair-production-satisfied-'));
+    temporaryDirectories.push(directory);
+    const outputPath = join(directory, 'repair.json');
+    await mkdir(join(directory, 'app'));
+    await writeFile(join(directory, 'app', 'robots.ts'), `export default function robots() { return { rules: [
+      { userAgent: 'Googlebot', allow: '/' }, { userAgent: 'Bingbot', allow: '/' },
+      { userAgent: 'OAI-SearchBot', allow: '/' }, { userAgent: 'Claude-SearchBot', allow: '/' },
+      { userAgent: 'PerplexityBot', allow: '/' },
+    ] }; }\n`, 'utf8');
+    const repairId = 'a'.repeat(32);
+    const scope = {
+      schemaVersion: 1, attempt: 1, feedback: [], producer: 'canonical-cloudflare-scheduler',
+      repairId, auditRunId: 'audit-satisfied', findingId: 'finding-satisfied',
+      repositoryProfileId: 'geopulse-v1', repositoryProfileDigest: 'b'.repeat(64),
+      repository: 'forwauzz/geopulse', defaultBranch: 'main', siteOrigin: 'https://getgeopulse.com',
+      sourceFinding: {
+        checkId: 'ai-crawler-access', targetUrl: 'https://getgeopulse.com/robots.txt',
+        finding: 'retrieval agents are blocked', confidence: 'high', risk: 'low', reportedAt: new Date().toISOString(),
+      },
+      instruction: { skillId: 'allow-ai-retrieval-agents', path: 'app/robots.ts' },
+      changeBudget: { maxFiles: 1, maxChangedLines: 10 },
+      issue: { title: 'repair robots', owner: 'codex', reviewer: 'codex', retryPolicy: 'maximum_three_sha_bound_attempts', nextAction: 'repair', dueAt: new Date().toISOString(), postcondition: 'retrieval agents allowed' },
+    };
+    let satisfiedBody: Record<string, unknown> | null = null;
+    const server = await listen(async (request, response): Promise<void> => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : null;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.url === '/v1/scopes/claim') return void response.end(JSON.stringify({ scope }));
+      if (request.url === '/v1/repairs') return void response.end(JSON.stringify({ jobId: 'c'.repeat(32) }));
+      if (request.url === '/v1/status') return void response.end(JSON.stringify({ recent: [{
+        jobId: 'c'.repeat(32), outcome: 'blocked', reasons: ['approved retrieval-agent rules already exist'],
+      }] }));
+      if (request.url === '/v1/scopes/satisfied') {
+        satisfiedBody = body;
+        return void response.end(JSON.stringify({ ok: true, replayed: false }));
+      }
+      response.writeHead(404).end('{}');
+    });
+    try {
+      await expect(execFileAsync(process.execPath, [productionRepairScript], { env: {
+        ...process.env,
+        REPAIR_AGENT_URL: server.url,
+        REPAIR_AGENT_API_TOKEN: 'test-token',
+        REPAIR_RUN_ID: 'production-satisfied-123456',
+        REPAIR_OUTPUT: outputPath,
+        REPAIR_REPOSITORY_ROOT: directory,
+      } })).resolves.toMatchObject({ stdout: expect.stringContaining('"satisfied":true') });
+      expect(satisfiedBody).toMatchObject({ repairId, attempt: 1, reasons: ['approved retrieval-agent rules already exist'] });
+      expect(JSON.parse(await readFile(outputPath, 'utf8'))).toMatchObject({ queued: false, repairId, reason: 'repair postcondition is already satisfied' });
     } finally {
       await server.close();
     }

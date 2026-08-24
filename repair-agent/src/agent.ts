@@ -23,6 +23,7 @@ import {
   recordRepairRolledBack,
   recordAuditDisposition,
   recordRepairScopeFeedback,
+  recordSatisfiedRepairScope,
   normalizeRepairState,
   validateRepairState,
   type CompletedRepair,
@@ -165,6 +166,10 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
     const seen = new Set((this.state.auditHistory ?? []).map((item) => item.auditRunId));
     if (seen.has(envelope.auditRunId)) {
       const existing = (this.state.auditHistory ?? []).find((item) => item.auditRunId === envelope.auditRunId);
+      if (existing?.outcome === 'satisfied'
+        || (existing?.outcome === 'duplicate' && existing.reasons.some((reason) => reason.includes('already satisfied')))) {
+        return { accepted: true, queued: false, repairId: null, reasons: ['audit finding is already satisfied'] };
+      }
       return existing?.repairId
         ? { accepted: true, queued: true, repairId: existing.repairId }
         : { accepted: true, queued: false, repairId: null, reasons: ['audit run was already consumed'] };
@@ -207,6 +212,18 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
       }));
       return { accepted: true, queued: false, repairId: null, reasons };
     }
+    if ((this.state.satisfiedRepairIds ?? []).includes(scope.repairId)) {
+      const reasons = ['repair postcondition is already satisfied on the default branch'];
+      this.setState(recordAuditDisposition(this.state, {
+        auditRunId: envelope.auditRunId,
+        producer: envelope.producer,
+        recordedAt: now,
+        outcome: 'duplicate',
+        repairId: scope.repairId,
+        reasons,
+      }));
+      return { accepted: true, queued: false, repairId: null, reasons };
+    }
     this.setState(enqueueRepairScope(this.state, scope, now));
     return { accepted: true, queued: true, repairId: scope.repairId };
   }
@@ -221,6 +238,12 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
 
   async acknowledgeScope(repairId: string, attempt: number, leaseId: string, gateDigest: string): Promise<{ replayed: boolean }> {
     const result = acknowledgeRepairScope(this.state, repairId, attempt, leaseId, gateDigest, new Date().toISOString());
+    this.setState(result.state);
+    return { replayed: result.replayed };
+  }
+
+  async markScopeSatisfied(repairId: string, attempt: number, leaseId: string, evidenceDigest: string, reasons: string[]): Promise<{ replayed: boolean }> {
+    const result = recordSatisfiedRepairScope(this.state, repairId, attempt, leaseId, evidenceDigest, reasons, new Date().toISOString());
     this.setState(result.state);
     return { replayed: result.replayed };
   }
