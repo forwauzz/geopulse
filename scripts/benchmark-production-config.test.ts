@@ -17,8 +17,15 @@ const wrangler = parse(readFileSync(join(root, 'wrangler.jsonc'), 'utf8')) as Wr
 const vars = wrangler.vars ?? {};
 
 describe('production benchmark configuration', () => {
+  it('fails both Perplexity-backed recurring lanes closed without a valid credential', () => {
+    expect(vars.BENCHMARK_SCHEDULE_ENABLED).toBe('false');
+    expect(vars.BENCHMARK_CHALLENGER_ENABLED).toBe('false');
+    expect(parseBenchmarkScheduleConfig(vars)).toBeNull();
+    expect(parseBenchmarkScheduleConfig(toBenchmarkChallengerScheduleEnv(vars))).toBeNull();
+  });
+
   it('freezes the primary lane to ten MSP domains and the MSP question set', () => {
-    const config = parseBenchmarkScheduleConfig(vars);
+    const config = parseBenchmarkScheduleConfig({ ...vars, BENCHMARK_SCHEDULE_ENABLED: 'true' });
 
     expect(config).not.toBeNull();
     expect(config).toMatchObject({
@@ -37,7 +44,10 @@ describe('production benchmark configuration', () => {
   });
 
   it('keeps the one-domain Teché healthcare challenger separate', () => {
-    const challenger = parseBenchmarkScheduleConfig(toBenchmarkChallengerScheduleEnv(vars));
+    const challenger = parseBenchmarkScheduleConfig(toBenchmarkChallengerScheduleEnv({
+      ...vars,
+      BENCHMARK_CHALLENGER_ENABLED: 'true',
+    }));
 
     expect(challenger).toMatchObject({
       querySetId: '89500ed0-6cb4-4ced-9a6f-683330c98302',
