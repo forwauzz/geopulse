@@ -1,9 +1,10 @@
 /**
  * llms.txt — weight 0, hygiene bucket (spec §2.5/C7).
  *
- * No major engine honors llms.txt as a citation signal (Google states it does nothing
- * for Search; near-zero real fetches observed industry-wide). It is offered as an
- * optional experiment: absence never penalizes, presence never promises a benefit.
+ * The authoritative proposal moved to v2 on 2026-08-10 and now documents path-scoped
+ * files plus Markdown discovery links. None of the watched engines documents llms.txt
+ * as a ranking or citation signal, so absence never penalizes and presence never
+ * promises a visibility benefit.
  */
 import type { AuditCheck, CheckContext, CheckResult } from '../../lib/interfaces/audit';
 
@@ -19,7 +20,7 @@ export const llmsTxtCheck: AuditCheck = {
         id: 'llms-txt',
         passed: true,
         status: 'PASS',
-        finding: `llms.txt found (${String(content.trim().length)} chars). Treat it as an optional experiment — no major AI engine uses it as a citation signal today, so expect no measurable benefit from it.`,
+        finding: `llms.txt found (${String(content.trim().length)} chars). It can provide an optional agent-readable overview, but no watched engine documents it as a ranking or citation signal, so no measurable visibility benefit is promised.`,
       };
     }
 
@@ -28,7 +29,7 @@ export const llmsTxtCheck: AuditCheck = {
       passed: true,
       status: 'PASS',
       finding:
-        'No /llms.txt file — and that is fine. No major AI engine honors llms.txt today, so it carries no score weight. Publish one only if you want to experiment.',
+        'No /llms.txt file — and that is fine. The v2 proposal is optional, and no watched engine documents a ranking or citation benefit, so this check carries no score weight.',
     };
   },
 };
