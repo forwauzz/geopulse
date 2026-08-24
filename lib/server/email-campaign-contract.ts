@@ -546,6 +546,17 @@ export function applyContractEdit(
       ...candidate,
       version: contract.version + 1,
       state: 'draft',
+      audience: {
+        ...candidate.audience,
+        // A frozen audience is evidence for one immutable campaign version. A changed message
+        // must be reviewed against a newly frozen recipient list; carrying the previous snapshot
+        // forward can silently resend to a completed cohort and makes the new checksum dishonest.
+        audienceId: null,
+        checksum: null,
+        recipientCount: null,
+        frozenAt: null,
+        excludedCounts: {},
+      },
       governance: {
         ...candidate.governance,
         // A new version has never been tested, preflighted, or scheduled. Carrying any of that
@@ -556,6 +567,7 @@ export function applyContractEdit(
         testVersionChecksum: null,
         scheduledAt: null,
         lockedAt: null,
+        stopReason: null,
       },
     },
   };
