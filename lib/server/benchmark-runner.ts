@@ -12,6 +12,7 @@ import {
   createBenchmarkExecutionAdapter,
   getBenchmarkExecutionAdapterMode,
   type BenchmarkExecutionAdapter,
+  type BenchmarkExecutionResult,
 } from './benchmark-execution';
 import { computeBenchmarkMetrics } from './benchmark-metrics';
 import { createBenchmarkRepository } from './benchmark-repository';
@@ -28,7 +29,26 @@ type BenchmarkRunnerResult = {
   readonly completedQueryCount: number;
   readonly failedQueryCount: number;
   readonly skippedQueryCount: number;
+  readonly terminalProviderFailureCode: string | null;
 };
+
+const TERMINAL_PROVIDER_FAILURE_PATTERN =
+  /^benchmark_(?:gemini|openai|perplexity)_(?:api_key_missing|http_(?:401|403))$/;
+
+export function terminalBenchmarkProviderFailureCode(
+  results: readonly Pick<BenchmarkExecutionResult, 'status' | 'errorMessage'>[]
+): string | null {
+  for (const result of results) {
+    if (
+      result.status === 'failed' &&
+      result.errorMessage &&
+      TERMINAL_PROVIDER_FAILURE_PATTERN.test(result.errorMessage)
+    ) {
+      return result.errorMessage;
+    }
+  }
+  return null;
+}
 
 function buildDefaultRunLabel(input: BenchmarkRunnerInput): string {
   return `benchmark-${input.runMode ?? DEFAULT_BENCHMARK_RUN_MODE}-${input.modelId}-${new Date().toISOString()}`;
@@ -165,6 +185,9 @@ export async function runBenchmarkGroupSkeleton(
   const failedQueryCount = executionResults.filter(
     ({ execution }) => execution.status === 'failed'
   ).length;
+  const terminalProviderFailureCode = terminalBenchmarkProviderFailureCode(
+    executionResults.map(({ execution }) => execution)
+  );
 
   const queryRunIdByQueryId = new Map(queryRuns.map((row) => [row.query_id, row.id] as const));
   const trackedCompetitors = Array.isArray(input.runMetadata?.['tracked_competitor_domains'])
@@ -282,6 +305,7 @@ export async function runBenchmarkGroupSkeleton(
       completed_query_count: completedQueryCount,
       failed_query_count: failedQueryCount,
       skipped_query_count: skippedQueryCount,
+      terminal_provider_failure_code: terminalProviderFailureCode,
       citation_count: storedCitations.length,
       exact_page_quality_rate: computedMetrics.exactPageQualityRate,
       exact_page_matched_runs: computedMetrics.metrics.exact_page_matched_runs,
@@ -294,6 +318,7 @@ export async function runBenchmarkGroupSkeleton(
     query_run_count: queryRuns.length,
     failed_query_count: failedQueryCount,
     skipped_query_count: skippedQueryCount,
+    terminal_provider_failure_code: terminalProviderFailureCode,
     citation_count: storedCitations.length,
     model_id: input.modelId,
     run_mode: runMode,
@@ -305,5 +330,6 @@ export async function runBenchmarkGroupSkeleton(
     completedQueryCount,
     failedQueryCount,
     skippedQueryCount: skippedQueryCount,
+    terminalProviderFailureCode,
   };
 }

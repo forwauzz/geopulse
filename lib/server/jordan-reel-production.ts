@@ -166,7 +166,9 @@ export function shouldPlanJordanReel(args: {
 function cleanLine(value: string, max: number): string {
   return value
     .replace(/https?:\/\/\S+/g, '')
-    .replace(/#\w+/g, '')
+    // Strip social hashtags (#AIVisibility) but keep ordinals like "#1" — "ranks #1"
+    // is load-bearing copy for a Reel about search position.
+    .replace(/#(?=[A-Za-z])\w+/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/[.!?]+$/, '')
@@ -174,18 +176,57 @@ function cleanLine(value: string, max: number): string {
     .trim();
 }
 
-function words(value: string, maxWords: number, maxChars: number): string {
-  const selected = cleanLine(value, Math.max(maxChars * 2, 200))
+// A line that stops on one of these reads as a fragment, not a statement. Dropping
+// trailing words to fit a width is what produced "...when it tells you what to" on
+// seven consecutive published Reels — the sentence lost its final word and nobody saw it.
+const DANGLING_TAIL_WORDS = new Set([
+  'a', 'about', 'across', 'after', 'against', 'an', 'and', 'are', 'as', 'at', 'be', 'because',
+  'been', 'before', 'behind', 'below', 'between', 'but', 'by', 'can', 'do', 'does', 'for',
+  'from', 'had', 'has', 'have', 'how', 'if', 'in', 'into', 'is', 'it', 'its', 'just', 'may',
+  'might', 'must', 'no', 'not', 'of', 'off', 'on', 'onto', 'or', 'our', 'over', 'should', 'so',
+  'than', 'that', 'the', 'their', 'them', 'then', 'these', 'they', 'this', 'those', 'through',
+  'to', 'under', 'until', 'up', 'was', 'we', 'were', 'what', 'when', 'where', 'which', 'while',
+  'who', 'why', 'will', 'with', 'would', 'you', 'your',
+]);
+
+function readsComplete(value: string): boolean {
+  const tail = value
     .split(' ')
     .filter(Boolean)
-    .slice(0, maxWords)
-    .join(' ');
-  if (selected.length <= maxChars) return selected;
-  const completeWords = selected.split(' ');
-  while (completeWords.length > 1 && completeWords.join(' ').length > maxChars) {
-    completeWords.pop();
+    .pop()
+    ?.toLowerCase()
+    .replace(/[^a-z0-9']/g, '') ?? '';
+  if (tail.length === 0) return false;
+  // A number is always a finished thought — "ranks #1", "top 20", "in 2026".
+  if (/\d/.test(tail)) return true;
+  return !DANGLING_TAIL_WORDS.has(tail);
+}
+
+// Returns a phrase that fits `maxChars` AND reads as a finished thought, or '' so the
+// caller can try the next candidate.
+//
+// Deliberately only accepts the WHOLE cleaned line or a cut at a real clause boundary.
+// It never sheds arbitrary trailing words to make something fit: a stopword list cannot
+// tell that "...only useful when it tells" is unfinished, so any shed-until-it-fits rule
+// eventually publishes a fragment. A correct generic fallback beats a mangled specific.
+function phrase(value: string, maxChars: number): string {
+  const cleaned = cleanLine(value, 400);
+  if (!cleaned) return '';
+  if (cleaned.length <= maxChars && readsComplete(cleaned)) return cleaned;
+
+  const boundaries = [...cleaned.matchAll(/[,;:]\s|\s[—–]\s/g)].reverse();
+  for (const boundary of boundaries) {
+    const candidate = cleaned.slice(0, boundary.index).trim().replace(/[,;:]$/, '').trim();
+    if (candidate.length <= maxChars && candidate.length >= 16 && readsComplete(candidate)) {
+      return candidate;
+    }
   }
-  return completeWords.join(' ');
+  return '';
+}
+
+function sameLine(left: string, right: string): boolean {
+  const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return normalise(left) === normalise(right);
 }
 
 function categoryFor(kind: string): JordanReelCategory {
@@ -195,6 +236,9 @@ function categoryFor(kind: string): JordanReelCategory {
   return 'educational';
 }
 
+// `existingAssets` is what stops the same top-ranked candidate winning every slot: a
+// candidate whose rendered script matches one already produced is skipped. Without it this
+// was a plain `.find()`, and August 2026 shipped the same Reel seven times running.
 export function chooseJordanReelSource<T extends ReelSource>(
   candidates: ReadonlyArray<T>,
   categories: readonly JordanReelCategory[],
@@ -216,6 +260,24 @@ export function chooseJordanReelSource<T extends ReelSource>(
   }) ?? null;
 }
 
+// The compare scene renders `top ≠ bottom`. A contrast the source did not actually make
+// is a fabricated claim, so we only ever use an explicit pair from the evidence, or fall
+// back to GEO-Pulse's own thesis — which is a statement about the category, not about the
+// source. The previous hardcoded 'AI READY' bottom half was never a contrast at all.
+const THESIS_COMPARISON = { top: 'RANKING', bottom: 'BEING CITED' } as const;
+
+function firstDistinctPhrase(
+  candidates: ReadonlyArray<unknown>,
+  maxChars: number,
+  taken: ReadonlyArray<string>
+): string {
+  for (const candidate of candidates) {
+    const built = phrase(String(candidate ?? ''), maxChars);
+    if (built && !taken.some((existing) => sameLine(existing, built))) return built;
+  }
+  return '';
+}
+
 function reelScriptSignature(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
@@ -235,39 +297,44 @@ function reelScriptSignature(value: unknown): string | null {
 }
 
 export function buildJordanReelScript(source: ReelSource): JordanReelScript {
-  const hook = words(
-    String(source.evidence['trend_hook'] ?? source.evidence['hook'] ?? source.title),
-    10,
-    72
-  );
-  const angle = words(
-    String(source.evidence['original_angle'] ?? source.caption),
-    12,
-    96
-  );
-  const titleWords = words(source.title, 7, 58);
-  const comparisonTop = words(
-    String(source.evidence['comparison_top'] ?? titleWords.split(/\b(?:vs|versus|not)\b/i)[0] ?? titleWords),
-    3,
-    24
-  ) || 'VISIBLE';
-  const comparisonBottom = words(
-    String(source.evidence['comparison_bottom'] ?? 'AI READY'),
-    3,
-    24
-  ) || 'AI READY';
+  const hook = firstDistinctPhrase(
+    [source.evidence['trend_hook'], source.evidence['hook'], source.title],
+    72,
+    []
+  ) || 'AI search changed the brief';
+
+  const tension = firstDistinctPhrase(
+    [source.evidence['original_angle'], source.caption, source.title],
+    96,
+    [hook]
+  ) || 'Ranking and recommendation are not the same signal';
+
+  // Must not restate the hook — when both fell back to source.title the Reel opened and
+  // closed on the identical line, which is what shipped seven times in August 2026.
+  const diagnostic = firstDistinctPhrase(
+    [source.evidence['diagnostic'], source.title, source.caption, source.evidence['original_angle']],
+    64,
+    [hook, tension]
+  ) || 'Find the visibility gap';
+
+  const explicitTop = phrase(String(source.evidence['comparison_top'] ?? ''), 24);
+  const explicitBottom = phrase(String(source.evidence['comparison_bottom'] ?? ''), 24);
+  const hasRealContrast = Boolean(explicitTop && explicitBottom && !sameLine(explicitTop, explicitBottom));
+  const comparisonTop = hasRealContrast ? explicitTop : THESIS_COMPARISON.top;
+  const comparisonBottom = hasRealContrast ? explicitBottom : THESIS_COMPARISON.bottom;
 
   return {
     template: 'diagnostic-kinetic-v1',
-    hook: hook || titleWords || 'AI SEARCH CHANGED',
-    tension: angle || 'Ranking and recommendation are not the same signal',
+    hook,
+    tension,
     comparisonTop: comparisonTop.toUpperCase(),
     comparisonBottom: comparisonBottom.toUpperCase(),
-    diagnostic: words(titleWords || angle, 8, 64) || 'FIND THE VISIBILITY GAP',
+    diagnostic,
     cta: 'RUN A FREE AI VISIBILITY SCAN',
     url: 'getgeopulse.com',
     sourceUrl: String(source.evidence['source_url']),
-    sourceLabel: words(String(source.evidence['source_label'] ?? 'Source-linked research'), 8, 64),
+    sourceLabel: phrase(String(source.evidence['source_label'] ?? 'Source-linked research'), 64)
+      || 'Source-linked research',
   };
 }
 

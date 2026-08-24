@@ -497,7 +497,7 @@ export async function executeBenchmarkScheduleSweep(args: {
           const scheduleSubvertical = typeof querySetMetadata['target_subcohort'] === 'string'
             ? querySetMetadata['target_subcohort']
             : 'not_applicable';
-          await args.runBenchmarkGroup(
+          const result = await args.runBenchmarkGroup(
             args.supabase,
             {
               domainId: domain.id,
@@ -530,6 +530,37 @@ export async function executeBenchmarkScheduleSweep(args: {
             args.adapter
           );
           launchedRuns += 1;
+          if (result.completedQueryCount === 0 && result.failedQueryCount > 0) {
+            failedRuns += 1;
+            structuredError('benchmark_schedule_persisted_group_failed', {
+              domain_id: domain.id,
+              canonical_domain: domain.canonical_domain,
+              query_set_id: domainQuerySet.id,
+              model_id: modelId,
+              run_mode: runMode,
+              failed_query_count: result.failedQueryCount,
+              skipped_query_count: result.skippedQueryCount,
+              terminal_provider_failure_code: result.terminalProviderFailureCode,
+              schedule_version: args.config.scheduleVersion,
+              schedule_window_utc: windowDate,
+            });
+            if (result.terminalProviderFailureCode) {
+              stoppedEarly = true;
+              structuredError('benchmark_schedule_terminal_provider_failure', {
+                domain_id: domain.id,
+                canonical_domain: domain.canonical_domain,
+                query_set_id: domainQuerySet.id,
+                model_id: modelId,
+                run_mode: runMode,
+                terminal_provider_failure_code: result.terminalProviderFailureCode,
+                launched_runs: launchedRuns,
+                failed_runs: failedRuns,
+                schedule_version: args.config.scheduleVersion,
+                schedule_window_utc: windowDate,
+              });
+              break outer;
+            }
+          }
         } catch (error) {
           failedRuns += 1;
           structuredError('benchmark_schedule_run_failed', {
