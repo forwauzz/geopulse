@@ -19,6 +19,7 @@ vi.mock('./distribution-engine-repository', async (importOriginal) => {
 import {
   claimNextJordanReel,
   completeJordanReelRender,
+  failJordanReelRender,
 } from './jordan-reel-render';
 
 const script = {
@@ -53,7 +54,7 @@ function asset(metadata: Record<string, unknown>) {
   } as never;
 }
 
-function supabaseStub() {
+function supabaseStub(recentVideoMetadata: Record<string, unknown>[] = []) {
   return {
     from(table: string) {
       let selectValue = '';
@@ -72,7 +73,11 @@ function supabaseStub() {
           if (table === 'distribution_jobs') {
             return { data: [{ id: 'job-row', publish_mode: 'scheduled', status: 'draft' }] };
           }
-          return { data: selectValue === 'metadata' ? [] : [] };
+          return {
+            data: selectValue === 'metadata'
+              ? recentVideoMetadata.map((metadata) => ({ metadata }))
+              : [],
+          };
         }),
       };
       return chain;
@@ -103,6 +108,88 @@ describe('Jordan Reel render handoff', () => {
       metadata: expect.objectContaining({
         reel_render_status: 'rendering',
         reel_template_id: 'diagnostic-kinetic-v1a',
+      }),
+    }));
+  });
+
+  it('uses the first template absent from the recent rendered set', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset({ reel_render_status: 'failed', reel_script: script }),
+    ]);
+    repo.upsertAsset.mockImplementation(async (input) => input);
+    const claim = await claimNextJordanReel(
+      supabaseStub([
+        { template_id: 'diagnostic-kinetic-v1a' },
+        { template_id: 'diagnostic-kinetic-v1b' },
+        { template_id: 'diagnostic-kinetic-v1a' },
+      ]),
+      new Date('2026-07-26T14:00:00.000Z')
+    );
+    expect(claim?.templateId).toBe('diagnostic-kinetic-v1c');
+  });
+
+  it('blocks before rendering when every safe template was recently used', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset({ reel_render_status: 'failed', reel_script: script, reel_render_attempt_count: 1 }),
+    ]);
+    repo.upsertAsset.mockImplementation(async (input) => input);
+    const claim = await claimNextJordanReel(
+      supabaseStub([
+        { template_id: 'diagnostic-kinetic-v1a' },
+        { template_id: 'diagnostic-kinetic-v1b' },
+        { template_id: 'diagnostic-kinetic-v1c' },
+      ]),
+      new Date('2026-07-26T14:00:00.000Z')
+    );
+    expect(claim).toBeNull();
+    expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        reel_render_status: 'blocked',
+        reel_render_error: 'template_inventory_exhausted',
+        reel_render_terminal: true,
+      }),
+    }));
+  });
+
+  it('quarantines an invalid script before any render attempt', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset({ reel_render_status: 'pending', reel_script: { ...script, sourceUrl: 'invented' } }),
+    ]);
+    repo.upsertAsset.mockImplementation(async (input) => input);
+    const claim = await claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-26T14:00:00.000Z')
+    );
+    expect(claim).toBeNull();
+    expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        reel_render_status: 'blocked',
+        reel_render_error: 'invalid_or_ungrounded_script',
+        reel_render_terminal: true,
+        reel_render_retryable: false,
+      }),
+    }));
+  });
+
+  it('quarantines duplicate media so the same failed asset cannot be rendered hourly', async () => {
+    repo.getAssetByAssetId.mockResolvedValue(asset({
+      reel_render_status: 'rendering',
+      reel_render_attempt_id: 'attempt-duplicate',
+      reel_render_attempt_count: 1,
+      reel_script: script,
+    }));
+    repo.upsertAsset.mockResolvedValue({});
+    await failJordanReelRender({
+      supabase: supabaseStub(),
+      assetId: 'proof_instagram_jordan-reel-2026-07-26-d0',
+      attemptId: 'attempt-duplicate',
+      error: 'complete_http_422_duplicate_media',
+    });
+    expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        reel_render_status: 'blocked',
+        reel_render_terminal: true,
+        reel_render_retryable: false,
       }),
     }));
   });

@@ -68,7 +68,7 @@ async function persistReportJobFailure(args: {
   readonly message: QueueMessage;
   readonly error: unknown;
   readonly env: CloudflareEnv;
-}): Promise<void> {
+}): Promise<{ readonly terminal: boolean }> {
   const job = parseReportQueueMessage(args.rawBody);
   const attempts = args.message.attempts ?? null;
   let replayedFromDlq = false;
@@ -85,7 +85,7 @@ async function persistReportJobFailure(args: {
   const event = terminal ? 'report_job_terminal_failure' : 'report_job_failed';
   const errorName = args.error instanceof Error ? args.error.name : 'UnknownError';
   const errorMessage = args.error instanceof Error ? args.error.message : 'unknown';
-  const data = {
+  const data: Record<string, string | number | boolean | null> = {
     scanId: job?.scanId ?? null,
     paymentId: job?.paymentId ?? null,
     errorName,
@@ -100,10 +100,21 @@ async function persistReportJobFailure(args: {
       args.env.NEXT_PUBLIC_SUPABASE_URL,
       args.env.SUPABASE_SERVICE_ROLE_KEY
     );
+    if (terminal && job?.scanId) {
+      const { error: scanStateError } = await supabase
+        .from('scans')
+        .update({ status: 'failed', updated_at: new Date().toISOString() })
+        .eq('id', job.scanId)
+        .eq('status', 'queued');
+      if (scanStateError) {
+        data.scanStateError = scanStateError.message.slice(0, 200);
+      }
+    }
     await structuredLogWithClientAndWait(supabase, event, data, 'error');
-    return;
+    return { terminal };
   }
   await structuredLogAndWait(event, data, 'error');
+  return { terminal };
 }
 
 export function planDeepAuditCrawlRecovery(
@@ -559,8 +570,9 @@ export async function dispatchQueueBatch(batch: ReportQueueBatch, env: Cloudflar
       await processReportJob(rawBody, env);
       m.ack();
     } catch (err) {
-      await persistReportJobFailure({ rawBody, message: m, error: err, env });
-      m.retry();
+      const failure = await persistReportJobFailure({ rawBody, message: m, error: err, env });
+      if (failure.terminal) m.ack();
+      else m.retry();
     }
   }
 }

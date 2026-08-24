@@ -21,6 +21,21 @@ export const PUBLIC_LEGACY_REDIRECTS: readonly PublicLegacyRedirect[] = [
     permanent: true,
   },
   {
+    source: '/blog/how-to-make-a-product-page-easier-for-ai-search',
+    destination: '/blog/product-pages-ai-search',
+    permanent: true,
+  },
+  {
+    source: '/blog/how-to-audit-your-site-for-ai-search-readiness',
+    destination: '/blog/ai-search-readiness-audit',
+    permanent: true,
+  },
+  {
+    source: '/blog/mixed-intent-content',
+    destination: '/blog/mixed-intent-content-that-confuses-buyers-and-models',
+    permanent: true,
+  },
+  {
     source: '/blog/long-intro-low-utility-content-pattern',
     destination: '/blog/crawlable-but-not-extractable',
     permanent: true,

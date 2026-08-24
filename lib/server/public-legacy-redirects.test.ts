@@ -33,4 +33,30 @@ describe('public legacy redirects', () => {
       ])
     );
   });
+
+  it('redirects only proven legacy article slugs to their maintained canonicals', () => {
+    expect(PUBLIC_LEGACY_REDIRECTS).toEqual(
+      expect.arrayContaining([
+        {
+          source: '/blog/how-to-audit-your-site-for-ai-search-readiness',
+          destination: '/blog/ai-search-readiness-audit',
+          permanent: true,
+        },
+        {
+          source: '/blog/how-to-make-a-product-page-easier-for-ai-search',
+          destination: '/blog/product-pages-ai-search',
+          permanent: true,
+        },
+        {
+          source: '/blog/mixed-intent-content',
+          destination: '/blog/mixed-intent-content-that-confuses-buyers-and-models',
+          permanent: true,
+        },
+      ])
+    );
+
+    expect(PUBLIC_LEGACY_REDIRECTS.map((redirect) => redirect.source)).not.toContain(
+      '/blog/vertical-strategy'
+    );
+  });
 });

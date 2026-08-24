@@ -129,6 +129,26 @@ describe('Jordan autonomous Reel production', () => {
     expect(script.url).toBe('getgeopulse.com');
   });
 
+  it('rotates away from a previously rendered script instead of repeating its media', () => {
+    const alternate = {
+      ...source,
+      key: 'sofia-service-proof',
+      title: 'Show the service evidence before the promise',
+      evidence: {
+        ...source.evidence,
+        hook: 'Lead with the service evidence an MSP buyer can verify.',
+        original_angle: 'Make the offer, service area, proof, and next action agree.',
+      },
+    };
+    const existing = asset({
+      metadata: { reel_script: buildJordanReelScript(source) },
+    });
+
+    expect(chooseJordanReelSource([source, alternate], ['timely'], [existing]))
+      .toEqual(alternate);
+    expect(chooseJordanReelSource([source], ['timely'], [existing])).toBeNull();
+  });
+
   it('never truncates a Reel line in the middle of a word', () => {
     const script = buildJordanReelScript({
       ...source,
@@ -141,4 +161,60 @@ describe('Jordan autonomous Reel production', () => {
     expect(script.hook).toBe('The next SEO brief may include actions, not just rankings');
     expect(script.tension).not.toMatch(/\s[a-z]$/);
   });
+
+  // Regression: the exact copy that published seven times in August 2026. The caption is
+  // thirteen words and the old builder capped `tension` at twelve, silently amputating
+  // "fix." and leaving the line hanging on a preposition.
+  it('never ends a Reel line on a dangling word', () => {
+    const script = buildJordanReelScript({
+      ...source,
+      title: 'What an AI-readiness audit actually shows',
+      caption: 'An AI-visibility score is only useful when it tells you what to fix.',
+      evidence: {
+        source_url: 'https://getgeopulse.com/methodology/ai-search-readiness-audit',
+        source_label: 'GEO-Pulse product behavior',
+      },
+    });
+    expect(script.tension).not.toMatch(/\bto$/);
+    for (const line of [script.hook, script.tension, script.diagnostic]) {
+      expect(line).not.toMatch(
+        /\b(?:to|the|a|an|of|for|when|what|and|or|with|that|your|it|is|not|just)$/i
+      );
+    }
+  });
+
+  it('does not restate the hook as the diagnostic payoff', () => {
+    const script = buildJordanReelScript({
+      ...source,
+      title: 'What an AI-readiness audit actually shows',
+      caption: 'An AI-visibility score is only useful when it tells you what to fix.',
+      evidence: {
+        source_url: 'https://getgeopulse.com/methodology/ai-search-readiness-audit',
+        source_label: 'GEO-Pulse product behavior',
+      },
+    });
+    const normalise = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    expect(normalise(script.diagnostic)).not.toBe(normalise(script.hook));
+    expect(normalise(script.tension)).not.toBe(normalise(script.hook));
+  });
+
+  it('never renders a comparison whose halves are not a contrast', () => {
+    const withoutContrast = buildJordanReelScript(source);
+    expect(withoutContrast.comparisonTop).not.toBe(withoutContrast.comparisonBottom);
+    // 'AI READY' used to be hardcoded as the bottom half of every Reel ever produced,
+    // paired against a truncated fragment of the title.
+    expect(withoutContrast.comparisonTop).not.toMatch(/^WHAT AN /);
+
+    const withContrast = buildJordanReelScript({
+      ...source,
+      evidence: {
+        ...source.evidence,
+        comparison_top: 'Ranks #1',
+        comparison_bottom: 'Absent from AI',
+      },
+    });
+    expect(withContrast.comparisonTop).toBe('RANKS #1');
+    expect(withContrast.comparisonBottom).toBe('ABSENT FROM AI');
+  });
+
 });

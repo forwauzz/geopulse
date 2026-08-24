@@ -28,11 +28,14 @@ const job = JSON.stringify({
 });
 
 describe('report queue terminal failure logging', () => {
-  it('awaits a durable, identified terminal log before retrying the final replay attempt', async () => {
+  it('awaits a durable terminal log, marks a queued scan failed, and acknowledges the final replay attempt', async () => {
     let releaseLog!: () => void;
     const durableLog = new Promise<void>((resolve) => { releaseLog = resolve; });
     mocks.structuredLogWithClientAndWait.mockReturnValueOnce(durableLog);
-    const db = { from: vi.fn() };
+    const finalEq = vi.fn().mockResolvedValue({ error: null });
+    const firstEq = vi.fn(() => ({ eq: finalEq }));
+    const update = vi.fn(() => ({ eq: firstEq }));
+    const db = { from: vi.fn(() => ({ update })) };
     mocks.createServiceRoleClient.mockReturnValue(db);
     const ack = vi.fn();
     const retry = vi.fn();
@@ -66,8 +69,12 @@ describe('report queue terminal failure logging', () => {
 
     releaseLog();
     await dispatch;
-    expect(ack).not.toHaveBeenCalled();
-    expect(retry).toHaveBeenCalledOnce();
+    expect(db.from).toHaveBeenCalledWith('scans');
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed' }));
+    expect(firstEq).toHaveBeenCalledWith('id', 'scan-96737074');
+    expect(finalEq).toHaveBeenCalledWith('status', 'queued');
+    expect(ack).toHaveBeenCalledOnce();
+    expect(retry).not.toHaveBeenCalled();
   });
 
   it('classifies a first-cycle failure as retryable while retaining scan identity', async () => {

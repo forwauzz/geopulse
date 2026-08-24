@@ -145,6 +145,60 @@ describe('production repair orchestration scripts', () => {
     }
   });
 
+  it('grants only the merge controller the workflow check authority it uses', async () => {
+    const workflow = await readFile(new URL('../../.github/workflows/repair-loop.yml', import.meta.url), 'utf8');
+    const match = /\n  merge-controller:([\s\S]*?)\n  feedback:/.exec(workflow);
+    expect(match).not.toBeNull();
+    const controller = match?.[1] ?? '';
+    expect(controller).toContain('checks: write');
+    expect(controller).toContain('REPAIR_GITHUB_ACTIONS_TOKEN: ${{ github.token }}');
+    expect(workflow).toContain("--label 'owner:codex'");
+  });
+
+  it('acknowledges a fresh exhausted lineage without failing every scheduler run', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'repair-production-exhausted-noop-'));
+    temporaryDirectories.push(directory);
+    const outputPath = join(directory, 'repair.json');
+    const server = await listen((request, response): void => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.url === '/v1/scopes/claim') {
+        response.end(JSON.stringify({ scope: null }));
+        return;
+      }
+      if (request.url === '/v1/status') {
+        response.end(JSON.stringify({
+          pendingScopes: [],
+          auditHistory: [{
+            producer: 'canonical-cloudflare-scheduler',
+            outcome: 'duplicate',
+            auditRunId: 'audit-exhausted-fresh',
+            recordedAt: new Date().toISOString(),
+            reasons: ['repair defect is exhausted and its owned incident remains open'],
+          }],
+        }));
+        return;
+      }
+      response.writeHead(404).end('{}');
+    });
+    try {
+      await expect(execFileAsync(process.execPath, [productionRepairScript], { env: {
+        ...process.env,
+        REPAIR_AGENT_URL: server.url,
+        REPAIR_AGENT_API_TOKEN: 'test-token',
+        REPAIR_RUN_ID: 'production-exhausted-noop-123456',
+        REPAIR_OUTPUT: outputPath,
+        REPAIR_REPOSITORY_ROOT: directory,
+      } })).resolves.toMatchObject({ stdout: expect.stringContaining('"queued":false') });
+      expect(JSON.parse(await readFile(outputPath, 'utf8'))).toMatchObject({
+        queued: false,
+        auditRunId: 'audit-exhausted-fresh',
+        reason: expect.stringContaining('owned incident'),
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('reconciles merged state, acknowledges only after deployment QA, then closes the issue', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'repair-production-finalize-'));
     temporaryDirectories.push(directory);
@@ -315,7 +369,12 @@ describe('production repair orchestration scripts', () => {
       const url = request.url ?? '';
       if (url === '/health') { response.end(JSON.stringify({ ok: true, mode: 'shadow', productionMutationsEnabled: false, killSwitch: false })); return; }
       if (url.endsWith('/actions/variables/REPAIR_LOOP_ENABLED')) { response.end(JSON.stringify({ value: 'true' })); return; }
-      if (url.endsWith('/check-runs') && request.method === 'POST') { response.end(JSON.stringify(checkRuns.get(600))); return; }
+      if (url.endsWith('/check-runs') && request.method === 'POST') {
+        response.end(JSON.stringify(request.headers.authorization === 'Bearer actions-token'
+          ? { id: 604, name: 'verify', head_sha: headSha, status: 'completed', conclusion: 'success', app: { slug: 'github-actions', id: 15368 } }
+          : checkRuns.get(600)));
+        return;
+      }
       const checkId = /\/check-runs\/(\d+)$/.exec(url)?.[1];
       if (checkId) { response.end(JSON.stringify(checkRuns.get(Number(checkId)))); return; }
       if (url.includes(`/commits/${headSha}/check-runs`)) { response.end(JSON.stringify({ check_runs: [checkRuns.get(503)] })); return; }
@@ -338,7 +397,7 @@ describe('production repair orchestration scripts', () => {
     });
     try {
       await expect(execFileAsync(process.execPath, [tsxCli, mergeScript], { env: {
-        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url,
+        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url, REPAIR_GITHUB_ACTIONS_TOKEN: 'actions-token',
         REPAIR_MERGE_APP_TOKEN: 'merge-token', REPAIR_AGENT_URL: server.url, REPAIR_AGENT_API_TOKEN: 'repair-token',
         REPAIR_ENGINEER_EVIDENCE: engineerPath, REPAIR_REVIEW_VERDICT: reviewerPath, REPAIR_QA_VERDICT: qaPath,
         REPAIR_MERGE_OUTPUT: outputPath, REPAIR_PR_NUMBER: '8', REPAIR_ISSUE_NUMBER: '7', REPAIR_AUTONOMOUS_MERGE_ENABLED: 'true',
@@ -392,7 +451,13 @@ describe('production repair orchestration scripts', () => {
       const url = request.url ?? '';
       if (url === '/health') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ ok: true, mode: 'shadow', productionMutationsEnabled: false, killSwitch: false })); return; }
       if (url.endsWith('/actions/variables/REPAIR_LOOP_ENABLED')) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ value: 'true' })); return; }
-      if (url.endsWith('/check-runs') && request.method === 'POST') { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(checkRuns.get(700))); return; }
+      if (url.endsWith('/check-runs') && request.method === 'POST') {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify(request.headers.authorization === 'Bearer actions-token'
+          ? { id: 704, name: 'verify', head_sha: headSha, status: 'completed', conclusion: 'success', app: { slug: 'github-actions', id: 15368 } }
+          : checkRuns.get(700)));
+        return;
+      }
       const checkId = /\/check-runs\/(\d+)$/.exec(url)?.[1];
       if (checkId) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(checkRuns.get(Number(checkId)))); return; }
       if (url.includes(`/commits/${headSha}/check-runs`)) { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ check_runs: [checkRuns.get(703)] })); return; }
@@ -411,7 +476,7 @@ describe('production repair orchestration scripts', () => {
     });
     try {
       await expect(execFileAsync(process.execPath, [tsxCli, mergeScript], { env: {
-        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url,
+        ...process.env, GITHUB_REPOSITORY: 'forwauzz/geopulse', GITHUB_API_URL: server.url, REPAIR_GITHUB_ACTIONS_TOKEN: 'actions-token',
         REPAIR_MERGE_APP_TOKEN: 'merge-token', REPAIR_AGENT_URL: server.url, REPAIR_AGENT_API_TOKEN: 'repair-token',
         REPAIR_ENGINEER_EVIDENCE: engineerPath, REPAIR_REVIEW_VERDICT: reviewerPath, REPAIR_QA_VERDICT: qaPath,
         REPAIR_MERGE_OUTPUT: outputPath, REPAIR_PR_NUMBER: '8', REPAIR_ISSUE_NUMBER: '7', REPAIR_AUTONOMOUS_MERGE_ENABLED: 'true',
