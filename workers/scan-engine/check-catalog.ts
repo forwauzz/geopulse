@@ -8,7 +8,8 @@
  *   - hygiene        (Bucket C) — good practice worth reporting, but NOT a citation
  *                     lever. Hygiene never influences the AI-readiness score.
  *
- * llms.txt is deliberately weight 0: no major engine honors it as a citation signal
+ * llms.txt is deliberately weight 0: the v2 proposal improves agent-readable discovery,
+ * but none of the watched engines documents it as a ranking or citation signal.
  * (Google says it does nothing for Search). It is offered as an optional experiment
  * with no score penalty and no promised benefit.
  */
@@ -172,7 +173,7 @@ export const CHECK_CATALOG: readonly CatalogEntry[] = [
     id: 'llms-txt',
     bucket: 'hygiene',
     weight: 0,
-    whyItMatters: 'Optional experiment. No major engine honors llms.txt as a citation signal today; publishing one neither helps nor hurts your score.',
+    whyItMatters: 'Optional agent-readable overview. No watched engine documents llms.txt as a ranking or citation signal; publishing one neither helps nor hurts your score.',
   },
 ];
 
