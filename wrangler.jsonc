@@ -111,7 +111,9 @@
     // Primary recurring benchmark lane: one explicit Quebec MSP comparison frame.
     // Keep query set, domains, model, modes, and schedule version frozen together so
     // cohort expansion cannot silently mix law-firm, startup, customer, or challenger data.
-    "BENCHMARK_SCHEDULE_ENABLED": "true",
+    // Fail closed while the Perplexity API credential is unavailable. Keep the frozen
+    // protocol below intact so reactivation requires only a validated credential and review.
+    "BENCHMARK_SCHEDULE_ENABLED": "false",
     "BENCHMARK_SCHEDULE_QUERY_SET_ID": "9cd3b0fc-8082-4d82-9548-f6f788e0b1b9",
     // Freeze one model lane for commercial comparability during the MSP pilot. Provider changes
     // start a fresh explicit schedule version rather than mixing incompatible observations.
@@ -139,7 +141,8 @@
     "BENCHMARK_SCHEDULE_VERSION": "msp-perplexity-v4-cohort10",
     // One bounded challenger vertical. Explicit-domain and one-run caps keep MSP primary;
     // the query set itself remains internal-only and aggregate/public claims fail closed.
-    "BENCHMARK_CHALLENGER_ENABLED": "true",
+    // The challenger uses the same unavailable Perplexity credential as the primary lane.
+    "BENCHMARK_CHALLENGER_ENABLED": "false",
     "BENCHMARK_CHALLENGER_QUERY_SET_ID": "89500ed0-6cb4-4ced-9a6f-683330c98302",
     "BENCHMARK_CHALLENGER_MODEL_ID": "sonar",
     "BENCHMARK_CHALLENGER_RUN_MODES": "blind_discovery",
