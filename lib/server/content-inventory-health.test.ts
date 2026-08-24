@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  contentInventoryLookahead,
   evaluateContentInventoryHealth,
   REQUIRED_CONTENT_FORMATS,
   requiredContentFormatsForConnectedProviders,
@@ -46,5 +47,9 @@ describe('content inventory health', () => {
     ]);
     expect(requiredContentFormatsForConnectedProviders(['instagram', 'linkedin']))
       .toEqual(REQUIRED_CONTENT_FORMATS);
+  });
+
+  it('queries beyond the 12-day floor by one full cadence interval', () => {
+    expect(contentInventoryLookahead(now)).toBe('2026-08-28T00:00:00.000Z');
   });
 });

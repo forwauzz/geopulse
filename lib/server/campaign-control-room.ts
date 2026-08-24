@@ -46,6 +46,20 @@ export type CampaignControlRoom = {
 type Row = Record<string, unknown>;
 type SupabaseLike = SupabaseClient<any, 'public', any>;
 
+export function agentNeedsOperationalAction(
+  agent: Pick<AgentStatus, 'blockers'>,
+): boolean {
+  // A cleanly disabled capability is an intentional fail-closed state, not an
+  // incident. Only a concrete dependency/configuration blocker creates work.
+  return agent.blockers.length > 0;
+}
+
+export function agentCampaignIsOperationallyRelevant(
+  agent: Pick<AgentStatus, 'enabled' | 'blockers'> | undefined,
+): boolean {
+  return !agent || agent.enabled || agent.blockers.length > 0;
+}
+
 async function safeRows(query: PromiseLike<{ data: unknown[] | null; error: unknown }>): Promise<Row[]> {
   try {
     const result = await query;
@@ -488,7 +502,8 @@ export async function loadCampaignControlRoom(args: {
   }
 
   const latestBenchmark = benchmarkRuns[0];
-  if (latestBenchmark) {
+  const benchmarkAgent = args.agents.find((agent) => agent.key === 'benchmark');
+  if (latestBenchmark && agentCampaignIsOperationallyRelevant(benchmarkAgent)) {
     const fallback = completedBenchmarkSibling(latestBenchmark, benchmarkRuns);
     const status = fallback ? 'completed_with_provider_fallback' : text(latestBenchmark, 'status') ?? 'unknown';
     const lastAt = text(latestBenchmark, 'completed_at') ?? text(latestBenchmark, 'created_at');
@@ -607,7 +622,7 @@ export async function loadCampaignControlRoom(args: {
     });
 
   for (const agent of args.agents) {
-    if (agent.enabled && agent.blockers.length === 0) continue;
+    if (!agentNeedsOperationalAction(agent)) continue;
     actions.push({
       key: `agent:${agent.key}`,
       severity: agent.blockers.length > 0 ? 'now' : 'watch',

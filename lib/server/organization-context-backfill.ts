@@ -36,6 +36,49 @@ function string(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+export function isOperationsExcludedContextConfig(metadata: unknown): boolean {
+  return record(metadata)['operations_excluded'] === true;
+}
+
+async function retireOperationsExcludedContextLoop(args: {
+  readonly supabase: SupabaseLike;
+  readonly configId: string;
+  readonly now: string;
+}): Promise<boolean | null> {
+  const { data: config, error: configError } = await args.supabase
+    .from('client_benchmark_configs')
+    .select('metadata')
+    .eq('id', args.configId)
+    .maybeSingle();
+  if (configError) throw configError;
+  if (!isOperationsExcludedContextConfig(config?.metadata)) return null;
+
+  const { data: openLoops, error: loopReadError } = await args.supabase
+    .from('agent_work_loops')
+    .select('id,evidence')
+    .in('source_type', ['organization_context_backfill', 'organization_context_change'])
+    .eq('source_key', args.configId)
+    .in('state', ['discovered', 'assigned', 'executing', 'verifying', 'blocked']);
+  if (loopReadError) throw loopReadError;
+  for (const loop of openLoops ?? []) {
+    const { error: loopError } = await args.supabase.from('agent_work_loops').update({
+      state: 'dismissed',
+      blocker: null,
+      next_action: null,
+      founder_required: false,
+      evidence: {
+        ...record(loop.evidence),
+        closure: 'operations_excluded_context_config',
+      },
+      verified_at: args.now,
+      resolved_at: args.now,
+    })
+      .eq('id', loop.id);
+    if (loopError) throw loopError;
+  }
+  return (openLoops ?? []).length > 0;
+}
+
 export type OrganizationContextBackfillPreview = {
   readonly mode: 'preview';
   readonly contractVersion: typeof ORGANIZATION_CONTEXT_BACKFILL_VERSION;
@@ -227,6 +270,12 @@ export function createSupabaseOrganizationContextBackfillStore(
     },
 
     async applyReady(plan, now) {
+      const excluded = await retireOperationsExcludedContextLoop({
+        supabase,
+        configId: plan.configId,
+        now,
+      });
+      if (excluded !== null) return excluded;
       if (!plan.context || !plan.ownerType || !plan.ownerId || !plan.domainId) {
         throw new Error(`Ready plan ${plan.configId} is missing its exact context scope.`);
       }
@@ -261,6 +310,12 @@ export function createSupabaseOrganizationContextBackfillStore(
     },
 
     async applyUnresolved(plan, now) {
+      const excluded = await retireOperationsExcludedContextLoop({
+        supabase,
+        configId: plan.configId,
+        now,
+      });
+      if (excluded !== null) return excluded;
       const { data: config, error: configReadError } = await supabase
         .from('client_benchmark_configs')
         .select('metadata')
