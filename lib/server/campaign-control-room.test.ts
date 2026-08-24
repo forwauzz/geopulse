@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agentCampaignIsOperationallyRelevant,
+  agentNeedsOperationalAction,
   completedBenchmarkSibling,
   isOperationsExcludedBenchmarkConfig,
   socialExperimentDetail,
@@ -7,6 +9,22 @@ import {
   summarizeRuntimeHealth,
   type CampaignItem,
 } from './campaign-control-room';
+
+describe('agentNeedsOperationalAction', () => {
+  it('does not turn an intentional fail-closed pause into repair work', () => {
+    expect(agentNeedsOperationalAction({ blockers: [] })).toBe(false);
+    expect(agentNeedsOperationalAction({ blockers: ['credential missing'] })).toBe(true);
+  });
+});
+
+describe('agentCampaignIsOperationallyRelevant', () => {
+  it('hides historical failures only while a capability is cleanly disabled', () => {
+    expect(agentCampaignIsOperationallyRelevant(undefined)).toBe(true);
+    expect(agentCampaignIsOperationallyRelevant({ enabled: true, blockers: [] })).toBe(true);
+    expect(agentCampaignIsOperationallyRelevant({ enabled: false, blockers: ['credential missing'] })).toBe(true);
+    expect(agentCampaignIsOperationallyRelevant({ enabled: false, blockers: [] })).toBe(false);
+  });
+});
 
 describe('completedBenchmarkSibling', () => {
   const cohort = {

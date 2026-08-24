@@ -8,6 +8,7 @@ import type {
 import type { OrganizationContext } from '../intelligence/organization-context';
 import {
   applyOrganizationContextBackfill,
+  isOperationsExcludedContextConfig,
   previewOrganizationContextBackfill,
   type OrganizationContextBackfillCheckpoint,
   type OrganizationContextBackfillStore,
@@ -54,6 +55,12 @@ function memoryStore(sources: readonly OrganizationContextBackfillSource[]) {
 }
 
 describe('organization context backfill workflow', () => {
+  it('treats only an explicit operations exclusion as terminal', () => {
+    expect(isOperationsExcludedContextConfig({ operations_excluded: true })).toBe(true);
+    expect(isOperationsExcludedContextConfig({ operations_excluded: false })).toBe(false);
+    expect(isOperationsExcludedContextConfig({ operations_excluded_reason: 'fixture' })).toBe(false);
+  });
+
   it('previews every record without calling any write method', async () => {
     const memory = memoryStore([source('a'), source('b', false)]);
     const result = await previewOrganizationContextBackfill({ store: memory.store, pageSize: 1 });

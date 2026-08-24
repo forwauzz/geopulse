@@ -5,6 +5,7 @@ import {
   exhaustedRepairAssignment,
   isContentLoopSatisfied,
   prioritizeWithAcceptedLearning,
+  RECONCILABLE_LOOP_STATES,
   retryIsDue,
   selectSeoFamilyIdsToDefer,
   seoParentCanClose,
@@ -129,6 +130,11 @@ describe('closed-loop agent control', () => {
   it('keeps dismissed work stopped while allowing deferred discoveries to re-enter WIP', () => {
     expect(shouldReactivateExistingLoop('discovered')).toBe(true);
     expect(shouldReactivateExistingLoop('dismissed')).toBe(false);
+  });
+
+  it('reconciles deferred discoveries once their source work is satisfied', () => {
+    expect(RECONCILABLE_LOOP_STATES).toContain('discovered');
+    expect(RECONCILABLE_LOOP_STATES).not.toContain('dismissed');
   });
 
   it('skips a 403 prospect instead of leaving Maya with a repeating open loop', async () => {

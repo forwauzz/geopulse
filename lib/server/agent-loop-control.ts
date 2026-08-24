@@ -16,6 +16,15 @@ export type AgentLoopState =
   | 'completed'
   | 'dismissed';
 
+export const RECONCILABLE_LOOP_STATES = [
+  'discovered',
+  'assigned',
+  'executing',
+  'verifying',
+  'blocked',
+  'completed',
+] as const satisfies readonly AgentLoopState[];
+
 type SeoOpportunity = {
   id: string;
   opportunity_key: string;
@@ -596,7 +605,7 @@ export async function reconcileContentLoops(db: Db, now = new Date()): Promise<n
     .from('agent_work_loops')
     .select('id,source_key,state')
     .eq('source_type', 'content_item')
-    .in('state', ['assigned', 'executing', 'verifying', 'blocked', 'completed'])
+    .in('state', RECONCILABLE_LOOP_STATES)
     .limit(250);
   const loops = loopRows ?? [];
   if (!loops.length) return 0;
@@ -826,7 +835,7 @@ export async function closeSatisfiedSeoParents(db: Db, now = new Date()): Promis
     .from('agent_work_loops')
     .select('id,source_key')
     .eq('source_type', 'seo_opportunity')
-    .in('state', ['assigned', 'executing', 'verifying', 'completed'])
+    .in('state', RECONCILABLE_LOOP_STATES)
     .limit(250);
   let completed = 0;
   for (const parent of parents ?? []) {

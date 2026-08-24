@@ -22,6 +22,15 @@ export type ContentInventoryHealth = {
 type Job = { distribution_asset_id?: unknown; scheduled_for?: unknown };
 type Asset = { id?: unknown; provider_family?: unknown; asset_type?: unknown };
 
+export const CONTENT_INVENTORY_FLOOR_DAYS = 12;
+export const CONTENT_INVENTORY_LOOKAHEAD_DAYS = 16;
+
+export function contentInventoryLookahead(now: Date): string {
+  return new Date(
+    now.getTime() + CONTENT_INVENTORY_LOOKAHEAD_DAYS * 86_400_000,
+  ).toISOString();
+}
+
 export function requiredContentFormatsForConnectedProviders(
   providers: readonly string[],
 ): readonly string[] {
@@ -56,7 +65,7 @@ export function evaluateContentInventoryHealth(args: {
 
   const requiredFormats = args.requiredFormats ?? REQUIRED_CONTENT_FORMATS;
   const missingFormats = requiredFormats.filter((format) => !covered.has(format));
-  const horizonMinimum = args.now.getTime() + 12 * 86_400_000;
+  const horizonMinimum = args.now.getTime() + CONTENT_INVENTORY_FLOOR_DAYS * 86_400_000;
   const horizonCovered = Boolean(
     inventoryThrough && Date.parse(inventoryThrough) >= horizonMinimum,
   );
@@ -80,7 +89,10 @@ export async function loadContentInventoryHealth(
   db: Db,
   now = new Date(),
 ): Promise<ContentInventoryHealth> {
-  const horizon = new Date(now.getTime() + 14 * 86_400_000).toISOString();
+  // The approved social cadence can place the next item slightly more than 14 days
+  // away at some hourly checkpoints. Query one full four-day cadence interval beyond
+  // the 12-day health floor so database truncation cannot create a false incident.
+  const horizon = contentInventoryLookahead(now);
   const articleFloor = new Date(now.getTime() - 14 * 86_400_000).toISOString();
   const jobsResult = await db
     .from('distribution_jobs')
