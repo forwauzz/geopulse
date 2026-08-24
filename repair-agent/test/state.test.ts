@@ -15,6 +15,7 @@ import {
   normalizeRepairState,
   acknowledgeRepairScope,
   recordRepairScopeFeedback,
+  recordSatisfiedRepairScope,
 } from '../src/state';
 import type { RepairScope } from '../src/loop/contracts';
 
@@ -51,6 +52,34 @@ describe('repair state machine', () => {
       postcondition: 'the broken link is gone',
     },
   };
+
+  it('retires a leased scope when the default branch already satisfies its postcondition', () => {
+    const queued = enqueueRepairScope(initialRepairState(), scope, now);
+    const leased = leaseNextRepairScope(queued, 'workflow-run-satisfied-1', Date.parse(now));
+    const digest = '8'.repeat(64);
+    const satisfied = recordSatisfiedRepairScope(
+      leased.state,
+      'repair-1',
+      1,
+      'workflow-run-satisfied-1',
+      digest,
+      ['approved retrieval-agent rules already exist'],
+      now
+    );
+    expect(satisfied.replayed).toBe(false);
+    expect(satisfied.state.pendingScopes).toEqual([]);
+    expect(satisfied.state.satisfiedRepairIds).toEqual(['repair-1']);
+    expect(satisfied.state.auditHistory?.[0]).toMatchObject({ outcome: 'satisfied', repairId: 'repair-1' });
+    expect(recordSatisfiedRepairScope(
+      satisfied.state,
+      'repair-1',
+      1,
+      'workflow-run-satisfied-1',
+      digest,
+      ['approved retrieval-agent rules already exist'],
+      now
+    ).replayed).toBe(true);
+  });
 
   it('enforces one active repair and sequential attempts', () => {
     const queued = beginRepair(
