@@ -34,6 +34,22 @@ type FetchLike = typeof fetch;
 const TRANSIENT_STATUSES = new Set([429, 503]);
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [400, 1200];
+const WORKERS_AI_SAFE_CONTEXT_TOKENS = 20_000;
+const WORKERS_AI_MAX_REWRITE_TOKENS = 6_000;
+const WORKERS_AI_MIN_REWRITE_TOKENS = 2_048;
+
+/**
+ * Workers AI does not expose a tokenizer at this boundary. Markdown-heavy reports are
+ * conservatively estimated at three characters per token, with a 4k-token safety margin
+ * below the current 24k model context. A report that cannot leave a useful output window
+ * keeps the deterministic artifact instead of making a provider request that must fail.
+ */
+export function workersAiRewriteOutputBudget(prompt: string): number | null {
+  const estimatedInputTokens = Math.ceil(prompt.length / 3);
+  const available = WORKERS_AI_SAFE_CONTEXT_TOKENS - estimatedInputTokens;
+  if (available < WORKERS_AI_MIN_REWRITE_TOKENS) return null;
+  return Math.min(WORKERS_AI_MAX_REWRITE_TOKENS, available);
+}
 
 function isEnabled(value: string | undefined): boolean {
   const normalized = value?.trim().toLowerCase();
@@ -88,11 +104,22 @@ export async function rewriteLayerOneReportInternal(
   const provider = env.provider?.trim().toLowerCase() || 'gemini';
   if (provider === 'workers_ai' || provider === 'workersai' || provider === 'cf') {
     const aiPrompt = `${buildLayerOneReportRewritePrompt({ reportMarkdown })}\nRewrite the report now. Return only the rewritten report.`;
+    const maxTokens = workersAiRewriteOutputBudget(aiPrompt);
+    if (maxTokens === null) {
+      return {
+        status: 'failed',
+        rewrittenMarkdown: null,
+        modelId,
+        executedAt,
+        responseMetadata: { provider: 'workers_ai', prompt_chars: aiPrompt.length },
+        errorMessage: 'layer_one_internal_rewrite_prompt_too_large',
+      };
+    }
     const res = await runWorkersAiPrompt({
       ai: env.ai,
       prompt: aiPrompt,
       model: env.model,
-      maxTokens: 8192,
+      maxTokens,
       temperature: 0.1,
     });
     if (!res.ok) {
@@ -101,7 +128,7 @@ export async function rewriteLayerOneReportInternal(
         rewrittenMarkdown: null,
         modelId: res.model,
         executedAt,
-        responseMetadata: { provider: 'workers_ai' },
+        responseMetadata: { provider: 'workers_ai', max_output_tokens: maxTokens },
         errorMessage: `layer_one_internal_rewrite_${res.reason}`,
       };
     }
@@ -112,7 +139,7 @@ export async function rewriteLayerOneReportInternal(
         rewrittenMarkdown: null,
         modelId: res.model,
         executedAt,
-        responseMetadata: { provider: 'workers_ai' },
+        responseMetadata: { provider: 'workers_ai', max_output_tokens: maxTokens },
         errorMessage: 'layer_one_internal_rewrite_empty_markdown',
       };
     }
@@ -121,7 +148,7 @@ export async function rewriteLayerOneReportInternal(
       rewrittenMarkdown: rewritten,
       modelId: res.model,
       executedAt,
-      responseMetadata: { provider: 'workers_ai' },
+      responseMetadata: { provider: 'workers_ai', max_output_tokens: maxTokens },
     };
   }
 
