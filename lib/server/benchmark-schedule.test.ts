@@ -530,6 +530,118 @@ describe('benchmark schedule helpers', () => {
     expect(runBenchmarkGroup).toHaveBeenCalledTimes(2);
   });
 
+  it('stops the sweep after one persisted terminal provider-auth failure', async () => {
+    const runBenchmarkGroup = vi.fn().mockResolvedValue({
+      runGroupId: 'run-auth-failed',
+      queryRunCount: 10,
+      completedQueryCount: 0,
+      failedQueryCount: 10,
+      skippedQueryCount: 0,
+      terminalProviderFailureCode: 'benchmark_perplexity_http_401',
+    });
+    const repo = {
+      getQuerySetById: vi.fn().mockResolvedValue({
+        id: 'set-1', name: 'msp-it-services-core', vertical: 'msp_it', version: 'v1',
+        description: null, status: 'active', metadata: {}, created_at: '2026-08-22T00:00:00.000Z',
+      }),
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+        {
+          id: 'domain-1', domain: 'example.ca', canonical_domain: 'example.ca',
+          site_url: 'https://example.ca/', display_name: 'Example MSP', vertical: 'msp_it',
+          subvertical: null, geo_region: 'Quebec', is_customer: false, is_competitor: true,
+          metadata: {}, created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z',
+        },
+      ]),
+      getRunGroupByScheduleKey: vi.fn().mockResolvedValue(null),
+    };
+
+    const summary = await executeBenchmarkScheduleSweep({
+      repo,
+      runBenchmarkGroup: runBenchmarkGroup as any,
+      supabase: {},
+      adapter: {} as any,
+      config: {
+        enabled: true,
+        querySetId: 'set-1',
+        modelId: 'sonar',
+        modelIds: ['sonar'],
+        runModes: ['blind_discovery', 'ungrounded_inference', 'grounded_site'],
+        vertical: 'msp_it',
+        seedPriorities: [1],
+        canonicalDomains: ['example.ca'],
+        domainLimit: 10,
+        maxRuns: 30,
+        maxFailures: 5,
+        windowHours: 12,
+        scheduleVersion: 'msp-perplexity-v4-cohort10',
+      },
+      now: new Date('2026-08-22T12:00:00.000Z'),
+    });
+
+    expect(summary).toMatchObject({
+      launchedRuns: 1,
+      failedRuns: 1,
+      stoppedEarly: true,
+    });
+    expect(runBenchmarkGroup).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts persisted all-failed groups toward the configured failure cap', async () => {
+    const runBenchmarkGroup = vi.fn().mockResolvedValue({
+      runGroupId: 'run-transient-failed',
+      queryRunCount: 10,
+      completedQueryCount: 0,
+      failedQueryCount: 10,
+      skippedQueryCount: 0,
+      terminalProviderFailureCode: null,
+    });
+    const repo = {
+      getQuerySetById: vi.fn().mockResolvedValue({
+        id: 'set-1', name: 'msp-it-services-core', vertical: 'msp_it', version: 'v1',
+        description: null, status: 'active', metadata: {}, created_at: '2026-08-22T00:00:00.000Z',
+      }),
+      listDomainsForBenchmarkScheduling: vi.fn().mockResolvedValue([
+        {
+          id: 'domain-1', domain: 'example.ca', canonical_domain: 'example.ca',
+          site_url: 'https://example.ca/', display_name: 'Example MSP', vertical: 'msp_it',
+          subvertical: null, geo_region: 'Quebec', is_customer: false, is_competitor: true,
+          metadata: {}, created_at: '2026-08-22T00:00:00.000Z', updated_at: '2026-08-22T00:00:00.000Z',
+        },
+      ]),
+      getRunGroupByScheduleKey: vi.fn().mockResolvedValue(null),
+    };
+
+    const summary = await executeBenchmarkScheduleSweep({
+      repo,
+      runBenchmarkGroup: runBenchmarkGroup as any,
+      supabase: {},
+      adapter: {} as any,
+      config: {
+        enabled: true,
+        querySetId: 'set-1',
+        modelId: 'sonar',
+        modelIds: ['sonar'],
+        runModes: ['blind_discovery', 'ungrounded_inference', 'grounded_site'],
+        vertical: 'msp_it',
+        seedPriorities: [1],
+        canonicalDomains: ['example.ca'],
+        domainLimit: 10,
+        maxRuns: 30,
+        maxFailures: 2,
+        windowHours: 12,
+        scheduleVersion: 'msp-perplexity-v4-cohort10',
+      },
+      now: new Date('2026-08-22T12:00:00.000Z'),
+    });
+
+    expect(summary).toMatchObject({
+      launchedRuns: 2,
+      failedRuns: 2,
+      stoppedEarly: true,
+    });
+    expect(runBenchmarkGroup).toHaveBeenCalledTimes(2);
+  });
+
   it('stops early when the run cap is reached', async () => {
     const runBenchmarkGroup = vi.fn().mockResolvedValue({
       runGroupId: 'run-1',

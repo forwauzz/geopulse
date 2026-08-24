@@ -269,13 +269,27 @@ describe('immutability after scheduling', () => {
   });
 
   it('the new version inherits no approval from the version it replaced', () => {
-    const { contract } = applyContractEdit(scheduled, { content: { subject: 'New subject' } });
+    const stopped: EmailCampaignV1 = {
+      ...scheduled,
+      state: 'stopped',
+      governance: { ...scheduled.governance, stopReason: 'zero replies at the bounded stop' },
+    };
+    const { contract } = applyContractEdit(stopped, { content: { subject: 'New subject' } });
+    expect(contract.audience).toEqual({
+      segment: stopped.audience.segment,
+      audienceId: null,
+      checksum: null,
+      recipientCount: null,
+      frozenAt: null,
+      excludedCounts: {},
+    });
     expect(contract.governance).toMatchObject({
       preflightPassedAt: null,
       testAcceptedAt: null,
       testVersionChecksum: null,
       scheduledAt: null,
       lockedAt: null,
+      stopReason: null,
     });
   });
 

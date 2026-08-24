@@ -254,7 +254,7 @@ jobs:
             test "$(jq 'length' <<<"$MATCHING_ISSUES")" -le 1
             ISSUE="$(jq -r '.[0].number // empty' <<<"$MATCHING_ISSUES")"
             if [ -z "$ISSUE" ]; then
-              ISSUE_URL="$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body "Automated low-risk repair lineage \`$REPAIR_ID\`. Owner: engineer. Independent reviewer: GEO-Pulse Repair Reviewer. Retry policy: maximum three SHA-bound attempts. Due: $DUE. Next action: $NEXT Acceptance: $POST. Unknown checks, expanded paths, pricing, claims, auth, billing, privacy, dependencies, migrations, and product-direction changes remain prohibited.")"
+              ISSUE_URL="$(gh issue create --repo "$GITHUB_REPOSITORY" --label 'owner:codex' --title "$TITLE" --body "Automated low-risk repair lineage \`$REPAIR_ID\`. Owner: engineer. Independent reviewer: GEO-Pulse Repair Reviewer. Retry policy: maximum three SHA-bound attempts. Due: $DUE. Next action: $NEXT Acceptance: $POST. Unknown checks, expanded paths, pricing, claims, auth, billing, privacy, dependencies, migrations, and product-direction changes remain prohibited.")"
               ISSUE="${ISSUE_URL##*/}"
             fi
           else
@@ -510,6 +510,7 @@ jobs:
       merged: ${{ steps.merge.outputs.merged }}
     permissions:
       actions: read
+      checks: write
       contents: read
     steps:
       - uses: actions/checkout@v4

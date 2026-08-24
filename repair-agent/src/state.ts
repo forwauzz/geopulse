@@ -40,6 +40,7 @@ export type RepairAgentState = {
   pendingScopes?: QueuedRepairScope[];
   auditHistory?: AuditDisposition[];
   scopeTransitions?: ScopeTransition[];
+  exhaustedRepairIds?: string[];
 };
 
 export type ScopeTransition = {
@@ -111,6 +112,7 @@ export function initialRepairState(): RepairAgentState {
     pendingScopes: [],
     auditHistory: [],
     scopeTransitions: [],
+    exhaustedRepairIds: [],
   };
 }
 
@@ -154,6 +156,7 @@ export function normalizeRepairState(state: RepairAgentState, now: string): Repa
   const needsNormalization = state.pendingScopes === undefined
     || state.auditHistory === undefined
     || state.scopeTransitions === undefined
+    || state.exhaustedRepairIds === undefined
     || retained.length !== queue.length
     || recent.some((item, index) => item.artifact !== state.recent?.[index]?.artifact);
   if (!needsNormalization) return state;
@@ -172,6 +175,7 @@ export function normalizeRepairState(state: RepairAgentState, now: string): Repa
     pendingScopes: retained,
     auditHistory: [...quarantineEvents, ...(state.auditHistory ?? [])].slice(0, 50),
     scopeTransitions: state.scopeTransitions ?? [],
+    exhaustedRepairIds: state.exhaustedRepairIds ?? [],
     updatedAt: quarantined.length > 0 ? now : state.updatedAt ?? null,
   };
   validateRepairState(normalized);
@@ -188,6 +192,7 @@ export function validateRepairState(state: RepairAgentState): void {
   if ((state.pendingScopes?.length ?? 0) > 25) throw new Error('pending scope queue exceeds retention limit');
   if ((state.auditHistory?.length ?? 0) > 50) throw new Error('audit history exceeds retention limit');
   if ((state.scopeTransitions?.length ?? 0) > 50) throw new Error('scope transition history exceeds retention limit');
+  if ((state.exhaustedRepairIds?.length ?? 0) > 100) throw new Error('exhausted repair lineage history exceeds retention limit');
   const repairIds = (state.pendingScopes ?? []).map((item) => item.scope.repairId);
   if (new Set(repairIds).size !== repairIds.length) throw new Error('pending scope queue contains duplicate repair ids');
   for (const item of state.pendingScopes ?? []) {
@@ -321,6 +326,7 @@ export function acknowledgeRepairScope(
   const next = {
     ...state,
     pendingScopes: (state.pendingScopes ?? []).filter((candidate) => candidate.scope.repairId !== repairId),
+    exhaustedRepairIds: (state.exhaustedRepairIds ?? []).filter((candidate) => candidate !== repairId),
     auditHistory: [{ auditRunId: item.scope.auditRunId, producer: item.scope.producer, recordedAt: now, outcome: 'acknowledged' as const, repairId, reasons: [] }, ...(state.auditHistory ?? [])].slice(0, 50),
     scopeTransitions: [transition, ...(state.scopeTransitions ?? [])].slice(0, 50),
     updatedAt: now,
@@ -467,6 +473,9 @@ export function recordRepairRolledBack(
       : queue.map((candidate, candidateIndex) => candidateIndex === index
         ? { scope: { ...candidate.scope, attempt: nextAttempt!, feedback }, state: 'pending' as const, leaseId: null, leaseExpiresAt: null, rollbackOutcome: structuredClone(outcome) }
         : candidate),
+    exhaustedRepairIds: exhausted
+      ? [repairId, ...(state.exhaustedRepairIds ?? []).filter((candidate) => candidate !== repairId)].slice(0, 100)
+      : state.exhaustedRepairIds,
     auditHistory: [{
       auditRunId: item.scope.auditRunId, producer: item.scope.producer, recordedAt: now,
       outcome: exhausted ? 'exhausted' as const : 'changes_requested' as const, repairId, reasons: feedback,
@@ -511,6 +520,9 @@ export function recordRepairScopeFeedback(
   const next: RepairAgentState = {
     ...state,
     pendingScopes: nextQueue,
+    exhaustedRepairIds: exhausted
+      ? [repairId, ...(state.exhaustedRepairIds ?? []).filter((candidate) => candidate !== repairId)].slice(0, 100)
+      : state.exhaustedRepairIds,
     auditHistory: [{
       auditRunId: item.scope.auditRunId,
       producer: item.scope.producer,

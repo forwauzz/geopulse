@@ -183,6 +183,30 @@ export class RepairAgent extends Agent<RepairWorkerEnv, RepairAgentState> {
       return { accepted: true, queued: false, repairId: null, reasons: decision.reasons };
     }
     const scope = await scopeRepair({ envelope, finding: decision.finding, profile, profileDigest, nowMs: Date.now() });
+    const pending = (this.state.pendingScopes ?? []).find((item) => item.scope.repairId === scope.repairId);
+    if (pending) {
+      this.setState(recordAuditDisposition(this.state, {
+        auditRunId: envelope.auditRunId,
+        producer: envelope.producer,
+        recordedAt: now,
+        outcome: 'duplicate',
+        repairId: scope.repairId,
+        reasons: ['same repair defect is already pending'],
+      }));
+      return { accepted: true, queued: true, repairId: scope.repairId };
+    }
+    if ((this.state.exhaustedRepairIds ?? []).includes(scope.repairId)) {
+      const reasons = ['repair defect is exhausted and its owned incident remains open'];
+      this.setState(recordAuditDisposition(this.state, {
+        auditRunId: envelope.auditRunId,
+        producer: envelope.producer,
+        recordedAt: now,
+        outcome: 'duplicate',
+        repairId: scope.repairId,
+        reasons,
+      }));
+      return { accepted: true, queued: false, repairId: null, reasons };
+    }
     this.setState(enqueueRepairScope(this.state, scope, now));
     return { accepted: true, queued: true, repairId: scope.repairId };
   }

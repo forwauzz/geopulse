@@ -145,6 +145,60 @@ describe('production repair orchestration scripts', () => {
     }
   });
 
+  it('grants only the merge controller the workflow check authority it uses', async () => {
+    const workflow = await readFile(new URL('../../.github/workflows/repair-loop.yml', import.meta.url), 'utf8');
+    const match = /\n  merge-controller:([\s\S]*?)\n  feedback:/.exec(workflow);
+    expect(match).not.toBeNull();
+    const controller = match?.[1] ?? '';
+    expect(controller).toContain('checks: write');
+    expect(controller).toContain('REPAIR_GITHUB_ACTIONS_TOKEN: ${{ github.token }}');
+    expect(workflow).toContain("--label 'owner:codex'");
+  });
+
+  it('acknowledges a fresh exhausted lineage without failing every scheduler run', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'repair-production-exhausted-noop-'));
+    temporaryDirectories.push(directory);
+    const outputPath = join(directory, 'repair.json');
+    const server = await listen((request, response): void => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      if (request.url === '/v1/scopes/claim') {
+        response.end(JSON.stringify({ scope: null }));
+        return;
+      }
+      if (request.url === '/v1/status') {
+        response.end(JSON.stringify({
+          pendingScopes: [],
+          auditHistory: [{
+            producer: 'canonical-cloudflare-scheduler',
+            outcome: 'duplicate',
+            auditRunId: 'audit-exhausted-fresh',
+            recordedAt: new Date().toISOString(),
+            reasons: ['repair defect is exhausted and its owned incident remains open'],
+          }],
+        }));
+        return;
+      }
+      response.writeHead(404).end('{}');
+    });
+    try {
+      await expect(execFileAsync(process.execPath, [productionRepairScript], { env: {
+        ...process.env,
+        REPAIR_AGENT_URL: server.url,
+        REPAIR_AGENT_API_TOKEN: 'test-token',
+        REPAIR_RUN_ID: 'production-exhausted-noop-123456',
+        REPAIR_OUTPUT: outputPath,
+        REPAIR_REPOSITORY_ROOT: directory,
+      } })).resolves.toMatchObject({ stdout: expect.stringContaining('"queued":false') });
+      expect(JSON.parse(await readFile(outputPath, 'utf8'))).toMatchObject({
+        queued: false,
+        auditRunId: 'audit-exhausted-fresh',
+        reason: expect.stringContaining('owned incident'),
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it('reconciles merged state, acknowledges only after deployment QA, then closes the issue', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'repair-production-finalize-'));
     temporaryDirectories.push(directory);
