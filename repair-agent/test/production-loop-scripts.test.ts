@@ -52,9 +52,9 @@ describe('production repair orchestration scripts', () => {
   it('keeps disabled App principal canaries least-privilege and non-gating', async () => {
     const workflow = await readFile(new URL('../../.github/workflows/repair-loop-canary.yml', import.meta.url), 'utf8');
     expect(workflow).toContain("test \"$REPAIR_LOOP_ENABLED\" = 'false'");
-    expect(workflow.match(/uses: actions\/create-github-app-token@v3/g)).toHaveLength(3);
+    expect(workflow.match(/uses: actions\/create-github-app-token@v2/g)).toHaveLength(3);
     expect(workflow.match(/permission-checks: write/g)).toHaveLength(3);
-    expect(workflow.match(/permission-actions-variables: read/g)).toHaveLength(1);
+    expect(workflow).not.toContain('permission-actions-variables:');
 
     const block = (job: string, nextJob: string): string => {
       const match = new RegExp(`\\n  ${job}:([\\s\\S]*?)\\n  ${nextJob}:`).exec(workflow);
@@ -83,14 +83,13 @@ describe('production repair orchestration scripts', () => {
     }
     expect(reviewer).not.toContain('permission-actions-variables:');
     expect(qa).not.toContain('permission-actions-variables:');
-    expect(merge.match(/permission-actions-variables: read/g)).toHaveLength(1);
     expect(reviewer).not.toContain('REPAIR_QA_PRIVATE_KEY');
     expect(reviewer).not.toContain('REPAIR_MERGE_PRIVATE_KEY');
     expect(qa).not.toContain('REPAIR_REVIEWER_PRIVATE_KEY');
     expect(qa).not.toContain('REPAIR_MERGE_PRIVATE_KEY');
     expect(merge).not.toContain('REPAIR_REVIEWER_PRIVATE_KEY');
     expect(merge).not.toContain('REPAIR_QA_PRIVATE_KEY');
-    expect(merge).toContain('permission-actions-variables: read');
+    expect(merge).toContain('gh api "repos/$GITHUB_REPOSITORY/actions/variables/REPAIR_LOOP_ENABLED"');
   });
 
   it('uses a distinct idempotent rollback lineage for every bounded attempt', async () => {

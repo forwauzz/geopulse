@@ -96,7 +96,7 @@ jobs:
     environment: repair-agent-shadow
     permissions: {}
     steps:
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@v2
         id: reviewer-token
         with:
           app-id: ${{ vars.REPAIR_REVIEWER_APP_ID }}
@@ -131,7 +131,7 @@ jobs:
     environment: repair-agent-shadow
     permissions: {}
     steps:
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@v2
         id: qa-token
         with:
           app-id: ${{ vars.REPAIR_QA_APP_ID }}
@@ -166,7 +166,7 @@ jobs:
     environment: repair-agent-shadow
     permissions: {}
     steps:
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@v2
         id: merge-token
         with:
           app-id: ${{ vars.REPAIR_MERGE_APP_ID }}
@@ -174,7 +174,6 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: ${{ github.event.repository.name }}
           permission-checks: write
-          permission-actions-variables: read
       - name: Prove merge App identity, Actions variable read, and Checks write
         shell: bash
         env:
