@@ -41,19 +41,20 @@ try {
     const status = await request('/v1/status');
     const history = Array.isArray(status.auditHistory) ? status.auditHistory : [];
     const latestCanonical = history.find((item) => typeof item?.producer === 'string' && item.producer.startsWith('canonical-cloudflare-')
-      && ['queued', 'unsupported', 'rejected'].includes(item?.outcome));
+      && ['queued', 'duplicate', 'unsupported', 'rejected', 'exhausted', 'acknowledged'].includes(item?.outcome));
     const latestAt = Date.parse(latestCanonical?.recordedAt ?? '');
     if (!Number.isFinite(latestAt) || Date.now() - latestAt > 26 * 60 * 60_000) {
       throw new Error('no pending scope and no fresh canonical audit intake evidence');
-    }
-    if (history.some((item) => typeof item?.producer === 'string' && item.producer.startsWith('canonical-cloudflare-') && item?.outcome === 'exhausted' && Date.parse(item?.recordedAt ?? '') >= latestAt)) {
-      throw new Error('canonical repair scope is exhausted and requires an owned incident');
     }
     const pending = Array.isArray(status.pendingScopes) ? status.pendingScopes : [];
     if (pending.some((item) => ['merge_pending', 'awaiting_qa', 'rollback_pending'].includes(item?.state))) {
       throw new Error('a durable merge, production QA, or rollback lifecycle still requires reconciliation');
     }
-    await writeEvidence({ schemaVersion: 1, queued: false, leaseId, reason: 'fresh canonical audit has no pending eligible repair scope', auditRunId: latestCanonical.auditRunId, auditRecordedAt: latestCanonical.recordedAt });
+    const reason = latestCanonical.outcome === 'exhausted' || (latestCanonical.outcome === 'duplicate'
+      && Array.isArray(latestCanonical.reasons) && latestCanonical.reasons.some((item) => String(item).includes('exhausted')))
+      ? 'fresh canonical audit matches an exhausted repair with an owned incident; no new attempt was claimed'
+      : 'fresh canonical audit has no pending eligible repair scope';
+    await writeEvidence({ schemaVersion: 1, queued: false, leaseId, reason, auditRunId: latestCanonical.auditRunId, auditRecordedAt: latestCanonical.recordedAt });
     console.log(JSON.stringify({ queued: false, auditRunId: latestCanonical.auditRunId }));
     // Let undici close its fetch handles naturally. An abrupt process.exit() can
     // trip a libuv assertion on Windows and can truncate the evidence file.

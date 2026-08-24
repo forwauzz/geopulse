@@ -158,6 +158,25 @@ const controllerRaw = await github(`/repos/${repository}/check-runs`, {
 const controllerCheckRunId = Number(controllerRaw['id']);
 if (!Number.isSafeInteger(controllerCheckRunId) || controllerCheckRunId <= 0) throw new Error('merge-controller check run identity is invalid');
 
+async function rejectBeforeMergeIntent(reason: string): Promise<never> {
+  await github(`/repos/${repository}/check-runs/${controllerCheckRunId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      status: 'completed',
+      conclusion: 'failure',
+      output: { title: 'Repair merge blocked', summary: reason.slice(0, 65_000) },
+    }),
+  });
+  await writeFile(outputPath, `${JSON.stringify({
+    schemaVersion: 1,
+    merged: false,
+    repairId: artifact.repairId,
+    attempt: artifact.attempt,
+    reasons: [reason],
+  }, null, 2)}\n`, 'utf8');
+  throw new Error(reason);
+}
+
 let decision;
 let requiredCheckIds: number[] = [];
 try {
@@ -204,19 +223,15 @@ if (!decision.allowed) {
 
 const finalSafety = await liveSafetyState();
 if (!finalSafety.enabled || finalSafety.killSwitch) {
-  await github(`/repos/${repository}/check-runs/${controllerCheckRunId}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ status: 'completed', conclusion: 'failure', output: { title: 'Repair merge blocked', summary: 'The live repair-loop activation or kill switch changed before merge.' } }),
-  });
-  throw new Error('live repair safety switch blocked merge');
+  await rejectBeforeMergeIntent('live repair safety switch blocked merge');
 }
 
 const verifyIndex = GEOPULSE_PROFILE.requiredChecks.findIndex((check) => check.checkName === 'verify'
   && check.appSlug === 'github-actions' && check.appId === 15368);
-if (verifyIndex < 0) throw new Error('authenticated exact-SHA CI source is unavailable for PR attestation');
+if (verifyIndex < 0) await rejectBeforeMergeIntent('authenticated exact-SHA CI source is unavailable for PR attestation');
 const sourceVerifyCheckRunId = requiredCheckIds[verifyIndex];
 if (sourceVerifyCheckRunId === undefined || !Number.isSafeInteger(sourceVerifyCheckRunId) || sourceVerifyCheckRunId <= 0) {
-  throw new Error('authenticated exact-SHA CI source is unavailable for PR attestation');
+  await rejectBeforeMergeIntent('authenticated exact-SHA CI source is unavailable for PR attestation');
 }
 const verifyAttestationDigest = await sha256({
   schemaVersion: 1,
@@ -239,13 +254,15 @@ const verifyAttestation = await githubActions(`/repos/${repository}/check-runs`,
       summary: `Authenticated GitHub Actions check run ${sourceVerifyCheckRunId} passed for ${artifact.headSha}; deterministic attestation ${verifyAttestationDigest}.`,
     },
   }),
-});
+}).catch((error: unknown) => rejectBeforeMergeIntent(
+  error instanceof Error ? error.message : 'GitHub Actions exact-SHA CI attestation failed',
+));
 const verifyAttestationApp = verifyAttestation['app'] as Record<string, unknown> | undefined;
 if (verifyAttestation['name'] !== 'verify' || verifyAttestation['head_sha'] !== artifact.headSha
   || verifyAttestation['status'] !== 'completed' || verifyAttestation['conclusion'] !== 'success'
   || verifyAttestationApp?.['slug'] !== 'github-actions' || verifyAttestationApp?.['id'] !== 15368
   || !Number.isSafeInteger(verifyAttestation['id'])) {
-  throw new Error('GitHub Actions exact-SHA CI attestation identity is invalid');
+  await rejectBeforeMergeIntent('GitHub Actions exact-SHA CI attestation identity is invalid');
 }
 
 const intentClaim = {

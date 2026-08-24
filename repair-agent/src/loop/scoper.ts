@@ -20,7 +20,16 @@ export async function scopeRepair(args: {
   if (!skill.allowedCheckIds.includes(args.finding.checkId)) throw new Error('finding check is incompatible with the selected repair skill');
   if (!skill.pathPattern.test(instruction.path) || !pathAllowed(args.profile, instruction.path)) throw new Error('repair instruction path is not allowed');
   if (!/^[a-f0-9]{64}$/.test(args.profileDigest) || await repositoryProfileDigest(args.profile) !== args.profileDigest) throw new Error('repository profile digest is invalid');
-  const identity = `${args.envelope.producer}:${args.envelope.auditRunId}:${args.finding.findingId}:${args.profile.id}:${args.profileDigest}:${instruction.skillId}:${instruction.path}`;
+  // A lineage identifies the defect and desired change, not the audit run that
+  // happened to observe it. Repeated scheduler/admin/CI observations converge.
+  const identity = [
+    args.profile.id,
+    args.profileDigest,
+    args.profile.repository,
+    new URL(args.envelope.targetUrl).toString(),
+    args.finding.checkId,
+    JSON.stringify(instruction),
+  ].join(':');
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(identity));
   const repairId = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 32);
   return {

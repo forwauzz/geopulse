@@ -78,6 +78,8 @@ export async function claimNextJordanReel(
     .filter((asset) => asset.asset_type === 'short_video_post')
     .find((asset) => {
       const status = String(metadata(asset)['reel_render_status'] ?? '');
+      const attempts = Number(metadata(asset)['reel_render_attempt_count'] ?? 0);
+      if (metadata(asset)['reel_render_terminal'] === true || attempts >= 3) return false;
       if (status === 'pending' || status === 'failed') return true;
       if (status !== 'rendering') return false;
       const leasedAt = new Date(String(metadata(asset)['reel_render_leased_at'] ?? ''));
@@ -100,8 +102,11 @@ export async function claimNextJordanReel(
       status: 'failed',
       ctaUrl: candidate.cta_url,
       metadata: {
-        reel_render_status: 'failed',
+        reel_render_status: 'blocked',
         reel_render_error: 'invalid_or_ungrounded_script',
+        reel_render_terminal: true,
+        reel_render_retryable: false,
+        reel_render_failed_at: now.toISOString(),
       },
     });
     return null;
@@ -122,8 +127,31 @@ export async function claimNextJordanReel(
     'diagnostic-kinetic-v1b',
     'diagnostic-kinetic-v1c',
   ];
-  const templateId =
-    templateIds.find((id) => !recentTemplateIds.includes(id)) ?? 'diagnostic-kinetic-v1a';
+  const templateId = templateIds.find((id) => !recentTemplateIds.includes(id));
+  if (!templateId) {
+    await repo.upsertAsset({
+      assetId: candidate.asset_id,
+      contentItemId: candidate.content_item_id,
+      sourceType: candidate.source_type,
+      sourceKey: candidate.source_key,
+      assetType: candidate.asset_type,
+      providerFamily: candidate.provider_family,
+      title: candidate.title,
+      bodyPlaintext: candidate.body_plaintext,
+      captionText: candidate.caption_text,
+      status: 'failed',
+      ctaUrl: candidate.cta_url,
+      metadata: {
+        reel_render_status: 'blocked',
+        reel_render_error: 'template_inventory_exhausted',
+        reel_render_terminal: true,
+        reel_render_retryable: false,
+        reel_render_failed_at: now.toISOString(),
+      },
+    });
+    return null;
+  }
+  const attemptCount = Number(metadata(candidate)['reel_render_attempt_count'] ?? 0) + 1;
   await repo.upsertAsset({
     assetId: candidate.asset_id,
     contentItemId: candidate.content_item_id,
@@ -142,6 +170,9 @@ export async function claimNextJordanReel(
       reel_render_leased_at: now.toISOString(),
       reel_render_error: null,
       reel_template_id: templateId,
+      reel_render_attempt_count: attemptCount,
+      reel_render_terminal: false,
+      reel_render_retryable: true,
     },
   });
   return {
@@ -411,6 +442,14 @@ export async function failJordanReelRender(args: {
   const repo = createDistributionEngineRepository(args.supabase as never);
   const asset = await repo.getAssetByAssetId(args.assetId);
   if (!asset || metadata(asset)['reel_render_attempt_id'] !== args.attemptId) return;
+  const error = args.error.replace(/\s+/g, ' ').trim().slice(0, 500);
+  const attempts = Number(metadata(asset)['reel_render_attempt_count'] ?? 1);
+  const terminal = attempts >= 3 || [
+    'duplicate_media',
+    'template_rotation_required',
+    'template_inventory_exhausted',
+    'invalid_or_ungrounded_script',
+  ].some((code) => error.includes(code));
   await repo.upsertAsset({
     assetId: asset.asset_id,
     contentItemId: asset.content_item_id,
@@ -424,9 +463,12 @@ export async function failJordanReelRender(args: {
     status: 'failed',
     ctaUrl: asset.cta_url,
     metadata: {
-      reel_render_status: 'failed',
-      reel_render_error: args.error.replace(/\s+/g, ' ').trim().slice(0, 500),
+      reel_render_status: terminal ? 'blocked' : 'failed',
+      reel_render_error: error,
       reel_render_failed_at: new Date().toISOString(),
+      reel_render_terminal: terminal,
+      reel_render_retryable: !terminal,
+      reel_render_attempt_count: attempts,
     },
   });
 }
