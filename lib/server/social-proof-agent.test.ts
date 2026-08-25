@@ -15,6 +15,7 @@ import {
   preferredAccount,
   prioritizeRequiredFormatCandidates,
   remainingDailyAssetCapacity,
+  reserveInstagramCadenceSlot,
   reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
   socialSequenceDimensions,
@@ -531,6 +532,24 @@ describe('Social Proof Agent safeguards', () => {
     expect(
       reserveInstagramScheduleSlot('2026-07-23T21:00:00.000Z', occupied)
     ).toBe('2026-07-23T23:00:00.000Z');
+  });
+
+  it('spaces recovery inventory across open cadence days instead of burst-posting', () => {
+    const occupied = new Set([
+      '2026-08-24T17:00:00.000Z',
+      '2026-08-26T17:00:00.000Z',
+      '2026-08-28T17:00:00.000Z',
+    ]);
+
+    expect(
+      reserveInstagramCadenceSlot('2026-08-24T13:00:00.000Z', occupied),
+    ).toBe('2026-08-25T13:00:00.000Z');
+    expect(
+      reserveInstagramCadenceSlot('2026-08-24T16:00:00.000Z', occupied),
+    ).toBe('2026-08-27T16:00:00.000Z');
+    expect(
+      reserveInstagramCadenceSlot('2026-08-24T19:00:00.000Z', occupied),
+    ).toBe('2026-08-29T19:00:00.000Z');
   });
 
   it('enforces the creative cap across the configured local day instead of once per hourly run', () => {

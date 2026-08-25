@@ -79,6 +79,7 @@ export async function runAutonomousCampaignExecution(args: {
     campaignOnly: false,
     campaignScopeRequired: true,
     requiredFormats: inventoryBefore.missingFormats,
+    inventoryHealthyBefore: inventoryBefore.healthy,
   });
   const queuedIds = new Set(social?.queuedContentItemIds ?? []);
   if (queuedIds.size > 0) {
