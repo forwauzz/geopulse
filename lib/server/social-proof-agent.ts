@@ -1049,6 +1049,33 @@ export function reserveInstagramScheduleSlot(
   return fallback;
 }
 
+export function reserveInstagramCadenceSlot(
+  desiredSlot: string,
+  occupiedSlots: Set<string>,
+  minimumGapHours = 18,
+): string {
+  let candidate = new Date(desiredSlot);
+  candidate.setUTCMinutes(0, 0, 0);
+  const minimumGapMs = minimumGapHours * 60 * 60_000;
+  for (let days = 0; days < 21; days += 1) {
+    const candidateMs = candidate.getTime();
+    const hasNearbyPost = [...occupiedSlots].some((slot) => {
+      const occupiedMs = Date.parse(slot);
+      return Number.isFinite(occupiedMs)
+        && Math.abs(occupiedMs - candidateMs) < minimumGapMs;
+    });
+    if (!hasNearbyPost) {
+      const slot = candidate.toISOString();
+      occupiedSlots.add(slot);
+      return slot;
+    }
+    candidate = new Date(candidateMs + 24 * 60 * 60_000);
+  }
+  const fallback = candidate.toISOString();
+  occupiedSlots.add(fallback);
+  return fallback;
+}
+
 function providerFamily(account: DistributionAccountRow | null): DistributionProviderFamily {
   if (!account) return 'generic';
   return account.provider_name === 'instagram' ||
@@ -1246,6 +1273,8 @@ export async function runSocialProofAgent(args: {
   readonly campaignScopeRequired?: boolean;
   /** Missing connected-channel formats that this run should replenish. */
   readonly requiredFormats?: readonly string[];
+  /** The pre-run inventory verdict makes a zero-output noop unambiguous in incident logs. */
+  readonly inventoryHealthyBefore?: boolean;
 }): Promise<SocialProofAgentResult> {
   const setting = await loadAutomationSetting(args.supabase, 'social_proof_agent');
   const config = resolveSocialProofAgentConfig(setting.config, setting.enabled, setting.killSwitch);
@@ -1438,11 +1467,15 @@ export async function runSocialProofAgent(args: {
         occupiedInstagramSlots.add(slot.toISOString());
       }
     }
-    const reserveInstagramSlot = (hourLocal: number): string =>
-      reserveInstagramScheduleSlot(
-        instagramScheduleSlot(now, config.timezone, hourLocal),
-        occupiedInstagramSlots
-      );
+    const cadenceRecoveryRequired = args.requiredFormats?.some((format) =>
+      format.startsWith('instagram:'),
+    ) === true;
+    const reserveInstagramSlot = (hourLocal: number): string => {
+      const desiredSlot = instagramScheduleSlot(now, config.timezone, hourLocal);
+      return cadenceRecoveryRequired
+        ? reserveInstagramCadenceSlot(desiredSlot, occupiedInstagramSlots)
+        : reserveInstagramScheduleSlot(desiredSlot, occupiedInstagramSlots);
+    };
     const previousSequenceAnchor = latestSocialSequenceAnchor(existingAssets);
     const historicalPerformance = historicalPerformanceByKind(existingAssets);
     const baseOrderedCandidates = prioritizeRequiredFormatCandidates(
@@ -1743,6 +1776,7 @@ export async function runSocialProofAgent(args: {
         candidates: result.candidates,
         assets_created: assetsCreated,
         jobs_created: jobsCreated,
+        inventory_healthy: args.inventoryHealthyBefore === true,
         account_provider: account?.provider_name ?? null,
         trend_provider: trendProvider,
         trend_reason: trendReason,

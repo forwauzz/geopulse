@@ -117,6 +117,37 @@ describe('runtime incident control', () => {
     });
   });
 
+  it('does not let zero-output noops reset repeated missing-inventory failures', () => {
+    const [social] = classifyRuntimeIncidents([
+      {
+        event: 'autonomous_campaign_execution',
+        level: 'info',
+        created_at: '2026-08-12T03:00:00.000Z',
+        data: { inventoryHealthy: false, inventoryReason: 'missing_required_formats:instagram:carousel_post' },
+      },
+      {
+        event: 'social_proof_agent_run',
+        level: 'info',
+        created_at: '2026-08-12T02:59:00.000Z',
+        data: { status: 'noop', candidates: 48, assets_created: 0, jobs_created: 0 },
+      },
+      {
+        event: 'autonomous_campaign_execution',
+        level: 'info',
+        created_at: '2026-08-12T02:00:00.000Z',
+        data: { inventoryHealthy: false, inventoryReason: 'missing_required_formats:instagram:carousel_post' },
+      },
+      {
+        event: 'social_proof_agent_run',
+        level: 'info',
+        created_at: '2026-08-12T01:59:00.000Z',
+        data: { status: 'created', assets_created: 1, jobs_created: 1 },
+      },
+    ]);
+
+    expect(social).toMatchObject({ active: true, consecutiveFailures: 2 });
+  });
+
   it('surfaces repeated editorial rejection without treating one rejection as an outage', () => {
     const once = classifyRuntimeIncidents([{
       event: 'seo_editorial_cron_run',

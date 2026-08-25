@@ -167,7 +167,8 @@ function success(row: Row, definition: RuntimeIncidentDefinition): boolean {
     definition.key === 'social-production'
     && row.event === 'social_proof_agent_run'
     && status === 'noop'
-    && Number(payload.candidates ?? 0) === 0
+    && Number(payload.assets_created ?? 0) === 0
+    && Number(payload.jobs_created ?? 0) === 0
   ) return payload.inventory_healthy === true;
   if (
     definition.key === 'social-production'
