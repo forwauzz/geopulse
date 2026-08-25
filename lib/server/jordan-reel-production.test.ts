@@ -206,6 +206,29 @@ describe('Jordan autonomous Reel production', () => {
     expect(chooseJordanReelSource([source], ['timely'], [existing])).toBeNull();
   });
 
+  it('prefers an unused primary-campaign source before a challenger source', () => {
+    const challenger = {
+      ...source,
+      key: 'agency-challenger',
+      evidence: {
+        ...source.evidence,
+        source_url: 'https://developers.google.com/search/docs/agency-example',
+        campaign_role: 'challenger',
+      },
+    };
+    const primary = {
+      ...source,
+      key: 'msp-primary',
+      evidence: {
+        ...source.evidence,
+        source_url: 'https://developers.google.com/search/docs/msp-example',
+        campaign_role: 'primary',
+      },
+    };
+
+    expect(chooseJordanReelSource([challenger, primary], ['timely'])).toEqual(primary);
+  });
+
   it('never truncates a Reel line in the middle of a word', () => {
     const script = buildJordanReelScript({
       ...source,

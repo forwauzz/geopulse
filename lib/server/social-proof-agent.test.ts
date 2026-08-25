@@ -257,6 +257,8 @@ describe('Social Proof Agent safeguards', () => {
       title: 'How to improve AI visibility',
       slug: 'improve-ai-visibility',
       canonical_url: null,
+      source_links: ['https://developers.google.com/search/docs/appearance/ai-features'],
+      growth_campaign_id: 'msp-1',
       published_at: '2026-07-20T00:00:00Z',
     };
     expect(buildEducationalCandidate({ ...base, metadata: {} }, 'https://getgeopulse.com')).toBeNull();
@@ -267,12 +269,24 @@ describe('Social Proof Agent safeguards', () => {
         metadata: {
           hero_image_url: 'https://getgeopulse.com/media/hero.jpg',
           hero_image_alt: 'Clean diagram of an AI visibility workflow',
+          campaign_key: 'msp-qc-first-customer-2026q3',
+          campaign_role: 'primary',
+          campaign_vertical: 'msp_it_services',
         },
       },
       'https://getgeopulse.com'
     );
     expect(candidate?.safeForAutonomousPublish).toBe(true);
     expect(candidate?.mediaAlt).toContain('AI visibility');
+    expect(candidate?.evidence).toMatchObject({
+      source_url: 'https://developers.google.com/search/docs/appearance/ai-features',
+      source_label: 'developers.google.com',
+      source_type: 'published_article_source',
+      growth_campaign_id: 'msp-1',
+      campaign_key: 'msp-qc-first-customer-2026q3',
+      campaign_role: 'primary',
+      campaign_vertical: 'msp_it_services',
+    });
   });
 
   it('normalizes relative canonical URLs before adding provider tracking', () => {
