@@ -268,14 +268,17 @@ export function chooseJordanReelSource<T extends ReelSource>(
       .map((asset) => reelScriptSignature(asset.metadata['reel_script']))
       .filter((signature): signature is string => signature !== null)
   );
-  return candidates.find((candidate) => {
+  const eligible = candidates.filter((candidate) => {
     const sourceUrl = candidate.evidence['source_url'];
     return categories.includes(categoryFor(candidate.kind)) &&
       typeof sourceUrl === 'string' &&
       /^https:\/\//.test(sourceUrl) &&
       candidate.title.trim().length > 0 &&
       !usedScripts.has(reelScriptSignature(buildJordanReelScript(candidate)) ?? '');
-  }) ?? null;
+  });
+  return eligible.find((candidate) => candidate.evidence['campaign_role'] === 'primary')
+    ?? eligible[0]
+    ?? null;
 }
 
 // The compare scene renders `top ≠ bottom`. A contrast the source did not actually make

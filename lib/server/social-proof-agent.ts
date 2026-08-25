@@ -154,6 +154,8 @@ type ContentRow = {
   readonly title: string;
   readonly slug: string;
   readonly canonical_url: string | null;
+  readonly source_links?: unknown;
+  readonly growth_campaign_id?: string | null;
   readonly metadata: unknown;
   readonly published_at: string | null;
 };
@@ -607,6 +609,22 @@ export function buildEducationalCandidate(
     readString(item.canonical_url) ?? `/blog/${encodeURIComponent(item.slug)}`,
     appUrl
   );
+  const metadataSourceUrl = readString(metadata['source_url']);
+  const sourceUrl = metadataSourceUrl?.startsWith('https://')
+    ? metadataSourceUrl
+    : Array.isArray(item.source_links)
+      ? item.source_links.find((value): value is string =>
+          typeof value === 'string' && value.startsWith('https://')
+        ) ?? null
+      : null;
+  let sourceLabel = readString(metadata['source_label']);
+  if (!sourceLabel && sourceUrl) {
+    try {
+      sourceLabel = new URL(sourceUrl).hostname;
+    } catch {
+      sourceLabel = null;
+    }
+  }
   return {
     key: `educational-${item.id}`,
     kind: 'educational',
@@ -627,6 +645,15 @@ export function buildEducationalCandidate(
       content_item_id: item.id,
       canonical_url: articleUrl,
       hero_verified: true,
+      source_url: sourceUrl,
+      source_label: sourceLabel,
+      source_type: sourceUrl ? 'published_article_source' : null,
+      growth_campaign_id:
+        item.growth_campaign_id ?? readString(metadata['growth_campaign_id']),
+      growth_intervention_id: readString(metadata['growth_intervention_id']),
+      campaign_key: readString(metadata['campaign_key']),
+      campaign_role: readString(metadata['campaign_role']),
+      campaign_vertical: readString(metadata['campaign_vertical']),
     },
     safeForAutonomousPublish: true,
   };
@@ -1304,7 +1331,7 @@ export async function runSocialProofAgent(args: {
         .limit(250),
       args.supabase
         .from('content_items')
-        .select('id,title,slug,canonical_url,metadata,published_at')
+        .select('id,title,slug,canonical_url,source_links,growth_campaign_id,metadata,published_at')
         .eq('status', 'published')
         .order('published_at', { ascending: false })
         .limit(25),
