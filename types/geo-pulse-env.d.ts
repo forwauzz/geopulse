@@ -18,6 +18,7 @@ interface CloudflareEnv {
   TURNSTILE_SECRET_KEY: string;
   GEMINI_API_KEY: string;
   GEMINI_MODEL: string;
+  JORDAN_REEL_REVIEW_MODEL?: string;
   GEMINI_ENDPOINT: string;
   SOCIAL_TREND_GEMINI_MODEL?: string;
   SOCIAL_TREND_OPENAI_MODEL?: string;

@@ -12,6 +12,10 @@ import {
   findRepeatedInstagramMedia,
   INSTAGRAM_REEL_VALIDATION_VERSION,
 } from './instagram-visual-safety';
+import {
+  JORDAN_REEL_REVIEW_VERSION,
+  type JordanReelReviewAttestation,
+} from './jordan-reel-review';
 
 const MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -53,7 +57,7 @@ function metadata(asset: DistributionAssetRow): Record<string, unknown> {
   return asset.metadata && typeof asset.metadata === 'object' ? asset.metadata : {};
 }
 
-function validScript(value: unknown): value is JordanReelScript {
+export function validJordanReelScript(value: unknown): value is JordanReelScript {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   return row['template'] === 'diagnostic-kinetic-v1' &&
@@ -88,7 +92,7 @@ export async function claimNextJordanReel(
   if (!candidate) return null;
 
   const script = metadata(candidate)['reel_script'];
-  if (!validScript(script)) {
+  if (!validJordanReelScript(script)) {
     await repo.upsertAsset({
       assetId: candidate.asset_id,
       contentItemId: candidate.content_item_id,
@@ -185,7 +189,7 @@ export async function claimNextJordanReel(
   };
 }
 
-function assertMp4(bytes: Uint8Array): void {
+export function validateJordanReelVideoBytes(bytes: Uint8Array): void {
   if (bytes.byteLength < 50_000 || bytes.byteLength > MAX_VIDEO_BYTES) {
     throw new Error('invalid_video_size');
   }
@@ -204,7 +208,7 @@ function assertJpeg(bytes: Uint8Array): void {
   }
 }
 
-function validateRenderReport(report: JordanReelRenderValidation): void {
+export function validateJordanReelRenderReport(report: JordanReelRenderValidation): void {
   if (report.width !== 1080 || report.height !== 1920) throw new Error('invalid_dimensions');
   if (!Number.isFinite(report.durationSeconds) || report.durationSeconds < 26 || report.durationSeconds > 30) {
     throw new Error('invalid_duration');
@@ -228,6 +232,41 @@ function validateRenderReport(report: JordanReelRenderValidation): void {
   }
 }
 
+function validateReviewAttestation(
+  review: JordanReelReviewAttestation,
+  mediaSha256: string
+): void {
+  if (
+    review.reviewer !== 'maya' ||
+    review.provider !== 'gemini' ||
+    review.reviewVersion !== JORDAN_REEL_REVIEW_VERSION ||
+    review.mediaSha256 !== mediaSha256 ||
+    !['pass', 'fail', 'hold'].includes(review.decision) ||
+    !review.model.trim() ||
+    !review.reviewedAt.trim() ||
+    !Number.isInteger(review.attempts) ||
+    review.attempts < 0 ||
+    !Array.isArray(review.findings)
+  ) {
+    throw new Error('reel_review_attestation_invalid');
+  }
+  if (
+    review.decision === 'pass' &&
+    (
+      review.findings.some((finding) => finding.severity !== 'minor') ||
+      !review.hookClear ||
+      !review.brandSafe ||
+      !review.ctaClear ||
+      !review.audioAcceptable ||
+      !review.textReadable ||
+      !review.sequenceCoherent ||
+      !review.engaging
+    )
+  ) {
+    throw new Error('reel_review_false_pass');
+  }
+}
+
 function publicUrl(publicBase: string, key: string): string {
   return `${publicBase.replace(/\/+$/, '')}/${key}`;
 }
@@ -243,14 +282,19 @@ export async function completeJordanReelRender(args: {
   readonly feedPreview: ArrayBuffer;
   readonly gridPreview: ArrayBuffer;
   readonly validation: JordanReelRenderValidation;
+  readonly review: JordanReelReviewAttestation;
   readonly now?: Date;
-}): Promise<{ readonly scheduled: boolean; readonly videoUrl: string }> {
-  validateRenderReport(args.validation);
+}): Promise<{
+  readonly scheduled: boolean;
+  readonly videoUrl: string;
+  readonly reviewDecision: JordanReelReviewAttestation['decision'];
+}> {
+  validateJordanReelRenderReport(args.validation);
   const videoBytes = new Uint8Array(args.video);
   const thumbnailBytes = new Uint8Array(args.thumbnail);
   const feedBytes = new Uint8Array(args.feedPreview);
   const gridBytes = new Uint8Array(args.gridPreview);
-  assertMp4(videoBytes);
+  validateJordanReelVideoBytes(videoBytes);
   assertJpeg(thumbnailBytes);
   assertJpeg(feedBytes);
   assertJpeg(gridBytes);
@@ -265,12 +309,13 @@ export async function completeJordanReelRender(args: {
   ) {
     throw new Error('stale_render_attempt');
   }
-  if (!validScript(assetMetadata['reel_script'])) throw new Error('invalid_or_ungrounded_script');
+  if (!validJordanReelScript(assetMetadata['reel_script'])) throw new Error('invalid_or_ungrounded_script');
   if (assetMetadata['reel_template_id'] !== args.validation.templateId) {
     throw new Error('unexpected_template_id');
   }
 
   const sha256 = createHash('sha256').update(videoBytes).digest('hex');
+  validateReviewAttestation(args.review, sha256);
   const { data: duplicate } = await args.supabase
     .from('distribution_asset_media')
     .select('id')
@@ -327,7 +372,7 @@ export async function completeJordanReelRender(args: {
       storageUrl: videoUrl,
       mimeType: 'video/mp4',
       altText: `${asset.title ?? 'GEO-Pulse AI visibility Reel'}.`,
-      providerReadyStatus: 'ready',
+      providerReadyStatus: args.review.decision === 'pass' ? 'ready' : 'invalid',
       metadata: {
         generated_by: 'jordan',
         renderer: 'github_actions_hyperframes',
@@ -363,6 +408,17 @@ export async function completeJordanReelRender(args: {
         sha256,
         media_fingerprint: sha256,
         template_id: args.validation.templateId,
+        agent_review_required: true,
+        agent_review_decision: args.review.decision,
+        agent_review_reviewer: args.review.reviewer,
+        agent_review_provider: args.review.provider,
+        agent_review_model: args.review.model,
+        agent_review_version: args.review.reviewVersion,
+        agent_review_media_sha256: args.review.mediaSha256,
+        agent_reviewed_at: args.review.reviewedAt,
+        agent_review_summary: args.review.summary,
+        agent_review_findings: args.review.findings,
+        agent_review_attempts: args.review.attempts,
       },
     },
     {
@@ -398,11 +454,13 @@ export async function completeJordanReelRender(args: {
     .order('created_at', { ascending: true })
     .limit(1);
   const job = jobs?.[0] as { id: string; publish_mode: string; status: string } | undefined;
-  const scheduled = job?.publish_mode === 'scheduled';
+  const scheduled = job?.publish_mode === 'scheduled' && args.review.decision === 'pass';
   if (job) {
     await repo.updateJob(job.id, {
       status: scheduled ? 'scheduled' : 'draft',
-      lastError: null,
+      lastError: args.review.decision === 'pass'
+        ? null
+        : `reel_agent_review_${args.review.decision}`,
     });
   }
   await repo.upsertAsset({
@@ -421,16 +479,26 @@ export async function completeJordanReelRender(args: {
     status: scheduled ? 'approved' : 'review',
     ctaUrl: asset.cta_url,
     metadata: {
-      reel_render_status: 'complete',
+      reel_render_status: args.review.decision === 'pass' ? 'complete' : 'review_failed',
       reel_rendered_at: validatedAt,
       reel_master_url: videoUrl,
       reel_thumbnail_url: thumbnailUrl,
       reel_feed_preview_url: feedPreviewUrl,
       reel_grid_preview_url: gridPreviewUrl,
       reel_render_error: null,
+      reel_review_status: args.review.decision,
+      reel_review_reviewer: args.review.reviewer,
+      reel_review_provider: args.review.provider,
+      reel_review_model: args.review.model,
+      reel_review_version: args.review.reviewVersion,
+      reel_review_media_sha256: args.review.mediaSha256,
+      reel_reviewed_at: args.review.reviewedAt,
+      reel_review_summary: args.review.summary,
+      reel_review_findings: args.review.findings,
+      reel_review_attempts: args.review.attempts,
     },
   });
-  return { scheduled, videoUrl };
+  return { scheduled, videoUrl, reviewDecision: args.review.decision };
 }
 
 export async function failJordanReelRender(args: {

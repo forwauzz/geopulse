@@ -49,6 +49,7 @@ import {
   buildJordanReelScript,
   chooseJordanReelSource,
   JORDAN_REEL_VALIDATION_VERSION,
+  jordanReelAttemptKey,
   jordanReelSlotKey,
   resolveJordanReelConfig,
   shouldPlanJordanReel,
@@ -1506,10 +1507,14 @@ export async function runSocialProofAgent(args: {
       reelPlanEligible
         ? chooseJordanReelSource(baseOrderedCandidates, config.reelCategories, existingAssets)
         : null;
+    const reelSlotKey = jordanReelSlotKey(now, config.timezone);
+    const reelAttemptIndex = existingAssets.filter(
+      (asset) => asset.asset_type === 'short_video_post' && asset.metadata['reel_slot_key'] === reelSlotKey,
+    ).length;
     const reelCandidate: SocialProofCandidate | null = reelSource
       ? {
           ...reelSource,
-          key: `jordan-reel-${jordanReelSlotKey(now, config.timezone)}`,
+          key: jordanReelAttemptKey(reelSlotKey, reelAttemptIndex),
           assetType: 'short_video_post',
           mediaUrl: null,
           mediaMimeType: null,
@@ -1518,7 +1523,7 @@ export async function runSocialProofAgent(args: {
             ...reelSource.evidence,
             research_agent:
               reelSource.evidence['research_agent'] === 'sofia' ? 'sofia' : null,
-            reel_slot_key: jordanReelSlotKey(now, config.timezone),
+            reel_slot_key: reelSlotKey,
             reel_script: buildJordanReelScript(reelSource),
             reel_template: 'diagnostic-kinetic-v1',
           },

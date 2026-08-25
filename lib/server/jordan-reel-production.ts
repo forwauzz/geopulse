@@ -127,6 +127,18 @@ export function jordanReelSlotKey(now: Date, timezone: string): string {
   return `${localDate}-d${local.weekday}`;
 }
 
+export function jordanReelAttemptKey(slotKey: string, attemptIndex: number): string {
+  const suffix = attemptIndex > 0 ? `-r${attemptIndex}` : '';
+  return `jordan-reel-${slotKey}${suffix}`;
+}
+
+function reelProvidesCoverage(asset: DistributionAssetRow): boolean {
+  if (asset.asset_type !== 'short_video_post') return false;
+  if (asset.status === 'failed' || asset.status === 'archived') return false;
+  const renderStatus = String(asset.metadata['reel_render_status'] ?? '');
+  return !['blocked', 'failed', 'review_failed'].includes(renderStatus);
+}
+
 export function shouldPlanJordanReel(args: {
   readonly now: Date;
   readonly timezone: string;
@@ -137,15 +149,21 @@ export function shouldPlanJordanReel(args: {
   if (!args.config.enabled) return false;
   const local = localDateParts(args.now, args.timezone);
   const slotKey = jordanReelSlotKey(args.now, args.timezone);
-  if (args.existingAssets.some((asset) => asset.metadata['reel_slot_key'] === slotKey)) {
+  const slotAttempts = args.existingAssets.filter(
+    (asset) => asset.asset_type === 'short_video_post' && asset.metadata['reel_slot_key'] === slotKey,
+  );
+  if (slotAttempts.some(reelProvidesCoverage)) {
     return false;
   }
+  // Preserve failed review evidence and create a fresh immutable attempt. Bound the
+  // recovery loop so a persistent source/template problem cannot flood inventory.
+  if (slotAttempts.length >= 3) return false;
 
   const start = new Date(args.now);
   start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
   start.setUTCHours(0, 0, 0, 0);
   const producedThisWeek = args.existingAssets.filter((asset) => {
-    if (asset.asset_type !== 'short_video_post') return false;
+    if (!reelProvidesCoverage(asset)) return false;
     if (typeof asset.metadata['reel_slot_key'] !== 'string') return false;
     const created = new Date(asset.created_at);
     return Number.isFinite(created.getTime()) && created >= start;
@@ -154,7 +172,7 @@ export function shouldPlanJordanReel(args: {
 
   const staleBefore = args.now.getTime() - (14 * 24 * 60 * 60 * 1000);
   const hasRecentReel = args.existingAssets.some((asset) => {
-    if (asset.asset_type !== 'short_video_post') return false;
+    if (!reelProvidesCoverage(asset)) return false;
     const created = new Date(asset.created_at).getTime();
     return Number.isFinite(created) && created >= staleBefore;
   });
@@ -345,6 +363,14 @@ export type JordanReelLibraryItem = {
   readonly scheduledFor: string | null;
   readonly destinationUrl: string | null;
   readonly renderStatus: string;
+  readonly reviewStatus: string;
+  readonly reviewSummary: string | null;
+  readonly reviewFindings: ReadonlyArray<{
+    readonly startSeconds: number;
+    readonly endSeconds: number;
+    readonly message: string;
+    readonly repair: string;
+  }>;
   readonly createdAt: string;
 };
 
@@ -378,6 +404,9 @@ export async function loadJordanReelLibrary(
   }
   return assets.map((asset: any) => {
     const job = byAsset.get(asset.id);
+    const rawFindings = Array.isArray(asset.metadata?.reel_review_findings)
+      ? asset.metadata.reel_review_findings
+      : [];
     return {
       assetId: asset.asset_id,
       title: asset.title ?? 'Untitled Reel',
@@ -385,6 +414,26 @@ export async function loadJordanReelLibrary(
       scheduledFor: job?.scheduled_for ?? null,
       destinationUrl: job?.destination_url ?? null,
       renderStatus: String(asset.metadata?.reel_render_status ?? 'unknown'),
+      reviewStatus: String(asset.metadata?.reel_review_status ?? 'not reviewed'),
+      reviewSummary: typeof asset.metadata?.reel_review_summary === 'string'
+        ? asset.metadata.reel_review_summary
+        : null,
+      reviewFindings: rawFindings.flatMap((finding: unknown) => {
+        if (!finding || typeof finding !== 'object' || Array.isArray(finding)) return [];
+        const row = finding as Record<string, unknown>;
+        if (
+          typeof row['startSeconds'] !== 'number' ||
+          typeof row['endSeconds'] !== 'number' ||
+          typeof row['message'] !== 'string' ||
+          typeof row['repair'] !== 'string'
+        ) return [];
+        return [{
+          startSeconds: row['startSeconds'],
+          endSeconds: row['endSeconds'],
+          message: row['message'],
+          repair: row['repair'],
+        }];
+      }).slice(0, 5),
       createdAt: asset.created_at,
     };
   });

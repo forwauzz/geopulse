@@ -55,6 +55,7 @@ Required:
 - `RESEND_FROM_EMAIL`
 - optional: `SALES_REPLY_TO_EMAIL` — verified receiving mailbox used for prospect replies and operator routing
 - `GEMINI_MODEL`
+- `JORDAN_REEL_REVIEW_MODEL` — optional Gemini video-understanding model override for Maya's mandatory exact-media Reel review (default `gemini-2.5-flash`); reuses `GEMINI_API_KEY`
 - `GEMINI_ENDPOINT`
 - `BENCHMARK_EXECUTION_PROVIDER`
 - `BENCHMARK_EXECUTION_MODEL`

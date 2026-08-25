@@ -49,6 +49,8 @@ STARTUP_SLACK_CLIENT_SECRET=your-slack-client-secret
 # Free tier: 1,000 req/day (Gemini 2.5 Flash-Lite)
 # Get key: https://ai.google.dev/
 GEMINI_API_KEY=your-gemini-api-key-here
+# Optional model override for Maya's mandatory full-Reel review.
+# JORDAN_REEL_REVIEW_MODEL=gemini-2.5-flash
 
 # Optional: internal benchmark execution lane. Defaults to stub unless enabled.
 # "multi" routes by model id (gemini-* -> Gemini, gpt-* -> OpenAI, *sonar* -> Perplexity).
