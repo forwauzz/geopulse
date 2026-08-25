@@ -43,6 +43,17 @@ const completeMetadata = {
   validated_by: 'founder',
 };
 
+const agentReviewMetadata = {
+  sha256: 'a'.repeat(64),
+  agent_review_required: true,
+  agent_review_decision: 'pass',
+  agent_review_reviewer: 'maya',
+  agent_review_provider: 'gemini',
+  agent_review_version: 'maya-reel-watch-v1',
+  agent_reviewed_at: '2026-08-24T15:00:00Z',
+  agent_review_media_sha256: 'a'.repeat(64),
+};
+
 describe('Instagram visual safety', () => {
   it('does not add a preview requirement to normal feed images', () => {
     expect(validateInstagramVisualSafety(asset('single_image_post'), [])).toEqual({ safe: true });
@@ -98,6 +109,7 @@ describe('Instagram visual safety', () => {
           automated_crop_suite_approved: true,
           automated_crop_suite_version: 'jordan-crop-suite-v2',
           production_validation_version: 'jordan-reel-v2',
+          ...agentReviewMetadata,
         }),
       ])
     ).toEqual({ safe: true });
@@ -117,6 +129,7 @@ describe('Instagram visual safety', () => {
           automated_crop_suite_approved: true,
           automated_crop_suite_version: 'jordan-crop-suite-v2',
           production_validation_version: 'jordan-reel-v2',
+          ...agentReviewMetadata,
         }),
       ])
     ).toEqual({ safe: true });
@@ -146,6 +159,31 @@ describe('Instagram visual safety', () => {
         }),
       ])
     ).toEqual({ safe: false, reason: 'meta_preview_approval_required' });
+  });
+
+  it('blocks an automated Reel until Maya passes the exact media SHA', () => {
+    const automated = {
+      ...completeMetadata,
+      duration_seconds: 28,
+      meta_preview_approved: false,
+      meta_preview_approved_at: '',
+      renderer: 'github_actions_hyperframes',
+      reels_preview_safe: true,
+      crop_safe_zone_checked: true,
+      automated_crop_suite_approved: true,
+      automated_crop_suite_version: 'jordan-crop-suite-v2',
+      production_validation_version: 'jordan-reel-v2',
+    };
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [reel(automated)])
+    ).toEqual({ safe: false, reason: 'reel_agent_review_required' });
+    expect(
+      validateInstagramVisualSafety(asset('short_video_post'), [reel({
+        ...automated,
+        ...agentReviewMetadata,
+        agent_review_media_sha256: 'b'.repeat(64),
+      })])
+    ).toEqual({ safe: false, reason: 'reel_agent_review_required' });
   });
 
   it('blocks silent reels even when every visual preview passed', () => {

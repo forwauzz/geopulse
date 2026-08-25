@@ -21,6 +21,10 @@ import {
   completeJordanReelRender,
   failJordanReelRender,
 } from './jordan-reel-render';
+import {
+  JORDAN_REEL_REVIEW_VERSION,
+  type JordanReelReviewAttestation,
+} from './jordan-reel-review';
 
 const script = {
   template: 'diagnostic-kinetic-v1' as const,
@@ -34,6 +38,28 @@ const script = {
   sourceUrl: 'https://developers.google.com/search/blog/example',
   sourceLabel: 'Google Search Central',
 };
+
+function passingReview(mediaSha256: string): JordanReelReviewAttestation {
+  return {
+    decision: 'pass' as const,
+    reviewer: 'maya' as const,
+    reviewVersion: JORDAN_REEL_REVIEW_VERSION,
+    provider: 'gemini' as const,
+    model: 'gemini-2.5-flash',
+    mediaSha256,
+    reviewedAt: '2026-07-26T14:29:00.000Z',
+    summary: 'Clean and ready.',
+    hookClear: true,
+    brandSafe: true,
+    ctaClear: true,
+    audioAcceptable: true,
+    textReadable: true,
+    sequenceCoherent: true,
+    engaging: true,
+    findings: [],
+    attempts: 1,
+  };
+}
 
 function asset(metadata: Record<string, unknown>) {
   return {
@@ -211,6 +237,9 @@ describe('Jordan Reel render handoff', () => {
     const jpeg = new Uint8Array(12_000);
     jpeg[0] = 0xff;
     jpeg[1] = 0xd8;
+    const mediaSha256 = await crypto.subtle.digest('SHA-256', video).then((digest) =>
+      [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    );
 
     const result = await completeJordanReelRender({
       supabase: supabaseStub(),
@@ -240,6 +269,7 @@ describe('Jordan Reel render handoff', () => {
         cropSafeZoneChecked: true,
         templateId: 'diagnostic-kinetic-v1a',
       },
+      review: passingReview(mediaSha256),
       now: new Date('2026-07-26T14:30:00.000Z'),
     });
 
@@ -256,6 +286,9 @@ describe('Jordan Reel render handoff', () => {
             automated_crop_suite_version: 'jordan-crop-suite-v2',
             production_validation_version: 'jordan-reel-v2',
             validation_version: 'reel-v2',
+            agent_review_decision: 'pass',
+            agent_review_reviewer: 'maya',
+            agent_review_media_sha256: mediaSha256,
           }),
         }),
       ])
@@ -265,6 +298,83 @@ describe('Jordan Reel render handoff', () => {
     }));
     expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
       status: 'approved',
+    }));
+  });
+
+  it('holds a failed Maya review without promoting the reserved schedule', async () => {
+    const renderingAsset = asset({
+      reel_render_status: 'rendering',
+      reel_render_attempt_id: 'attempt-2',
+      reel_template_id: 'diagnostic-kinetic-v1a',
+      reel_script: script,
+    });
+    repo.getAssetByAssetId.mockResolvedValue(renderingAsset);
+    repo.replaceAssetMedia.mockResolvedValue([]);
+    repo.updateJob.mockResolvedValue({});
+    repo.upsertAsset.mockResolvedValue({});
+    const video = new Uint8Array(60_000);
+    video.set(new TextEncoder().encode('ftyp'), 4);
+    const jpeg = new Uint8Array(12_000);
+    jpeg[0] = 0xff;
+    jpeg[1] = 0xd8;
+    const mediaSha256 = await crypto.subtle.digest('SHA-256', video).then((digest) =>
+      [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    );
+    const review = {
+      ...passingReview(mediaSha256),
+      decision: 'fail' as const,
+      textReadable: false,
+      summary: 'Text is clipped.',
+      findings: [{
+        code: 'text_clipped' as const,
+        severity: 'major' as const,
+        startSeconds: 3,
+        endSeconds: 5,
+        message: 'Headline is clipped.',
+        repair: 'Move it down.',
+      }],
+    };
+
+    const result = await completeJordanReelRender({
+      supabase: supabaseStub(),
+      bucket: { async put() {} },
+      publicBase: 'https://media.example',
+      assetId: 'proof_instagram_jordan-reel-2026-07-26-d0',
+      attemptId: 'attempt-2',
+      video: video.buffer,
+      thumbnail: jpeg.buffer.slice(0),
+      feedPreview: jpeg.buffer.slice(0),
+      gridPreview: jpeg.buffer.slice(0),
+      validation: {
+        width: 1080,
+        height: 1920,
+        durationSeconds: 28,
+        audioTrackCount: 1,
+        feedPreviewSafe: true,
+        gridPreviewSafe: true,
+        reelsPreviewSafe: true,
+        mobileTextLegible: true,
+        spellingChecked: true,
+        ctaChecked: true,
+        cropSafeZoneChecked: true,
+        templateId: 'diagnostic-kinetic-v1a',
+      },
+      review,
+      now: new Date('2026-07-26T14:30:00.000Z'),
+    });
+
+    expect(result).toMatchObject({ scheduled: false, reviewDecision: 'fail' });
+    expect(repo.updateJob).toHaveBeenCalledWith('job-row', expect.objectContaining({
+      status: 'draft',
+      lastError: 'reel_agent_review_fail',
+    }));
+    expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'review',
+      metadata: expect.objectContaining({
+        reel_render_status: 'review_failed',
+        reel_review_status: 'fail',
+        reel_review_findings: review.findings,
+      }),
     }));
   });
 });

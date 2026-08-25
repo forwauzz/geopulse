@@ -9,6 +9,7 @@ export type InstagramVisualSafetyResult =
   | { readonly safe: false; readonly reason: string };
 
 export const INSTAGRAM_REEL_VALIDATION_VERSION = 'reel-v2';
+export const INSTAGRAM_REEL_AGENT_REVIEW_VERSION = 'maya-reel-watch-v1';
 
 function numberFrom(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -61,6 +62,18 @@ export function validateInstagramVisualSafety(
     stringFrom(video.metadata['renderer']) === 'github_actions_hyperframes';
   if (!manualMetaPreviewApproved && !automatedCropSuiteApproved) {
     return { safe: false, reason: 'meta_preview_approval_required' };
+  }
+  const agentReviewApproved =
+    video.metadata['agent_review_required'] === true &&
+    stringFrom(video.metadata['agent_review_decision']) === 'pass' &&
+    stringFrom(video.metadata['agent_review_reviewer']) === 'maya' &&
+    stringFrom(video.metadata['agent_review_provider']) === 'gemini' &&
+    stringFrom(video.metadata['agent_review_version']) === INSTAGRAM_REEL_AGENT_REVIEW_VERSION &&
+    stringFrom(video.metadata['agent_reviewed_at']) !== '' &&
+    stringFrom(video.metadata['agent_review_media_sha256']) !== '' &&
+    stringFrom(video.metadata['agent_review_media_sha256']) === stringFrom(video.metadata['sha256']);
+  if (automatedCropSuiteApproved && !agentReviewApproved) {
+    return { safe: false, reason: 'reel_agent_review_required' };
   }
   if (video.metadata['has_audio'] !== true || numberFrom(video.metadata['audio_track_count'])! < 1) {
     return { safe: false, reason: 'reel_audio_required' };

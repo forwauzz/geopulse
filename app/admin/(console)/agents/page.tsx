@@ -611,8 +611,21 @@ export default async function AdminAgentsPage() {
                       <p className="truncate font-sans text-sm font-bold text-on-background">{reel.title}</p>
                       <p className="font-sans text-xs text-on-surface-variant">
                         {reel.renderStatus.replaceAll('_', ' ')}
+                        {` · Maya: ${reel.reviewStatus.replaceAll('_', ' ')}`}
                         {reel.scheduledFor ? ` · ${new Date(reel.scheduledFor).toLocaleString('en-CA', { timeZone: social.timezone })}` : ''}
                       </p>
+                      {reel.reviewSummary ? (
+                        <p className="mt-1 font-sans text-xs leading-5 text-on-surface-variant">{reel.reviewSummary}</p>
+                      ) : null}
+                      {reel.reviewFindings.length > 0 ? (
+                        <ul className="mt-2 space-y-1 font-sans text-xs leading-5 text-error">
+                          {reel.reviewFindings.map((finding, index) => (
+                            <li key={`${finding.startSeconds}-${finding.endSeconds}-${index}`}>
+                              {finding.startSeconds.toFixed(1)}–{finding.endSeconds.toFixed(1)}s: {finding.message} Fix: {finding.repair}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                     {reel.destinationUrl ? (
                       <a href={reel.destinationUrl} target="_blank" rel="noreferrer" className="font-sans text-xs font-bold text-primary">Open</a>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildJordanReelScript,
   chooseJordanReelSource,
+  jordanReelAttemptKey,
   jordanReelSlotKey,
   resolveJordanReelConfig,
   shouldPlanJordanReel,
@@ -67,6 +68,41 @@ describe('Jordan autonomous Reel production', () => {
     })).toBe(false);
   });
 
+  it('replaces a review-failed Reel without overwriting its evidence', () => {
+    const now = new Date('2026-07-26T14:00:00.000Z');
+    const slot = jordanReelSlotKey(now, 'America/Toronto');
+    const config = resolveJordanReelConfig({ reels_enabled: true });
+    expect(shouldPlanJordanReel({
+      now,
+      timezone: 'America/Toronto',
+      config,
+      coverageRequired: true,
+      existingAssets: [asset({
+        status: 'review',
+        metadata: { reel_slot_key: slot, reel_render_status: 'review_failed' },
+      })],
+    })).toBe(true);
+    expect(jordanReelAttemptKey(slot, 1)).toBe(`jordan-reel-${slot}-r1`);
+    expect(jordanReelAttemptKey(slot, 2)).toBe(`jordan-reel-${slot}-r2`);
+  });
+
+  it('bounds review-failure recovery at three immutable attempts per slot', () => {
+    const now = new Date('2026-07-26T14:00:00.000Z');
+    const slot = jordanReelSlotKey(now, 'America/Toronto');
+    const config = resolveJordanReelConfig({ reels_enabled: true });
+    expect(shouldPlanJordanReel({
+      now,
+      timezone: 'America/Toronto',
+      config,
+      coverageRequired: true,
+      existingAssets: [0, 1, 2].map((attempt) => asset({
+        asset_id: `failed-${attempt}`,
+        status: 'review',
+        metadata: { reel_slot_key: slot, reel_render_status: 'review_failed' },
+      })),
+    })).toBe(false);
+  });
+
   it('catches up stale Reel inventory off-schedule but still enforces the weekly cap', () => {
     const config = resolveJordanReelConfig({
       reels_enabled: true,
@@ -88,6 +124,27 @@ describe('Jordan autonomous Reel production', () => {
         metadata: { reel_slot_key: '2026-07-25-d6' },
       })],
     })).toBe(false);
+  });
+
+  it('does not let failed review attempts consume weekly or recent Reel coverage', () => {
+    const config = resolveJordanReelConfig({
+      reels_enabled: true,
+      reels_per_week: 1,
+      reel_days_local: [0],
+    });
+    expect(shouldPlanJordanReel({
+      now: new Date('2026-07-27T14:00:00.000Z'),
+      timezone: 'America/Toronto',
+      config,
+      existingAssets: [asset({
+        created_at: '2026-07-26T14:00:00.000Z',
+        status: 'review',
+        metadata: {
+          reel_slot_key: '2026-07-26-d0',
+          reel_render_status: 'review_failed',
+        },
+      })],
+    })).toBe(true);
   });
 
   it('keeps normal weekday scheduling when Reel inventory is recent', () => {
