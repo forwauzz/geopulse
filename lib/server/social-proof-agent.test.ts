@@ -11,6 +11,7 @@ import {
   growthCampaignForSocialCandidate,
   instagramScheduleSlot,
   latestSocialSequenceAnchor,
+  nextLocalAssetCapacityReset,
   orderAutonomousCandidates,
   preferredAccount,
   prioritizeRequiredFormatCandidates,
@@ -597,5 +598,12 @@ describe('Social Proof Agent safeguards', () => {
       asset('2026-07-27T01:00:00.000Z'),
       asset('2026-07-27T05:00:00.000Z'),
     ], new Date('2026-07-27T03:30:00.000Z'), 4, 'America/Toronto')).toBe(3);
+  });
+
+  it('defers a saturated Toronto creative day to the next local reset', () => {
+    expect(nextLocalAssetCapacityReset(
+      new Date('2026-08-26T00:05:00.000Z'),
+      'America/Toronto',
+    )).toBe('2026-08-26T04:00:00.000Z');
   });
 });
