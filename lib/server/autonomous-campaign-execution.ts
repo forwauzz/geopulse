@@ -63,6 +63,8 @@ export async function runAutonomousCampaignExecution(args: {
   inventoryReason: string | null;
   inventoryThrough: string | null;
   missingFormats: string;
+  socialRetryReason: string | null;
+  socialRetryAfter: string | null;
 }> {
   const now = args.now ?? new Date();
   const proofReconciliation = await reconcilePublishedDistributionProofs({
@@ -96,6 +98,13 @@ export async function runAutonomousCampaignExecution(args: {
     ));
   }
   const inventory = await loadContentInventoryHealth(args.supabase, now);
+  const partialRecoveryPending = social?.assetsCreated > 0 && !inventory.healthy;
+  const socialRetryReason = social?.reason
+    ?? (partialRecoveryPending ? 'partial_recovery_pending' : null);
+  const socialRetryAfter = social?.retryAfter
+    ?? (partialRecoveryPending
+      ? new Date(now.getTime() + 3_600_000).toISOString()
+      : null);
 
   return {
     loopsSynced: loopControl.synced,
@@ -107,5 +116,7 @@ export async function runAutonomousCampaignExecution(args: {
     inventoryReason: inventory.reason,
     inventoryThrough: inventory.inventoryThrough,
     missingFormats: inventory.missingFormats.join(','),
+    socialRetryReason,
+    socialRetryAfter,
   };
 }

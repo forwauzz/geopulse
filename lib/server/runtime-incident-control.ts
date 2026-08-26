@@ -20,7 +20,20 @@ export type RuntimeIncidentSignal = {
   readonly latestFailureAt: string | null;
   readonly latestSuccessAt: string | null;
   readonly reason: string | null;
+  readonly retryAfter: string | null;
 };
+
+type ExistingRuntimeIncidentLoop = {
+  readonly attempt_count?: number | null;
+  readonly max_attempts?: number | null;
+  readonly last_attempted_at?: string | null;
+  readonly metadata?: Record<string, unknown> | null;
+};
+
+const DEFERRED_RETRY_REASONS = new Set([
+  'daily_asset_cap_reached',
+  'partial_recovery_pending',
+]);
 
 const DEFINITIONS: readonly RuntimeIncidentDefinition[] = [
   {
@@ -181,11 +194,83 @@ function success(row: Row, definition: RuntimeIncidentDefinition): boolean {
 
 function reason(row: Row | undefined): string | null {
   const payload = data(row);
-  for (const key of ['reason', 'inventoryReason', 'inventory_reason', 'error', 'message', 'failed_stage']) {
+  for (const key of [
+    'socialRetryReason',
+    'retry_reason',
+    'reason',
+    'inventoryReason',
+    'inventory_reason',
+    'error',
+    'message',
+    'failed_stage',
+  ]) {
     const value = payload[key];
     if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 500);
   }
   return row ? String(row.event) : null;
+}
+
+function retryAfter(row: Row | undefined): string | null {
+  const payload = data(row);
+  for (const key of ['socialRetryAfter', 'retry_after']) {
+    const value = payload[key];
+    if (typeof value === 'string' && Number.isFinite(Date.parse(value))) return value;
+  }
+  return null;
+}
+
+export function planRuntimeIncidentLoop(
+  signal: RuntimeIncidentSignal,
+  existing: ExistingRuntimeIncidentLoop | null | undefined,
+  now: Date,
+): {
+  readonly state: 'executing' | 'blocked';
+  readonly severity: 'today' | 'urgent';
+  readonly attemptCount: number;
+  readonly founderRequired: boolean;
+  readonly blocker: string | null;
+  readonly dueAt: string;
+  readonly nextAction: string;
+  readonly deferred: boolean;
+} {
+  const maxAttempts = Math.max(1, Number(existing?.max_attempts ?? 3));
+  const currentAttempts = Math.max(0, Number(existing?.attempt_count ?? 0));
+  const deferred = DEFERRED_RETRY_REASONS.has(signal.reason ?? '');
+  const legacyDerivedAttempts = existing?.metadata?.['attempt_semantics_version'] !== 'runtime-repair-v2';
+  const latestFailure = Date.parse(signal.latestFailureAt ?? '');
+  const lastAttempt = Date.parse(existing?.last_attempted_at ?? '');
+  const hasNewRepairFailure = Boolean(existing)
+    && Number.isFinite(latestFailure)
+    && (!Number.isFinite(lastAttempt) || latestFailure > lastAttempt);
+  const attemptCount = deferred
+    ? legacyDerivedAttempts
+      ? Math.min(currentAttempts, maxAttempts - 1)
+      : currentAttempts
+    : hasNewRepairFailure
+      ? Math.min(maxAttempts, currentAttempts + 1)
+      : currentAttempts;
+  const founderRequired = !deferred && attemptCount >= maxAttempts;
+  const retryAt = Date.parse(signal.retryAfter ?? '');
+  const dueAt = deferred && Number.isFinite(retryAt) && retryAt > now.getTime()
+    ? new Date(retryAt).toISOString()
+    : new Date(now.getTime() + (founderRequired ? 2 : 6) * 3_600_000).toISOString();
+
+  return {
+    state: founderRequired ? 'blocked' : 'executing',
+    severity: founderRequired ? 'urgent' : 'today',
+    attemptCount,
+    founderRequired,
+    blocker: founderRequired
+      ? 'Automatic runtime retries were exhausted; the repair requires an engineering change.'
+      : null,
+    dueAt,
+    nextAction: founderRequired
+      ? 'Open a Codex engineering repair task from this incident; deploy the fix and wait for the replacement success signal.'
+      : deferred
+        ? `Wait for the bounded retry window at ${dueAt}; then require replacement inventory or count one real repair failure.`
+        : signal.definition.nextAction,
+    deferred,
+  };
 }
 
 export function classifyRuntimeIncidents(
@@ -230,6 +315,7 @@ export function classifyRuntimeIncidents(
       latestFailureAt: latestFailure?.created_at ?? null,
       latestSuccessAt: latestSuccess?.created_at ?? null,
       reason: active ? reason(latestFailure) : null,
+      retryAfter: active ? retryAfter(latestFailure) : null,
     };
   });
 }
@@ -256,7 +342,7 @@ export async function syncRuntimeIncidentLoops(args: {
   for (const signal of signals) {
     const { data: existing } = await args.db
       .from('agent_work_loops')
-      .select('id,state,attempt_count,max_attempts,last_attempted_at')
+      .select('id,state,attempt_count,max_attempts,last_attempted_at,metadata')
       .eq('source_type', 'runtime_incident')
       .eq('source_key', signal.definition.key)
       .maybeSingle();
@@ -283,42 +369,38 @@ export async function syncRuntimeIncidentLoops(args: {
       continue;
     }
 
-    const maxAttempts = Number(existing?.max_attempts ?? 3);
-    const observedAttempts = Math.max(
-      Number(existing?.attempt_count ?? 0),
-      Math.min(maxAttempts, signal.consecutiveFailures),
-    );
-    const exhausted = observedAttempts >= maxAttempts;
-    const founderRequired = exhausted;
+    const plan = planRuntimeIncidentLoop(signal, existing, now);
     const payload = {
       lane: signal.definition.lane,
       owner: signal.definition.owner,
-      state: exhausted ? 'blocked' : 'executing',
-      severity: exhausted ? 'urgent' : 'today',
+      state: plan.state,
+      severity: plan.severity,
       title: signal.definition.title,
       detail: signal.reason ?? 'A production runtime failed.',
-      next_action: exhausted
-        ? 'Open a Codex engineering repair task from this incident; deploy the fix and wait for the replacement success signal.'
-        : signal.definition.nextAction,
-      due_at: new Date(now.getTime() + (exhausted ? 2 : 6) * 3_600_000).toISOString(),
-      attempt_count: observedAttempts,
-      last_attempted_at: signal.latestFailureAt,
-      founder_required: founderRequired,
-      blocker: exhausted
-        ? 'Automatic runtime retries were exhausted; the repair requires an engineering change.'
-        : null,
+      next_action: plan.nextAction,
+      due_at: plan.dueAt,
+      attempt_count: plan.attemptCount,
+      last_attempted_at: plan.deferred
+        ? existing?.last_attempted_at ?? null
+        : signal.latestFailureAt,
+      founder_required: plan.founderRequired,
+      blocker: plan.blocker,
       evidence: {
         verification: 'replacement_success_pending',
         latest_failure_at: signal.latestFailureAt,
         latest_success_at: signal.latestSuccessAt,
         consecutive_failures: signal.consecutiveFailures,
         reason: signal.reason,
+        retry_deferred: plan.deferred,
+        retry_after: signal.retryAfter,
       },
       metadata: {
         campaign_lane: signal.definition.campaignLane,
         failure_events: signal.definition.failureEvents,
         success_events: signal.definition.successEvents,
         repair_requires_git_when_exhausted: true,
+        deferred_retry_reasons: [...DEFERRED_RETRY_REASONS],
+        attempt_semantics_version: 'runtime-repair-v2',
       },
       verified_at: null,
       resolved_at: null,
@@ -328,7 +410,7 @@ export async function syncRuntimeIncidentLoops(args: {
         .from('agent_work_loops')
         .update(payload)
         .eq('id', existing.id);
-      if (!updateError && exhausted) escalated += 1;
+      if (!updateError && plan.founderRequired) escalated += 1;
     } else {
       const { error: insertError } = await args.db.from('agent_work_loops').insert({
         source_type: 'runtime_incident',
@@ -337,7 +419,7 @@ export async function syncRuntimeIncidentLoops(args: {
       });
       if (!insertError) {
         opened += 1;
-        if (exhausted) escalated += 1;
+        if (plan.founderRequired) escalated += 1;
       }
     }
   }

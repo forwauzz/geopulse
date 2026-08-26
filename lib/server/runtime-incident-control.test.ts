@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyRuntimeIncidents } from './runtime-incident-control';
+import { classifyRuntimeIncidents, planRuntimeIncidentLoop } from './runtime-incident-control';
 
 describe('runtime incident control', () => {
   it('opens a production incident when the latest runtime signals are failures', () => {
@@ -146,6 +146,81 @@ describe('runtime incident control', () => {
     ]);
 
     expect(social).toMatchObject({ active: true, consecutiveFailures: 2 });
+  });
+
+  it('keeps a known daily-cap deferral owned without fabricating exhausted retries', () => {
+    const [social] = classifyRuntimeIncidents([{
+      event: 'autonomous_campaign_execution',
+      level: 'info',
+      created_at: '2026-08-26T00:05:42.000Z',
+      data: {
+        inventoryHealthy: false,
+        inventoryReason: 'missing_required_formats:instagram:short_video_post',
+        socialRetryReason: 'daily_asset_cap_reached',
+        socialRetryAfter: '2026-08-26T04:00:00.000Z',
+      },
+    }]);
+
+    expect(social).toMatchObject({
+      active: true,
+      reason: 'daily_asset_cap_reached',
+      retryAfter: '2026-08-26T04:00:00.000Z',
+    });
+    expect(planRuntimeIncidentLoop(social!, {
+      attempt_count: 3,
+      max_attempts: 3,
+      last_attempted_at: '2026-08-25T23:03:48.000Z',
+    }, new Date('2026-08-26T00:06:00.000Z'))).toMatchObject({
+      state: 'executing',
+      severity: 'today',
+      attemptCount: 2,
+      founderRequired: false,
+      blocker: null,
+      dueAt: '2026-08-26T04:00:00.000Z',
+    });
+  });
+
+  it('exhausts only after a newer non-deferred repair failure', () => {
+    const [social] = classifyRuntimeIncidents([{
+      event: 'autonomous_campaign_execution_error',
+      level: 'error',
+      created_at: '2026-08-26T05:05:42.000Z',
+      data: { error: 'renderer_failed' },
+    }]);
+
+    expect(planRuntimeIncidentLoop(social!, {
+      attempt_count: 2,
+      max_attempts: 3,
+      last_attempted_at: '2026-08-26T04:05:42.000Z',
+    }, new Date('2026-08-26T05:06:00.000Z'))).toMatchObject({
+      state: 'blocked',
+      attemptCount: 3,
+      founderRequired: true,
+    });
+  });
+
+  it('does not downgrade a genuinely exhausted v2 lineage during a later deferral', () => {
+    const [social] = classifyRuntimeIncidents([{
+      event: 'autonomous_campaign_execution',
+      level: 'info',
+      created_at: '2026-08-26T20:05:42.000Z',
+      data: {
+        inventoryHealthy: false,
+        socialRetryReason: 'daily_asset_cap_reached',
+        socialRetryAfter: '2026-08-27T04:00:00.000Z',
+      },
+    }]);
+
+    expect(planRuntimeIncidentLoop(social!, {
+      attempt_count: 3,
+      max_attempts: 3,
+      last_attempted_at: '2026-08-26T19:05:42.000Z',
+      metadata: { attempt_semantics_version: 'runtime-repair-v2' },
+    }, new Date('2026-08-26T20:06:00.000Z'))).toMatchObject({
+      attemptCount: 3,
+      founderRequired: false,
+      state: 'executing',
+    });
   });
 
   it('surfaces repeated editorial rejection without treating one rejection as an outage', () => {

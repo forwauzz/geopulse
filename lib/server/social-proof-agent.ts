@@ -121,6 +121,7 @@ export type SocialProofAgentResult = {
   readonly jobsCreated: number;
   readonly queuedContentItemIds: readonly string[];
   readonly reason?: string;
+  readonly retryAfter?: string;
 };
 
 export const SOCIAL_SEQUENCE_VERSION = 'social-flow-v1';
@@ -211,28 +212,40 @@ export function growthCampaignForSocialCandidate(
   return campaign;
 }
 
+function localDayKey(value: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((candidate) => candidate.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+export function nextLocalAssetCapacityReset(now: Date, timezone = 'UTC'): string {
+  const day = localDayKey(now, timezone);
+  const cursor = new Date(now);
+  cursor.setUTCMinutes(0, 0, 0);
+  for (let hour = 1; hour <= 30; hour += 1) {
+    cursor.setUTCHours(cursor.getUTCHours() + 1);
+    if (localDayKey(cursor, timezone) !== day) return cursor.toISOString();
+  }
+  return new Date(now.getTime() + 24 * 3_600_000).toISOString();
+}
+
 export function remainingDailyAssetCapacity(
   assets: readonly Pick<DistributionAssetRow, 'created_at' | 'metadata'>[],
   now: Date,
   dailyCap: number,
   timezone = 'UTC',
 ): number {
-  const localDay = (value: Date): string => {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(value);
-    const part = (type: Intl.DateTimeFormatPartTypes) =>
-      parts.find((candidate) => candidate.type === type)?.value ?? '';
-    return `${part('year')}-${part('month')}-${part('day')}`;
-  };
-  const day = localDay(now);
+  const day = localDayKey(now, timezone);
   const createdToday = assets.filter((asset) => {
     const created = new Date(asset.created_at);
     return Number.isFinite(created.getTime())
-      && localDay(created) === day
+      && localDayKey(created, timezone) === day
       && asset.metadata['created_by_agent'] === 'jordan';
   }).length;
   return Math.max(0, dailyCap - createdToday);
@@ -1790,6 +1803,7 @@ export async function runSocialProofAgent(args: {
       }
     }
 
+    const capacityDeferred = dailyCapacity === 0 && orderedCandidates.length > 0;
     const result: SocialProofAgentResult = {
       status: assetsCreated > 0 ? 'created' : 'noop',
       mode,
@@ -1797,7 +1811,14 @@ export async function runSocialProofAgent(args: {
       assetsCreated,
       jobsCreated,
       queuedContentItemIds,
-      ...(candidates.length === 0 ? { reason: 'no_safe_candidates' } : {}),
+      ...(candidates.length === 0
+        ? { reason: 'no_safe_candidates' }
+        : capacityDeferred
+          ? {
+              reason: 'daily_asset_cap_reached',
+              retryAfter: nextLocalAssetCapacityReset(now, config.timezone),
+            }
+          : {}),
     };
     await structuredLogWithClientAndWait(
       args.supabase,
@@ -1824,6 +1845,9 @@ export async function runSocialProofAgent(args: {
               : reelSource
                 ? 'planned'
                 : 'no_grounded_source',
+        daily_capacity_remaining: dailyCapacity,
+        retry_reason: result.reason ?? null,
+        retry_after: result.retryAfter ?? null,
       },
       'info'
     );
