@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { shouldRejectForMiddlewareSubrequest } from '@/lib/server/middleware-cve';
+import { resolvePublicHostRedirect } from '@/lib/server/public-host-redirect';
 import { updateSession } from '@/lib/supabase/middleware';
 
 /**
@@ -23,6 +24,11 @@ function ensureAnonymousId(request: NextRequest, response: NextResponse): void {
 export async function middleware(request: NextRequest) {
   if (shouldRejectForMiddlewareSubrequest(request.headers)) {
     return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  const publicHostRedirect = resolvePublicHostRedirect(request.url);
+  if (publicHostRedirect) {
+    return NextResponse.redirect(publicHostRedirect, 308);
   }
 
   const requestHeaders = new Headers(request.headers);

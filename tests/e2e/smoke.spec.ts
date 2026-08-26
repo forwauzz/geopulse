@@ -5,8 +5,11 @@ test.describe('public smoke flows', () => {
     await page.goto('/');
 
     await expect(
-      page.getByRole('heading', { name: /be the answer,?\s+not the runner-up/i })
+      page.getByRole('heading', { name: /see what ai search understands about your msp/i })
     ).toBeVisible();
+    await expect(page).toHaveTitle('AI Visibility Audit for MSPs | GEO-Pulse');
+    await expect(page.getByText(/free ai visibility audit for msps/i)).toBeVisible();
+    await expect(page.getByText(/five major search and answer engines/i)).toBeVisible();
     await expect(page.getByLabel('Website URL')).toBeVisible();
     await expect(page.getByRole('button', { name: /audit website/i })).toBeVisible();
     await expect(

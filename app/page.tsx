@@ -17,6 +17,10 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 import { loadUiFlags } from '@/lib/server/app-ui-flags';
 
+const HOME_TITLE = 'AI Visibility Audit for MSPs | GEO-Pulse';
+const HOME_DESCRIPTION =
+  'Run a free AI visibility audit for your MSP. Check the website signals that help five search and answer engines understand your business, then see what to fix first.';
+
 /** Hero feature cards. Scores are the illustrative set shown on the marketing dashboard. */
 const heroCards = [
   {
@@ -36,7 +40,7 @@ const heroCards = [
     note: 'nothing resolves to you',
     rot: '5deg',
     delay: '0.20s',
-    position: 'left-0 top-[23.5rem] h-[12.5rem] w-[12.5rem] z-[3]',
+    position: 'left-0 top-[23.5rem] h-[12.5rem] w-[12.5rem] z-[1]',
     tone: 'bg-lp-ink text-white',
   },
   {
@@ -46,7 +50,7 @@ const heroCards = [
     note: 'cites a competitor',
     rot: '7deg',
     delay: '0.12s',
-    position: 'right-0 top-16 h-[14.5rem] w-[14.5rem] z-[3]',
+    position: 'right-0 top-16 h-[14.5rem] w-[14.5rem] z-[1]',
     tone: 'bg-lp-blue text-white',
   },
   {
@@ -171,8 +175,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const baseUrl = await loadBaseUrl();
   return buildPublicPageMetadata({
     baseUrl,
-    title: 'AI Visibility You Can Prove, Fix, and Report | GEO-Pulse',
-    description: 'See where competitors win in AI answers, what to fix on your website, and whether the work improved your visibility.',
+    title: HOME_TITLE,
+    description: HOME_DESCRIPTION,
     canonicalPath: '/',
     openGraphType: 'website',
   });
@@ -191,13 +195,13 @@ export default async function HomePage({
   const uiFlags = await loadUiFlags();
   const primaryHref = uiFlags.show_pricing ? '/pricing' : '/login';
   const siteUrl = toAbsoluteUrl(baseUrl, '/');
-  const description = 'See where competitors win in AI answers, what to fix on your website, and whether the work improved your visibility.';
+  const description = HOME_DESCRIPTION;
   const schemas = [
     buildOrganizationStructuredData({ url: siteUrl, description: SITE_DESCRIPTION }),
     buildWebSiteStructuredData({ url: siteUrl, description: SITE_DESCRIPTION }),
     buildWebPageStructuredData({
       url: siteUrl,
-      title: 'AI Visibility You Can Prove, Fix, and Report | GEO-Pulse',
+      title: HOME_TITLE,
       description,
       siteUrl,
       dateModified: new Date().toISOString(),
@@ -242,7 +246,9 @@ export default async function HomePage({
               className={`lp-card pointer-events-none absolute hidden flex-col justify-between p-4 lg:flex ${card.position} ${card.tone}`}
               style={{ '--lp-rot': card.rot, animationDelay: card.delay } as React.CSSProperties}
             >
-              <span className="font-body text-[10px] font-bold uppercase tracking-[0.16em] opacity-60">{card.engine}</span>
+              <span className="font-body text-[10px] font-bold uppercase tracking-[0.16em] opacity-60">
+                Example signal &middot; {card.engine}
+              </span>
               <span>
                 <span className="block font-headline text-5xl font-semibold leading-none tracking-[-0.04em]">{card.value}</span>
                 <span className="mt-1 block font-body text-[11px] font-semibold opacity-70">{card.note}</span>
@@ -250,15 +256,18 @@ export default async function HomePage({
             </div>
           ))}
 
-          <h1 className="lp-rise relative z-[2] mx-auto max-w-5xl text-balance font-headline text-5xl font-semibold leading-[0.94] tracking-[-0.045em] text-lp-ink sm:text-6xl md:text-7xl lg:text-[6.5rem]">
-            Be the answer, not the runner-up
+          <p className="lp-rise relative z-[4] mb-5 font-body text-xs font-bold uppercase tracking-[0.18em] text-lp-blue">
+            Free AI visibility audit for MSPs
+          </p>
+          <h1 className="lp-rise relative z-[2] mx-auto max-w-4xl text-balance font-headline text-5xl font-semibold leading-[0.94] tracking-[-0.045em] text-lp-ink sm:text-6xl md:text-7xl lg:text-[5.75rem]">
+            See what AI search understands about your MSP.
           </h1>
           <p
             className="lp-rise relative z-[4] mx-auto mt-6 max-w-xl text-balance font-body text-base leading-7 text-lp-muted md:text-lg"
             style={{ animationDelay: '0.10s' }}
           >
-            Measure how every answer engine describes your business, find out why competitors win the
-            recommendation, and prove what changed after you fix it.
+            Audit the public website signals that help five major search and answer engines crawl,
+            understand, and reuse your services. Get your first findings, then see what to fix first.
           </p>
 
           <div id="audit" className="lp-rise relative z-[4] mx-auto mt-8 max-w-2xl scroll-mt-24" style={{ animationDelay: '0.18s' }}>
