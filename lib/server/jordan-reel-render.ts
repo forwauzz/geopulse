@@ -20,6 +20,7 @@ import {
 const MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const LEASE_MS = 2 * 60 * 60 * 1000;
+const REVIEW_RETRY_BACKOFF_MS = 6 * 60 * 60 * 1000;
 
 export type JordanReelBucket = {
   put(
@@ -57,6 +58,53 @@ function metadata(asset: DistributionAssetRow): Record<string, unknown> {
   return asset.metadata && typeof asset.metadata === 'object' ? asset.metadata : {};
 }
 
+function retryableReviewerHold(
+  assetMetadata: Record<string, unknown>,
+  now: Date
+): boolean {
+  if (
+    assetMetadata['reel_render_status'] !== 'review_failed' ||
+    assetMetadata['reel_render_retryable'] !== true ||
+    assetMetadata['reel_review_status'] !== 'hold'
+  ) {
+    return false;
+  }
+  const findings = assetMetadata['reel_review_findings'];
+  if (
+    !Array.isArray(findings) ||
+    findings.length === 0 ||
+    findings.some((finding) => (
+      !finding ||
+      typeof finding !== 'object' ||
+      (finding as Record<string, unknown>)['code'] !== 'reviewer_unavailable'
+    ))
+  ) {
+    return false;
+  }
+  const explicitRetryAt = Date.parse(String(assetMetadata['reel_review_retry_after'] ?? ''));
+  if (Number.isFinite(explicitRetryAt)) return now.getTime() >= explicitRetryAt;
+  const reviewedAt = Date.parse(String(assetMetadata['reel_reviewed_at'] ?? ''));
+  return Number.isFinite(reviewedAt) &&
+    now.getTime() - reviewedAt >= REVIEW_RETRY_BACKOFF_MS;
+}
+
+function reviewerHoldHistory(assetMetadata: Record<string, unknown>): unknown[] {
+  const prior = Array.isArray(assetMetadata['reel_review_history'])
+    ? assetMetadata['reel_review_history'].slice(-2)
+    : [];
+  return [
+    ...prior,
+    {
+      decision: assetMetadata['reel_review_status'] ?? null,
+      reviewed_at: assetMetadata['reel_reviewed_at'] ?? null,
+      summary: assetMetadata['reel_review_summary'] ?? null,
+      findings: assetMetadata['reel_review_findings'] ?? [],
+      media_sha256: assetMetadata['reel_review_media_sha256'] ?? null,
+      attempts: assetMetadata['reel_review_attempts'] ?? 0,
+    },
+  ];
+}
+
 export function validJordanReelScript(value: unknown): value is JordanReelScript {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
@@ -81,12 +129,14 @@ export async function claimNextJordanReel(
   const candidate = assets
     .filter((asset) => asset.asset_type === 'short_video_post')
     .find((asset) => {
-      const status = String(metadata(asset)['reel_render_status'] ?? '');
-      const attempts = Number(metadata(asset)['reel_render_attempt_count'] ?? 0);
-      if (metadata(asset)['reel_render_terminal'] === true || attempts >= 3) return false;
+      const assetMetadata = metadata(asset);
+      const status = String(assetMetadata['reel_render_status'] ?? '');
+      const attempts = Number(assetMetadata['reel_render_attempt_count'] ?? 0);
+      if (assetMetadata['reel_render_terminal'] === true || attempts >= 3) return false;
       if (status === 'pending' || status === 'failed') return true;
+      if (retryableReviewerHold(assetMetadata, now)) return true;
       if (status !== 'rendering') return false;
-      const leasedAt = new Date(String(metadata(asset)['reel_render_leased_at'] ?? ''));
+      const leasedAt = new Date(String(assetMetadata['reel_render_leased_at'] ?? ''));
       return !Number.isFinite(leasedAt.getTime()) || now.getTime() - leasedAt.getTime() > LEASE_MS;
     });
   if (!candidate) return null;
@@ -117,21 +167,29 @@ export async function claimNextJordanReel(
   }
 
   const attemptId = randomUUID();
-  const { data: recentMedia } = await supabase
-    .from('distribution_asset_media')
-    .select('metadata')
-    .eq('media_kind', 'video')
-    .order('created_at', { ascending: false })
-    .limit(3);
-  const recentTemplateIds = (recentMedia ?? [])
-    .map((row: { metadata?: Record<string, unknown> }) => String(row.metadata?.['template_id'] ?? ''))
-    .filter(Boolean);
+  const candidateMetadata = metadata(candidate);
+  const retryingReviewerHold = retryableReviewerHold(candidateMetadata, now);
   const templateIds = [
     'diagnostic-kinetic-v1a',
     'diagnostic-kinetic-v1b',
     'diagnostic-kinetic-v1c',
   ];
-  const templateId = templateIds.find((id) => !recentTemplateIds.includes(id));
+  let templateId: string | undefined;
+  if (retryingReviewerHold) {
+    const priorTemplateId = String(candidateMetadata['reel_template_id'] ?? '');
+    templateId = templateIds.includes(priorTemplateId) ? priorTemplateId : undefined;
+  } else {
+    const { data: recentMedia } = await supabase
+      .from('distribution_asset_media')
+      .select('metadata')
+      .eq('media_kind', 'video')
+      .order('created_at', { ascending: false })
+      .limit(3);
+    const recentTemplateIds = (recentMedia ?? [])
+      .map((row: { metadata?: Record<string, unknown> }) => String(row.metadata?.['template_id'] ?? ''))
+      .filter(Boolean);
+    templateId = templateIds.find((id) => !recentTemplateIds.includes(id));
+  }
   if (!templateId) {
     await repo.upsertAsset({
       assetId: candidate.asset_id,
@@ -177,6 +235,14 @@ export async function claimNextJordanReel(
       reel_render_attempt_count: attemptCount,
       reel_render_terminal: false,
       reel_render_retryable: true,
+      reel_review_retry_after: null,
+      ...(retryingReviewerHold
+        ? {
+            reel_review_history: reviewerHoldHistory(candidateMetadata),
+            reel_review_retry_count:
+              Number(candidateMetadata['reel_review_retry_count'] ?? 0) + 1,
+          }
+        : {}),
     },
   });
   return {
@@ -318,15 +384,17 @@ export async function completeJordanReelRender(args: {
   validateReviewAttestation(args.review, sha256);
   const { data: duplicate } = await args.supabase
     .from('distribution_asset_media')
-    .select('id')
+    .select('id,distribution_asset_id')
     .eq('media_kind', 'video')
     .eq('metadata->>sha256', sha256)
+    .neq('distribution_asset_id', asset.id)
     .limit(1);
   if (duplicate?.length) throw new Error('duplicate_media');
   const { data: recentMedia } = await args.supabase
     .from('distribution_asset_media')
     .select('metadata')
     .eq('media_kind', 'video')
+    .neq('distribution_asset_id', asset.id)
     .order('created_at', { ascending: false })
     .limit(3);
   const repeated = findRepeatedInstagramMedia(
@@ -366,6 +434,12 @@ export async function completeJordanReelRender(args: {
   const feedPreviewUrl = publicUrl(args.publicBase, feedKey);
   const gridPreviewUrl = publicUrl(args.publicBase, gridKey);
   const validatedAt = now.toISOString();
+  const reviewerUnavailable = args.review.decision === 'hold' &&
+    args.review.findings.length > 0 &&
+    args.review.findings.every((finding) => finding.code === 'reviewer_unavailable');
+  const reviewRetryAfter = reviewerUnavailable
+    ? new Date(now.getTime() + REVIEW_RETRY_BACKOFF_MS).toISOString()
+    : null;
   await repo.replaceAssetMedia(asset.id, [
     {
       mediaKind: 'video',
@@ -496,6 +570,8 @@ export async function completeJordanReelRender(args: {
       reel_review_summary: args.review.summary,
       reel_review_findings: args.review.findings,
       reel_review_attempts: args.review.attempts,
+      reel_render_retryable: reviewerUnavailable,
+      reel_review_retry_after: reviewRetryAfter,
     },
   });
   return { scheduled, videoUrl, reviewDecision: args.review.decision };

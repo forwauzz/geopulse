@@ -92,6 +92,9 @@ function supabaseStub(recentVideoMetadata: Record<string, unknown>[] = []) {
         eq() {
           return chain;
         },
+        neq() {
+          return chain;
+        },
         order() {
           return chain;
         },
@@ -152,6 +155,89 @@ describe('Jordan Reel render handoff', () => {
       new Date('2026-07-26T14:00:00.000Z')
     );
     expect(claim?.templateId).toBe('diagnostic-kinetic-v1c');
+  });
+
+  it('retries the same held Reel after reviewer transport backoff without consuming a new creative slot', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset({
+        reel_render_status: 'review_failed',
+        reel_render_retryable: true,
+        reel_render_attempt_count: 1,
+        reel_template_id: 'diagnostic-kinetic-v1b',
+        reel_script: script,
+        reel_review_status: 'hold',
+        reel_reviewed_at: '2026-07-26T06:00:00.000Z',
+        reel_review_summary: 'Reviewer unavailable.',
+        reel_review_findings: [{ code: 'reviewer_unavailable' }],
+        reel_review_media_sha256: 'held-sha',
+        reel_review_attempts: 2,
+      }),
+    ]);
+    repo.upsertAsset.mockImplementation(async (input) => input);
+
+    const claim = await claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-26T12:01:00.000Z')
+    );
+
+    expect(claim).toMatchObject({
+      assetId: 'proof_instagram_jordan-reel-2026-07-26-d0',
+      templateId: 'diagnostic-kinetic-v1b',
+    });
+    expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        reel_render_status: 'rendering',
+        reel_render_attempt_count: 2,
+        reel_review_retry_count: 1,
+        reel_review_history: [expect.objectContaining({
+          decision: 'hold',
+          media_sha256: 'held-sha',
+        })],
+      }),
+    }));
+  });
+
+  it('keeps a transient reviewer hold idle until its retry time', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset({
+        reel_render_status: 'review_failed',
+        reel_render_retryable: true,
+        reel_render_attempt_count: 1,
+        reel_template_id: 'diagnostic-kinetic-v1b',
+        reel_script: script,
+        reel_review_status: 'hold',
+        reel_reviewed_at: '2026-07-26T06:00:00.000Z',
+        reel_review_retry_after: '2026-07-26T13:00:00.000Z',
+        reel_review_findings: [{ code: 'reviewer_unavailable' }],
+      }),
+    ]);
+
+    await expect(claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-26T12:59:59.000Z')
+    )).resolves.toBeNull();
+    expect(repo.upsertAsset).not.toHaveBeenCalled();
+  });
+
+  it('does not retry the same media after a substantive Maya review failure', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset({
+        reel_render_status: 'review_failed',
+        reel_render_retryable: true,
+        reel_render_attempt_count: 1,
+        reel_template_id: 'diagnostic-kinetic-v1b',
+        reel_script: script,
+        reel_review_status: 'fail',
+        reel_reviewed_at: '2026-07-26T06:00:00.000Z',
+        reel_review_findings: [{ code: 'text_clipped' }],
+      }),
+    ]);
+
+    await expect(claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-27T12:00:00.000Z')
+    )).resolves.toBeNull();
+    expect(repo.upsertAsset).not.toHaveBeenCalled();
   });
 
   it('blocks before rendering when every safe template was recently used', async () => {
@@ -301,7 +387,7 @@ describe('Jordan Reel render handoff', () => {
     }));
   });
 
-  it('holds a failed Maya review without promoting the reserved schedule', async () => {
+  it('holds an unavailable Maya review and records a bounded retry time', async () => {
     const renderingAsset = asset({
       reel_render_status: 'rendering',
       reel_render_attempt_id: 'attempt-2',
@@ -322,16 +408,15 @@ describe('Jordan Reel render handoff', () => {
     );
     const review = {
       ...passingReview(mediaSha256),
-      decision: 'fail' as const,
-      textReadable: false,
-      summary: 'Text is clipped.',
+      decision: 'hold' as const,
+      summary: 'Independent review was unavailable.',
       findings: [{
-        code: 'text_clipped' as const,
-        severity: 'major' as const,
-        startSeconds: 3,
-        endSeconds: 5,
-        message: 'Headline is clipped.',
-        repair: 'Move it down.',
+        code: 'reviewer_unavailable' as const,
+        severity: 'blocker' as const,
+        startSeconds: 0,
+        endSeconds: 0,
+        message: 'Independent review was unavailable.',
+        repair: 'Retry the independent review before scheduling this exact media file.',
       }],
     };
 
@@ -363,16 +448,18 @@ describe('Jordan Reel render handoff', () => {
       now: new Date('2026-07-26T14:30:00.000Z'),
     });
 
-    expect(result).toMatchObject({ scheduled: false, reviewDecision: 'fail' });
+    expect(result).toMatchObject({ scheduled: false, reviewDecision: 'hold' });
     expect(repo.updateJob).toHaveBeenCalledWith('job-row', expect.objectContaining({
       status: 'draft',
-      lastError: 'reel_agent_review_fail',
+      lastError: 'reel_agent_review_hold',
     }));
     expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
       status: 'review',
       metadata: expect.objectContaining({
         reel_render_status: 'review_failed',
-        reel_review_status: 'fail',
+        reel_review_status: 'hold',
+        reel_render_retryable: true,
+        reel_review_retry_after: '2026-07-26T20:30:00.000Z',
         reel_review_findings: review.findings,
       }),
     }));
