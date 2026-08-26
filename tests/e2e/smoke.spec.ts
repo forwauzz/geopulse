@@ -5,7 +5,7 @@ test.describe('public smoke flows', () => {
     await page.goto('/');
 
     await expect(
-      page.getByRole('heading', { name: /see what ai search understands about your msp/i })
+      page.getByRole('heading', { name: /see what ai search understands about your business/i })
     ).toBeVisible();
     await expect(page).toHaveTitle('AI Visibility Audit for MSPs | GEO-Pulse');
     await expect(page.getByText(/free ai visibility audit for msps/i)).toBeVisible();

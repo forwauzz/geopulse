@@ -260,7 +260,7 @@ export default async function HomePage({
             Free AI visibility audit for MSPs
           </p>
           <h1 className="lp-rise relative z-[2] mx-auto max-w-4xl text-balance font-headline text-5xl font-semibold leading-[0.94] tracking-[-0.045em] text-lp-ink sm:text-6xl md:text-7xl lg:text-[5.75rem]">
-            See what AI search understands about your MSP.
+            See what AI search understands about your business.
           </h1>
           <p
             className="lp-rise relative z-[4] mx-auto mt-6 max-w-xl text-balance font-body text-base leading-7 text-lp-muted md:text-lg"
