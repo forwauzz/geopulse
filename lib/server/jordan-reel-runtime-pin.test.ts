@@ -16,4 +16,10 @@ describe('Jordan Reel production runtime pin', () => {
       expect(readFileSync(resolve(file), 'utf8'), file).toContain(runtime);
     }
   });
+
+  it('pins the production reviewer to the current multimodal model', () => {
+    expect(readFileSync(resolve('wrangler.jsonc'), 'utf8')).toContain(
+      '"JORDAN_REEL_REVIEW_MODEL": "gemini-3.5-flash"'
+    );
+  });
 });
