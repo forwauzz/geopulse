@@ -49,16 +49,7 @@ describe('Jordan independent Reel review', () => {
   });
 
   it('attests a clean full-video review to the exact media SHA', async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(new Response(null, {
-        status: 200,
-        headers: { 'x-goog-upload-url': 'https://upload.example/video' },
-      }))
-      .mockResolvedValueOnce(Response.json({
-        file: { name: 'files/reel-1', uri: 'https://files.example/reel-1', state: 'ACTIVE' },
-      }))
-      .mockResolvedValueOnce(modelEnvelope(cleanPayload()))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const fetchImpl = vi.fn().mockResolvedValueOnce(modelEnvelope(cleanPayload()));
 
     const review = await reviewJordanReel({
       apiKey: 'gemini-test-key',
@@ -80,19 +71,16 @@ describe('Jordan independent Reel review', () => {
       mediaSha256: 'a'.repeat(64),
       attempts: 1,
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
-    expect(String(fetchImpl.mock.calls[2]?.[0])).toContain('generateContent');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('generateContent');
+    const request = JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit)?.body));
+    expect(request.contents[0].parts[0]).toEqual({
+      inlineData: { mimeType: 'video/mp4', data: 'AQID' },
+    });
   });
 
   it('downgrades a claimed pass when the Reel has a serious issue', async () => {
     const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(new Response(null, {
-        status: 200,
-        headers: { 'x-goog-upload-url': 'https://upload.example/video' },
-      }))
-      .mockResolvedValueOnce(Response.json({
-        file: { name: 'files/reel-2', uri: 'https://files.example/reel-2', state: 'ACTIVE' },
-      }))
       .mockResolvedValueOnce(modelEnvelope(cleanPayload({
         decision: 'pass',
         textReadable: false,
@@ -104,8 +92,7 @@ describe('Jordan independent Reel review', () => {
           message: 'The headline is clipped at the top.',
           repair: 'Move the headline down into the center safe area.',
         }],
-      })))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      })));
 
     const review = await reviewJordanReel({
       apiKey: 'gemini-test-key',
@@ -123,6 +110,34 @@ describe('Jordan independent Reel review', () => {
       endSeconds: 5.1,
       code: 'text_clipped',
     });
+  });
+
+  it('retains the Files API path when inline request size would exceed the safe ceiling', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response(null, {
+        status: 200,
+        headers: { 'x-goog-upload-url': 'https://upload.example/video' },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        file: { name: 'files/reel-large', uri: 'https://files.example/reel-large', state: 'ACTIVE' },
+      }))
+      .mockResolvedValueOnce(modelEnvelope(cleanPayload()))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const review = await reviewJordanReel({
+      apiKey: 'gemini-test-key',
+      video: new Uint8Array(15 * 1024 * 1024).buffer,
+      mediaSha256: 'e'.repeat(64),
+      durationSeconds: 28,
+      script,
+      fetchImpl: fetchImpl as typeof fetch,
+      wait: async () => undefined,
+    });
+
+    expect(review).toMatchObject({ decision: 'pass', attempts: 1 });
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('/upload/v1beta/files');
+    expect(String(fetchImpl.mock.calls[2]?.[0])).toContain('generateContent');
   });
 
   it('fails closed after two reviewer transport attempts', async () => {
