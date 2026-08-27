@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  DEFAULT_JORDAN_REEL_REVIEW_MODEL,
   JORDAN_REEL_REVIEW_VERSION,
   parseJordanReelReviewModelPayload,
   reviewJordanReel,
@@ -53,7 +54,6 @@ describe('Jordan independent Reel review', () => {
 
     const review = await reviewJordanReel({
       apiKey: 'gemini-test-key',
-      model: 'gemini-2.5-flash',
       video: new Uint8Array([1, 2, 3]).buffer,
       mediaSha256: 'a'.repeat(64),
       durationSeconds: 28,
@@ -72,7 +72,9 @@ describe('Jordan independent Reel review', () => {
       attempts: 1,
     });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain('generateContent');
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain(
+      `/models/${DEFAULT_JORDAN_REEL_REVIEW_MODEL}:generateContent`
+    );
     const request = JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit)?.body));
     expect(request.contents[0].parts[0]).toEqual({
       inlineData: { mimeType: 'video/mp4', data: 'AQID' },

@@ -1,7 +1,7 @@
 import type { JordanReelScript } from './jordan-reel-production';
 
 export const JORDAN_REEL_REVIEW_VERSION = 'maya-reel-watch-v2-inline';
-export const DEFAULT_JORDAN_REEL_REVIEW_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_JORDAN_REEL_REVIEW_MODEL = 'gemini-3.5-flash';
 
 const FILES_API_ROOT = 'https://generativelanguage.googleapis.com';
 const MAX_REVIEW_ATTEMPTS = 2;
