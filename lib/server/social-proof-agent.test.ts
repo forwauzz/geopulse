@@ -16,6 +16,7 @@ import {
   preferredAccount,
   prioritizeRequiredFormatCandidates,
   remainingDailyAssetCapacity,
+  reelProductionDeferral,
   reserveInstagramCadenceSlot,
   reserveInstagramScheduleSlot,
   resolveSocialProofAgentConfig,
@@ -118,6 +119,39 @@ describe('Social Proof Agent safeguards', () => {
       'covered-two',
     ]);
     expect(ordered).toHaveLength(3);
+  });
+
+  it('surfaces an exhausted exact-media review ahead of a generic daily-cap deferral', () => {
+    const deferral = reelProductionDeferral([{
+      asset_type: 'short_video_post',
+      metadata: {
+        reel_render_status: 'review_failed',
+        reel_review_status: 'hold',
+        reel_render_retryable: true,
+        reel_render_attempt_count: 3,
+        reel_review_retry_after: '2026-08-27T01:25:49.476Z',
+      },
+    } as never], ['instagram:short_video_post'], false);
+
+    expect(deferral).toEqual({ reason: 'reel_review_attempts_exhausted' });
+  });
+
+  it('keeps a bounded exact-media review backoff owned until its due time', () => {
+    const deferral = reelProductionDeferral([{
+      asset_type: 'short_video_post',
+      metadata: {
+        reel_render_status: 'review_failed',
+        reel_review_status: 'hold',
+        reel_render_retryable: true,
+        reel_render_attempt_count: 2,
+        reel_review_retry_after: '2026-08-27T01:25:49.476Z',
+      },
+    } as never], ['instagram:short_video_post'], false);
+
+    expect(deferral).toEqual({
+      reason: 'reel_review_retry_pending',
+      retryAfter: '2026-08-27T01:25:49.476Z',
+    });
   });
 
   it('keeps a first-party grounded Reel source when trend providers are unavailable', () => {

@@ -33,6 +33,7 @@ type ExistingRuntimeIncidentLoop = {
 const DEFERRED_RETRY_REASONS = new Set([
   'daily_asset_cap_reached',
   'partial_recovery_pending',
+  'reel_review_retry_pending',
 ]);
 
 const DEFINITIONS: readonly RuntimeIncidentDefinition[] = [

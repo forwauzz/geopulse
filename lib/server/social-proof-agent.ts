@@ -124,6 +124,30 @@ export type SocialProofAgentResult = {
   readonly retryAfter?: string;
 };
 
+export function reelProductionDeferral(
+  assets: readonly DistributionAssetRow[],
+  requiredFormats: readonly string[] | undefined,
+  inventoryHealthyBefore: boolean | undefined,
+): { readonly reason: string; readonly retryAfter?: string } | null {
+  if (
+    inventoryHealthyBefore === true ||
+    !requiredFormats?.includes('instagram:short_video_post')
+  ) return null;
+  const held = assets.find((asset) => (
+    asset.asset_type === 'short_video_post' &&
+    asset.metadata['reel_render_status'] === 'review_failed' &&
+    asset.metadata['reel_review_status'] === 'hold' &&
+    asset.metadata['reel_render_retryable'] === true
+  ));
+  if (!held) return null;
+  const attempts = Number(held.metadata['reel_render_attempt_count'] ?? 0);
+  if (attempts >= 3) return { reason: 'reel_review_attempts_exhausted' };
+  const retryAfter = String(held.metadata['reel_review_retry_after'] ?? '');
+  return Number.isFinite(Date.parse(retryAfter))
+    ? { reason: 'reel_review_retry_pending', retryAfter }
+    : { reason: 'reel_review_retry_pending' };
+}
+
 export const SOCIAL_SEQUENCE_VERSION = 'social-flow-v1';
 
 export type SocialSequenceAnchor = {
@@ -1803,6 +1827,11 @@ export async function runSocialProofAgent(args: {
       }
     }
 
+    const reelDeferral = reelProductionDeferral(
+      existingAssets,
+      args.requiredFormats,
+      args.inventoryHealthyBefore,
+    );
     const capacityDeferred = dailyCapacity === 0 && orderedCandidates.length > 0;
     const result: SocialProofAgentResult = {
       status: assetsCreated > 0 ? 'created' : 'noop',
@@ -1811,7 +1840,9 @@ export async function runSocialProofAgent(args: {
       assetsCreated,
       jobsCreated,
       queuedContentItemIds,
-      ...(candidates.length === 0
+      ...(reelDeferral
+        ? reelDeferral
+        : candidates.length === 0
         ? { reason: 'no_safe_candidates' }
         : capacityDeferred
           ? {
