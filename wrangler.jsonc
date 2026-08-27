@@ -73,7 +73,7 @@
     "SOCIAL_MEDIA_PUBLIC_BASE": "https://pub-5b90c5727ac1429a93a0ffef23cf25f7.r2.dev",
     "SOCIAL_TREND_GEMINI_MODEL": "gemini-3.5-flash",
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
-    "JORDAN_REEL_REVIEW_MODEL": "gemini-2.5-flash",
+    "JORDAN_REEL_REVIEW_MODEL": "gemini-3.5-flash",
     "GEMINI_ENDPOINT": "https://generativelanguage.googleapis.com/v1beta/models",
     // Live local-competitor discovery uses Gemini with Google Search grounding.
     // The API falls back visibly (never silently) when billing/quota is unavailable.
