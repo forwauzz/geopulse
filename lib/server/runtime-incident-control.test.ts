@@ -180,6 +180,31 @@ describe('runtime incident control', () => {
     });
   });
 
+  it('keeps a bounded Reel review backoff owned without consuming an engineering retry', () => {
+    const [social] = classifyRuntimeIncidents([{
+      event: 'autonomous_campaign_execution',
+      level: 'info',
+      created_at: '2026-08-26T20:05:42.000Z',
+      data: {
+        inventoryHealthy: false,
+        inventoryReason: 'missing_required_formats:instagram:short_video_post',
+        socialRetryReason: 'reel_review_retry_pending',
+        socialRetryAfter: '2026-08-27T01:25:49.476Z',
+      },
+    }]);
+
+    expect(planRuntimeIncidentLoop(social!, {
+      attempt_count: 2,
+      max_attempts: 3,
+      last_attempted_at: '2026-08-26T19:25:49.000Z',
+    }, new Date('2026-08-26T20:06:00.000Z'))).toMatchObject({
+      state: 'executing',
+      attemptCount: 2,
+      founderRequired: false,
+      dueAt: '2026-08-27T01:25:49.476Z',
+    });
+  });
+
   it('exhausts only after a newer non-deferred repair failure', () => {
     const [social] = classifyRuntimeIncidents([{
       event: 'autonomous_campaign_execution_error',

@@ -1,11 +1,14 @@
 import type { JordanReelScript } from './jordan-reel-production';
 
-export const JORDAN_REEL_REVIEW_VERSION = 'maya-reel-watch-v1';
-export const DEFAULT_JORDAN_REEL_REVIEW_MODEL = 'gemini-2.5-flash';
+export const JORDAN_REEL_REVIEW_VERSION = 'maya-reel-watch-v2-inline';
+export const DEFAULT_JORDAN_REEL_REVIEW_MODEL = 'gemini-3.5-flash';
 
 const FILES_API_ROOT = 'https://generativelanguage.googleapis.com';
 const MAX_REVIEW_ATTEMPTS = 2;
 const MAX_FILE_POLLS = 30;
+// Gemini supports one-off inline video requests below 20 MB. Keep enough
+// headroom for base64 expansion, the review prompt, and the JSON envelope.
+const MAX_INLINE_VIDEO_BYTES = 14 * 1024 * 1024;
 
 export type JordanReelReviewDecision = 'pass' | 'fail' | 'hold';
 export type JordanReelReviewSeverity = 'blocker' | 'major' | 'minor';
@@ -74,6 +77,10 @@ type UploadedGeminiFile = {
   readonly uri: string;
   readonly state: string;
 };
+
+type GeminiMediaPart =
+  | { readonly inlineData: { readonly mimeType: 'video/mp4'; readonly data: string } }
+  | { readonly fileData: { readonly mimeType: 'video/mp4'; readonly fileUri: string } };
 
 const findingCodes: readonly JordanReelReviewFindingCode[] = [
   'blank_frame',
@@ -339,10 +346,20 @@ function responseText(value: unknown): string {
     .join('\n');
 }
 
+function base64Video(video: ArrayBuffer): string {
+  const bytes = new Uint8Array(video);
+  const chunks: string[] = [];
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    chunks.push(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize)));
+  }
+  return btoa(chunks.join(''));
+}
+
 async function generateReview(args: {
   readonly apiKey: string;
   readonly model: string;
-  readonly file: UploadedGeminiFile;
+  readonly mediaPart: GeminiMediaPart;
   readonly script: JordanReelScript;
   readonly durationSeconds: number;
   readonly fetchImpl: FetchLike;
@@ -359,7 +376,7 @@ async function generateReview(args: {
         contents: [{
           role: 'user',
           parts: [
-            { fileData: { mimeType: 'video/mp4', fileUri: args.file.uri } },
+            args.mediaPart,
             { text: reviewPrompt(args.script, args.durationSeconds) },
           ],
         }],
@@ -458,21 +475,30 @@ export async function reviewJordanReel(args: {
   }
   const fetchImpl = args.fetchImpl ?? fetch;
   const wait = args.wait ?? ((milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const inlineData = args.video.byteLength <= MAX_INLINE_VIDEO_BYTES
+    ? base64Video(args.video)
+    : null;
   let lastError = 'unknown';
   for (let attempt = 1; attempt <= MAX_REVIEW_ATTEMPTS; attempt += 1) {
     let uploaded: UploadedGeminiFile | null = null;
     try {
-      uploaded = await uploadVideo({
-        apiKey,
-        video: args.video,
-        displayName: `geopulse-reel-${args.mediaSha256.slice(0, 12)}`,
-        fetchImpl,
-      });
-      const active = await awaitActiveFile({ apiKey, file: uploaded, fetchImpl, wait });
+      let mediaPart: GeminiMediaPart;
+      if (inlineData) {
+        mediaPart = { inlineData: { mimeType: 'video/mp4', data: inlineData } };
+      } else {
+        uploaded = await uploadVideo({
+          apiKey,
+          video: args.video,
+          displayName: `geopulse-reel-${args.mediaSha256.slice(0, 12)}`,
+          fetchImpl,
+        });
+        const active = await awaitActiveFile({ apiKey, file: uploaded, fetchImpl, wait });
+        mediaPart = { fileData: { mimeType: 'video/mp4', fileUri: active.uri } };
+      }
       const payload = await generateReview({
         apiKey,
         model,
-        file: active,
+        mediaPart,
         script: args.script,
         durationSeconds: args.durationSeconds,
         fetchImpl,

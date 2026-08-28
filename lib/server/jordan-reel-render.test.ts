@@ -240,7 +240,7 @@ describe('Jordan Reel render handoff', () => {
     expect(repo.upsertAsset).not.toHaveBeenCalled();
   });
 
-  it('blocks before rendering when every safe template was recently used', async () => {
+  it('reuses the least-recently-used template after every safe variant has appeared', async () => {
     repo.listAssets.mockResolvedValue([
       asset({ reel_render_status: 'failed', reel_script: script, reel_render_attempt_count: 1 }),
     ]);
@@ -253,12 +253,12 @@ describe('Jordan Reel render handoff', () => {
       ]),
       new Date('2026-07-26T14:00:00.000Z')
     );
-    expect(claim).toBeNull();
+    expect(claim?.templateId).toBe('diagnostic-kinetic-v1c');
     expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
       metadata: expect.objectContaining({
-        reel_render_status: 'blocked',
-        reel_render_error: 'template_inventory_exhausted',
-        reel_render_terminal: true,
+        reel_render_status: 'rendering',
+        reel_template_id: 'diagnostic-kinetic-v1c',
+        reel_render_terminal: false,
       }),
     }));
   });

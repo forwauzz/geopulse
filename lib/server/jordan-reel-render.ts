@@ -189,6 +189,11 @@ export async function claimNextJordanReel(
       .map((row: { metadata?: Record<string, unknown> }) => String(row.metadata?.['template_id'] ?? ''))
       .filter(Boolean);
     templateId = templateIds.find((id) => !recentTemplateIds.includes(id));
+    if (!templateId && recentTemplateIds.length > 0) {
+      templateId = templateIds.reduce((leastRecent, id) =>
+        recentTemplateIds.indexOf(id) > recentTemplateIds.indexOf(leastRecent) ? id : leastRecent
+      );
+    }
   }
   if (!templateId) {
     await repo.upsertAsset({
