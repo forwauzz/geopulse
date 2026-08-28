@@ -763,6 +763,50 @@ describe('OpenAiCompatibleBenchmarkExecutionAdapter — perplexity', () => {
     expect(result.responseMetadata['attempts']).toBe(2);
   });
 
+  it('honors Retry-After when Perplexity rate-limits a request', async () => {
+    const sleeps: number[] = [];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{"error":"rate limited"}', {
+        status: 429,
+        headers: { 'Retry-After': '2' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ message: { content: 'Example is an MSP.' } }],
+      }), { status: 200 }));
+
+    const adapter = new OpenAiCompatibleBenchmarkExecutionAdapter(
+      'perplexity',
+      perplexityConfig,
+      fetchMock as unknown as typeof fetch,
+      async (ms) => { sleeps.push(ms); }
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, perplexityContext);
+
+    expect(result.status).toBe('completed');
+    expect(sleeps).toEqual([2_000]);
+  });
+
+  it('classifies Perplexity insufficient quota returned as 401', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      error: { type: 'insufficient_quota', message: 'You exceeded your current quota.' },
+    }), { status: 401 }));
+
+    const adapter = new OpenAiCompatibleBenchmarkExecutionAdapter(
+      'perplexity',
+      perplexityConfig,
+      fetchMock as unknown as typeof fetch
+    );
+
+    const result = await adapter.executeQuery(sampleQuery, perplexityContext);
+
+    expect(result.status).toBe('failed');
+    expect(result.errorMessage).toBe('benchmark_perplexity_quota_depleted');
+    expect(result.responseMetadata['quota_state']).toBe('depleted');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('fails with perplexity-prefixed error after exhausting retries', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
