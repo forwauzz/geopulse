@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  resolveBenchmarkQueryExecutionDelayMs,
   runBenchmarkGroupSkeleton,
   terminalBenchmarkProviderFailureCode,
 } from './benchmark-runner';
@@ -17,9 +18,30 @@ describe('runBenchmarkGroupSkeleton', () => {
       { status: 'failed', errorMessage: 'benchmark_gemini_api_key_missing' },
     ])).toBe('benchmark_gemini_api_key_missing');
     expect(terminalBenchmarkProviderFailureCode([
+      { status: 'failed', errorMessage: 'benchmark_perplexity_quota_depleted' },
+    ])).toBe('benchmark_perplexity_quota_depleted');
+    expect(terminalBenchmarkProviderFailureCode([
       { status: 'failed', errorMessage: 'benchmark_perplexity_http_429' },
       { status: 'failed', errorMessage: 'benchmark_gemini_http_500' },
     ])).toBeNull();
+  });
+
+  it('paces Perplexity queries even when manual runs omit scheduler metadata', () => {
+    expect(resolveBenchmarkQueryExecutionDelayMs({
+      requestedDelay: undefined,
+      executionMode: 'multi',
+      modelId: 'sonar',
+    })).toBe(1_500);
+    expect(resolveBenchmarkQueryExecutionDelayMs({
+      requestedDelay: 3_500,
+      executionMode: 'multi',
+      modelId: 'sonar',
+    })).toBe(3_500);
+    expect(resolveBenchmarkQueryExecutionDelayMs({
+      requestedDelay: undefined,
+      executionMode: 'multi',
+      modelId: 'gemini-2.5-flash',
+    })).toBe(0);
   });
 
   it('creates a skeleton run group, skipped query runs, and starter metrics', async () => {

@@ -74,6 +74,8 @@ const GEMINI_RETRY_DELAYS_MS = [400, 1200];
 const OPENAI_TRANSIENT_STATUSES = new Set([429, 503, 529]);
 const OPENAI_MAX_ATTEMPTS = 3;
 const OPENAI_RETRY_DELAYS_MS = [400, 1200];
+const PERPLEXITY_RETRY_DELAYS_MS = [1_500, 3_000];
+const MAX_RETRY_AFTER_MS = 30_000;
 
 const OPENAI_DEFAULT_MODEL = 'gpt-4o-mini';
 const OPENAI_DEFAULT_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
@@ -151,6 +153,23 @@ function isGeminiModelId(modelId: string): boolean {
 function isQuotaDepletedResponse(responseBody: string | null): boolean {
   if (!responseBody) return false;
   return /prepayment credits? (?:are )?depleted|insufficient[_ -]?quota|billing (?:account|quota)|quota has been exhausted/i.test(responseBody);
+}
+
+export function parseRetryAfterMs(
+  rawValue: string | null | undefined,
+  nowMs = Date.now()
+): number | null {
+  const value = rawValue?.trim();
+  if (!value) return null;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(Math.ceil(seconds * 1_000), MAX_RETRY_AFTER_MS);
+  }
+
+  const retryAtMs = Date.parse(value);
+  if (!Number.isFinite(retryAtMs)) return null;
+  return Math.min(Math.max(0, retryAtMs - nowMs), MAX_RETRY_AFTER_MS);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -446,7 +465,8 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
   constructor(
     providerTag: 'openai' | 'perplexity',
     private readonly config: BenchmarkExecutionConfig,
-    private readonly fetchImpl: FetchLike = defaultFetch
+    private readonly fetchImpl: FetchLike = defaultFetch,
+    private readonly sleepImpl: (ms: number) => Promise<void> = sleep
   ) {
     this.providerTag = providerTag;
   }
@@ -540,12 +560,16 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
 
         if (!response.ok) {
           const responseBody = await readResponseTextSafely(response);
-          const quotaDepleted = response.status === 429 && isQuotaDepletedResponse(responseBody);
+          const quotaDepleted = isQuotaDepletedResponse(responseBody);
           const retryable = OPENAI_TRANSIENT_STATUSES.has(response.status) && !quotaDepleted;
           const hasRetry = attempt < OPENAI_MAX_ATTEMPTS;
           if (retryable && hasRetry) {
-            const delayMs = OPENAI_RETRY_DELAYS_MS[attempt - 1] ?? 1200;
-            await sleep(delayMs);
+            const retryAfterMs = parseRetryAfterMs(response.headers?.get('Retry-After'));
+            const fallbackDelays = provider === 'perplexity'
+              ? PERPLEXITY_RETRY_DELAYS_MS
+              : OPENAI_RETRY_DELAYS_MS;
+            const delayMs = retryAfterMs ?? fallbackDelays[attempt - 1] ?? 1_200;
+            await this.sleepImpl(delayMs);
             continue;
           }
 
@@ -565,7 +589,9 @@ export class OpenAiCompatibleBenchmarkExecutionAdapter implements BenchmarkExecu
               retryable,
               quota_state: quotaDepleted ? 'depleted' : 'available_or_unknown',
             },
-            errorMessage: `benchmark_${provider}_http_${String(response.status)}`,
+            errorMessage: quotaDepleted
+              ? `benchmark_${provider}_quota_depleted`
+              : `benchmark_${provider}_http_${String(response.status)}`,
             executedAt,
           };
         }

@@ -33,7 +33,26 @@ type BenchmarkRunnerResult = {
 };
 
 const TERMINAL_PROVIDER_FAILURE_PATTERN =
-  /^benchmark_(?:gemini|openai|perplexity)_(?:api_key_missing|http_(?:401|403))$/;
+  /^benchmark_(?:gemini|openai|perplexity)_(?:api_key_missing|quota_depleted|http_(?:401|403))$/;
+
+const PERPLEXITY_MIN_QUERY_DELAY_MS = 1_500;
+
+export function resolveBenchmarkQueryExecutionDelayMs(args: {
+  readonly requestedDelay: unknown;
+  readonly executionMode: string;
+  readonly modelId: string;
+}): number {
+  const requested = Number(args.requestedDelay ?? 0);
+  const boundedRequested = Number.isFinite(requested)
+    ? Math.max(0, Math.min(requested, 5_000))
+    : 0;
+  const usesPerplexity = args.executionMode === 'perplexity' ||
+    (args.executionMode === 'multi' && args.modelId.trim().toLowerCase().startsWith('sonar'));
+
+  return usesPerplexity
+    ? Math.max(boundedRequested, PERPLEXITY_MIN_QUERY_DELAY_MS)
+    : boundedRequested;
+}
 
 export function terminalBenchmarkProviderFailureCode(
   results: readonly Pick<BenchmarkExecutionResult, 'status' | 'errorMessage'>[]
@@ -84,6 +103,11 @@ export async function runBenchmarkGroupSkeleton(
   const startedAt = new Date().toISOString();
   const runLabel = input.runLabel?.trim() || buildDefaultRunLabel(input);
   const executionMode = getBenchmarkExecutionAdapterMode(adapter);
+  const queryExecutionDelayMs = resolveBenchmarkQueryExecutionDelayMs({
+    requestedDelay: input.runMetadata?.['query_execution_delay_ms'],
+    executionMode,
+    modelId: input.modelId,
+  });
   const runMode = input.runMode ?? DEFAULT_BENCHMARK_RUN_MODE;
   const groundingResolution = await resolveBenchmarkGroundingContextForRun(domain, runMode);
   const groundingContext = groundingResolution.context;
@@ -110,6 +134,7 @@ export async function runBenchmarkGroupSkeleton(
     metadata: {
       ...(input.runMetadata ?? {}),
       execution_mode: executionMode,
+      effective_query_execution_delay_ms: queryExecutionDelayMs,
       run_mode: runMode,
       grounding_context_available: groundingContext !== null,
       grounding_context_source: groundingResolution.source,
@@ -133,24 +158,22 @@ export async function runBenchmarkGroupSkeleton(
     groundingContext,
   };
 
-  const requestedDelay = Number(input.runMetadata?.['query_execution_delay_ms'] ?? 0);
-  const queryExecutionDelayMs = Number.isFinite(requestedDelay)
-    ? Math.max(0, Math.min(requestedDelay, 5_000))
-    : 0;
   const executionResults: Array<{
     query: (typeof queries)[number];
     execution: Awaited<ReturnType<BenchmarkExecutionAdapter['executeQuery']>>;
   }> = [];
   if (queryExecutionDelayMs > 0) {
-    for (const [index, query] of queries.entries()) {
-      if (index > 0) {
-        await new Promise((resolve) => setTimeout(resolve, queryExecutionDelayMs));
-      }
-      executionResults.push({
-        query,
-        execution: await adapter.executeQuery(query, executionContext),
-      });
-    }
+    executionResults.push(...await Promise.all(
+      queries.map(async (query, index) => {
+        if (index > 0) {
+          await new Promise((resolve) => setTimeout(resolve, queryExecutionDelayMs * index));
+        }
+        return {
+          query,
+          execution: await adapter.executeQuery(query, executionContext),
+        };
+      })
+    ));
   } else {
     executionResults.push(...await Promise.all(
       queries.map(async (query) => ({

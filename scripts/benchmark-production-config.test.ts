@@ -17,10 +17,10 @@ const wrangler = parse(readFileSync(join(root, 'wrangler.jsonc'), 'utf8')) as Wr
 const vars = wrangler.vars ?? {};
 
 describe('production benchmark configuration', () => {
-  it('fails both Perplexity-backed recurring lanes closed without a valid credential', () => {
-    expect(vars.BENCHMARK_SCHEDULE_ENABLED).toBe('false');
+  it('reactivates only the funded primary MSP lane', () => {
+    expect(vars.BENCHMARK_SCHEDULE_ENABLED).toBe('true');
     expect(vars.BENCHMARK_CHALLENGER_ENABLED).toBe('false');
-    expect(parseBenchmarkScheduleConfig(vars)).toBeNull();
+    expect(parseBenchmarkScheduleConfig(vars)).not.toBeNull();
     expect(parseBenchmarkScheduleConfig(toBenchmarkChallengerScheduleEnv(vars))).toBeNull();
   });
 
@@ -34,6 +34,7 @@ describe('production benchmark configuration', () => {
       vertical: 'msp_it',
       domainLimit: 10,
       maxRuns: 30,
+      queryExecutionDelayMs: 1_500,
       windowHours: 12,
       scheduleVersion: 'msp-perplexity-v4-cohort10',
       includeUserPrompts: false,
