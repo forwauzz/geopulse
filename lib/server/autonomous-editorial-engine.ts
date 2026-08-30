@@ -13,6 +13,12 @@ import {
   reconcileContentLoops,
 } from './agent-loop-control';
 import { reserveProviderSpend } from './provider-spend-control';
+import {
+  loadActiveGrowthCampaigns,
+  selectCampaignScopedOpportunities,
+  type CampaignScopedOpportunity,
+  type GrowthCampaign,
+} from './growth-campaign-intelligence';
 
 type Db = { from(table: string): any; rpc?(name: string, args: Record<string, unknown>): any };
 export const AUTONOMOUS_EDITORIAL_SOURCE_TYPE = 'internal_plus_research' as const;
@@ -53,6 +59,40 @@ export function mergeEditorialCandidates(
     ...retryRows,
     ...seoRows.filter((row: any) => !retryIds.has(String(row.content_id))),
   ];
+}
+
+type EditorialCandidate = {
+  readonly content_id: string;
+  readonly slug: string | null;
+  readonly content_type: string;
+  readonly topic_cluster: string | null;
+  readonly title?: string | null;
+  readonly status?: string | null;
+  readonly growth_campaign_id?: string | null;
+  readonly metadata?: Readonly<Record<string, unknown>> | null;
+  readonly [key: string]: unknown;
+};
+
+export function selectEditorialCandidateForActiveCampaign(
+  candidates: readonly EditorialCandidate[],
+  campaigns: readonly GrowthCampaign[],
+): CampaignScopedOpportunity<EditorialCandidate & { readonly id: string }> | null {
+  for (const candidate of candidates) {
+    const eligible = candidate.status === 'brief'
+      || candidate.metadata?.['editorial_retry_required'] === true
+      || candidate.metadata?.['proposed_by'] === 'marketing_autopilot'
+      || (candidate.status === 'archived' && Boolean(candidate.topic_cluster));
+    if (!eligible) continue;
+    const scoped = selectCampaignScopedOpportunities([
+      {
+        ...candidate,
+        id: candidate.content_id,
+        evidence: candidate.topic_cluster,
+      },
+    ], campaigns, 2)[0];
+    if (scoped) return scoped;
+  }
+  return null;
 }
 
 const EDITORIAL_FALLBACK_INTERNAL_LINK =
@@ -96,7 +136,7 @@ export async function runAutonomousEditorialEngine(args: {
 
   const retryCandidatesResult = await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at,growth_campaign_id')
     .eq('content_type', 'article')
     .eq('metadata->>editorial_retry_required', 'true')
     .in('status', ['brief', 'draft'])
@@ -105,7 +145,7 @@ export async function runAutonomousEditorialEngine(args: {
 
   const seoCandidatesResult = await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at,growth_campaign_id')
     .eq('content_type', 'article')
     .eq('metadata->>proposed_by', 'seo_agent')
     .in('status', ['brief', 'draft'])
@@ -117,7 +157,7 @@ export async function runAutonomousEditorialEngine(args: {
     ? { data: [], error: null }
     : await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at,growth_campaign_id')
     .eq('content_type', 'article')
     // Archived topic-registry items are deliberately excluded from the public site until this
     // engine replaces their thin planning seed with a source-backed editorial draft.
@@ -141,16 +181,15 @@ export async function runAutonomousEditorialEngine(args: {
     const rightSeo = right?.metadata?.proposed_by === 'seo_agent' ? 0 : 1;
     return leftSeo - rightSeo;
   });
-  const candidate = orderedCandidates.find((row: any) =>
-    row?.status === 'brief' ||
-    row?.metadata?.editorial_retry_required === true ||
-    row?.metadata?.proposed_by === 'marketing_autopilot' ||
-    // The registry cleanup predates the metadata marker on some rows. An archived article with
-    // a topic is still safe to re-enter only through this full draft → hero → review → publish
-    // sequence; it never revives the archived seed body directly.
-    (row?.status === 'archived' && Boolean(row?.topic_cluster))
+  const activeCampaigns = await loadActiveGrowthCampaigns(args.supabase);
+  const scopedCandidate = selectEditorialCandidateForActiveCampaign(
+    orderedCandidates as EditorialCandidate[],
+    activeCampaigns,
   );
-  if (!candidate?.content_id || !candidate.topic_cluster) return { status: 'skipped', reason: 'no_candidate' };
+  const candidate = scopedCandidate?.opportunity;
+  if (!candidate?.content_id || !candidate.topic_cluster || !scopedCandidate) {
+    return { status: 'skipped', reason: 'no_active_campaign_candidate' };
+  }
 
   const { data: existing } = await args.supabase.from('content_items').select('title').eq('content_type', 'article').limit(250);
   const providerDraft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
@@ -190,7 +229,22 @@ export async function runAutonomousEditorialEngine(args: {
   const review = await args.provider.review({ title: draft.title, markdown: draft.markdown, sources: draft.sources, hero });
   if (!review.approved) return { status: 'rejected', reason: review.reasons.join('; ') || 'review_failed' };
 
-  const metadata = { ...(candidate.metadata ?? {}), editorial_retry_required: false, autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: hero.provider, hero_provider_failure: hero.providerFailure ?? null }, author_name: 'Geo Team', author_role: 'Editorial Team', author_url: 'https://getgeopulse.com/about', hero_image_url: hero.url, hero_image_alt: hero.alt };
+  const metadata = {
+    ...(candidate.metadata ?? {}),
+    editorial_retry_required: false,
+    campaign_key: scopedCandidate.campaign.campaign_key,
+    campaign_role: scopedCandidate.campaign.role,
+    campaign_vertical: scopedCandidate.campaign.vertical,
+    campaign_gate: scopedCandidate.gateReason,
+    buyer_role: scopedCandidate.campaign.buyer_role,
+    offer_key: scopedCandidate.campaign.offer_key,
+    autonomous_editorial: { generated_at: now.toISOString(), reviewer: 'passed', hero_provider: hero.provider, hero_provider_failure: hero.providerFailure ?? null },
+    author_name: 'Geo Team',
+    author_role: 'Editorial Team',
+    author_url: 'https://getgeopulse.com/about',
+    hero_image_url: hero.url,
+    hero_image_alt: hero.alt,
+  };
   const checks = evaluateContentPublishChecks({
     ...candidate,
     content_type: 'article',
@@ -218,7 +272,17 @@ export async function runAutonomousEditorialEngine(args: {
     metadata,
     published_at: null,
   });
-  const { error: updateError } = await args.supabase.from('content_items').update({ title: draft.title, draft_markdown: draft.markdown, source_links: draft.sources, source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE, status: 'published', canonical_url: publish.canonicalUrl, published_at: publish.publishedAt, metadata }).eq('content_id', candidate.content_id);
+  const { error: updateError } = await args.supabase.from('content_items').update({
+    title: draft.title,
+    draft_markdown: draft.markdown,
+    source_links: draft.sources,
+    source_type: AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
+    status: 'published',
+    canonical_url: publish.canonicalUrl,
+    published_at: publish.publishedAt,
+    growth_campaign_id: scopedCandidate.campaign.id,
+    metadata,
+  }).eq('content_id', candidate.content_id);
   if (updateError) return { status: 'failed', reason: updateError.message };
   const opportunityId = String(candidate.metadata?.seo_opportunity_id ?? '');
   if (opportunityId && publish.canonicalUrl) {
