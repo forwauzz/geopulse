@@ -5,7 +5,10 @@ import { BlogArticleBody } from '@/components/blog-article-body';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import {
   buildArticleStructuredData,
+  clampArticleDescription,
+  extractArticleLeadParagraph,
   parseArticleMetadata,
+  resolvePublicArticleDescription,
 } from '@/lib/server/content-article-metadata';
 import {
   buildTopicHref,
@@ -37,22 +40,6 @@ function formatLabel(value: string | null): string {
   return value ? formatTopicLabel(value) : '-';
 }
 
-function extractLeadParagraph(markdown: string): string | null {
-  const paragraphs = markdown
-    .split(/\r?\n\r?\n/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .filter((part) => !part.startsWith('#') && !part.startsWith('- ') && !part.startsWith('* '));
-
-  return paragraphs[0] ?? null;
-}
-
-function clampDescription(value: string, maxLength = 155): string {
-  const normalized = value.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
-}
-
 type TocItem = {
   readonly id: string;
   readonly title: string;
@@ -73,11 +60,11 @@ function extractToc(markdown: string): TocItem[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .reduce<TocItem[]>((items, line) => {
-      const match = /^(#{1,2})\s+(.+?)\s*$/.exec(line);
+      const match = /^(#{2,3})\s+(.+?)\s*$/.exec(line);
       if (!match) return items;
       const marker = match[1] ?? '';
       const rawTitle = match[2] ?? '';
-      const level = marker.length === 1 ? 2 : 3;
+      const level = marker.length === 2 ? 2 : 3;
       const title = rawTitle.replace(/\s+#+$/, '').trim();
       if (!title) return items;
       items.push({ id: slugify(title), title, level });
@@ -115,12 +102,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  const description =
-    clampDescription(
-      extractLeadParagraph(article.draft_markdown) ??
-        article.primary_problem ??
-        'Operator-grade guidance about AI search readiness.'
-    );
+  const description = clampArticleDescription(
+    resolvePublicArticleDescription({
+      metadata: article.metadata,
+      markdown: article.draft_markdown,
+    })
+  );
   const articleMetadata = parseArticleMetadata(article.metadata);
   const canonicalUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, article.canonical_url, article.slug);
 
@@ -162,11 +149,13 @@ export default async function BlogArticlePage({ params }: Props) {
   if (!article) notFound();
 
   const articleMetadata = parseArticleMetadata(article.metadata);
-  const leadParagraph = extractLeadParagraph(article.draft_markdown);
+  const leadParagraph = extractArticleLeadParagraph(article.draft_markdown);
   const canonicalUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, article.canonical_url, article.slug);
   const authorUrl = articleMetadata.authorUrl ?? toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/about');
-  const description =
-    leadParagraph ?? article.primary_problem ?? 'Operator-grade guidance about AI search readiness.';
+  const description = resolvePublicArticleDescription({
+    metadata: article.metadata,
+    markdown: article.draft_markdown,
+  });
   const structuredData = buildArticleStructuredData({
     title: article.title,
     description,

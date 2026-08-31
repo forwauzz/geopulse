@@ -26,19 +26,23 @@ function renderHeading(level: 1 | 2 | 3 | 4 | 5 | 6, children: React.ReactNode) 
   const id = slugify(text);
 
   if (level === 1) return <h2 id={id}>{children}</h2>;
-  if (level === 2) return <h3 id={id}>{children}</h3>;
-  if (level === 3) return <h4 id={id}>{children}</h4>;
-  if (level === 4) return <h5 id={id}>{children}</h5>;
+  if (level === 2) return <h2 id={id}>{children}</h2>;
+  if (level === 3) return <h3 id={id}>{children}</h3>;
+  if (level === 4) return <h4 id={id}>{children}</h4>;
+  if (level === 5) return <h5 id={id}>{children}</h5>;
   return <h6 id={id}>{children}</h6>;
 }
 
 export function BlogArticleBody({ markdown }: { markdown: string }) {
   const components: Components = {
-    a: ({ href, children }) => (
-      <a href={href} target="_blank" rel="noreferrer">
-        {children}
-      </a>
-    ),
+    a: ({ href, children }) => {
+      const external = Boolean(href && /^https?:\/\//i.test(href));
+      return (
+        <a href={href} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>
+          {children}
+        </a>
+      );
+    },
     h1: ({ children }) => renderHeading(1, children),
     h2: ({ children }) => renderHeading(2, children),
     h3: ({ children }) => renderHeading(3, children),

@@ -1,3 +1,8 @@
+import {
+  extractArticleLeadParagraph,
+  isSafePublicArticleDescription,
+} from './content-article-metadata';
+
 export type PublishableContentSnapshot = {
   readonly content_type: string;
   readonly slug: string | null;
@@ -121,6 +126,24 @@ function hasUnknownInternalLink(markdown: string): boolean {
     if (!APPROVED_INTERNAL_CONTENT_PATHS.some((path) => href.startsWith(path))) return true;
   }
   return false;
+}
+
+function hasLookalikeGeoPulseBodyLink(markdown: string): boolean {
+  const markdownLinkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
+  for (const match of markdown.matchAll(markdownLinkPattern)) {
+    const href = match[1]?.trim() ?? '';
+    try {
+      const hostname = new URL(href).hostname.toLowerCase().replace(/^www\./, '');
+      if (hostname === 'geopulse.com') return true;
+    } catch {
+      // Relative links are evaluated by the internal-route check.
+    }
+  }
+  return false;
+}
+
+function hasMarkdownH1(markdown: string): boolean {
+  return /^#(?!#)\s+.+$/m.test(markdown);
 }
 
 function hasUntrustedGeoPulseSource(sourceLinks: readonly string[]): boolean {
@@ -364,6 +387,30 @@ export function evaluateContentPublishChecks(item: PublishableContentSnapshot): 
   );
 
   if (markdown) {
+    const publicCopy = [
+      item.title,
+      readMetadataString(item.metadata, 'meta_description'),
+      extractArticleLeadParagraph(markdown),
+    ].filter((value): value is string => Boolean(value));
+    checks.push(
+      buildCheck({
+        key: 'public_copy_internal_search_note',
+        label: 'Public copy excludes internal search-performance notes',
+        category: 'semantic_quality',
+        passed: publicCopy.every((value) => isSafePublicArticleDescription(value)),
+        hint:
+          'Remove internal rank, position, impression, click, or CTR notes from the public title, lead, and meta description.',
+      })
+    );
+    checks.push(
+      buildCheck({
+        key: 'markdown_single_page_h1',
+        label: 'Article body does not add a duplicate H1',
+        category: 'llm_readiness',
+        passed: !hasMarkdownH1(markdown),
+        hint: 'Remove the Markdown H1; the article page template already supplies the single page H1.',
+      })
+    );
     checks.push(
       buildCheck({
         key: 'llm_h2_count',
@@ -380,6 +427,16 @@ export function evaluateContentPublishChecks(item: PublishableContentSnapshot): 
         category: 'publish_contract',
         passed: !hasUnknownInternalLink(markdown),
         hint: 'Replace unknown relative links with a verified GEO-Pulse route.',
+      })
+    );
+    checks.push(
+      buildCheck({
+        key: 'body_link_domain_identity',
+        label: 'Body links do not confuse GEO-Pulse with geopulse.com',
+        category: 'publish_contract',
+        passed: !hasLookalikeGeoPulseBodyLink(markdown),
+        hint:
+          'Remove geopulse.com body links; GEO-Pulse product and conversion links must use getgeopulse.com or a verified relative route.',
       })
     );
     checks.push(

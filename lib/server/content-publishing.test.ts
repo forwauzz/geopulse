@@ -55,9 +55,7 @@ describe('content publishing helpers', () => {
       cta_goal: 'free_scan',
       source_type: 'internal_plus_research',
       source_links: ['https://example.com/research'],
-      draft_markdown: `# Article
-
-Short intro paragraph that defines the topic and keeps language concrete for extraction.
+      draft_markdown: `Short intro paragraph that defines the topic and keeps language concrete for extraction.
 
 ## What crawlable but not extractable means
 
@@ -361,6 +359,51 @@ Read [topic context](/blog/topic/msp-ai-visibility) and [scan now](/geopulse).
     );
   });
 
+  it('blocks duplicate H1s, lookalike conversion links, and leaked search-performance notes', () => {
+    const issues = getContentPublishIssues({
+      content_type: 'article',
+      slug: 'seo-ai-visibility-audit',
+      title: 'AI Visibility Audit',
+      status: 'approved',
+      topic_cluster: 'ai visibility audit',
+      cta_goal: 'free_scan',
+      source_type: 'internal_plus_research',
+      source_links: ['https://developers.google.com/search/docs/appearance/ai-features'],
+      draft_markdown: `# AI Visibility Audit
+
+An audit explains observable readiness evidence.
+
+## What should the audit check?
+
+- Crawl access
+- Structure
+
+## How should a team use it?
+
+Read [the audit guide](/blog/ai-search-readiness-audit), then [run a scan](https://www.geopulse.com/free-scan).
+`,
+      canonical_url: '/blog/seo-ai-visibility-audit',
+      metadata: {
+        author_name: 'Uzziel T.',
+        author_role: 'Founder, GEO-Pulse',
+        meta_description: 'ahrefs.com ranks #2; getgeopulse.com is outside the measured top 10.',
+        hero_image_url: 'https://cdn.example.com/hero.png',
+        hero_image_alt: 'Editorial evidence collage',
+      },
+      published_at: null,
+    });
+
+    expect(issues).toContain(
+      'Remove internal rank, position, impression, click, or CTR notes from the public title, lead, and meta description.'
+    );
+    expect(issues).toContain(
+      'Remove the Markdown H1; the article page template already supplies the single page H1.'
+    );
+    expect(issues).toContain(
+      'Remove geopulse.com body links; GEO-Pulse product and conversion links must use getgeopulse.com or a verified relative route.'
+    );
+  });
+
   it('returns structured checks for operator-facing publish review', () => {
     const checks = evaluateContentPublishChecks({
       content_type: 'article',
@@ -371,9 +414,7 @@ Read [topic context](/blog/topic/msp-ai-visibility) and [scan now](/geopulse).
       cta_goal: 'free_scan',
       source_type: 'internal_plus_research',
       source_links: ['https://example.com/research'],
-      draft_markdown: `# Article
-
-Short intro paragraph that defines the topic.
+      draft_markdown: `Short intro paragraph that defines the topic.
 
 ## What crawlable but not extractable means
 
