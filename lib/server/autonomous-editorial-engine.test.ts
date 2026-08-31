@@ -3,6 +3,7 @@ import {
   AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
   ensureEditorialInternalBlogLink,
   mergeEditorialCandidates,
+  removeRedundantEditorialH1,
   runAutonomousEditorialEngine,
   selectEditorialCandidateForActiveCampaign,
 } from './autonomous-editorial-engine';
@@ -69,6 +70,14 @@ function db() {
 }
 
 describe('autonomous editorial engine', () => {
+  it('removes a generated H1 only when the page title already supplies the same title', () => {
+    expect(removeRedundantEditorialH1('# AI Visibility Audit\n\nUseful lead.', 'AI Visibility Audit')).toBe(
+      'Useful lead.'
+    );
+    expect(removeRedundantEditorialH1('# Different claim\n\nUseful lead.', 'AI Visibility Audit')).toContain(
+      '# Different claim'
+    );
+  });
   it('uses a source type permitted by the production content_items contract', () => {
     expect(['internal_product', 'external_research', 'internal_plus_research', 'founder_input'])
       .toContain(AUTONOMOUS_EDITORIAL_SOURCE_TYPE);

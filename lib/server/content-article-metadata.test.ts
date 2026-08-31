@@ -3,6 +3,7 @@ import {
   buildArticleStructuredData,
   mergeArticleMetadata,
   parseArticleMetadata,
+  resolvePublicArticleDescription,
 } from './content-article-metadata';
 
 describe('content article metadata helpers', () => {
@@ -12,6 +13,7 @@ describe('content article metadata helpers', () => {
         author_name: 'Carine Tamon',
         author_role: 'Founder',
         author_url: 'https://getgeopulse.com/about',
+        meta_description: 'A practical audit walkthrough for operators.',
         hero_image_url: 'https://cdn.example.com/hero.jpg',
         hero_image_alt: 'Article hero image',
       })
@@ -19,6 +21,7 @@ describe('content article metadata helpers', () => {
       authorName: 'Carine Tamon',
       authorRole: 'Founder',
       authorUrl: 'https://getgeopulse.com/about',
+      metaDescription: 'A practical audit walkthrough for operators.',
       heroImageUrl: 'https://cdn.example.com/hero.jpg',
       heroImageAlt: 'Article hero image',
       noIndex: false,
@@ -33,6 +36,7 @@ describe('content article metadata helpers', () => {
           authorName: 'Carine Tamon',
           authorRole: 'Founder',
           authorUrl: null,
+          metaDescription: 'A practical audit walkthrough for operators.',
           heroImageUrl: 'https://cdn.example.com/hero.jpg',
           heroImageAlt: 'Article hero image',
           noIndex: true,
@@ -42,10 +46,20 @@ describe('content article metadata helpers', () => {
       existing: true,
       author_name: 'Carine Tamon',
       author_role: 'Founder',
+      meta_description: 'A practical audit walkthrough for operators.',
       hero_image_url: 'https://cdn.example.com/hero.jpg',
       hero_image_alt: 'Article hero image',
       noindex: true,
     });
+  });
+
+  it('never exposes internal search-performance notes as article descriptions', () => {
+    expect(
+      resolvePublicArticleDescription({
+        metadata: { meta_description: 'ahrefs.com ranks #2; getgeopulse.com is outside the measured top 10.' },
+        markdown: 'A practical AI visibility audit separates page readiness from observed answer visibility.',
+      })
+    ).toBe('A practical AI visibility audit separates page readiness from observed answer visibility.');
   });
 
   it('builds article structured data', () => {
@@ -73,6 +87,7 @@ describe('content article metadata helpers', () => {
       publisher: {
         '@type': 'Organization',
         name: 'GEO-Pulse',
+        url: 'https://getgeopulse.com/',
       },
     });
   });

@@ -106,6 +106,19 @@ export function ensureEditorialInternalBlogLink(markdown: string): string {
   return hasInternalBlogLink ? markdown : `${markdown.trimEnd()}${EDITORIAL_FALLBACK_INTERNAL_LINK}`;
 }
 
+function normalizedEditorialTitle(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export function removeRedundantEditorialH1(markdown: string, title: string): string {
+  const match = /^\s*#(?!#)\s+(.+?)\s*(?:\r?\n|$)/.exec(markdown);
+  if (!match) return markdown;
+  if (normalizedEditorialTitle(match[1] ?? '') !== normalizedEditorialTitle(title)) {
+    return markdown;
+  }
+  return markdown.slice(match[0].length).trimStart();
+}
+
 function safeEditorialFailureCode(value: unknown): string | null {
   return typeof value === 'string' && /^[a-z0-9_-]{1,80}$/.test(value)
     ? value
@@ -196,7 +209,9 @@ export async function runAutonomousEditorialEngine(args: {
   const draft = {
     ...providerDraft,
     markdown: providerDraft.markdown
-      ? ensureEditorialInternalBlogLink(providerDraft.markdown)
+      ? ensureEditorialInternalBlogLink(
+          removeRedundantEditorialH1(providerDraft.markdown, providerDraft.title)
+        )
       : providerDraft.markdown,
   };
   if (!draft.title || !draft.markdown || draft.sources.length === 0) {
