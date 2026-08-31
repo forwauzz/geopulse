@@ -3,6 +3,21 @@ import { createHash } from 'node:crypto';
 export const MEASUREMENT_LANE_PROTOCOL_VERSION = 'measurement-lane-v1';
 export const UNKNOWN_PROTOCOL_VALUE = 'unknown';
 export const NOT_APPLICABLE_PROTOCOL_VALUE = 'not_applicable';
+export const MEASUREMENT_LANE_LOOKUP_BATCH_SIZE = 25;
+
+export function batchMeasurementLaneFingerprints(
+  fingerprints: readonly string[],
+  batchSize = MEASUREMENT_LANE_LOOKUP_BATCH_SIZE
+): string[][] {
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new Error('Measurement lane lookup batch size must be a positive integer.');
+  }
+  const batches: string[][] = [];
+  for (let offset = 0; offset < fingerprints.length; offset += batchSize) {
+    batches.push(fingerprints.slice(offset, offset + batchSize));
+  }
+  return batches;
+}
 
 /** Converts legacy UTC hour keys (YYYY-MM-DDTHH) into valid timestamptz values. */
 export function normalizeMeasurementWindowTimestamp(value: string | null): string | null {

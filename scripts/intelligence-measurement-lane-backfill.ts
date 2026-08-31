@@ -1,6 +1,7 @@
 import { createServiceRoleClient } from '../lib/supabase/service-role';
 import {
   MEASUREMENT_LANE_PROTOCOL_VERSION,
+  batchMeasurementLaneFingerprints,
   NOT_APPLICABLE_PROTOCOL_VALUE,
   UNKNOWN_PROTOCOL_VALUE,
   aggregateMeasurementWindowCoverage,
@@ -250,13 +251,19 @@ async function main(): Promise<void> {
       throw new Error(`Lane upsert failed at row ${offset}: ${laneUpsert.error.message}`);
     }
   }
-  const laneResult = await client
-    .from('intelligence_measurement_lanes')
-    .select('id,fingerprint')
-    .in('fingerprint', laneRows.map((row) => row.fingerprint));
-  if (laneResult.error) throw new Error(`Lane lookup failed: ${laneResult.error.message}`);
+  const laneLookupRows: Row[] = [];
+  for (const fingerprintBatch of batchMeasurementLaneFingerprints(
+    laneRows.map((row) => row.fingerprint)
+  )) {
+    const laneResult = await client
+      .from('intelligence_measurement_lanes')
+      .select('id,fingerprint')
+      .in('fingerprint', fingerprintBatch);
+    if (laneResult.error) throw new Error(`Lane lookup failed: ${laneResult.error.message}`);
+    laneLookupRows.push(...((laneResult.data ?? []) as unknown as Row[]));
+  }
   const laneIds = new Map(
-    ((laneResult.data ?? []) as unknown as Row[]).map((row) => [String(row['fingerprint']), String(row['id'])])
+    laneLookupRows.map((row) => [String(row['fingerprint']), String(row['id'])])
   );
 
   const plansByWindow = new Map<string, typeof plans>();
