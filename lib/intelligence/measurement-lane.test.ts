@@ -3,6 +3,7 @@ import {
   NOT_APPLICABLE_PROTOCOL_VALUE,
   UNKNOWN_PROTOCOL_VALUE,
   aggregateMeasurementWindowCoverage,
+  batchMeasurementLaneFingerprints,
   evaluateMeasurementLaneCompatibility,
   inferProvider,
   measurementLaneFingerprint,
@@ -32,6 +33,14 @@ const base: MeasurementLaneProtocol = {
 };
 
 describe('measurement lane protocol', () => {
+  it('batches large fingerprint lookups without dropping or reordering values', () => {
+    const fingerprints = Array.from({ length: 61 }, (_, index) => `fingerprint-${index}`);
+    const batches = batchMeasurementLaneFingerprints(fingerprints, 25);
+
+    expect(batches.map((batch) => batch.length)).toEqual([25, 25, 11]);
+    expect(batches.flat()).toEqual(fingerprints);
+  });
+
   it('creates the same fingerprint regardless of casing and whitespace', () => {
     expect(measurementLaneFingerprint(base)).toBe(
       measurementLaneFingerprint({ ...base, vertical: ' LAW_FIRMS ' })
