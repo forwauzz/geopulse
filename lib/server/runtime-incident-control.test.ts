@@ -224,6 +224,31 @@ describe('runtime incident control', () => {
     });
   });
 
+  it('routes exhausted independent Reel review to the existing provider-capacity action', () => {
+    const [social] = classifyRuntimeIncidents([{
+      event: 'autonomous_campaign_execution',
+      level: 'info',
+      created_at: '2026-08-30T23:03:05.000Z',
+      data: {
+        inventoryHealthy: false,
+        socialRetryReason: 'reel_review_attempts_exhausted',
+      },
+    }]);
+
+    expect(planRuntimeIncidentLoop(social!, {
+      attempt_count: 3,
+      max_attempts: 3,
+      last_attempted_at: '2026-08-30T21:03:05.000Z',
+      metadata: { attempt_semantics_version: 'runtime-repair-v2' },
+    }, new Date('2026-08-31T00:00:00.000Z'))).toMatchObject({
+      state: 'blocked',
+      founderRequired: true,
+      requiresGit: false,
+      blocker: expect.stringContaining('GenerateContent capacity'),
+      nextAction: expect.stringContaining('same media hash once'),
+    });
+  });
+
   it('does not downgrade a genuinely exhausted v2 lineage during a later deferral', () => {
     const [social] = classifyRuntimeIncidents([{
       event: 'autonomous_campaign_execution',

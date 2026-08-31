@@ -36,6 +36,16 @@ const DEFERRED_RETRY_REASONS = new Set([
   'reel_review_retry_pending',
 ]);
 
+const EXTERNAL_CAPACITY_EXHAUSTED_REASONS = new Map([
+  [
+    'reel_review_attempts_exhausted',
+    {
+      blocker: 'Independent Gemini Reel review exhausted its bounded attempts; publishing remains held until existing GenerateContent capacity is restored.',
+      nextAction: 'Founder restores Gemini GenerateContent capacity within the existing $5 cap; Marcus then retries the same media hash once and requires an independent review pass plus provider-ready output before scheduling.',
+    },
+  ],
+] as const);
+
 const DEFINITIONS: readonly RuntimeIncidentDefinition[] = [
   {
     key: 'social-production',
@@ -233,6 +243,7 @@ export function planRuntimeIncidentLoop(
   readonly dueAt: string;
   readonly nextAction: string;
   readonly deferred: boolean;
+  readonly requiresGit: boolean;
 } {
   const maxAttempts = Math.max(1, Number(existing?.max_attempts ?? 3));
   const currentAttempts = Math.max(0, Number(existing?.attempt_count ?? 0));
@@ -251,6 +262,9 @@ export function planRuntimeIncidentLoop(
       ? Math.min(maxAttempts, currentAttempts + 1)
       : currentAttempts;
   const founderRequired = !deferred && attemptCount >= maxAttempts;
+  const externalCapacityBlock = EXTERNAL_CAPACITY_EXHAUSTED_REASONS.get(
+    signal.reason as 'reel_review_attempts_exhausted',
+  );
   const retryAt = Date.parse(signal.retryAfter ?? '');
   const dueAt = deferred && Number.isFinite(retryAt) && retryAt > now.getTime()
     ? new Date(retryAt).toISOString()
@@ -262,15 +276,18 @@ export function planRuntimeIncidentLoop(
     attemptCount,
     founderRequired,
     blocker: founderRequired
-      ? 'Automatic runtime retries were exhausted; the repair requires an engineering change.'
+      ? externalCapacityBlock?.blocker
+        ?? 'Automatic runtime retries were exhausted; the repair requires an engineering change.'
       : null,
     dueAt,
     nextAction: founderRequired
-      ? 'Open a Codex engineering repair task from this incident; deploy the fix and wait for the replacement success signal.'
+      ? externalCapacityBlock?.nextAction
+        ?? 'Open a Codex engineering repair task from this incident; deploy the fix and wait for the replacement success signal.'
       : deferred
         ? `Wait for the bounded retry window at ${dueAt}; then require replacement inventory or count one real repair failure.`
         : signal.definition.nextAction,
     deferred,
+    requiresGit: !externalCapacityBlock,
   };
 }
 
@@ -399,7 +416,7 @@ export async function syncRuntimeIncidentLoops(args: {
         campaign_lane: signal.definition.campaignLane,
         failure_events: signal.definition.failureEvents,
         success_events: signal.definition.successEvents,
-        repair_requires_git_when_exhausted: true,
+        repair_requires_git_when_exhausted: plan.requiresGit,
         deferred_retry_reasons: [...DEFERRED_RETRY_REASONS],
         attempt_semantics_version: 'runtime-repair-v2',
       },
