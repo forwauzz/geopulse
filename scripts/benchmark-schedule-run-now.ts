@@ -1,5 +1,6 @@
 import { createBenchmarkExecutionAdapter, type BenchmarkExecutionEnvLike } from '../lib/server/benchmark-execution';
 import { runScheduledBenchmarkSweep } from '../lib/server/benchmark-schedule';
+import { reconcileBenchmarkIntelligenceAfterSweep } from '../lib/server/benchmark-intelligence-reconciliation';
 import { createServiceRoleClient } from '../lib/supabase/service-role';
 
 function parseArgs(argv: string[]): { windowDate: string | null } {
@@ -50,6 +51,14 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const intelligence = summary.launchedRuns > 0 || summary.skippedExistingRuns > 0
+    ? await reconcileBenchmarkIntelligenceAfterSweep(supabase, {
+        recentHours: 72,
+        querySetId: summary.querySetId,
+        windowKey: summary.windowDate,
+      })
+    : null;
+
   console.log('benchmark schedule run now:');
   console.log(`  query_set_id: ${summary.querySetId}`);
   console.log(`  model_id: ${summary.modelId}`);
@@ -60,6 +69,7 @@ async function main(): Promise<void> {
   console.log(`  skipped_existing_runs: ${summary.skippedExistingRuns}`);
   console.log(`  failed_runs: ${summary.failedRuns}`);
   console.log(`  stopped_early: ${summary.stoppedEarly}`);
+  console.log(`  intelligence_reconciliation: ${JSON.stringify(intelligence)}`);
 }
 
 main().catch((error) => {
