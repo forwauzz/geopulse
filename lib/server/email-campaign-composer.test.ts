@@ -67,6 +67,19 @@ function contract(body = 'Hi {{name}},\n\nReply with one client domain: {{walkth
   });
 }
 
+function jsonbRoundTrip<T>(value: T): T {
+  const sortKeys = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(sortKeys);
+    if (!input || typeof input !== 'object') return input;
+    return Object.fromEntries(
+      Object.entries(input as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, sortKeys(child)]),
+    );
+  };
+  return sortKeys(value) as T;
+}
+
 describe('preview uses the production renderer', () => {
   const preview = renderCampaignPreview({ contract: contract(), contact: CONTACT, appUrl: 'https://getgeopulse.com' });
 
@@ -326,6 +339,48 @@ describe('store', () => {
       .email_campaign.versions['1'];
     expect(stored?.state).toBe('stopped');
     expect(stored?.governance.stopReason).toBe('zero qualified replies');
+  });
+
+  it('allows a JSONB-loaded locked version to stop after object keys are reordered', async () => {
+    const sender = resolveCampaignSender({
+      [CAMPAIGN_FROM_ENV_KEY]: 'reports@getgeopulse.com',
+      [CAMPAIGN_REPLY_TO_ENV_KEY]: 'reports@getgeopulse.com',
+      [CAMPAIGN_SENDER_VERIFIED_ENV_KEY]: 'true',
+    });
+    const locked = jsonbRoundTrip(withResolvedSender(
+      { ...contract(), state: 'scheduled' as const },
+      sender,
+    ));
+    const updates: Record<string, unknown>[] = [];
+    const supabase = {
+      from() {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: () => Promise.resolve({
+                data: { id: 'int-1', metadata: { email_campaign: { current: 1, versions: { '1': locked } } } },
+              }),
+            }),
+          }),
+          update(payload: Record<string, unknown>) {
+            updates.push(payload);
+            return { eq: () => Promise.resolve({ error: null }) };
+          },
+        };
+      },
+    } as never;
+
+    const resolved = withResolvedSender(locked, sender);
+    const stopped = {
+      ...resolved,
+      state: 'stopped' as const,
+      governance: { ...resolved.governance, stopReason: 'zero qualified replies' },
+      updatedAt: '2026-09-09T00:00:00.000Z',
+    };
+    const result = await saveEmailCampaign(supabase, stopped);
+
+    expect(result).toEqual({ ok: true });
+    expect(updates).toHaveLength(1);
   });
 
   it('accepts an idempotent stopped-state save on the current immutable version', async () => {

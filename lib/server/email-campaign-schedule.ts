@@ -379,7 +379,7 @@ export async function stopCampaign(args: {
   readonly contract: EmailCampaignV1;
   readonly reason: string;
   readonly nowMs: number;
-  readonly save: (contract: EmailCampaignV1) => Promise<{ ok: boolean }>;
+  readonly save: (contract: EmailCampaignV1) => Promise<{ ok: boolean; reason?: string }>;
 }): Promise<{ ok: true; stoppedProspects: number } | { ok: false; reason: string }> {
   const nowIso = new Date(args.nowMs).toISOString();
 
@@ -388,7 +388,12 @@ export async function stopCampaign(args: {
     governance: { stopReason: args.reason },
   });
   const saved = await args.save(contract);
-  if (!saved.ok) return { ok: false, reason: 'stopped_contract_save_failed' };
+  if (!saved.ok) {
+    return {
+      ok: false,
+      reason: `stopped_contract_save_failed:${saved.reason?.trim() || 'unknown'}`,
+    };
+  }
 
   const { data: enrollments, error: enrollmentReadError } = await args.supabase
     .from('outreach_campaign_enrollments')

@@ -30,10 +30,23 @@ const LOCKED_LIFECYCLE_ORDER: Readonly<Record<EmailCampaignPreparationState, num
   stopped: 3,
 };
 
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, canonicalJson(child)]),
+  );
+}
+
 function lockedLifecyclePayload(contract: EmailCampaignV1): string {
   const { state: _state, updatedAt: _updatedAt, governance, ...immutable } = contract;
   const { stopReason: _stopReason, ...immutableGovernance } = governance;
-  return JSON.stringify({ ...immutable, governance: immutableGovernance });
+  // Postgres JSONB does not preserve JavaScript insertion order. Compare the semantic payload,
+  // not the key order returned by the database, or a configuration-resolved sender can make a
+  // legitimate scheduled -> stopped transition look like an immutable contract rewrite.
+  return JSON.stringify(canonicalJson({ ...immutable, governance: immutableGovernance }));
 }
 
 /** A locked version may advance lifecycle state, but its recipient-visible contract stays immutable. */

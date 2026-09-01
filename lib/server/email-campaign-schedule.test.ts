@@ -567,10 +567,10 @@ describe('stopping a campaign', () => {
       contract: { ...contract(), state: 'scheduled' },
       reason: 'zero qualified replies',
       nowMs: NOW,
-      save: async () => ({ ok: false }),
+      save: async () => ({ ok: false, reason: 'version_is_locked' }),
     });
 
-    expect(result).toEqual({ ok: false, reason: 'stopped_contract_save_failed' });
+    expect(result).toEqual({ ok: false, reason: 'stopped_contract_save_failed:version_is_locked' });
     expect(writes).toEqual([]);
   });
 });
