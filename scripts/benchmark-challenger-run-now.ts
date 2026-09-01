@@ -3,7 +3,7 @@ import {
   runScheduledBenchmarkSweep,
   toBenchmarkChallengerScheduleEnv,
 } from '../lib/server/benchmark-schedule';
-import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
+import { reconcileBenchmarkIntelligenceAfterSweep } from '../lib/server/benchmark-intelligence-reconciliation';
 import { createServiceRoleClient } from '../lib/supabase/service-role';
 
 function values(argv: string[]): Map<string, string> {
@@ -53,14 +53,14 @@ async function main(): Promise<void> {
     }),
     triggerSource: 'manual_run_now',
   });
-  const quality = summary.launchedRuns > 0
-    ? await supabase.rpc('refresh_recent_benchmark_intelligence_quality', { p_recent_hours: 72 })
-    : { data: null, error: null };
-  if (quality.error) throw quality.error;
-  const learning = summary.launchedRuns > 0
-    ? await runIntelligenceLearningLoop(supabase)
+  const intelligence = summary.launchedRuns > 0 || summary.skippedExistingRuns > 0
+    ? await reconcileBenchmarkIntelligenceAfterSweep(supabase, {
+        recentHours: 72,
+        querySetId: summary.querySetId,
+        windowKey: summary.windowDate,
+      })
     : null;
-  console.log(JSON.stringify({ summary, qualityRefresh: quality.data, learning }, null, 2));
+  console.log(JSON.stringify({ summary, intelligence }, null, 2));
   if (summary.failedRuns > 0 || summary.stoppedEarly) process.exitCode = 1;
 }
 

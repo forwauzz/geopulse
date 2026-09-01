@@ -57,6 +57,7 @@ import { runCampaignChiefOfStaffCheck } from '../lib/server/campaign-chief-of-st
 import { runAutonomousSeoAgent } from '../lib/server/autonomous-seo-agent';
 import { runAutonomousCampaignExecution } from '../lib/server/autonomous-campaign-execution';
 import { runIntelligenceLearningLoop } from '../lib/server/intelligence-learning-loop';
+import { reconcileBenchmarkIntelligenceAfterSweep } from '../lib/server/benchmark-intelligence-reconciliation';
 import { enqueueDailyLifecycleExceptionDigest, enqueueMissingAccountCreatedEmails, enqueueOnboardingReminders, processLifecycleEmailQueue } from '../lib/server/lifecycle-email';
 import { persistAndDeliverRepairAudit, retryPendingRepairAudits } from '../lib/server/repair-audit-intake';
 
@@ -755,22 +756,21 @@ export default {
           adapter: createBenchmarkExecutionAdapter(env),
           triggerSource: 'worker_cron',
         });
-        if (benchmarkResult.launchedRuns > 0) {
-          const qualityRefresh = await supabase.rpc('refresh_recent_benchmark_intelligence_quality', {
-            p_recent_hours: 72,
+        if (benchmarkResult.launchedRuns > 0 || benchmarkResult.skippedExistingRuns > 0) {
+          const reconciliation = await reconcileBenchmarkIntelligenceAfterSweep(supabase, {
+            recentHours: 72,
+            querySetId: benchmarkResult.querySetId,
+            windowKey: benchmarkResult.windowDate,
           });
-          if (qualityRefresh.error) {
-            structuredError('intelligence_quality_after_benchmark_error', {
-              error: qualityRefresh.error.message,
-            });
-          }
-          const learningResult = await runIntelligenceLearningLoop(supabase);
           structuredLog('intelligence_learning_after_benchmark', {
             benchmark_launched_runs: benchmarkResult.launchedRuns,
             benchmark_failed_runs: benchmarkResult.failedRuns,
-            benchmark_quality_refresh: qualityRefresh.error ? 'failed_closed' : qualityRefresh.data,
-            ...learningResult,
-          }, learningResult.criticalQuarantined > 0 ? 'warning' : 'info');
+            benchmark_mapped_query_runs: reconciliation.measurementReconciliation.mappedQueryRuns,
+            benchmark_fail_closed_query_runs: reconciliation.measurementReconciliation.failClosedQueryRuns,
+            benchmark_indexed_query_runs: reconciliation.measurementReconciliation.indexedQueryRunsUpdated,
+            benchmark_quality_refresh: JSON.stringify(reconciliation.qualityRefresh),
+            ...reconciliation.learning,
+          }, reconciliation.learning.criticalQuarantined > 0 ? 'warning' : 'info');
         }
       } catch (err) {
         structuredError('benchmark_schedule_worker_error', {
@@ -792,22 +792,21 @@ export default {
           adapter: createBenchmarkExecutionAdapter(env),
           triggerSource: 'worker_cron',
         });
-        if (challengerResult.launchedRuns > 0) {
-          const qualityRefresh = await supabase.rpc('refresh_recent_benchmark_intelligence_quality', {
-            p_recent_hours: 72,
+        if (challengerResult.launchedRuns > 0 || challengerResult.skippedExistingRuns > 0) {
+          const reconciliation = await reconcileBenchmarkIntelligenceAfterSweep(supabase, {
+            recentHours: 72,
+            querySetId: challengerResult.querySetId,
+            windowKey: challengerResult.windowDate,
           });
-          if (qualityRefresh.error) {
-            structuredError('intelligence_quality_after_challenger_error', {
-              error: qualityRefresh.error.message,
-            });
-          }
-          const learningResult = await runIntelligenceLearningLoop(supabase);
           structuredLog('intelligence_learning_after_challenger', {
             benchmark_launched_runs: challengerResult.launchedRuns,
             benchmark_failed_runs: challengerResult.failedRuns,
-            benchmark_quality_refresh: qualityRefresh.error ? 'failed_closed' : qualityRefresh.data,
-            ...learningResult,
-          }, learningResult.criticalQuarantined > 0 ? 'warning' : 'info');
+            benchmark_mapped_query_runs: reconciliation.measurementReconciliation.mappedQueryRuns,
+            benchmark_fail_closed_query_runs: reconciliation.measurementReconciliation.failClosedQueryRuns,
+            benchmark_indexed_query_runs: reconciliation.measurementReconciliation.indexedQueryRunsUpdated,
+            benchmark_quality_refresh: JSON.stringify(reconciliation.qualityRefresh),
+            ...reconciliation.learning,
+          }, reconciliation.learning.criticalQuarantined > 0 ? 'warning' : 'info');
         }
       } catch (err) {
         structuredError('benchmark_challenger_worker_error', {

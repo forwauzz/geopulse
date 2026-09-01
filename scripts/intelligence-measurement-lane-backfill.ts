@@ -306,6 +306,7 @@ async function main(): Promise<void> {
   const windowIds = new Map(
     windowResult.map((row) => [`${String(row['lane_id'])}:${String(row['window_key'])}`, String(row['id'])])
   );
+  const plansBySourceId = new Map(plans.map((plan) => [plan.sourceId, plan]));
   const mappingRows = [
     ...plans.map((plan) => ({
       source_kind: plan.sourceKind,
@@ -319,6 +320,19 @@ async function main(): Promise<void> {
         ? 'one_or_more_protocol_versions_unknown'
         : null,
     })),
+    ...queryRuns.flatMap((run) => {
+      const parent = plansBySourceId.get(String(run['run_group_id']));
+      if (!parent) return [];
+      const unknown = Object.values(parent.protocol).includes(UNKNOWN_PROTOCOL_VALUE);
+      return [{
+        source_kind: 'benchmark_query_run',
+        source_id: String(run['id']),
+        lane_id: laneIds.get(parent.fingerprint)!,
+        window_id: windowIds.get(`${laneIds.get(parent.fingerprint)!}:${parent.windowKey}`) ?? null,
+        mapping_status: unknown ? 'legacy_unknown' : 'mapped',
+        mapping_reason: unknown ? 'one_or_more_protocol_versions_unknown' : null,
+      }];
+    }),
     ...cohortPlans.map((plan) => ({
       source_kind: plan.sourceKind,
       source_id: plan.sourceId,
