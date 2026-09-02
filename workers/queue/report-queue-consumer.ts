@@ -132,6 +132,14 @@ export function shouldDeliverReportEmail(job: ReportQueueMessage): boolean {
   return !(job.v === 3 && job.deliveryMode === 'campaign_preview');
 }
 
+export function reportDeliveryPaymentId(paymentReference: string): string | null {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    paymentReference
+  )
+    ? paymentReference
+    : null;
+}
+
 export function completedDeepAuditScanFields(args: {
   readonly score: number;
   readonly letterGrade: string;
@@ -997,12 +1005,13 @@ async function processReportJob(rawBody: string, env: CloudflareEnv): Promise<vo
   if (!campaignPreview) {
     await emitMarketingEvent(supabase as never, 'report_delivered', {
       scan_id: job.scanId,
-      payment_id: job.paymentId,
+      payment_id: reportDeliveryPaymentId(job.paymentId),
       email: job.customerEmail,
       idempotency_key: `report:${reportId ?? `${job.scanId}:${job.paymentId}`}:delivered`,
       metadata: {
         kind: 'deep_audit',
         report_id: reportId,
+        payment_reference: job.paymentId,
         payload_version: payload.version,
         attached_pdf: attachPdf,
       },
