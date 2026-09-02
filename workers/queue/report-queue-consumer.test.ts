@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   completedDeepAuditScanFields,
   planDeepAuditCrawlRecovery,
+  reportDeliveryPaymentId,
   shouldDeliverReportEmail,
 } from './report-queue-consumer';
 
@@ -50,6 +51,22 @@ describe('shouldDeliverReportEmail', () => {
       paymentId: 'payment-1',
       stripeSessionId: 'session-1',
     })).toBe(true);
+  });
+});
+
+describe('reportDeliveryPaymentId', () => {
+  it('preserves a real payment row UUID for attribution joins', () => {
+    expect(reportDeliveryPaymentId('660e8400-e29b-41d4-a716-446655440001')).toBe(
+      '660e8400-e29b-41d4-a716-446655440001'
+    );
+  });
+
+  it('keeps an automatic startup delivery reference out of the UUID-only payment field', () => {
+    expect(
+      reportDeliveryPaymentId(
+        'startup-auto-741b5371-d13c-4e1a-8753-7e81f5854aca-4dc43b0d-095b-489b-b1f3-72dca9a991cd'
+      )
+    ).toBeNull();
   });
 });
 
