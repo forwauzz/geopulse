@@ -21,7 +21,7 @@ import {
   loadAudienceEvidence,
   selectCampaignAudience,
 } from '@/lib/server/campaign-audience';
-import { structuredLog } from '@/lib/server/structured-log';
+import { structuredLog, structuredLogWithClientAndWait } from '@/lib/server/structured-log';
 import { buildAuditCampaignContracts } from '@/lib/server/audit-campaign-readiness';
 import { loadCampaignScanContexts } from '@/lib/server/email-campaign-scan-context';
 import {
@@ -37,6 +37,7 @@ import { enrichApolloCandidates, searchApolloQuebecMspCandidates } from '@/lib/s
 import { prepareCampaignAudits } from '@/lib/server/campaign-audit-preparation';
 import { fetchAllRows } from '@/lib/server/supabase-page';
 import { selectSavedApolloContacts, type SavedApolloContact } from '@/lib/server/saved-apollo-campaign-intake';
+import { normalizeApolloFailureCode } from '@/lib/server/apollo-connection-status';
 
 const CONSOLE_PATH = '/admin/campaigns/email';
 
@@ -275,6 +276,12 @@ export async function prepareApolloCampaignContactsAction(formData: FormData): P
     successUrl = `${CONSOLE_PATH}?apolloSearched=${String(candidates.length)}&apolloCredits=${String(enriched.attempted)}&apolloEligible=${String(plan.counts.eligibleMsp)}&apolloHeld=${String(plan.counts.held)}&apolloAuditsQueued=${String(audits.queued)}&apolloAuditsReady=${String(audits.alreadyReady)}&apolloAuditFailures=${String(audits.failed)}#apollo-intake`;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'apollo_intake_failed';
+    await structuredLogWithClientAndWait(ctx.adminDb, 'apollo_campaign_contacts_prepare_failed', {
+      requested,
+      reason: normalizeApolloFailureCode(message),
+      enrichmentCredits: 0,
+      sendState: 'not_enrolled',
+    }, 'error');
     redirect(`${CONSOLE_PATH}?apolloError=${encodeURIComponent(message.slice(0, 120))}#apollo-intake`);
   }
   redirect(successUrl);
