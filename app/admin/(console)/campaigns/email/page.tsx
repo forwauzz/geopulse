@@ -7,6 +7,7 @@ import {
 } from '@/lib/server/email-campaign-console';
 import { resolveCampaignSender } from '@/lib/server/email-campaign-sender';
 import { PRESET_OUTREACH_TEMPLATES } from '@/lib/server/outreach-templates';
+import { resolveApolloConnectionStatus } from '@/lib/server/apollo-connection-status';
 import {
   createAuditEmailCampaignAction,
   createEmailCampaignAction,
@@ -36,6 +37,12 @@ const STATE_STYLE: Record<string, string> = {
   completed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
   stopped: 'bg-red-500/15 text-red-700 dark:text-red-300',
 };
+
+const APOLLO_STATUS_STYLE = {
+  healthy: 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200',
+  warning: 'bg-amber-500/10 text-amber-800 dark:text-amber-200',
+  error: 'bg-red-500/10 text-red-700 dark:text-red-300',
+} as const;
 
 function campaignSegments(vertical: string, segments: readonly EmailCampaignSegmentOption[]) {
   const pattern = vertical === 'msp_it_services' ? /(^|-)msp(s)?($|-)/i : /marketing-agenc/i;
@@ -90,6 +97,11 @@ export default async function EmailCampaignsPage({
   const mspPreset = PRESET_OUTREACH_TEMPLATES.find((template) => template.key === 'msp-evidence-first')!;
   const agencyPreset = PRESET_OUTREACH_TEMPLATES.find((template) => template.key === 'first-scorecard')!;
   const savedApolloSegments = composer.segments.filter((segment) => /^apollo-import-/i.test(segment.segment));
+  const apolloStatus = resolveApolloConnectionStatus({
+    keyConfigured: Boolean(env['APOLLO_API_KEY']),
+    searched: query.apolloSearched !== undefined,
+    error: query.apolloError,
+  });
 
   return (
     <div className="space-y-6">
@@ -196,8 +208,8 @@ export default async function EmailCampaignsPage({
               then queues personalized audits without enrolling or emailing anyone.
             </p>
           </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-bold ${env['APOLLO_API_KEY'] ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-200' : 'bg-amber-500/10 text-amber-800 dark:text-amber-200'}`}>
-            {env['APOLLO_API_KEY'] ? 'Apollo connected' : 'Apollo key required'}
+          <span className={`rounded-full px-3 py-1 text-xs font-bold ${APOLLO_STATUS_STYLE[apolloStatus.tone]}`}>
+            {apolloStatus.label}
           </span>
         </div>
         {query.apolloSearched !== undefined ? (
