@@ -40,6 +40,25 @@ Check [the readiness guide](/blog/ai-search-readiness-audit).`);
     expect(String((run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[0]?.content)).toContain('Do not invent');
   });
 
+  it('routes the bounded audit CTA to the commercial audit surface', async () => {
+    const run = vi.fn().mockResolvedValue({ response: `<article_title>What should an MSP verify?</article_title>
+<article_markdown>Start with observable evidence.
+
+## What should the team inspect?
+
+Read [the MSP evidence guide](/blog/msp-service-claims-verifiable-evidence).
+</article_markdown>` });
+    const provider = createAutonomousEditorialProvider({ AI: { run } });
+
+    await provider.draft({ topic: 'msp evidence', existingTitles: [] });
+
+    const prompt = String(
+      (run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[1]?.content
+    );
+    expect(prompt).toContain('/ai-visibility-audit');
+    expect(prompt).not.toContain('/blog/ai-search-readiness-audit');
+  });
+
   it('returns a bounded provider code instead of exposing writer failure text', async () => {
     const run = vi.fn().mockRejectedValue(new Error('Upstream 429: secret provider detail'));
     const provider = createAutonomousEditorialProvider({ AI: { run } });
