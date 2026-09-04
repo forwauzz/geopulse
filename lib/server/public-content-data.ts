@@ -117,20 +117,30 @@ export function createPublicContentData(supabase: SupabaseLike) {
         return [...E2E_BLOG_FIXTURE_LIST_ROWS];
       }
 
-      const { data, error } = await supabase
-        .from('content_items')
-        .select(
-          'id,content_id,slug,title,target_persona,primary_problem,topic_cluster,cta_goal,canonical_url,published_at,updated_at,draft_markdown,metadata'
-        )
-        .eq('content_type', 'article')
-        .eq('status', 'published')
-        .order('published_at', { ascending: false })
-        .order('updated_at', { ascending: false })
-        .limit(50);
+      // Topic resolution and sitemaps require the full published inventory.
+      // A display limit here turns older, still-published topics into 404s.
+      const rows: Array<Record<string, unknown>> = [];
+      const pageSize = 50;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase
+          .from('content_items')
+          .select(
+            'id,content_id,slug,title,target_persona,primary_problem,topic_cluster,cta_goal,canonical_url,published_at,updated_at,draft_markdown,metadata'
+          )
+          .eq('content_type', 'article')
+          .eq('status', 'published')
+          .order('published_at', { ascending: false })
+          .order('updated_at', { ascending: false })
+          .order('id', { ascending: true })
+          .range(offset, offset + pageSize - 1);
 
-      if (error) throw error;
+        if (error) throw error;
+        const page = (data ?? []) as Array<Record<string, unknown>>;
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
 
-      return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      return rows.map((row) => ({
         id: String(row.id),
         content_id: String(row.content_id),
         slug: String(row.slug),
