@@ -287,12 +287,12 @@ function strongestSignal(snapshot: RevenueAgencySnapshot, verifiedRecurring: num
   if (snapshot.repliesReceived > 0) return `${snapshot.repliesReceived} human reply/replies received.`;
   if (snapshot.checkoutStarts > 0) return `${snapshot.checkoutStarts} checkout start(s) recorded.`;
   if (snapshot.qualifiedWorkspaceActivations > 0) {
-    return `${snapshot.qualifiedWorkspaceActivations} workspace(s) reached qualified first value.`;
+    return `${snapshot.qualifiedWorkspaceActivations} workspace(s) reached product first value. Product/pilot activity only; not evidence of buying intent.`;
   }
   if (snapshot.deliveredReports > 0) {
-    return `${snapshot.deliveredReports} qualified report(s) delivered.`;
+    return `${snapshot.deliveredReports} report(s) delivered. Product/pilot activity only; not evidence of buying intent.`;
   }
-  if (snapshot.completedScans > 0) return `${snapshot.completedScans} qualified scan(s) completed.`;
+  if (snapshot.completedScans > 0) return `${snapshot.completedScans} scan(s) completed. Product/pilot activity only; not evidence of buying intent.`;
   if (snapshot.outreachSends > 0) {
     return `${snapshot.outreachSends} provider-accepted outreach send(s); no deeper movement yet.`;
   }
@@ -310,9 +310,9 @@ function departmentOutcome(
     case 'maya':
       return `${open} company work item(s) open; focus is ${snapshot.focus}.`;
     case 'noah':
-      return `${snapshot.workspaceRecordsCreated} workspace record(s) created and ${snapshot.qualifiedWorkspaceActivations} qualified first-value activation(s) in ${snapshot.windowDays} days.`;
+      return `${snapshot.workspaceRecordsCreated} workspace record(s) created and ${snapshot.qualifiedWorkspaceActivations} product first-value activation(s) in ${snapshot.windowDays} days; free/pilot usage may be included, not sales qualification.`;
     case 'priya':
-      return `${snapshot.completedScans} qualified scan(s) and ${snapshot.deliveredReports} delivered report(s) in ${snapshot.windowDays} days.`;
+      return `${snapshot.completedScans} product scan(s) and ${snapshot.deliveredReports} delivered report(s) in ${snapshot.windowDays} days; internal/partner tests may be included.`;
     case 'elena':
       return `${snapshot.outreachSends} send(s), ${snapshot.repliesReceived} reply/replies, and ${snapshot.meetingsBooked} meeting(s) in ${snapshot.windowDays} days.`;
     case 'sofia':
@@ -794,7 +794,7 @@ export function renderDailyCompanyStandupHtml(report: DailyCompanyStandup): stri
         <tbody>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Outreach sent / opened</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.outreachSends} / ${report.revenue.outreachOpens}</strong></td></tr>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Human replies / meetings</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.replies} / ${report.revenue.meetings}</strong></td></tr>
-          <tr><td style="padding:9px;border:1px solid #e5e7eb">Workspace records created / qualified first value</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.workspaceRecordsCreated} / ${report.revenue.qualifiedWorkspaceActivations}</strong></td></tr>
+          <tr><td style="padding:9px;border:1px solid #e5e7eb">Workspace records created / product first value (not sales qualification)</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.workspaceRecordsCreated} / ${report.revenue.qualifiedWorkspaceActivations}</strong></td></tr>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Checkout starts</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.checkoutStarts}</strong></td></tr>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Paid subscriptions started / cancellations</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.revenue.paidSubscriptionsStarted} / ${report.revenue.cancellations}</strong></td></tr>
           <tr><td style="padding:9px;border:1px solid #e5e7eb">Verified non-internal recurring customers</td><td style="padding:9px;border:1px solid #e5e7eb"><strong>${report.verifiedRecurringCustomers}</strong></td></tr>

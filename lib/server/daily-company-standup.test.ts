@@ -178,13 +178,22 @@ describe('daily company standup', () => {
 
     const html = renderDailyCompanyStandupHtml(report);
     expect(html).toContain('Verified non-internal recurring customers');
-    expect(html).toContain('Workspace records created / qualified first value');
+    expect(html).toContain('Workspace records created / product first value');
     expect(html).not.toContain('Activated workspaces');
     expect(html).toContain('Maya Brooks');
     expect(html).toContain('Codex');
     expect(html).toContain('Role rubric');
     expect(html).toContain('Worked on');
     expect(html).toContain('Working next');
+  });
+
+  it('labels product and pilot activity separately from commercial intent', () => {
+    const report = buildDailyCompanyStandup({ snapshot, workforce: room.workforce,
+      loops: [], founderDecisions: [], verifiedRecurringCustomers: 0, now });
+    const text = JSON.stringify(report);
+    expect(text).toContain('Product/pilot activity only');
+    expect(text).not.toMatch(/qualified first.value|qualified scan|qualified report/);
+    expect(renderDailyCompanyStandupHtml(report)).toContain('not evidence of buying intent');
   });
 
   it('holds Maya independently accountable for missing ownership, overdue work, and weak closure', () => {
