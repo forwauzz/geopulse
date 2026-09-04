@@ -92,7 +92,18 @@ describe('Revenue Agency control plane', () => {
     ).toBe('convert');
   });
 
-  it('counts only deduplicated external workspaces with evidenced first value', () => {
+  it('does not infer acquisition from saved prospects, product usage or published posts', () => {
+    const activity = { leads: 0, activeProspects: 8, completedScans: 51, proofAssets: 68,
+      paidSubscriptionsStarted: 0, activeMonitoring: 0 };
+    expect(chooseRevenueAgencyFocus(activity)).toMatchObject({ focus: 'acquire' });
+    expect(chooseRevenueAgencyFocus(activity).reason).toContain('not established');
+    expect(chooseRevenueAgencyFocus({ ...activity, repliesReceived: 1 }).focus).toBe('convert');
+    expect(chooseRevenueAgencyFocus({ ...activity, checkoutStarts: 1 }).focus).toBe('convert');
+    expect(chooseRevenueAgencyFocus({ ...activity, meetingsBooked: 1 }).focus).toBe('convert');
+    expect(chooseRevenueAgencyFocus({ ...activity, paidSubscriptionsStarted: 1 }).focus).toBe('retain');
+  });
+
+  it('counts deduplicated product first value, including pilots without proven buying intent', () => {
     expect(countQualifiedWorkspaceActivations({
       owners: [
         { id: 'startup-1', kind: 'startup', canonical_domain: 'customer.ca', fallback_domain: null, status: 'active', metadata: {} },

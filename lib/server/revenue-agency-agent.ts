@@ -71,6 +71,7 @@ export type RevenueAgencySnapshot = {
   readonly repliesReceived: number;
   readonly meetingsBooked: number;
   readonly workspaceRecordsCreated: number;
+  /** Legacy field name: product first value, potentially free/pilot; not sales qualification. */
   readonly qualifiedWorkspaceActivations: number;
   readonly paymentsCompleted: number;
   readonly paidSubscriptionsStarted: number;
@@ -473,7 +474,17 @@ export function chooseRevenueAgencyFocus(values: {
   proofAssets: number;
   paidSubscriptionsStarted: number;
   activeMonitoring: number;
+  repliesReceived?: number;
+  meetingsBooked?: number;
+  checkoutStarts?: number;
 }): { focus: RevenueStage['key']; reason: string } {
+  // Saved inventory, published posts and customer-path scans can include partner
+  // tests. They do not establish that acquisition or buying intent is working.
+  if (values.leads === 0 && (values.repliesReceived ?? 0) === 0
+    && (values.meetingsBooked ?? 0) === 0 && (values.checkoutStarts ?? 0) === 0
+    && values.paidSubscriptionsStarted === 0 && values.activeMonitoring === 0) {
+    return { focus: 'acquire', reason: 'Qualified acquisition is not established: no recorded leads, replies, meetings or checkout starts. Saved prospects and product/pilot activity are not buying intent.' };
+  }
   if (values.leads + values.activeProspects === 0) {
     return { focus: 'acquire', reason: 'The loop needs qualified prospects before any downstream stage can compound.' };
   }
@@ -484,7 +495,7 @@ export function chooseRevenueAgencyFocus(values: {
     return { focus: 'prove', reason: 'Audit evidence exists, but none has been packaged into safe distribution assets yet.' };
   }
   if (values.paidSubscriptionsStarted === 0) {
-    return { focus: 'convert', reason: 'The top of funnel is working, but no recent lead has crossed into a recurring paid relationship.' };
+    return { focus: 'convert', reason: 'Recorded commercial signals need follow-through; no recent recurring subscription has started. Activity alone does not establish acquisition quality.' };
   }
   if (values.activeMonitoring === 0) {
     return { focus: 'retain', reason: 'Conversions exist, but recurring monitoring has not become the retention layer yet.' };
@@ -569,6 +580,9 @@ export async function loadRevenueAgencySnapshot(
     proofAssets: proofAssets + publishedProof,
     paidSubscriptionsStarted,
     activeMonitoring,
+    repliesReceived,
+    meetingsBooked,
+    checkoutStarts,
   });
 
   const stages: RevenueStage[] = [
@@ -576,15 +590,15 @@ export async function loadRevenueAgencySnapshot(
       key: 'acquire',
       label: 'Acquire',
       value: leads + activeProspects,
-      status: leads + activeProspects > 0 ? 'healthy' : 'attention',
-      detail: `${leads} new leads · ${activeProspects} active outreach prospects`,
+      status: leads > 0 || repliesReceived > 0 || meetingsBooked > 0 || checkoutStarts > 0 ? 'healthy' : 'attention',
+      detail: `${leads} new leads · ${activeProspects} enabled outreach records (inventory, not buying intent)`,
     },
     {
       key: 'diagnose',
       label: 'Diagnose',
       value: completedScans,
       status: completedScans > 0 ? 'healthy' : 'waiting',
-      detail: `${completedScans} completed scans · ${deliveredReports} reports delivered · ${workspaceRecordsCreated} workspace records created · ${qualifiedWorkspaceActivations} qualified first-value activations`,
+      detail: `${completedScans} completed scans · ${deliveredReports} reports delivered · ${workspaceRecordsCreated} workspace records created · ${qualifiedWorkspaceActivations} product first-value activations. Product/pilot activity only; not evidence of buying intent.`,
     },
     {
       key: 'prove',
