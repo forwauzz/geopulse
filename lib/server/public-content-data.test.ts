@@ -1,7 +1,46 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createPublicContentData } from './public-content-data';
 
 describe('createPublicContentData', () => {
+  it('keeps older published articles across multiple database pages', async () => {
+    const articles = Array.from({ length: 101 }, (_, index) => ({
+      id: `item-${index}`, content_id: `article-${index}`, slug: `article-${index}`,
+      title: `Article ${index}`, cta_goal: 'free_scan',
+      topic_cluster: index >= 50 ? 'older_topic' : 'newer_topic',
+      published_at: '2026-09-03T12:00:00Z', updated_at: '2026-09-03T12:00:00Z',
+      draft_markdown: 'Published article body', metadata: {},
+    }));
+    const range = vi.fn(async (from: number, to: number) => ({
+      data: articles.slice(from, to + 1), error: null,
+    }));
+    const query = {
+      select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(), range,
+      limit: (count: number) => Promise.resolve({ data: articles.slice(0, count), error: null }),
+    };
+    const rows = await createPublicContentData({ from: () => query } as any).getPublishedArticles();
+    expect(rows.map((row) => row.id)).toEqual(articles.map((row) => row.id));
+    expect(rows.at(-1)?.topic_cluster).toBe('older_topic');
+    expect(range.mock.calls).toEqual([[0, 49], [50, 99], [100, 149]]);
+    expect(query.order).toHaveBeenCalledWith('id', { ascending: true });
+    expect(query.eq).toHaveBeenCalledWith('status', 'published');
+    expect(query.eq).toHaveBeenCalledWith('content_type', 'article');
+  });
+
+  it('fails rather than emitting a partial inventory when a later page fails', async () => {
+    const error = new Error('inventory page unavailable');
+    const range = vi.fn()
+      .mockResolvedValueOnce({ data: Array.from({ length: 50 }, () => ({})), error: null })
+      .mockResolvedValueOnce({ data: null, error });
+    const query = {
+      select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(), range,
+      limit: () => Promise.resolve({ data: [], error: null }),
+    };
+    await expect(createPublicContentData({ from: () => query } as any).getPublishedArticles())
+      .rejects.toThrow('inventory page unavailable');
+  });
+
   it('returns published articles with derived excerpts', async () => {
     const supabase = {
       from(table: string) {
@@ -16,7 +55,7 @@ describe('createPublicContentData', () => {
           order() {
             return this;
           },
-          limit() {
+          range() {
             return Promise.resolve({
               data: [
                 {
