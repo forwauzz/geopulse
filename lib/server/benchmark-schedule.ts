@@ -9,7 +9,7 @@ import {
   type BenchmarkDomainRow,
   type BenchmarkQuerySetRow,
 } from './benchmark-repository';
-import { runBenchmarkGroupSkeleton } from './benchmark-runner';
+import { runBenchmarkGroupSkeleton, terminalBenchmarkProviderFailureCode } from './benchmark-runner';
 import { structuredError, structuredLog } from './structured-log';
 
 export type ScheduleEnvLike = {
@@ -478,6 +478,24 @@ export async function executeBenchmarkScheduleSweep(args: {
         const existing = await args.repo.getRunGroupByScheduleKey(scheduleRunKey);
         if (existing) {
           skippedExistingRuns += 1;
+          const persistedCode = existing.metadata?.['terminal_provider_failure_code'];
+          const terminalCode = existing.status === 'failed' && typeof persistedCode === 'string'
+            ? terminalBenchmarkProviderFailureCode([{ status: 'failed', errorMessage: persistedCode }])
+            : null;
+          if (terminalCode) {
+            failedRuns += 1;
+            stoppedEarly = true;
+            structuredError('benchmark_schedule_terminal_provider_failure', {
+              run_group_id: existing.id,
+              terminal_provider_failure_code: terminalCode,
+              schedule_version: args.config.scheduleVersion,
+              schedule_window_utc: windowDate,
+              persisted: true,
+              launched_runs: launchedRuns,
+              failed_runs: failedRuns,
+            });
+            break outer;
+          }
           continue;
         }
 
