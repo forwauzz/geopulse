@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentCampaignIsOperationallyRelevant,
   agentNeedsOperationalAction,
+  blockingRuntimeIncident,
   completedBenchmarkSibling,
   isOperationsExcludedBenchmarkConfig,
   socialExperimentDetail,
@@ -9,6 +10,28 @@ import {
   summarizeRuntimeHealth,
   type CampaignItem,
 } from './campaign-control-room';
+
+describe('blockingRuntimeIncident', () => {
+  it('keeps an active social production incident authoritative over a later coarse success signal', () => {
+    const incident = {
+      source_type: 'runtime_incident',
+      source_key: 'social-production',
+      state: 'blocked',
+      blocker: 'Missing required short-video output.',
+    };
+
+    expect(blockingRuntimeIncident([
+      { source_type: 'runtime_incident', source_key: 'seo-editorial', state: 'blocked' },
+      incident,
+    ], 'social-production')).toBe(incident);
+  });
+
+  it('does not block the summary after the incident leaves an active blocked state', () => {
+    expect(blockingRuntimeIncident([
+      { source_type: 'runtime_incident', source_key: 'social-production', state: 'verifying' },
+    ], 'social-production')).toBeNull();
+  });
+});
 
 describe('agentNeedsOperationalAction', () => {
   it('does not turn an intentional fail-closed pause into repair work', () => {
