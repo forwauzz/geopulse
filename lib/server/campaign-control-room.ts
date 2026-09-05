@@ -267,6 +267,17 @@ export function summarizeRuntimeHealth(
   };
 }
 
+export function blockingRuntimeIncident(
+  loops: readonly Row[],
+  sourceKey: string,
+): Row | null {
+  return loops.find((row) => (
+    text(row, 'source_type') === 'runtime_incident'
+    && text(row, 'source_key') === sourceKey
+    && (text(row, 'state') === 'blocked' || row['founder_required'] === true)
+  )) ?? null;
+}
+
 export async function loadCampaignControlRoom(args: {
   readonly supabase: SupabaseLike;
   readonly agents: readonly AgentStatus[];
@@ -361,31 +372,36 @@ export async function loadCampaignControlRoom(args: {
   const socialAgent = args.agents.find((agent) => agent.key === 'social_proof');
   if (socialAgent?.enabled) {
     const runtime = summarizeRuntimeHealth(logs, 'social_proof_agent_run');
+    const incident = blockingRuntimeIncident(openWorkLoops, 'social-production');
     const stale = isOlderThan(runtime.lastRunAt, nowMs, 3);
-    const blocked = runtime.consecutiveFailures >= 2;
+    const blocked = Boolean(incident) || runtime.consecutiveFailures >= 2;
     campaigns.push({
       id: 'runtime:social-proof',
       lane: 'social',
       name: 'Sofia and Jordan production pipeline',
       channel: 'Research → creative → Instagram',
-      status: blocked
-        ? `${runtime.consecutiveFailures} consecutive failures`
-        : runtime.lastStatus === 'failed'
-          ? 'latest run failed'
-          : stale
-            ? 'runtime heartbeat stale'
-            : 'running',
+      status: incident
+        ? 'runtime incident blocked'
+        : blocked
+          ? `${runtime.consecutiveFailures} consecutive failures`
+          : runtime.lastStatus === 'failed'
+            ? 'latest run failed'
+            : stale
+              ? 'runtime heartbeat stale'
+              : 'running',
       health: blocked ? 'blocked' : runtime.lastStatus === 'failed' || stale ? 'attention' : 'healthy',
       owner: 'Jordan',
-      lastActivityAt: runtime.lastRunAt,
+      lastActivityAt: text(incident ?? {}, 'updated_at') ?? runtime.lastRunAt,
       nextActivityAt: null,
-      detail: blocked
-        ? `The production agent failed ${runtime.consecutiveFailures} consecutive runs. Scheduled inventory may still publish, but new research and creative production are not healthy.`
-        : runtime.lastStatus === 'failed'
-          ? 'The latest production run failed. The next bounded retry must succeed before Maya closes this incident.'
-          : stale
-            ? 'No social production heartbeat was recorded in the expected window.'
-            : 'The latest research and production run completed successfully.',
+      detail: incident
+        ? text(incident, 'blocker') ?? text(incident, 'detail') ?? 'The production runtime incident is blocked pending replacement evidence.'
+        : blocked
+          ? `The production agent failed ${runtime.consecutiveFailures} consecutive runs. Scheduled inventory may still publish, but new research and creative production are not healthy.`
+          : runtime.lastStatus === 'failed'
+            ? 'The latest production run failed. The next bounded retry must succeed before Maya closes this incident.'
+            : stale
+              ? 'No social production heartbeat was recorded in the expected window.'
+              : 'The latest research and production run completed successfully.',
       href: '/admin/agents',
     });
   }
