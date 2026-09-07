@@ -6,7 +6,9 @@ import {
   canDispatchApprovedManualInstagramAsset,
   dispatchDistributionJobById,
   dispatchDistributionJobs,
+  findPublishedCopyDuplicate,
   isLinkedInAutomatedAssetType,
+  normalizeDistributionCopy,
 } from './distribution-job-dispatcher';
 
 vi.mock('./distribution-social-oauth', async () => {
@@ -62,6 +64,149 @@ const baseEnv = {
 };
 
 describe('dispatchDistributionJobs', () => {
+  it('normalizes harmless copy differences and preserves cross-format experiments', () => {
+    expect(normalizeDistributionCopy('  SAME\n copy  ')).toBe('same copy');
+    expect(
+      findPublishedCopyDuplicate(
+        {
+          id: 'current',
+          asset_type: 'single_image_post',
+          caption_text: 'Same\ncopy',
+          body_plaintext: null,
+          body_markdown: null,
+        },
+        [
+          {
+            id: 'published-image',
+            asset_id: 'published-image',
+            asset_type: 'single_image_post',
+            caption_text: ' same copy ',
+            body_plaintext: null,
+            body_markdown: null,
+          },
+          {
+            id: 'published-reel',
+            asset_id: 'published-reel',
+            asset_type: 'short_video_post',
+            caption_text: 'same copy',
+            body_plaintext: null,
+            body_markdown: null,
+          },
+        ]
+      )
+    ).toEqual(expect.objectContaining({ id: 'published-image', asset_id: 'published-image' }));
+  });
+
+  it('fails closed before provider access when the same account already published identical copy', async () => {
+    const updateJob = vi
+      .fn()
+      .mockResolvedValueOnce({
+        id: 'job-row-duplicate',
+        job_id: 'job_duplicate',
+        distribution_asset_id: 'asset-row-duplicate',
+        distribution_account_id: 'acct-row-instagram',
+        publish_mode: 'scheduled',
+        scheduled_for: '2026-09-09T16:00:00.000Z',
+        status: 'processing',
+        destination_url: null,
+        provider_post_id: null,
+        last_error: null,
+        created_by_user_id: null,
+        completed_at: null,
+        created_at: '2026-09-01T00:00:00.000Z',
+        updated_at: '2026-09-09T16:00:00.000Z',
+      })
+      .mockResolvedValueOnce({ status: 'failed' });
+    const publishInstagramAsset = vi.fn();
+    const repo = {
+      getJobById: vi.fn().mockResolvedValue({
+        id: 'job-row-duplicate',
+        job_id: 'job_duplicate',
+        distribution_asset_id: 'asset-row-duplicate',
+        distribution_account_id: 'acct-row-instagram',
+        publish_mode: 'scheduled',
+        scheduled_for: '2026-09-09T16:00:00.000Z',
+        status: 'scheduled',
+        destination_url: null,
+        provider_post_id: null,
+        last_error: null,
+        created_by_user_id: null,
+        completed_at: null,
+        created_at: '2026-09-01T00:00:00.000Z',
+        updated_at: '2026-09-01T00:00:00.000Z',
+      }),
+      updateJob,
+      getAccountById: vi.fn().mockResolvedValue({
+        id: 'acct-row-instagram',
+        account_id: 'instagram_geopulse',
+        provider_name: 'instagram',
+        account_label: 'GEO-Pulse Instagram',
+        external_account_id: '17841462281213951',
+        status: 'connected',
+        default_audience_id: null,
+        metadata: {},
+        connected_by_user_id: null,
+        last_verified_at: null,
+        created_at: '2026-07-23T00:00:00.000Z',
+        updated_at: '2026-07-23T00:00:00.000Z',
+      }),
+      getAssetById: vi.fn().mockResolvedValue({
+        id: 'asset-row-duplicate',
+        asset_id: 'future-duplicate',
+        content_item_id: 'content-row-duplicate',
+        source_type: 'content_item',
+        source_key: null,
+        asset_type: 'single_image_post',
+        provider_family: 'instagram',
+        title: 'Future duplicate',
+        body_markdown: null,
+        body_plaintext: null,
+        caption_text: 'Repeated caption',
+        status: 'approved',
+        cta_url: null,
+        metadata: {},
+        created_by_user_id: null,
+        approved_by_user_id: null,
+        approved_at: null,
+        created_at: '2026-09-01T00:00:00.000Z',
+        updated_at: '2026-09-01T00:00:00.000Z',
+      }),
+      listPublishedAssetsForAccount: vi.fn().mockResolvedValue([
+        {
+          id: 'asset-row-published',
+          asset_id: 'already-published',
+          asset_type: 'single_image_post',
+          caption_text: ' repeated  caption ',
+          body_plaintext: null,
+          body_markdown: null,
+        },
+      ]),
+      listJobAttempts: vi.fn().mockResolvedValue([]),
+      createJobAttempt: vi.fn().mockResolvedValue({}),
+    };
+
+    await expect(
+      dispatchDistributionJobById({} as any, baseEnv as any, 'job-row-duplicate', {
+        createRepository: () => repo as any,
+        publishInstagramAsset,
+        structuredLog: vi.fn(),
+        structuredError: vi.fn(),
+      })
+    ).rejects.toThrow(
+      'Duplicate distribution copy blocked: future-duplicate repeats published asset already-published.'
+    );
+
+    expect(publishInstagramAsset).not.toHaveBeenCalled();
+    expect(updateJob).toHaveBeenLastCalledWith(
+      'job-row-duplicate',
+      expect.objectContaining({
+        status: 'failed',
+        lastError:
+          'Duplicate distribution copy blocked: future-duplicate repeats published asset already-published.',
+      })
+    );
+  });
+
   it('fails closed for stale LinkedIn jobs and unsupported formats', () => {
     expect(canStartLinkedInProviderPublish('queued')).toBe(true);
     expect(canStartLinkedInProviderPublish('scheduled')).toBe(true);

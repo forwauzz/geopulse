@@ -58,6 +58,37 @@ export function isLinkedInAutomatedAssetType(
   );
 }
 
+export function normalizeDistributionCopy(value: string | null | undefined): string {
+  return (value ?? '')
+    .normalize('NFKC')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase('en-US');
+}
+
+export function findPublishedCopyDuplicate(
+  asset: Pick<DistributionAssetRow, 'id' | 'asset_type' | 'caption_text' | 'body_plaintext' | 'body_markdown'>,
+  publishedAssets: ReadonlyArray<
+    Pick<DistributionAssetRow, 'id' | 'asset_id' | 'asset_type' | 'caption_text' | 'body_plaintext' | 'body_markdown'>
+  >
+): Pick<DistributionAssetRow, 'id' | 'asset_id'> | null {
+  const copy = normalizeDistributionCopy(
+    asset.caption_text ?? asset.body_plaintext ?? asset.body_markdown
+  );
+  if (!copy) return null;
+
+  return (
+    publishedAssets.find(
+      (published) =>
+        published.id !== asset.id &&
+        published.asset_type === asset.asset_type &&
+        normalizeDistributionCopy(
+          published.caption_text ?? published.body_plaintext ?? published.body_markdown
+        ) === copy
+    ) ?? null
+  );
+}
+
 type DispatchFailureDetails = {
   readonly message: string;
   readonly retryable: boolean;
@@ -1540,6 +1571,21 @@ export async function dispatchDistributionJobById(
     }
     if (!asset) {
       throw new Error('Distribution asset not found for job.');
+    }
+    const listPublishedAssetsForAccount = (repo as any).listPublishedAssetsForAccount;
+    if (typeof listPublishedAssetsForAccount === 'function') {
+      const publishedAssets = await listPublishedAssetsForAccount.call(
+        repo,
+        currentJob.distribution_account_id
+      );
+      const duplicate = findPublishedCopyDuplicate(asset, publishedAssets);
+      if (duplicate) {
+        throw new ContentDestinationPublishError({
+          message: `Duplicate distribution copy blocked: ${asset.asset_id} repeats published asset ${duplicate.asset_id}.`,
+          providerName: account.provider_name,
+          retryable: false,
+        });
+      }
     }
     if (account.provider_name === 'linkedin' && !linkedinPublishCanStart) {
       throw new ContentDestinationPublishError({

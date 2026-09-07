@@ -619,6 +619,41 @@ export function createDistributionEngineRepository(supabase: SupabaseLike) {
       return data ?? null;
     },
 
+    async listPublishedAssetsForAccount(
+      distributionAccountId: string,
+      limit = 500
+    ): Promise<DistributionAssetRow[]> {
+      const { data: jobs, error: jobsError } = await supabase
+        .from('distribution_jobs')
+        .select('distribution_asset_id')
+        .eq('distribution_account_id', distributionAccountId)
+        .eq('status', 'published')
+        .order('completed_at', { ascending: false, nullsFirst: false })
+        .limit(limit);
+
+      if (jobsError) throw jobsError;
+      const assetIds = [
+        ...new Set(
+          ((jobs ?? []) as Array<{ distribution_asset_id: string }>).map(
+            (job) => job.distribution_asset_id
+          )
+        ),
+      ];
+      if (assetIds.length === 0) return [];
+
+      const assets: DistributionAssetRow[] = [];
+      for (let index = 0; index < assetIds.length; index += 100) {
+        const { data, error } = await supabase
+          .from('distribution_assets')
+          .select(ASSET_SELECT)
+          .in('id', assetIds.slice(index, index + 100));
+
+        if (error) throw error;
+        assets.push(...((data ?? []) as DistributionAssetRow[]));
+      }
+      return assets.map(normalizeAsset);
+    },
+
     async updateJob(id: string, input: DistributionJobUpdateInput): Promise<DistributionJobRow> {
       const { data, error } = await supabase
         .from('distribution_jobs')
