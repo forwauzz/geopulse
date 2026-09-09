@@ -284,12 +284,16 @@ async function main() {
     };
     const { data: updated, error: updateError } = await db
       .from('automation_settings')
-      .update({ config: nextConfig, updated_at: changedAt, updated_by: 'codex:issue-606' })
+      .update({ config: nextConfig, updated_at: changedAt, updated_by: null })
       .eq('feature', 'seo_agent')
       .eq('updated_at', settingChange.expectedUpdatedAt)
       .select('feature')
       .maybeSingle();
-    if (updateError || !updated) throw new Error('seo_agent setting compare-and-set update failed');
+    if (updateError || !updated) {
+      throw new Error(
+        `seo_agent setting compare-and-set update failed: ${updateError?.message ?? 'no matching row'}`,
+      );
+    }
   }
 
   const { data: verified, error: verifyError } = await db

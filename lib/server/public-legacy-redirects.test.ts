@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { PUBLIC_LEGACY_REDIRECTS } from './public-legacy-redirects';
+import {
+  isPublicLegacyRedirectSource,
+  PUBLIC_LEGACY_REDIRECTS,
+} from './public-legacy-redirects';
 
 describe('public legacy redirects', () => {
   it('keeps every source unique and every redirect permanent', () => {
@@ -58,5 +61,10 @@ describe('public legacy redirects', () => {
     expect(PUBLIC_LEGACY_REDIRECTS.map((redirect) => redirect.source)).not.toContain(
       '/blog/vertical-strategy'
     );
+  });
+
+  it('identifies redirect sources so sitemaps can exclude them', () => {
+    expect(isPublicLegacyRedirectSource('/blog/long-intro-low-utility-content-pattern')).toBe(true);
+    expect(isPublicLegacyRedirectSource('/blog/crawlable-but-not-extractable')).toBe(false);
   });
 });
