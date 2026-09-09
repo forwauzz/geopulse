@@ -71,3 +71,11 @@ export const PUBLIC_LEGACY_REDIRECTS: readonly PublicLegacyRedirect[] = [
     permanent: true,
   },
 ] as const;
+
+const PUBLIC_LEGACY_REDIRECT_SOURCES = new Set(
+  PUBLIC_LEGACY_REDIRECTS.map((redirect) => redirect.source),
+);
+
+export function isPublicLegacyRedirectSource(path: string): boolean {
+  return PUBLIC_LEGACY_REDIRECT_SOURCES.has(path);
+}

@@ -4,6 +4,7 @@ import { parseArticleMetadata } from '@/lib/server/content-article-metadata';
 import { createPublicContentData } from '@/lib/server/public-content-data';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { canonicalPublicOrigin, isIndexablePublishedArticle } from '@/lib/server/public-indexing';
+import { isPublicLegacyRedirectSource } from '@/lib/server/public-legacy-redirects';
 
 function withBase(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
@@ -26,7 +27,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return articles
     .filter((article) => {
       const metadata = parseArticleMetadata(article.metadata);
-      return !metadata.noIndex && isIndexablePublishedArticle(article);
+      return !metadata.noIndex
+        && isIndexablePublishedArticle(article)
+        && !isPublicLegacyRedirectSource(`/blog/${article.slug}`);
     })
     .map((article) => ({
       url: withBase(baseUrl, `/blog/${article.slug}`),
