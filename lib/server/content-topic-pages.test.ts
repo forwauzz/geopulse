@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildSeededTopicPageItem, getTopicPageContent } from './content-topic-pages';
+import {
+  buildSeededTopicPageItem,
+  getTopicPageContent,
+  resolveTopicPageSeo,
+} from './content-topic-pages';
 
 describe('content topic pages', () => {
   it('returns curated copy for known topics', () => {
@@ -42,6 +46,31 @@ describe('content topic pages', () => {
           'Start with pages that should explain the business clearly, then check whether the answer is direct, structured, and easy to quote without heavy interpretation.',
         topic_page_seeded: true,
       },
+    });
+  });
+
+  it('assigns the MSP cluster a focused search intent', () => {
+    expect(resolveTopicPageSeo(
+      'msp-websites-ai-search-results-aeo-services',
+      'Msp Websites Ai Search Results Aeo Services',
+      'Fallback definition.',
+    )).toEqual({
+      title: 'AI Search Optimization for MSPs: Guides and Audits | GEO-Pulse',
+      heading: 'AI Search Optimization for MSPs',
+      description:
+        'Explore practical guides for MSP AI search visibility, AEO, GEO, website audits, evidence quality, and measurement. Start with the highest-impact fix.',
+    });
+  });
+
+  it('uses curated topic copy as the unique description fallback', () => {
+    expect(resolveTopicPageSeo(
+      'trust-signals',
+      'Trust Signals',
+      'Trust signals show whether public claims are supported by visible evidence.',
+    )).toEqual({
+      title: 'Trust Signals | GEO-Pulse Blog',
+      heading: 'Trust Signals',
+      description: 'Trust signals show whether public claims are supported by visible evidence.',
     });
   });
 });

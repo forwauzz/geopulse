@@ -12,7 +12,7 @@ import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 const title = 'AI Search Visibility Audits for MSPs | GEO-Pulse';
 const description =
-  'See what AI answer engines can understand about your managed IT services, where your website evidence is weak, and what to improve first.';
+  'See what AI answer engines understand about your managed IT services, where your website evidence is weak, and which fix to prioritize first.';
 
 const faqs = [
   {
@@ -111,7 +111,7 @@ export default async function MspsSolutionPage({
               For managed service providers
             </p>
             <h1 className="mt-5 max-w-3xl text-balance font-headline text-4xl font-semibold leading-[1.04] tracking-[-0.04em] text-on-background sm:text-5xl md:text-6xl">
-              Make your IT expertise easier for AI answers to understand.
+              Make Your MSP Easier to Find and Trust in AI Search
             </h1>
             <p className="mt-6 max-w-2xl font-body text-lg leading-8 text-on-surface-variant">
               GEO-Pulse shows what your website communicates about your services, locations, and

@@ -2,7 +2,11 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { WalkthroughRequestForm } from '@/components/walkthrough-request-form';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
-import { buildPublicPageMetadata } from '@/lib/server/public-site-seo';
+import {
+  buildPublicPageMetadata,
+  buildWebPageStructuredData,
+  toAbsoluteUrl,
+} from '@/lib/server/public-site-seo';
 import { getTurnstileSiteKey } from '@/lib/turnstile-site-key';
 
 const title = 'Request a GEO-Pulse Walkthrough';
@@ -35,9 +39,20 @@ export default async function WalkthroughPage({
   searchParams: Promise<{ website?: string; company?: string; source?: string }>;
 }) {
   const { website = '', company = '', source } = await searchParams;
+  const baseUrl = await loadBaseUrl();
+  const schema = buildWebPageStructuredData({
+    url: toAbsoluteUrl(baseUrl, '/walkthrough'),
+    title,
+    description,
+    siteUrl: toAbsoluteUrl(baseUrl, '/'),
+  });
 
   return (
     <main className="px-6 py-16 md:px-10 md:py-24">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      />
       <section className="mx-auto grid max-w-6xl gap-10 rounded-[2rem] border border-gold/25 bg-[rgb(var(--blog-card-a))] p-7 shadow-float md:p-12 lg:grid-cols-[0.8fr_1.2fr]">
         <div>
           <p className="font-label text-xs font-semibold uppercase tracking-[0.16em] text-primary">

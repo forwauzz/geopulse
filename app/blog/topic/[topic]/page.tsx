@@ -14,7 +14,7 @@ import {
   buildBreadcrumbStructuredData,
   buildTopicPageStructuredData,
 } from '@/lib/server/content-structured-data';
-import { getTopicPageContent } from '@/lib/server/content-topic-pages';
+import { getTopicPageContent, resolveTopicPageSeo } from '@/lib/server/content-topic-pages';
 import { createPublicContentData } from '@/lib/server/public-content-data';
 import {
   buildPublicPageMetadata,
@@ -95,7 +95,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const articles = await loadArticles();
   const topicGroups = groupArticlesByTopic(articles);
   const group = resolveTopicRoute(topicGroups, topic)?.group;
-  const env = await getPaymentApiEnv();
 
   if (!group) {
     return {
@@ -103,10 +102,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
+  const [env, topicMetadata] = await Promise.all([
+    getPaymentApiEnv(),
+    loadTopicPageMetadata(group.topicKey),
+  ]);
+  const fallback = getTopicPageContent(group.topicKey);
+  const definition = readTopicPageField(
+    topicMetadata,
+    'topic_page_definition',
+    fallback.definition,
+  );
+  const seo = resolveTopicPageSeo(group.topicKey, group.topicLabel, definition);
+
   return buildPublicPageMetadata({
     baseUrl: env.NEXT_PUBLIC_APP_URL,
-    title: `${group.topicLabel} | GEO-Pulse Blog`,
-    description: `Published GEO-Pulse articles about ${group.topicLabel}.`,
+    title: seo.title,
+    description: seo.description,
     canonicalPath: buildTopicHref(group.topicKey),
     openGraphType: 'website',
   });
@@ -144,9 +155,11 @@ export default async function BlogTopicPage({ params }: Props) {
       fallbackTopicContent.practicalTakeaway
     ),
   };
+  const topicSeo = resolveTopicPageSeo(group.topicKey, group.topicLabel, topicContent.definition);
+  const isMspSearchTopic = group.topicKey === 'msp-websites-ai-search-results-aeo-services';
   const topicUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, buildTopicHref(group.topicKey));
   const structuredData = buildTopicPageStructuredData({
-    topicLabel: group.topicLabel,
+    topicLabel: topicSeo.heading,
     topicUrl,
     definition: topicContent.definition,
     whyItMatters: topicContent.whyItMatters,
@@ -159,7 +172,7 @@ export default async function BlogTopicPage({ params }: Props) {
   });
   const breadcrumbStructuredData = buildBreadcrumbStructuredData([
     { name: 'Blog', item: toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, '/blog') },
-    { name: group.topicLabel, item: topicUrl },
+    { name: topicSeo.heading, item: topicUrl },
   ]);
   const tocItems = [
     { id: 'definition', title: 'Definition' },
@@ -186,14 +199,14 @@ export default async function BlogTopicPage({ params }: Props) {
               </Link>
             </li>
             <li aria-hidden="true">/</li>
-            <li className="text-on-background">{group.topicLabel}</li>
+            <li className="text-on-background">{topicSeo.heading}</li>
           </ol>
         </nav>
         <p className="mt-6 font-label text-sm font-semibold uppercase tracking-widest text-gold">
           Topic cluster
         </p>
         <h1 className="mt-3 font-headline text-4xl font-bold text-on-background md:text-5xl">
-          {group.topicLabel}
+          {topicSeo.heading}
         </h1>
         <p className="mt-4 font-body text-lg leading-relaxed text-on-surface-variant">
           {topicContent.definition}
@@ -209,6 +222,28 @@ export default async function BlogTopicPage({ params }: Props) {
         <p className="mt-2 font-body text-xs text-on-surface-variant/80">
           Editorially maintained by {SITE_EDITORIAL_NAME}.
         </p>
+        {isMspSearchTopic ? (
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/blog/seo-ai-visibility-for-managed-service-providers"
+              className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-on-primary"
+            >
+              Start with the MSP guide
+            </Link>
+            <Link
+              href="/solutions/msps"
+              className="rounded-xl border border-outline-variant/40 px-4 py-2 text-sm font-semibold text-on-background"
+            >
+              Explore MSP audits
+            </Link>
+            <Link
+              href="/ai-visibility-audit"
+              className="rounded-xl border border-outline-variant/40 px-4 py-2 text-sm font-semibold text-on-background"
+            >
+              Run the free audit
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       <section className="mt-8 max-w-3xl rounded-2xl bg-surface-container-low p-6 shadow-float">

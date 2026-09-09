@@ -68,3 +68,15 @@ export function configInt(config: Record<string, unknown>, key: string, fallback
   const v = config[key];
   return typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback;
 }
+
+/** Read a non-negative integer so zero can explicitly pause a bounded batch. */
+export function configNonNegativeInt(
+  config: Record<string, unknown>,
+  key: string,
+  fallback: number,
+): number {
+  const value = config[key];
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : fallback;
+}

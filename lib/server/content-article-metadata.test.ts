@@ -14,6 +14,8 @@ describe('content article metadata helpers', () => {
         author_role: 'Founder',
         author_url: 'https://getgeopulse.com/about',
         meta_description: 'A practical audit walkthrough for operators.',
+        seo_title: 'AI Visibility Audit Checklist: 10 Practical Checks',
+        seo_h1: 'AI Visibility Audit Checklist',
         hero_image_url: 'https://cdn.example.com/hero.jpg',
         hero_image_alt: 'Article hero image',
       })
@@ -22,6 +24,8 @@ describe('content article metadata helpers', () => {
       authorRole: 'Founder',
       authorUrl: 'https://getgeopulse.com/about',
       metaDescription: 'A practical audit walkthrough for operators.',
+      seoTitle: 'AI Visibility Audit Checklist: 10 Practical Checks',
+      seoHeading: 'AI Visibility Audit Checklist',
       heroImageUrl: 'https://cdn.example.com/hero.jpg',
       heroImageAlt: 'Article hero image',
       noIndex: false,
@@ -37,6 +41,8 @@ describe('content article metadata helpers', () => {
           authorRole: 'Founder',
           authorUrl: null,
           metaDescription: 'A practical audit walkthrough for operators.',
+          seoTitle: 'AI Visibility Audit Checklist: 10 Practical Checks',
+          seoHeading: 'AI Visibility Audit Checklist',
           heroImageUrl: 'https://cdn.example.com/hero.jpg',
           heroImageAlt: 'Article hero image',
           noIndex: true,
@@ -47,10 +53,22 @@ describe('content article metadata helpers', () => {
       author_name: 'Carine Tamon',
       author_role: 'Founder',
       meta_description: 'A practical audit walkthrough for operators.',
+      seo_title: 'AI Visibility Audit Checklist: 10 Practical Checks',
+      seo_h1: 'AI Visibility Audit Checklist',
       hero_image_url: 'https://cdn.example.com/hero.jpg',
       hero_image_alt: 'Article hero image',
       noindex: true,
     });
+  });
+
+  it('uses the article title when no safe public description exists', () => {
+    expect(
+      resolvePublicArticleDescription({
+        metadata: { meta_description: 'Position #2 with 100 impressions.' },
+        markdown: '# Heading only',
+        title: 'MSP AI Search Audit',
+      })
+    ).toBe('Practical guidance on MSP AI Search Audit for teams improving AI search readiness.');
   });
 
   it('never exposes internal search-performance notes as article descriptions', () => {

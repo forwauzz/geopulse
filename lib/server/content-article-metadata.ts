@@ -3,6 +3,8 @@ export type ArticleMetadataFields = {
   readonly authorRole: string | null;
   readonly authorUrl: string | null;
   readonly metaDescription?: string | null;
+  readonly seoTitle?: string | null;
+  readonly seoHeading?: string | null;
   readonly heroImageUrl: string | null;
   readonly heroImageAlt: string | null;
   readonly noIndex: boolean;
@@ -25,6 +27,8 @@ export function parseArticleMetadata(metadata: Record<string, unknown> | null | 
     authorRole: readString(safe['author_role']),
     authorUrl: readString(safe['author_url']),
     metaDescription: readString(safe['meta_description']),
+    seoTitle: readString(safe['seo_title']),
+    seoHeading: readString(safe['seo_h1']),
     heroImageUrl: readString(safe['hero_image_url']),
     heroImageAlt: readString(safe['hero_image_alt']),
     noIndex: safe['noindex'] === true,
@@ -49,6 +53,16 @@ export function mergeArticleMetadata(
   if (fields.metaDescription !== undefined) {
     if (fields.metaDescription) next['meta_description'] = fields.metaDescription;
     else delete next['meta_description'];
+  }
+
+  if (fields.seoTitle !== undefined) {
+    if (fields.seoTitle) next['seo_title'] = fields.seoTitle;
+    else delete next['seo_title'];
+  }
+
+  if (fields.seoHeading !== undefined) {
+    if (fields.seoHeading) next['seo_h1'] = fields.seoHeading;
+    else delete next['seo_h1'];
   }
 
   if (fields.heroImageUrl) next['hero_image_url'] = fields.heroImageUrl;
@@ -81,12 +95,17 @@ export function extractArticleLeadParagraph(markdown: string): string | null {
 export function resolvePublicArticleDescription(input: {
   readonly metadata: Record<string, unknown> | null | undefined;
   readonly markdown: string;
+  readonly title?: string;
 }): string {
   const explicit = readString(input.metadata?.['meta_description']);
   if (isSafePublicArticleDescription(explicit)) return explicit!;
 
   const lead = extractArticleLeadParagraph(input.markdown);
   if (isSafePublicArticleDescription(lead)) return lead!;
+
+  if (input.title?.trim()) {
+    return `Practical guidance on ${input.title.trim()} for teams improving AI search readiness.`;
+  }
 
   return DEFAULT_ARTICLE_DESCRIPTION;
 }

@@ -7,6 +7,10 @@ export const SITE_AUTHOR_NAME = 'Uzziel T.';
 export const SITE_AUTHOR_ROLE = 'Founder, GEO-Pulse';
 export const SITE_AUTHOR_URL_PATH = '/about';
 export const SITE_EDITORIAL_NAME = 'GEO-Pulse Editorial';
+export const DEFAULT_SOCIAL_IMAGE = {
+  url: '/images/blog/ai-search-readiness-audit.png',
+  alt: 'GEO-Pulse AI search visibility audit',
+} as const;
 
 /**
  * Entity pinning (spec C16): sameAs links disambiguate GEO-Pulse in the crowded
@@ -42,6 +46,8 @@ export function buildPublicPageMetadata(input: {
   };
 }): Metadata {
   const canonicalUrl = toAbsoluteUrl(input.baseUrl, input.canonicalPath);
+  const image = input.image ?? DEFAULT_SOCIAL_IMAGE;
+  const imageUrl = toAbsoluteUrl(input.baseUrl, image.url);
   return {
     title: input.title,
     description: input.description,
@@ -65,22 +71,18 @@ export function buildPublicPageMetadata(input: {
       description: input.description,
       url: canonicalUrl,
       type: input.openGraphType ?? 'website',
-      ...(input.image
-        ? {
-            images: [
-              {
-                url: input.image.url,
-                alt: input.image.alt,
-              },
-            ],
-          }
-        : {}),
+      images: [
+        {
+          url: imageUrl,
+          alt: image.alt,
+        },
+      ],
     },
     twitter: {
-      card: input.image ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title: input.title,
       description: input.description,
-      ...(input.image ? { images: [input.image.url] } : {}),
+      images: [imageUrl],
     },
   };
 }
