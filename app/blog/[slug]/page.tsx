@@ -20,6 +20,7 @@ import {
 import { buildBreadcrumbStructuredData } from '@/lib/server/content-structured-data';
 import { createPublicContentClient } from '@/lib/server/public-content-client';
 import { createPublicContentData } from '@/lib/server/public-content-data';
+import { DEFAULT_SOCIAL_IMAGE } from '@/lib/server/public-site-seo';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,13 +107,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     resolvePublicArticleDescription({
       metadata: article.metadata,
       markdown: article.draft_markdown,
+      title: article.title,
     })
   );
   const articleMetadata = parseArticleMetadata(article.metadata);
   const canonicalUrl = toAbsoluteUrl(env.NEXT_PUBLIC_APP_URL, article.canonical_url, article.slug);
+  const publicTitle = articleMetadata.seoTitle ?? article.title;
+  const socialImageUrl = toAbsoluteUrl(
+    env.NEXT_PUBLIC_APP_URL,
+    articleMetadata.heroImageUrl ?? DEFAULT_SOCIAL_IMAGE.url,
+  );
+  const socialImageAlt = articleMetadata.heroImageAlt ?? DEFAULT_SOCIAL_IMAGE.alt;
 
   return {
-    title: `${article.title} | GEO-Pulse`,
+    title: `${publicTitle} | GEO-Pulse`,
     description,
     alternates: {
       canonical: canonicalUrl,
@@ -122,18 +130,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       follow: !articleMetadata.noIndex,
     },
     openGraph: {
-      title: `${article.title} | GEO-Pulse`,
+      title: `${publicTitle} | GEO-Pulse`,
       description,
       url: canonicalUrl,
       type: 'article',
-      images: articleMetadata.heroImageUrl
-        ? [
-            {
-              url: articleMetadata.heroImageUrl,
-              alt: articleMetadata.heroImageAlt ?? article.title,
-            },
-          ]
-        : [],
+      images: [{ url: socialImageUrl, alt: socialImageAlt }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${publicTitle} | GEO-Pulse`,
+      description,
+      images: [socialImageUrl],
     },
   };
 }
@@ -155,9 +162,16 @@ export default async function BlogArticlePage({ params }: Props) {
   const description = resolvePublicArticleDescription({
     metadata: article.metadata,
     markdown: article.draft_markdown,
-  });
-  const structuredData = buildArticleStructuredData({
     title: article.title,
+  });
+  const publicHeading = articleMetadata.seoHeading ?? article.title;
+  const isMspArticle =
+    article.metadata?.['campaign_vertical'] === 'msp_it_services'
+    || /\bmsp\b|managed service provider/i.test(
+      [article.keyword_cluster, article.topic_cluster, article.target_persona].filter(Boolean).join(' ')
+    );
+  const structuredData = buildArticleStructuredData({
+    title: publicHeading,
     description,
     canonicalUrl,
     publishedAt: article.published_at,
@@ -177,7 +191,7 @@ export default async function BlogArticlePage({ params }: Props) {
         article.slug
       ),
     },
-    { name: article.title, item: canonicalUrl },
+    { name: publicHeading, item: canonicalUrl },
   ]);
   const relatedArticles = getRelatedArticles(articles, article.slug, article.topic_cluster, 3);
   const bodyRelatedArticles = relatedArticles.slice(0, 2);
@@ -231,7 +245,7 @@ export default async function BlogArticlePage({ params }: Props) {
           </Link>
         </div>
         <h1 className="mt-4 max-w-4xl font-headline text-4xl font-bold leading-tight text-on-background md:text-5xl">
-          {article.title}
+          {publicHeading}
         </h1>
         {articleMetadata.heroImageUrl ? (
           <div className="mt-6 overflow-hidden rounded-2xl bg-surface-container-low shadow-float">
@@ -296,6 +310,14 @@ export default async function BlogArticlePage({ params }: Props) {
               >
                 Open topic page
               </Link>
+              {isMspArticle ? (
+                <Link
+                  href="/solutions/msps"
+                  className="rounded-xl border border-outline-variant/35 bg-surface-container px-4 py-2 text-sm font-medium text-on-background transition hover:bg-surface-container-high"
+                >
+                  MSP AI visibility audits
+                </Link>
+              ) : null}
               {bodyRelatedArticles.map((related) => (
                 <Link
                   key={related.content_id}
@@ -416,7 +438,7 @@ export default async function BlogArticlePage({ params }: Props) {
               your own site before you decide what to fix first.
             </p>
             <Link
-              href="/"
+              href="/ai-visibility-audit"
               className="mt-5 inline-flex rounded-xl bg-primary px-4 py-2 font-body text-sm font-semibold text-on-primary transition hover:opacity-90"
             >
               Start free scan

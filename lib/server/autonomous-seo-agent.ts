@@ -1,4 +1,4 @@
-import { configInt, loadAutomationSetting } from './automation-settings';
+import { configInt, configNonNegativeInt, loadAutomationSetting } from './automation-settings';
 import { runAgentLoopControl } from './agent-loop-control';
 import { decryptSeoToken, encryptSeoToken } from './seo-token-crypto';
 import {
@@ -478,7 +478,7 @@ export async function runAutonomousSeoAgent(args: {
     await runAgentLoopControl({
       db: args.supabase,
       now,
-      seoBatch: Math.min(configInt(config, 'content_family_batch', 10), 25),
+      seoBatch: Math.min(configNonNegativeInt(config, 'content_family_batch', 10), 25),
     });
     const result: SeoAgentResult = {
       status: 'completed',

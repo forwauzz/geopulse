@@ -4,6 +4,21 @@ export type TopicPageContent = {
   readonly practicalTakeaway: string;
 };
 
+export type TopicPageSeo = {
+  readonly title: string;
+  readonly heading: string;
+  readonly description: string;
+};
+
+const TOPIC_PAGE_SEO: Record<string, TopicPageSeo> = {
+  'msp-websites-ai-search-results-aeo-services': {
+    title: 'AI Search Optimization for MSPs: Guides and Audits | GEO-Pulse',
+    heading: 'AI Search Optimization for MSPs',
+    description:
+      'Explore practical guides for MSP AI search visibility, AEO, GEO, website audits, evidence quality, and measurement. Start with the highest-impact fix.',
+  },
+};
+
 export type SeededTopicPageItem = {
   readonly content_id: string;
   readonly slug: string;
@@ -17,6 +32,14 @@ export type SeededTopicPageItem = {
 };
 
 const TOPIC_PAGE_COPY: Record<string, TopicPageContent> = {
+  'msp-websites-ai-search-results-aeo-services': {
+    definition:
+      'AI search optimization for MSPs makes managed IT services, locations, expertise, and proof easier for answer engines to retrieve and explain accurately.',
+    whyItMatters:
+      'MSP buyers often ask AI systems for shortlists before visiting a provider website. Clear public evidence improves the chance that those systems understand the offer.',
+    practicalTakeaway:
+      'Start with the core MSP guide, audit the highest-intent service pages, fix the clearest evidence gap, and measure the same buyer questions again.',
+  },
   ai_search_readiness: {
     definition:
       'AI search readiness is the practical state where a site is crawlable, structurally legible, and easy for language models to segment, summarize, and cite.',
@@ -52,6 +75,24 @@ export function getTopicPageContent(topicKey: string): TopicPageContent {
       'Topic pages should give readers and language models one stable place to understand how related articles connect.',
     practicalTakeaway:
       'Start with the definition here, then move into the linked articles for the more specific workflow, mistake, or explanation you need.',
+  };
+}
+
+export function resolveTopicPageSeo(
+  topicKey: string,
+  topicLabel: string,
+  definition: string,
+): TopicPageSeo {
+  const override = TOPIC_PAGE_SEO[topicKey];
+  if (override) return override;
+  const normalized = definition.replace(/\s+/g, ' ').trim();
+  const description = normalized.length <= 155
+    ? normalized
+    : `${normalized.slice(0, 152).trimEnd()}...`;
+  return {
+    title: `${topicLabel} | GEO-Pulse Blog`,
+    heading: topicLabel,
+    description,
   };
 }
 

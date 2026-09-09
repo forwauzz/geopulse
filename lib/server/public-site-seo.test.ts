@@ -13,7 +13,9 @@ describe('public-site-seo', () => {
 
     expect(metadata.alternates?.canonical).toBe('https://getgeopulse.com/pricing');
     expect(metadata.openGraph?.url).toBe('https://getgeopulse.com/pricing');
-    expect((metadata.twitter as { card?: string } | undefined)?.card).toBe('summary');
+    expect((metadata.twitter as { card?: string } | undefined)?.card).toBe('summary_large_image');
+    expect((metadata.openGraph as { images?: Array<{ url: string }> } | undefined)?.images?.[0]?.url)
+      .toBe('https://getgeopulse.com/images/blog/ai-search-readiness-audit.png');
   });
 
   it('builds a WebPage schema that points back to the site root', () => {

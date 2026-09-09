@@ -64,6 +64,7 @@
     "audit-campaign:acceptance": "tsx scripts/audit-campaign-acceptance.ts",
     "report:layer-one:rewrite-prompt": "node ./node_modules/tsx/dist/cli.mjs scripts/layer-one-report-rewrite-prompt.ts",
     "content:schedule:reconcile": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/reconcile-content-schedule.ts",
+    "seo:visibility:reconcile": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/reconcile-seo-visibility-content.ts",
     "content:amara:render": "node scripts/render-amara-campaign.mjs"
   },
   "dependencies": {

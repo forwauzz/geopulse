@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { configInt, loadAutomationSetting, updateAutomationSetting } from './automation-settings';
+import {
+  configInt,
+  configNonNegativeInt,
+  loadAutomationSetting,
+  updateAutomationSetting,
+} from './automation-settings';
 
 function fakeSupabase(row: unknown, opts: { error?: boolean } = {}) {
   const captured: { upsert?: any } = {};
@@ -59,5 +64,13 @@ describe('configInt', () => {
     expect(configInt({ daily_cap: 0 }, 'daily_cap', 2)).toBe(2);
     expect(configInt({}, 'daily_cap', 2)).toBe(2);
     expect(configInt({ daily_cap: 'x' }, 'daily_cap', 2)).toBe(2);
+  });
+});
+
+describe('configNonNegativeInt', () => {
+  it('accepts zero as an explicit batch pause', () => {
+    expect(configNonNegativeInt({ content_family_batch: 0 }, 'content_family_batch', 10)).toBe(0);
+    expect(configNonNegativeInt({ content_family_batch: 2.8 }, 'content_family_batch', 10)).toBe(2);
+    expect(configNonNegativeInt({ content_family_batch: -1 }, 'content_family_batch', 10)).toBe(10);
   });
 });
