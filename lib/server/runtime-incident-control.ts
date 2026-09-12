@@ -11,6 +11,9 @@ export type RuntimeIncidentDefinition = {
   readonly successEvents: readonly string[];
   readonly nextAction: string;
   readonly activationThreshold?: number;
+  readonly exhaustedBlocker?: string;
+  readonly exhaustedNextAction?: string;
+  readonly exhaustedRequiresGit?: boolean;
 };
 
 export type RuntimeIncidentSignal = {
@@ -72,6 +75,9 @@ const DEFINITIONS: readonly RuntimeIncidentDefinition[] = [
     failureEvents: ['gpm_client_run_failed', 'gpm_sweep_completed_with_errors', 'gpm_sweep_config_failed'],
     successEvents: ['gpm_client_run_launched', 'gpm_sweep_completed'],
     nextAction: 'Retry the failed client measurement and verify a replacement run or report before closing.',
+    exhaustedBlocker: 'Gemini and Perplexity recurring measurement exhausted the bounded same-window attempts; customer reporting remains held until the existing provider capacity is restored.',
+    exhaustedNextAction: 'Founder restores Gemini GenerateContent and Perplexity API capacity within the existing caps; Marcus then runs one bounded replacement measurement and requires a complete provider result before closing.',
+    exhaustedRequiresGit: false,
   },
   {
     key: 'intelligence-learning',
@@ -277,17 +283,21 @@ export function planRuntimeIncidentLoop(
     founderRequired,
     blocker: founderRequired
       ? externalCapacityBlock?.blocker
+        ?? signal.definition.exhaustedBlocker
         ?? 'Automatic runtime retries were exhausted; the repair requires an engineering change.'
       : null,
     dueAt,
     nextAction: founderRequired
       ? externalCapacityBlock?.nextAction
+        ?? signal.definition.exhaustedNextAction
         ?? 'Open a Codex engineering repair task from this incident; deploy the fix and wait for the replacement success signal.'
       : deferred
         ? `Wait for the bounded retry window at ${dueAt}; then require replacement inventory or count one real repair failure.`
         : signal.definition.nextAction,
     deferred,
-    requiresGit: !externalCapacityBlock,
+    requiresGit: externalCapacityBlock
+      ? false
+      : signal.definition.exhaustedRequiresGit ?? true,
   };
 }
 

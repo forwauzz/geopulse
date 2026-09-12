@@ -87,7 +87,7 @@ export type GpmRunSummary = {
   readonly baselineRequired: boolean;
   readonly platformResults: readonly {
     readonly platform: string;
-    readonly status: 'launched' | 'skipped_existing' | 'failed';
+    readonly status: 'launched' | 'skipped_existing' | 'failed' | 'retry_exhausted';
     readonly runGroupId: string | null;
     readonly estimatedCostUsd: number;
   }[];
@@ -99,8 +99,22 @@ export type GpmSweepSummary = {
   readonly launchedRuns: number;
   readonly skippedRuns: number;
   readonly failedRuns: number;
+  readonly deferredRuns: number;
   readonly blockedConfigs: number;
 };
+
+export type GpmSweepOutcomeEvent =
+  | 'gpm_sweep_completed_with_errors'
+  | 'gpm_sweep_retry_deferred'
+  | 'gpm_sweep_completed';
+
+export function resolveGpmSweepOutcomeEvent(
+  summary: Pick<GpmSweepSummary, 'failedRuns' | 'deferredRuns'>,
+): GpmSweepOutcomeEvent {
+  if (summary.failedRuns > 0) return 'gpm_sweep_completed_with_errors';
+  if (summary.deferredRuns > 0) return 'gpm_sweep_retry_deferred';
+  return 'gpm_sweep_completed';
+}
 
 // ── Window date helpers ───────────────────────────────────────────────────────
 
@@ -397,9 +411,17 @@ export async function executeGpmClientRun(args: {
       continue;
     }
     if (retryExhausted) {
+      structuredLog('gpm_client_run_retry_exhausted', {
+        config_id: args.config.id,
+        platform,
+        window_date: windowDate,
+        retry_limit: 3,
+        retry_deferred: true,
+        reason: 'same_window_retry_exhausted',
+      }, 'warning');
       platformResults.push({
         platform,
-        status: 'failed',
+        status: 'retry_exhausted',
         runGroupId: null,
         estimatedCostUsd: 0,
       });
@@ -613,6 +635,7 @@ export async function runGpmScheduledSweep(args: {
       launchedRuns: 0,
       skippedRuns: 0,
       failedRuns: 0,
+      deferredRuns: 0,
       blockedConfigs: 0,
     };
   }
@@ -638,6 +661,7 @@ export async function runGpmScheduledSweep(args: {
   let launchedRuns = 0;
   let skippedRuns = 0;
   let failedRuns = 0;
+  let deferredRuns = 0;
   let blockedConfigs = 0;
 
   structuredLog('gpm_sweep_started', {
@@ -836,6 +860,7 @@ export async function runGpmScheduledSweep(args: {
         if (p.status === 'launched') launchedRuns += 1;
         else if (p.status === 'skipped_existing') skippedRuns += 1;
         else if (p.status === 'failed') failedRuns += 1;
+        else if (p.status === 'retry_exhausted') deferredRuns += 1;
       }
     } catch (error) {
       failedRuns += 1;
@@ -852,11 +877,12 @@ export async function runGpmScheduledSweep(args: {
     launchedRuns,
     skippedRuns,
     failedRuns,
+    deferredRuns,
     blockedConfigs,
   };
 
   structuredLog(
-    failedRuns > 0 ? 'gpm_sweep_completed_with_errors' : 'gpm_sweep_completed',
+    resolveGpmSweepOutcomeEvent(summary),
     summary
   );
 

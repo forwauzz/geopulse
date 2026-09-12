@@ -9,6 +9,7 @@ import {
   gpmRunHasCompletedQuestions,
   resolveGpmEnabledPlatforms,
   resolveGpmPlatformModelMap,
+  resolveGpmSweepOutcomeEvent,
   resolveGpmWindowDate,
   resolveActivationBaselineStatus,
 } from './geo-performance-schedule';
@@ -20,6 +21,23 @@ describe('GPM measurement contract', () => {
     expect(gpmRunHasCompletedQuestions({ completedQueryCount: 8 })).toBe(true);
     expect(gpmRunCompletedAllQuestions({ completedQueryCount: 3 }, 10)).toBe(false);
     expect(gpmRunCompletedAllQuestions({ completedQueryCount: 10 }, 10)).toBe(true);
+  });
+});
+
+describe('GPM sweep health semantics', () => {
+  it('keeps a genuine new provider failure unhealthy', () => {
+    expect(resolveGpmSweepOutcomeEvent({ failedRuns: 1, deferredRuns: 0 }))
+      .toBe('gpm_sweep_completed_with_errors');
+  });
+
+  it('reports exhausted same-window retries as deferred, not as a fresh failure or success', () => {
+    expect(resolveGpmSweepOutcomeEvent({ failedRuns: 0, deferredRuns: 2 }))
+      .toBe('gpm_sweep_retry_deferred');
+  });
+
+  it('reports a clean completed or skipped sweep as healthy', () => {
+    expect(resolveGpmSweepOutcomeEvent({ failedRuns: 0, deferredRuns: 0 }))
+      .toBe('gpm_sweep_completed');
   });
 });
 

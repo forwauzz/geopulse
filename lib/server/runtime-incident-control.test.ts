@@ -249,6 +249,28 @@ describe('runtime incident control', () => {
     });
   });
 
+  it('routes exhausted recurring measurement to provider capacity instead of another code retry', () => {
+    const gpm = classifyRuntimeIncidents([{
+      event: 'gpm_sweep_completed_with_errors',
+      level: 'warning',
+      created_at: '2026-09-11T18:05:32.000Z',
+      data: { failedRuns: 2 },
+    }]).find((signal) => signal.definition.key === 'gpm-monitoring');
+
+    expect(planRuntimeIncidentLoop(gpm!, {
+      attempt_count: 3,
+      max_attempts: 3,
+      last_attempted_at: '2026-09-11T18:05:32.000Z',
+      metadata: { attempt_semantics_version: 'runtime-repair-v2' },
+    }, new Date('2026-09-12T00:00:00.000Z'))).toMatchObject({
+      state: 'blocked',
+      founderRequired: true,
+      requiresGit: false,
+      blocker: expect.stringContaining('provider capacity'),
+      nextAction: expect.stringContaining('Gemini GenerateContent and Perplexity API capacity'),
+    });
+  });
+
   it('does not downgrade a genuinely exhausted v2 lineage during a later deferral', () => {
     const [social] = classifyRuntimeIncidents([{
       event: 'autonomous_campaign_execution',
