@@ -8,6 +8,7 @@ import {
   assignedSocialCandidate,
   assignedSocialCandidates,
   filterCampaignAssignedSocial,
+  hasRecordedDailyTrendAttempt,
   growthCampaignForSocialCandidate,
   instagramScheduleSlot,
   latestSocialSequenceAnchor,
@@ -38,6 +39,20 @@ function scan(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Social Proof Agent safeguards', () => {
+  it('records one bounded trend discovery attempt per day from durable run evidence', () => {
+    expect(hasRecordedDailyTrendAttempt([
+      { data: { status: 'noop', trend_provider: null, trend_reason: null } },
+      { data: { status: 'noop', trend_provider: null, trend_reason: 'gemini_http_429;openai_http_429' } },
+    ])).toBe(true);
+    expect(hasRecordedDailyTrendAttempt([
+      { data: { status: 'noop', trend_provider: null, trend_reason: null } },
+      { data: null },
+    ])).toBe(false);
+    expect(hasRecordedDailyTrendAttempt([
+      { data: { status: 'created', trend_provider: 'gemini', trend_reason: null } },
+    ])).toBe(true);
+  });
+
   it('versions assigned carousel inventory and supplies a real multi-slide checklist', () => {
     const candidate = assignedSocialCandidate({
       id: 'item-1',

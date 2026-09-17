@@ -185,6 +185,23 @@ type ContentRow = {
   readonly published_at: string | null;
 };
 
+type SocialTrendAttemptLogRow = {
+  readonly data: unknown;
+};
+
+export function hasRecordedDailyTrendAttempt(
+  rows: readonly SocialTrendAttemptLogRow[],
+): boolean {
+  return rows.some((row) => {
+    if (!row.data || typeof row.data !== 'object' || Array.isArray(row.data)) return false;
+    const data = row.data as Record<string, unknown>;
+    return (
+      (typeof data['trend_provider'] === 'string' && data['trend_provider'].length > 0) ||
+      (typeof data['trend_reason'] === 'string' && data['trend_reason'].length > 0)
+    );
+  });
+}
+
 type AssignedSocialRow = {
   readonly id: string;
   readonly content_id: string;
@@ -1359,7 +1376,16 @@ export async function runSocialProofAgent(args: {
   try {
     const repo = createDistributionEngineRepository(args.supabase as never);
     const now = args.now ?? new Date();
-    const [scanResult, contentResult, assignedSocialResult, accounts, existingAssets, activeCampaigns] = await Promise.all([
+    const trendAttemptDayStart = `${now.toISOString().slice(0, 10)}T00:00:00.000Z`;
+    const [
+      scanResult,
+      contentResult,
+      assignedSocialResult,
+      accounts,
+      existingAssets,
+      activeCampaigns,
+      trendAttemptResult,
+    ] = await Promise.all([
       args.supabase
         .from('scans')
         .select('id,domain,score,letter_grade,issues_json,run_source,created_at')
@@ -1383,6 +1409,13 @@ export async function runSocialProofAgent(args: {
       repo.listAccounts({ status: 'connected' }),
       repo.listAssets({ providerFamily: 'instagram' }),
       args.campaignScopeRequired ? loadActiveGrowthCampaigns(args.supabase as any) : Promise.resolve([]),
+      args.supabase
+        .from('app_logs')
+        .select('data')
+        .eq('event', 'social_proof_agent_run')
+        .gte('created_at', trendAttemptDayStart)
+        .order('created_at', { ascending: false })
+        .limit(24),
     ]);
     if (scanResult.error) throw scanResult.error;
     if (contentResult.error) throw contentResult.error;
@@ -1482,35 +1515,45 @@ export async function runSocialProofAgent(args: {
       (asset.source_key ?? '').startsWith('sofia-')
       && now.getTime() - Date.parse(asset.created_at) < 20 * 3_600_000
     );
+    const dailyTrendAttemptRecorded = hasRecordedDailyTrendAttempt(
+      (trendAttemptResult.data ?? []) as SocialTrendAttemptLogRow[],
+    );
     if (!args.campaignOnly && config.trendResearchEnabled && args.env && !recentSofiaResearch) {
-      const discovery = await discoverSocialTrends(args.env, now, (provider, estimatedCostUsd) =>
-        reserveProviderSpend({
-          db: args.supabase,
-          provider,
-          idempotencyKey: `social-trend:${provider}:${now.toISOString().slice(0, 10)}`,
-          operation: 'daily_social_trend_research',
-          estimatedCostUsd,
-          metadata: { owner: 'Sofia', cadence: 'daily' },
-        })
-      );
-      if (discovery.ok) {
-        trendProvider = discovery.provider;
-        await upsertPriyaResearchIdeas(
-          args.supabase,
-          discovery.ideas.map(socialTrendToPriyaIdea),
-          now,
-        );
-        const recentlyUsed = new Set(
-          existingAssets
-            .map((asset) => asset.source_key ?? '')
-            .filter((key) => key.startsWith('sofia-'))
-            .map((key) => key.slice('sofia-'.length))
-        );
-        for (const idea of buildDailySocialSlate(discovery.ideas, recentlyUsed)) {
-          candidates.push(trendIdeaCandidate(idea, args.appUrl));
-        }
+      if (trendAttemptResult.error) {
+        // Fail closed on paid discovery while preserving first-party/campaign candidates.
+        trendReason = 'trend_attempt_history_unavailable';
+      } else if (dailyTrendAttemptRecorded) {
+        trendReason = 'daily_attempt_already_recorded';
       } else {
-        trendReason = discovery.reason;
+        const discovery = await discoverSocialTrends(args.env, now, (provider, estimatedCostUsd) =>
+          reserveProviderSpend({
+            db: args.supabase,
+            provider,
+            idempotencyKey: `social-trend:${provider}:${now.toISOString().slice(0, 10)}`,
+            operation: 'daily_social_trend_research',
+            estimatedCostUsd,
+            metadata: { owner: 'Sofia', cadence: 'daily' },
+          })
+        );
+        if (discovery.ok) {
+          trendProvider = discovery.provider;
+          await upsertPriyaResearchIdeas(
+            args.supabase,
+            discovery.ideas.map(socialTrendToPriyaIdea),
+            now,
+          );
+          const recentlyUsed = new Set(
+            existingAssets
+              .map((asset) => asset.source_key ?? '')
+              .filter((key) => key.startsWith('sofia-'))
+              .map((key) => key.slice('sofia-'.length))
+          );
+          for (const idea of buildDailySocialSlate(discovery.ideas, recentlyUsed)) {
+            candidates.push(trendIdeaCandidate(idea, args.appUrl));
+          }
+        } else {
+          trendReason = discovery.reason;
+        }
       }
     }
 
