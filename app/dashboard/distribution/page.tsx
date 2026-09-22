@@ -4,6 +4,7 @@ import { loadAdminPageContext } from '@/lib/server/admin-runtime';
 import { createDistributionEngineAdminData } from '@/lib/server/distribution-engine-admin-data';
 import { createContentAdminData } from '@/lib/server/content-admin-data';
 import { resolveDistributionEngineFlags } from '@/lib/server/distribution-engine-flags';
+import { formatDistributionTime } from '@/lib/server/distribution-time-display';
 import {
   startInstagramOauthConnect,
   startLinkedInOauthConnect,
@@ -11,17 +12,6 @@ import {
 } from './actions';
 
 export const dynamic = 'force-dynamic';
-
-function formatDateTime(value: string | null): string {
-  if (!value) return '-';
-  return new Date(value).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 function formatLabel(value: string | null): string {
   if (!value) return '-';
@@ -547,9 +537,9 @@ export default async function DistributionAdminPage(props: {
                       <td className="px-4 py-3 text-on-surface-variant">
                         {accountNextAction(account)}
                       </td>
-                      <td className="px-4 py-3">{formatDateTime(account.latest_token_expiry)}</td>
-                      <td className="px-4 py-3">{formatDateTime(account.last_verified_at)}</td>
-                      <td className="px-4 py-3">{formatDateTime(account.updated_at)}</td>
+                      <td className="px-4 py-3">{formatDistributionTime(account.latest_token_expiry)}</td>
+                      <td className="px-4 py-3">{formatDistributionTime(account.last_verified_at)}</td>
+                      <td className="px-4 py-3">{formatDistributionTime(account.updated_at)}</td>
                     </tr>
                   ))
                 )}
@@ -628,7 +618,7 @@ export default async function DistributionAdminPage(props: {
                           {asset.content_item_id ?? asset.source_key ?? '-'}
                         </div>
                       </td>
-                      <td className="px-4 py-3">{formatDateTime(asset.updated_at)}</td>
+                      <td className="px-4 py-3">{formatDistributionTime(asset.updated_at)}</td>
                     </tr>
                   ))
                 )}
@@ -689,14 +679,14 @@ export default async function DistributionAdminPage(props: {
                           {formatLabel(job.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">{formatDateTime(job.scheduled_for)}</td>
-                      <td className="px-4 py-3">{formatDateTime(job.latest_retry_scheduled_for)}</td>
+                      <td className="px-4 py-3">{formatDistributionTime(job.scheduled_for)}</td>
+                      <td className="px-4 py-3">{formatDistributionTime(job.latest_retry_scheduled_for)}</td>
                       <td className="px-4 py-3">{formatRetryDelayMs(job.latest_retry_after_ms)}</td>
                       <td className="px-4 py-3 text-right">{job.attempt_count}</td>
                       <td className="px-4 py-3 text-on-surface-variant">
                         {job.latest_attempt_error ?? job.last_error ?? '-'}
                       </td>
-                      <td className="px-4 py-3">{formatDateTime(job.updated_at)}</td>
+                      <td className="px-4 py-3">{formatDistributionTime(job.updated_at)}</td>
                     </tr>
                   ))
                 )}
