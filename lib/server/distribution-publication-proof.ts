@@ -14,8 +14,20 @@ type PublishedContent = {
   metadata: Record<string, unknown>;
 };
 
+type PublicationDeliveryProof = {
+  status?: unknown;
+};
+
 function isNewsletterProvider(provider: string): boolean {
   return provider === 'buttondown' || provider === 'kit' || provider === 'ghost';
+}
+
+export function hasDurablePublicationProof(args: {
+  assetStatus: unknown;
+  delivery: PublicationDeliveryProof | null | undefined;
+}): boolean {
+  return args.assetStatus === 'published'
+    && args.delivery?.status === 'published';
 }
 
 async function upsertDelivery(args: {
@@ -210,6 +222,24 @@ export async function reconcilePublishedDistributionProofs(args: {
         .maybeSingle();
       if (itemError) throw itemError;
       if (!item) continue;
+      const destinationType = isNewsletterProvider(account.provider_name)
+        ? 'newsletter'
+        : 'social';
+      const { data: deliveryRows, error: deliveryError } = await args.db
+        .from('content_distribution_deliveries')
+        .select('status')
+        .eq('content_item_id', asset.content_item_id)
+        .eq('destination_type', destinationType)
+        .eq('destination_name', account.provider_name)
+        .eq('status', 'published')
+        .limit(1);
+      if (deliveryError) throw deliveryError;
+      if (hasDurablePublicationProof({
+        assetStatus: asset.status,
+        delivery: deliveryRows?.[0] ?? null,
+      })) {
+        continue;
+      }
       await recordDistributionPublicationProof({
         db: args.db,
         account,

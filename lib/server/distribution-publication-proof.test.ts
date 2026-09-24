@@ -1,5 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { recordDistributionPublicationProof } from './distribution-publication-proof';
+import {
+  hasDurablePublicationProof,
+  recordDistributionPublicationProof,
+} from './distribution-publication-proof';
+
+describe('hasDurablePublicationProof', () => {
+  it('accepts only a published asset with a published delivery', () => {
+    expect(hasDurablePublicationProof({
+      assetStatus: 'published',
+      delivery: {
+        status: 'published',
+      },
+    })).toBe(true);
+
+    expect(hasDurablePublicationProof({
+      assetStatus: 'approved',
+      delivery: {
+        status: 'published',
+      },
+    })).toBe(false);
+
+    expect(hasDurablePublicationProof({
+      assetStatus: 'published',
+      delivery: {
+        status: 'failed',
+      },
+    })).toBe(false);
+  });
+});
 
 describe('recordDistributionPublicationProof', () => {
   it('records asset-only proof for an approved manual Instagram asset', async () => {
