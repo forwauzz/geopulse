@@ -1182,6 +1182,15 @@ export function preferredAccount(accounts: ReadonlyArray<DistributionAccountRow>
   );
 }
 
+export function autonomousDistributionGateReason(
+  mode: SocialProofAgentMode,
+  account: DistributionAccountRow | null,
+): string | null {
+  return mode === 'autonomous' && !account
+    ? 'connected_distribution_account_unavailable'
+    : null;
+}
+
 function assetStatusForMode(mode: SocialProofAgentMode): DistributionAssetRow['status'] {
   if (mode === 'autonomous') return 'approved';
   return mode === 'approval' ? 'review' : 'draft';
@@ -1421,6 +1430,45 @@ export async function runSocialProofAgent(args: {
     if (contentResult.error) throw contentResult.error;
     if (assignedSocialResult.error) throw assignedSocialResult.error;
 
+    const account = preferredAccount(accounts);
+    const distributionGateReason = autonomousDistributionGateReason(mode, account);
+    if (distributionGateReason) {
+      const result: SocialProofAgentResult = {
+        status: 'noop',
+        mode,
+        candidates: 0,
+        assetsCreated: 0,
+        jobsCreated: 0,
+        queuedContentItemIds: [],
+        reason: distributionGateReason,
+      };
+      await structuredLogWithClientAndWait(
+        args.supabase,
+        'social_proof_agent_run',
+        {
+          status: result.status,
+          mode,
+          candidates: 0,
+          assets_created: 0,
+          jobs_created: 0,
+          inventory_healthy: args.inventoryHealthyBefore === true,
+          account_provider: null,
+          trend_provider: null,
+          trend_reason: null,
+          performance_checked: 0,
+          performance_updated: 0,
+          performance_failed: 0,
+          reel_plan_eligible: false,
+          reel_plan_decision: 'connected_distribution_account_unavailable',
+          daily_capacity_remaining: 0,
+          retry_reason: distributionGateReason,
+          retry_after: null,
+        },
+        'info',
+      );
+      return result;
+    }
+
     let performanceLearning = { checked: 0, updated: 0, failed: 0 };
     if (config.learningEnabled && accountProviderIsInstagram(accounts)) {
       try {
@@ -1557,7 +1605,6 @@ export async function runSocialProofAgent(args: {
       }
     }
 
-    const account = preferredAccount(accounts);
     const family = providerFamily(account);
     const occupiedInstagramSlots = new Set<string>();
     if (account?.provider_name === 'instagram') {

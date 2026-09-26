@@ -7,6 +7,7 @@ import {
   buildProductDemoCandidate,
   assignedSocialCandidate,
   assignedSocialCandidates,
+  autonomousDistributionGateReason,
   filterCampaignAssignedSocial,
   hasRecordedDailyTrendAttempt,
   growthCampaignForSocialCandidate,
@@ -266,6 +267,14 @@ describe('Social Proof Agent safeguards', () => {
       account('buttondown', 'newsletter'),
       account('instagram', 'social'),
     ])?.provider_name).toBe('instagram');
+  });
+
+  it('does not create autonomous generic assets when no distribution account is connected', () => {
+    expect(autonomousDistributionGateReason('autonomous', null)).toBe(
+      'connected_distribution_account_unavailable',
+    );
+    expect(autonomousDistributionGateReason('draft', null)).toBeNull();
+    expect(autonomousDistributionGateReason('approval', null)).toBeNull();
   });
 
   it('is fail-closed when disabled or killed', () => {
