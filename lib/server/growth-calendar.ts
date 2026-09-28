@@ -422,6 +422,9 @@ export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<Growth
     const campaign = campaignById.get(String(linkedAsset?.growth_campaign_id ?? metadata['growth_campaign_id']));
     const intervention = interventionById.get(String(linkedAsset?.growth_intervention_id ?? metadata['growth_intervention_id']));
     const dependencies: string[] = loop.blocker ? [String(loop.blocker)] : [];
+    if (loop.founder_required && dependencies.length === 0) {
+      dependencies.push('Founder action required');
+    }
     if (linkedAsset && !['approved', 'scheduled', 'published'].includes(String(linkedAsset.status))) {
       dependencies.push(`Asset approval is ${titleCase(linkedAsset.status).toLowerCase()}`);
     }
