@@ -421,9 +421,18 @@ export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<Growth
       (lane.includes('sales') || lane.includes('outreach') ? 'sales' : 'internal');
     const campaign = campaignById.get(String(linkedAsset?.growth_campaign_id ?? metadata['growth_campaign_id']));
     const intervention = interventionById.get(String(linkedAsset?.growth_intervention_id ?? metadata['growth_intervention_id']));
+    const isManualDistribution = Boolean(linkedAsset && metadata['manual_publish'] === true);
     const dependencies: string[] = loop.blocker ? [String(loop.blocker)] : [];
     if (loop.founder_required && dependencies.length === 0) {
       dependencies.push('Founder action required');
+    }
+    if (
+      isManualDistribution &&
+      (channel === 'instagram' || channel === 'linkedin') &&
+      !accountRows.some((account) => account.status === 'connected' && providerChannel(account.provider_name) === channel)
+    ) {
+      const providerLabel = channel === 'linkedin' ? 'LinkedIn' : titleCase(channel);
+      dependencies.push(`${providerLabel} publishing account is not connected`);
     }
     if (linkedAsset && !['approved', 'scheduled', 'published'].includes(String(linkedAsset.status))) {
       dependencies.push(`Asset approval is ${titleCase(linkedAsset.status).toLowerCase()}`);
@@ -431,7 +440,6 @@ export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<Growth
     if (linkedMedia.some((item) => !['ready', 'uploaded'].includes(item.readyStatus))) {
       dependencies.push('Media still needs provider-ready QA');
     }
-    const isManualDistribution = Boolean(linkedAsset && metadata['manual_publish'] === true);
     activities.push({
       id: `loop:${loop.id}`,
       sourceType: 'work_loop',
