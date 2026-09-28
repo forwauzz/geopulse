@@ -125,6 +125,50 @@ describe('loadGrowthCalendar', () => {
       }),
     ]);
   });
+
+  it('shows founder-required distribution work as needing help instead of next', async () => {
+    const data = await loadGrowthCalendar(stubSupabase({
+      distribution_assets: [{
+        id: 'asset-row-2',
+        provider_family: 'linkedin',
+        status: 'approved',
+        metadata: {},
+      }],
+      agent_work_loops: [{
+        id: 'loop-2',
+        source_type: 'manual_distribution',
+        source_key: 'linkedin-founder-required',
+        lane: 'distribution',
+        owner: 'sofia',
+        state: 'assigned',
+        severity: 'normal',
+        title: 'Publish the approved LinkedIn post',
+        detail: 'Scheduled LinkedIn post',
+        next_action: 'Connect the company page before publishing.',
+        due_at: '2099-08-03T13:00:00.000Z',
+        attempt_count: 0,
+        max_attempts: 3,
+        founder_required: true,
+        blocker: null,
+        created_at: '2026-08-01T12:00:00.000Z',
+        updated_at: '2026-08-01T12:00:00.000Z',
+        metadata: {
+          channel: 'linkedin',
+          manual_publish: true,
+          distribution_asset_id: 'asset-row-2',
+        },
+      }],
+    }));
+
+    const activity = data.activities.find((row) => row.id === 'loop:loop-2');
+
+    expect(activity).toMatchObject({
+      channel: 'linkedin',
+      displayState: 'action',
+      nextAction: 'Connect the company page before publishing.',
+      dependencies: ['Founder action required'],
+    });
+  });
 });
 
 /**
