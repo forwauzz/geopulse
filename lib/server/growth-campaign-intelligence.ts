@@ -37,7 +37,11 @@ export type CampaignScopedOpportunity<T extends CampaignClassifiableOpportunity>
   readonly opportunity: T;
   readonly campaign: GrowthCampaign;
   readonly vertical: Exclude<CampaignVertical, 'background'>;
-  readonly gateReason: 'explicit_campaign_id' | 'explicit_vertical_metadata' | 'explicit_vertical_language';
+  readonly gateReason:
+    | 'explicit_campaign_id'
+    | 'explicit_vertical_metadata'
+    | 'explicit_vertical_language'
+    | 'primary_campaign_fallback';
 };
 
 function record(value: unknown): Readonly<Record<string, unknown>> {
