@@ -80,12 +80,20 @@ export function selectEditorialCandidateForActiveCampaign(
   candidates: readonly EditorialCandidate[],
   campaigns: readonly GrowthCampaign[],
 ): CampaignScopedOpportunity<EditorialCandidate & { readonly id: string }> | null {
-  const eligibleCandidates = candidates.filter((candidate) =>
-    candidate.status === 'brief'
-      || candidate.metadata?.['editorial_retry_required'] === true
+  const eligibleCandidates = candidates.filter((candidate) => {
+    const archivedReason = candidate.metadata?.['archived_reason'];
+    const isExplicitRetry = candidate.metadata?.['editorial_retry_required'] === true;
+    if (typeof archivedReason === 'string' && archivedReason.trim() && !isExplicitRetry) {
+      return false;
+    }
+    const isArchivedSeed = candidate.status === 'archived'
+      && Boolean(candidate.topic_cluster)
+      && !archivedReason;
+    return candidate.status === 'brief'
+      || isExplicitRetry
       || candidate.metadata?.['proposed_by'] === 'marketing_autopilot'
-      || (candidate.status === 'archived' && Boolean(candidate.topic_cluster)),
-  );
+      || isArchivedSeed;
+  });
   const classifiable = eligibleCandidates.map((candidate) => ({
     ...candidate,
     id: candidate.content_id,

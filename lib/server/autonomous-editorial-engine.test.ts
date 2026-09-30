@@ -165,6 +165,36 @@ describe('autonomous editorial engine', () => {
     expect(EDITORIAL_FALLBACK_SCAN_LIMIT).toBeGreaterThanOrEqual(100);
   });
 
+  it('rejects an archived seed whose metadata says it should not become an article', () => {
+    const selected = selectEditorialCandidateForActiveCampaign([
+      {
+        content_id: 'homepage-only',
+        slug: 'branded-query',
+        content_type: 'article',
+        title: 'Branded query optimization',
+        topic_cluster: 'geo_pulse',
+        status: 'archived',
+        growth_campaign_id: 'campaign-primary',
+        metadata: {
+          campaign_vertical: 'msp_it_services',
+          archived_reason: 'Branded query belongs to homepage optimization, not a new article.',
+        },
+      },
+      {
+        content_id: 'neutral',
+        slug: 'evidence-checklist',
+        content_type: 'article',
+        title: 'Evidence checklist',
+        topic_cluster: 'trust_signals_and_evidence_hygiene',
+        status: 'archived',
+        metadata: {},
+      },
+    ], [primaryCampaign, challengerCampaign]);
+
+    expect(selected?.opportunity.content_id).toBe('neutral');
+    expect(selected?.gateReason).toBe('primary_campaign_fallback');
+  });
+
   it('keeps the primary lane ahead of an available challenger by using a neutral seed', () => {
     const selected = selectEditorialCandidateForActiveCampaign([
       {
