@@ -14,6 +14,7 @@ import {
 } from './agent-loop-control';
 import { reserveProviderSpend } from './provider-spend-control';
 import {
+  classifyCampaignVertical,
   loadActiveGrowthCampaigns,
   selectCampaignScopedOpportunities,
   type CampaignScopedOpportunity,
@@ -50,6 +51,8 @@ export type EditorialRunResult = {
   heroProviderFailure?: string;
 };
 
+export const EDITORIAL_FALLBACK_SCAN_LIMIT = 250;
+
 export function mergeEditorialCandidates(
   retryRows: readonly any[],
   seoRows: readonly any[],
@@ -77,22 +80,59 @@ export function selectEditorialCandidateForActiveCampaign(
   candidates: readonly EditorialCandidate[],
   campaigns: readonly GrowthCampaign[],
 ): CampaignScopedOpportunity<EditorialCandidate & { readonly id: string }> | null {
-  for (const candidate of candidates) {
-    const eligible = candidate.status === 'brief'
+  const eligibleCandidates = candidates.filter((candidate) =>
+    candidate.status === 'brief'
       || candidate.metadata?.['editorial_retry_required'] === true
       || candidate.metadata?.['proposed_by'] === 'marketing_autopilot'
-      || (candidate.status === 'archived' && Boolean(candidate.topic_cluster));
-    if (!eligible) continue;
-    const scoped = selectCampaignScopedOpportunities([
-      {
-        ...candidate,
-        id: candidate.content_id,
-        evidence: candidate.topic_cluster,
-      },
-    ], campaigns, 2)[0];
-    if (scoped) return scoped;
+      || (candidate.status === 'archived' && Boolean(candidate.topic_cluster)),
+  );
+  const classifiable = eligibleCandidates.map((candidate) => ({
+    ...candidate,
+    id: candidate.content_id,
+    evidence: candidate.topic_cluster,
+  }));
+  const explicitlyScoped = selectCampaignScopedOpportunities(
+    classifiable,
+    campaigns,
+    Math.max(2, classifiable.length),
+  );
+  const primary = explicitlyScoped.find((item) => item.campaign.role === 'primary');
+  if (primary) return primary;
+
+  const primaryCampaign = campaigns.find((campaign) => campaign.role === 'primary');
+  if (primaryCampaign) {
+    const neutral = classifiable.find((candidate) => {
+      const metadata = candidate.metadata ?? {};
+      if (candidate.growth_campaign_id) return false;
+      if (metadata['campaign_vertical'] || metadata['vertical']) return false;
+      if (candidate.topic_cluster?.startsWith('vertical_strategy_')) return false;
+      return classifyCampaignVertical(candidate).vertical === 'background';
+    });
+    if (neutral) return {
+        opportunity: neutral,
+        campaign: primaryCampaign,
+        vertical: primaryCampaign.vertical,
+        gateReason: 'primary_campaign_fallback',
+      };
   }
-  return null;
+  return explicitlyScoped[0] ?? null;
+}
+
+export function editorialDraftTopic(
+  candidate: EditorialCandidate,
+  scoped: Pick<CampaignScopedOpportunity<EditorialCandidate & { readonly id: string }>, 'campaign' | 'gateReason'>,
+): string {
+  return [
+    `Topic cluster: ${candidate.topic_cluster ?? candidate.title ?? 'AI-search readiness'}`,
+    `Active campaign: ${scoped.campaign.campaign_key} (${scoped.campaign.role})`,
+    `Buyer: ${scoped.campaign.buyer_role}`,
+    `Vertical: ${scoped.campaign.vertical}`,
+    scoped.campaign.subvertical ? `Subvertical: ${scoped.campaign.subvertical}` : null,
+    scoped.campaign.geo_region ? `Market: ${scoped.campaign.geo_region}` : null,
+    `Buyer problem: ${scoped.campaign.primary_problem}`,
+    `Offer and CTA boundary: ${scoped.campaign.offer_key} -> ${scoped.campaign.cta_goal}`,
+    `Campaign gate: ${scoped.gateReason}`,
+  ].filter(Boolean).join('\n');
 }
 
 const EDITORIAL_FALLBACK_INTERNAL_LINK =
@@ -176,7 +216,7 @@ export async function runAutonomousEditorialEngine(args: {
     // engine replaces their thin planning seed with a source-backed editorial draft.
     .in('status', ['brief', 'draft', 'archived'])
     .order('updated_at', { ascending: true })
-    .limit(25);
+    .limit(EDITORIAL_FALLBACK_SCAN_LIMIT);
   if (fallbackResult.error) return { status: 'failed', reason: fallbackResult.error.message };
   const prioritizedSeoCandidates = mergeEditorialCandidates(
     retryCandidatesResult.data ?? [],
@@ -205,7 +245,10 @@ export async function runAutonomousEditorialEngine(args: {
   }
 
   const { data: existing } = await args.supabase.from('content_items').select('title').eq('content_type', 'article').limit(250);
-  const providerDraft = await args.provider.draft({ topic: candidate.topic_cluster, existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')) });
+  const providerDraft = await args.provider.draft({
+    topic: editorialDraftTopic(candidate, scopedCandidate),
+    existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')),
+  });
   const draft = {
     ...providerDraft,
     markdown: providerDraft.markdown

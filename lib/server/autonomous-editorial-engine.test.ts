@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   AUTONOMOUS_EDITORIAL_SOURCE_TYPE,
+  EDITORIAL_FALLBACK_SCAN_LIMIT,
+  editorialDraftTopic,
   ensureEditorialInternalBlogLink,
   mergeEditorialCandidates,
   removeRedundantEditorialH1,
@@ -133,6 +135,82 @@ describe('autonomous editorial engine', () => {
         metadata: {},
       },
     ], [primaryCampaign, challengerCampaign])).toBeNull();
+  });
+
+  it('uses a neutral archived seed for the primary campaign when no scoped candidate exists', () => {
+    const selected = selectEditorialCandidateForActiveCampaign([
+      {
+        content_id: 'legal',
+        slug: 'legal',
+        content_type: 'article',
+        title: 'Legal benchmark guide',
+        topic_cluster: 'vertical_strategy_legal_professional_services',
+        status: 'archived',
+        metadata: {},
+      },
+      {
+        content_id: 'neutral',
+        slug: 'proof-checklist',
+        content_type: 'article',
+        title: 'Proof checklist',
+        topic_cluster: 'trust_signals_and_evidence_hygiene',
+        status: 'archived',
+        metadata: {},
+      },
+    ], [primaryCampaign, challengerCampaign]);
+
+    expect(selected?.opportunity.content_id).toBe('neutral');
+    expect(selected?.campaign.campaign_key).toBe('msp-primary');
+    expect(selected?.gateReason).toBe('primary_campaign_fallback');
+    expect(EDITORIAL_FALLBACK_SCAN_LIMIT).toBeGreaterThanOrEqual(100);
+  });
+
+  it('keeps the primary lane ahead of an available challenger by using a neutral seed', () => {
+    const selected = selectEditorialCandidateForActiveCampaign([
+      {
+        content_id: 'agency', slug: 'agency', content_type: 'article',
+        title: 'Agency reporting', topic_cluster: 'vertical_strategy_agencies',
+        status: 'archived', metadata: {},
+      },
+      {
+        content_id: 'neutral', slug: 'evidence', content_type: 'article',
+        title: 'Evidence checklist', topic_cluster: 'trust_signals_and_evidence_hygiene',
+        status: 'archived', metadata: {},
+      },
+    ], [primaryCampaign, challengerCampaign]);
+
+    expect(selected?.campaign.role).toBe('primary');
+    expect(selected?.opportunity.content_id).toBe('neutral');
+    expect(selected?.gateReason).toBe('primary_campaign_fallback');
+  });
+
+  it('prefers the primary campaign even when a challenger seed sorts first', () => {
+    const selected = selectEditorialCandidateForActiveCampaign([
+      {
+        content_id: 'agency', slug: 'agency', content_type: 'article',
+        title: 'Agency reporting', topic_cluster: 'vertical_strategy_agencies',
+        status: 'archived', metadata: {},
+      },
+      {
+        content_id: 'msp', slug: 'msp', content_type: 'article',
+        title: 'MSP evidence', topic_cluster: 'vertical_strategy_msp',
+        status: 'archived', metadata: { campaign_vertical: 'msp_it_services' },
+      },
+    ], [primaryCampaign, challengerCampaign]);
+
+    expect(selected?.campaign.role).toBe('primary');
+    expect(selected?.opportunity.content_id).toBe('msp');
+  });
+
+  it('injects the active buyer and offer boundary into the writer topic', () => {
+    expect(editorialDraftTopic(row, {
+      campaign: primaryCampaign,
+      gateReason: 'explicit_campaign_id',
+    })).toContain('Buyer: MSP owner');
+    expect(editorialDraftTopic(row, {
+      campaign: primaryCampaign,
+      gateReason: 'explicit_campaign_id',
+    })).toContain('Offer and CTA boundary: free_scan -> free_scan');
   });
 
   it('persists the resolved campaign identity on a published article', async () => {
