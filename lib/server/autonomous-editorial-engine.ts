@@ -82,8 +82,16 @@ export function selectEditorialCandidateForActiveCampaign(
 ): CampaignScopedOpportunity<EditorialCandidate & { readonly id: string }> | null {
   const eligibleCandidates = candidates.filter((candidate) => {
     const archivedReason = candidate.metadata?.['archived_reason'];
+    const retiredAt = candidate.metadata?.['retired_at'];
+    const retiredReason = candidate.metadata?.['retired_reason'];
     const isExplicitRetry = candidate.metadata?.['editorial_retry_required'] === true;
     if (typeof archivedReason === 'string' && archivedReason.trim() && !isExplicitRetry) {
+      return false;
+    }
+    if ((
+      (typeof retiredAt === 'string' && retiredAt.trim())
+      || (typeof retiredReason === 'string' && retiredReason.trim())
+    ) && !isExplicitRetry) {
       return false;
     }
     const isArchivedSeed = candidate.status === 'archived'
