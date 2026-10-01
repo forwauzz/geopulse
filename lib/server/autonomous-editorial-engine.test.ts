@@ -195,6 +195,45 @@ describe('autonomous editorial engine', () => {
     expect(selected?.gateReason).toBe('primary_campaign_fallback');
   });
 
+  it('rejects a retired WIP seed unless it is explicitly approved for editorial retry', () => {
+    const retired = {
+      content_id: 'retired',
+      slug: 'retired-opportunity',
+      content_type: 'article',
+      title: 'Retired opportunity',
+      topic_cluster: 'ai_search_evidence',
+      status: 'archived',
+      growth_campaign_id: 'campaign-primary',
+      metadata: {
+        campaign_vertical: 'msp_it_services',
+        retired_at: '2026-07-31T00:00:00.000Z',
+        retired_reason: 'parent_opportunity_retired_by_vertical_wip_gate',
+      },
+    };
+    const neutral = {
+      content_id: 'neutral',
+      slug: 'evidence-checklist',
+      content_type: 'article',
+      title: 'Evidence checklist',
+      topic_cluster: 'trust_signals_and_evidence_hygiene',
+      status: 'archived',
+      metadata: {},
+    };
+
+    expect(selectEditorialCandidateForActiveCampaign(
+      [retired, neutral],
+      [primaryCampaign, challengerCampaign],
+    )?.opportunity.content_id).toBe('neutral');
+    expect(selectEditorialCandidateForActiveCampaign(
+      [{
+        ...retired,
+        status: 'draft',
+        metadata: { ...retired.metadata, editorial_retry_required: true },
+      }],
+      [primaryCampaign, challengerCampaign],
+    )?.opportunity.content_id).toBe('retired');
+  });
+
   it('keeps the primary lane ahead of an available challenger by using a neutral seed', () => {
     const selected = selectEditorialCandidateForActiveCampaign([
       {
