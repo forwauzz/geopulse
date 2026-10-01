@@ -70,6 +70,11 @@ export const PUBLIC_LEGACY_REDIRECTS: readonly PublicLegacyRedirect[] = [
     destination: '/blog/seo-ge-pulse',
     permanent: true,
   },
+  {
+    source: '/blog/why-docs-style-navigation-improves-discoverability',
+    destination: '/blog/canonical-site-first-newsletter-second-explained',
+    permanent: true,
+  },
 ] as const;
 
 const PUBLIC_LEGACY_REDIRECT_SOURCES = new Set(
