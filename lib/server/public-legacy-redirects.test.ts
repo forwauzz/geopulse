@@ -55,6 +55,11 @@ describe('public legacy redirects', () => {
           destination: '/blog/mixed-intent-content-that-confuses-buyers-and-models',
           permanent: true,
         },
+        {
+          source: '/blog/why-docs-style-navigation-improves-discoverability',
+          destination: '/blog/canonical-site-first-newsletter-second-explained',
+          permanent: true,
+        },
       ])
     );
 

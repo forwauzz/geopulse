@@ -166,6 +166,48 @@ function normalizedEditorialTitle(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+type PublishedEditorialCandidate = {
+  readonly content_id?: string | null;
+  readonly title?: string | null;
+  readonly draft_markdown?: string | null;
+};
+
+function normalizedEditorialLead(markdown: string): string {
+  const paragraphs = markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .split(/\r?\n\s*\r?\n/)
+    .map((paragraph) => paragraph
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/^[\s>*+-]+/gm, '')
+      .replace(/\s+/g, ' ')
+      .trim())
+    .filter((paragraph) => paragraph.length >= 120);
+  return normalizedEditorialTitle(paragraphs[0] ?? '');
+}
+
+export function findPublishedEditorialDuplicate(
+  draft: { readonly title: string; readonly markdown: string },
+  published: readonly PublishedEditorialCandidate[],
+): { readonly contentId: string; readonly title: string; readonly reason: 'duplicate_title' | 'duplicate_lead' } | null {
+  const draftTitle = normalizedEditorialTitle(draft.title);
+  const draftLead = normalizedEditorialLead(draft.markdown);
+  for (const row of published) {
+    const contentId = String(row.content_id ?? '').trim();
+    const title = String(row.title ?? '').trim();
+    if (!contentId || !title) continue;
+    if (draftTitle && normalizedEditorialTitle(title) === draftTitle) {
+      return { contentId, title, reason: 'duplicate_title' };
+    }
+    const lead = normalizedEditorialLead(String(row.draft_markdown ?? ''));
+    if (draftLead.length >= 120 && lead === draftLead) {
+      return { contentId, title, reason: 'duplicate_lead' };
+    }
+  }
+  return null;
+}
+
 export function removeRedundantEditorialH1(markdown: string, title: string): string {
   const match = /^\s*#(?!#)\s+(.+?)\s*(?:\r?\n|$)/.exec(markdown);
   if (!match) return markdown;
@@ -260,7 +302,13 @@ export async function runAutonomousEditorialEngine(args: {
     return { status: 'skipped', reason: 'no_active_campaign_candidate' };
   }
 
-  const { data: existing } = await args.supabase.from('content_items').select('title').eq('content_type', 'article').limit(250);
+  const { data: existing, error: existingError } = await args.supabase
+    .from('content_items')
+    .select('content_id,title,draft_markdown')
+    .eq('content_type', 'article')
+    .eq('status', 'published')
+    .limit(250);
+  if (existingError) return { status: 'failed', reason: existingError.message };
   const providerDraft = await args.provider.draft({
     topic: editorialDraftTopic(candidate, scopedCandidate),
     existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')),
@@ -279,6 +327,26 @@ export async function runAutonomousEditorialEngine(args: {
       status: 'rejected',
       reason: providerFailure ? `incomplete_draft:${providerFailure}` : 'incomplete_draft',
     };
+  }
+
+  const duplicate = findPublishedEditorialDuplicate(draft, existing ?? []);
+  if (duplicate) {
+    const { error: quarantineError } = await args.supabase.from('content_items').update({
+      status: 'archived',
+      metadata: {
+        ...(candidate.metadata ?? {}),
+        editorial_retry_required: false,
+        archived_reason: 'duplicate_published_article',
+        autonomous_editorial_rejection: {
+          rejected_at: now.toISOString(),
+          reason: duplicate.reason,
+          duplicate_content_id: duplicate.contentId,
+          duplicate_title: duplicate.title,
+        },
+      },
+    }).eq('content_id', candidate.content_id);
+    if (quarantineError) return { status: 'failed', reason: quarantineError.message };
+    return { status: 'rejected', reason: `duplicate_published_article:${duplicate.reason}` };
   }
 
   let allowGeneratedHero = false;
