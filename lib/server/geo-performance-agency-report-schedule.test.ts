@@ -6,12 +6,21 @@ const mocks = vi.hoisted(() => ({
   run: vi.fn(),
   store: vi.fn(),
   querySet: null as null | { version: string; metadata: Record<string, unknown> },
+  existingRunGroups: [] as Array<{
+    id: string;
+    status: 'completed' | 'failed';
+    metadata: Record<string, unknown>;
+  }>,
+  scheduleKeys: [] as string[],
 }));
 
 vi.mock('./benchmark-repository', () => ({
   createBenchmarkRepository: vi.fn(() => ({
     getDomainById: vi.fn(async () => ({ canonical_domain: 'clinic.example' })),
-    getRunGroupByScheduleKey: vi.fn(async () => null),
+    getRunGroupByScheduleKey: vi.fn(async (scheduleKey: string) => {
+      mocks.scheduleKeys.push(scheduleKey);
+      return mocks.existingRunGroups.shift() ?? null;
+    }),
     getQuerySetById: vi.fn(async () => mocks.querySet),
   })),
 }));
@@ -55,6 +64,8 @@ describe('GPM agency artifact schedule', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.querySet = null;
+    mocks.existingRunGroups = [];
+    mocks.scheduleKeys = [];
   });
 
   it('waits for every provider and stores one combined report with all successful run ids', async () => {
@@ -165,6 +176,90 @@ describe('GPM agency artifact schedule', () => {
     expect(mocks.run.mock.calls.map((call) => call[1].runMetadata.query_execution_delay_ms))
       .toEqual([1_500, 1_500]);
     expect(mocks.store).not.toHaveBeenCalled();
+  });
+
+  it('stops after three failed attempts in one provider window', async () => {
+    const organizationContext = context();
+    const derived = deriveOrganizationMeasurementBinding(organizationContext);
+    expect(derived.ok).toBe(true);
+    if (!derived.ok) return;
+    const measurementMetadata = organizationMeasurementMetadata(derived.binding);
+    mocks.querySet = { version: derived.binding.querySetVersion, metadata: measurementMetadata };
+    mocks.existingRunGroups = [
+      { id: 'run-initial', status: 'failed', metadata: {} },
+      { id: 'run-retry-1', status: 'failed', metadata: {} },
+      { id: 'run-retry-2', status: 'failed', metadata: {} },
+    ];
+
+    const result = await executeGpmClientRun({
+      supabase: {},
+      config: {
+        id: 'config-1', startup_workspace_id: null, agency_account_id: 'agency-1', benchmark_domain_id: 'domain-1',
+        topic: 'specialist care', location: 'Toronto', query_set_id: 'set-1', competitor_list: [], cadence: 'monthly',
+        platforms_enabled: ['perplexity'], report_email: null,
+        metadata: { prompt_count: 2, ...measurementMetadata },
+        created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z',
+      },
+      entitlement: {
+        enabled: true, tier: 'agency_pro', maxPromptsPerRun: null, allowedCadences: ['monthly'],
+        deliverySurfaces: [], platformsAllowed: ['perplexity'], source: 'bundle_service',
+      },
+      platformModelMap: { chatgpt: 'gpt-test', gemini: 'gemini-test', perplexity: 'sonar-test' },
+      adapter: {} as never,
+      now: new Date('2026-08-01T12:00:00.000Z'),
+      organizationContext,
+    });
+
+    expect(result.platformResults).toEqual([
+      expect.objectContaining({ platform: 'perplexity', status: 'retry_exhausted' }),
+    ]);
+    expect(mocks.run).not.toHaveBeenCalled();
+    expect(mocks.scheduleKeys).toHaveLength(3);
+    expect(mocks.scheduleKeys[0]).not.toContain(':retry:');
+    expect(mocks.scheduleKeys[1]).toContain(':retry:1');
+    expect(mocks.scheduleKeys[2]).toContain(':retry:2');
+  });
+
+  it('uses the next stable retry key while fewer than three attempts exist', async () => {
+    const organizationContext = context();
+    const derived = deriveOrganizationMeasurementBinding(organizationContext);
+    expect(derived.ok).toBe(true);
+    if (!derived.ok) return;
+    const measurementMetadata = organizationMeasurementMetadata(derived.binding);
+    mocks.querySet = { version: derived.binding.querySetVersion, metadata: measurementMetadata };
+    mocks.existingRunGroups = [
+      { id: 'run-initial', status: 'failed', metadata: {} },
+      { id: 'run-retry-1', status: 'failed', metadata: {} },
+    ];
+    mocks.run.mockResolvedValue({ runGroupId: 'run-retry-2', completedQueryCount: 0 });
+
+    const result = await executeGpmClientRun({
+      supabase: {},
+      config: {
+        id: 'config-1', startup_workspace_id: null, agency_account_id: 'agency-1', benchmark_domain_id: 'domain-1',
+        topic: 'specialist care', location: 'Toronto', query_set_id: 'set-1', competitor_list: [], cadence: 'monthly',
+        platforms_enabled: ['perplexity'], report_email: null,
+        metadata: { prompt_count: 2, ...measurementMetadata },
+        created_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z',
+      },
+      entitlement: {
+        enabled: true, tier: 'agency_pro', maxPromptsPerRun: null, allowedCadences: ['monthly'],
+        deliverySurfaces: [], platformsAllowed: ['perplexity'], source: 'bundle_service',
+      },
+      platformModelMap: { chatgpt: 'gpt-test', gemini: 'gemini-test', perplexity: 'sonar-test' },
+      adapter: {} as never,
+      now: new Date('2026-08-01T12:00:00.000Z'),
+      organizationContext,
+    });
+
+    expect(result.platformResults).toEqual([
+      expect.objectContaining({ platform: 'perplexity', status: 'failed' }),
+    ]);
+    expect(mocks.run).toHaveBeenCalledOnce();
+    const providerCall = mocks.run.mock.calls[0];
+    expect(providerCall).toBeDefined();
+    expect(providerCall?.[1].runMetadata.schedule_run_key).toContain(':retry:2');
+    expect(mocks.scheduleKeys).toHaveLength(3);
   });
 
   it('fails closed before provider work when the active context is not confirmed', async () => {
