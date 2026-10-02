@@ -38,7 +38,7 @@ const challengerCampaign: GrowthCampaign = {
   allocation_percent: 20,
 };
 const row = { content_id: 'content-1', slug: 'useful-page', content_type: 'article', title: 'MSP brief', topic_cluster: 'msp_ai_search_readiness', status: 'brief', growth_campaign_id: 'campaign-primary', metadata: { campaign_vertical: 'msp_it_services' } };
-function db() {
+function db(candidate = row) {
   const update = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }));
   return { update, from: vi.fn((table: string) => ({
     select: vi.fn((columns: string) => {
@@ -68,7 +68,7 @@ function db() {
       chain.eq = vi.fn(() => chain);
       chain.in = vi.fn(() => chain);
       chain.order = vi.fn(() => chain);
-      chain.limit = vi.fn(async () => ({ data:[row], error:null }));
+      chain.limit = vi.fn(async () => ({ data:[candidate], error:null }));
       return chain;
     }),
     update,
@@ -161,6 +161,47 @@ describe('autonomous editorial engine', () => {
     expect(supabase.update).toHaveBeenCalledWith(expect.objectContaining({
       status: 'archived',
       metadata: expect.objectContaining({ archived_reason: 'duplicate_published_article' }),
+    }));
+  });
+
+  it('quarantines a configured redirect source before drafting or hero spend', async () => {
+    const supabase = db({
+      ...row,
+      content_id: 'legacy-source',
+      slug: 'extractability-audit-checklist-for-content-pages',
+    });
+    const draft = vi.fn(async () => ({
+      title: 'Should not be drafted',
+      markdown: 'Should not be drafted.',
+      sources: ['https://example.com/source'],
+    }));
+    const hero = vi.fn(async () => ({
+      url: 'https://example.com/hero.jpg',
+      alt: 'Hero',
+      provider: 'deterministic' as const,
+    }));
+    const review = vi.fn(async () => ({ approved: true, reasons: [] }));
+
+    const result = await runAutonomousEditorialEngine({
+      supabase,
+      provider: { draft, hero, review },
+      now: new Date('2026-10-02T00:30:00Z'),
+    });
+
+    expect(result).toEqual({ status: 'rejected', reason: 'public_legacy_redirect_source' });
+    expect(draft).not.toHaveBeenCalled();
+    expect(hero).not.toHaveBeenCalled();
+    expect(review).not.toHaveBeenCalled();
+    expect(supabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'archived',
+      metadata: expect.objectContaining({
+        editorial_retry_required: false,
+        archived_reason: 'public_legacy_redirect_source',
+        autonomous_editorial_rejection: expect.objectContaining({
+          redirect_source: '/blog/extractability-audit-checklist-for-content-pages',
+          canonical_destination: '/blog/crawlable-but-not-extractable',
+        }),
+      }),
     }));
   });
 

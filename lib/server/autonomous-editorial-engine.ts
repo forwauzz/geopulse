@@ -13,6 +13,7 @@ import {
   reconcileContentLoops,
 } from './agent-loop-control';
 import { reserveProviderSpend } from './provider-spend-control';
+import { PUBLIC_LEGACY_REDIRECTS } from './public-legacy-redirects';
 import {
   classifyCampaignVertical,
   loadActiveGrowthCampaigns,
@@ -300,6 +301,29 @@ export async function runAutonomousEditorialEngine(args: {
   const candidate = scopedCandidate?.opportunity;
   if (!candidate?.content_id || !candidate.topic_cluster || !scopedCandidate) {
     return { status: 'skipped', reason: 'no_active_campaign_candidate' };
+  }
+
+  const publicPath = candidate.slug ? `/blog/${candidate.slug}` : null;
+  const legacyRedirect = publicPath
+    ? PUBLIC_LEGACY_REDIRECTS.find((redirect) => redirect.source === publicPath)
+    : null;
+  if (legacyRedirect) {
+    const { error: quarantineError } = await args.supabase.from('content_items').update({
+      status: 'archived',
+      metadata: {
+        ...(candidate.metadata ?? {}),
+        editorial_retry_required: false,
+        archived_reason: 'public_legacy_redirect_source',
+        autonomous_editorial_rejection: {
+          reason: 'public_legacy_redirect_source',
+          rejected_at: now.toISOString(),
+          redirect_source: legacyRedirect.source,
+          canonical_destination: legacyRedirect.destination,
+        },
+      },
+    }).eq('content_id', candidate.content_id);
+    if (quarantineError) return { status: 'failed', reason: quarantineError.message };
+    return { status: 'rejected', reason: 'public_legacy_redirect_source' };
   }
 
   const { data: existing, error: existingError } = await args.supabase
