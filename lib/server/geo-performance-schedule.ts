@@ -384,23 +384,27 @@ export async function executeGpmClientRun(args: {
     const baseRunKey = args.runVersion
       ? `${contextRunKey}:recheck:${args.runVersion}`
       : contextRunKey;
+    const maxAttemptsPerWindow = 3;
     let runKey = baseRunKey;
     let completedExisting: Awaited<ReturnType<typeof repo.getRunGroupByScheduleKey>> = null;
-    let retryExhausted = false;
-    for (let retryDepth = 0; retryDepth <= 3; retryDepth += 1) {
+    let openAttemptSlot = false;
+    for (let attemptIndex = 0; attemptIndex < maxAttemptsPerWindow; attemptIndex += 1) {
+      runKey =
+        attemptIndex === 0
+          ? baseRunKey
+          : `${baseRunKey}:retry:${attemptIndex}`;
       const existing = await repo.getRunGroupByScheduleKey(runKey);
-      if (!existing) break;
+      if (!existing) {
+        openAttemptSlot = true;
+        break;
+      }
       const existingCompleted = Number(existing.metadata?.['completed_query_count'] ?? 0);
       if (existing.status === 'completed' && existingCompleted >= configuredPromptCount) {
         completedExisting = existing;
         break;
       }
-      if (retryDepth === 3) {
-        retryExhausted = true;
-        break;
-      }
-      runKey = `${baseRunKey}:retry:${retryDepth + 1}`;
     }
+    const retryExhausted = !completedExisting && !openAttemptSlot;
     if (completedExisting) {
       platformResults.push({
         platform,
@@ -415,7 +419,7 @@ export async function executeGpmClientRun(args: {
         config_id: args.config.id,
         platform,
         window_date: windowDate,
-        retry_limit: 3,
+        retry_limit: maxAttemptsPerWindow,
         retry_deferred: true,
         reason: 'same_window_retry_exhausted',
       }, 'warning');
