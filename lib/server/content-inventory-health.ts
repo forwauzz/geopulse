@@ -21,9 +21,16 @@ export type ContentInventoryHealth = {
 
 type Job = { distribution_asset_id?: unknown; scheduled_for?: unknown };
 type Asset = { id?: unknown; provider_family?: unknown; asset_type?: unknown };
+type DistributionAccount = { provider_name?: unknown; status?: unknown };
 
 export const CONTENT_INVENTORY_FLOOR_DAYS = 12;
 export const CONTENT_INVENTORY_LOOKAHEAD_DAYS = 16;
+export const CONTENT_INVENTORY_CONFIGURED_ACCOUNT_STATUSES = [
+  'connected',
+  'token_expired',
+  'revoked',
+  'error',
+] as const;
 
 export function contentInventoryLookahead(now: Date): string {
   return new Date(
@@ -39,6 +46,18 @@ export function requiredContentFormatsForConnectedProviders(
     const [provider] = format.split(':');
     return provider === 'blog' || connected.has(provider ?? '');
   });
+}
+
+export function inventoryProvidersForAccounts(
+  accounts: readonly DistributionAccount[],
+): readonly string[] {
+  const configuredStatuses = new Set<string>(CONTENT_INVENTORY_CONFIGURED_ACCOUNT_STATUSES);
+  return [...new Set(
+    accounts
+      .filter((account) => configuredStatuses.has(String(account.status ?? '')))
+      .map((account) => String(account.provider_name ?? ''))
+      .filter((provider) => provider === 'instagram' || provider === 'linkedin'),
+  )];
 }
 
 export function evaluateContentInventoryHealth(args: {
@@ -117,14 +136,12 @@ export async function loadContentInventoryHealth(
   if (articlesResult.error) throw articlesResult.error;
   const accountsResult = await db
     .from('distribution_accounts')
-    .select('provider_name')
-    .eq('status', 'connected')
+    .select('provider_name,status')
+    .in('status', [...CONTENT_INVENTORY_CONFIGURED_ACCOUNT_STATUSES])
     .in('provider_name', ['instagram', 'linkedin']);
   if (accountsResult.error) throw accountsResult.error;
   const requiredFormats = requiredContentFormatsForConnectedProviders(
-    (accountsResult.data ?? []).map((account: { provider_name?: unknown }) =>
-      String(account.provider_name ?? ''),
-    ),
+    inventoryProvidersForAccounts(accountsResult.data ?? []),
   );
   return evaluateContentInventoryHealth({
     now,

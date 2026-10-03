@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   contentInventoryLookahead,
   evaluateContentInventoryHealth,
+  inventoryProvidersForAccounts,
   REQUIRED_CONTENT_FORMATS,
   requiredContentFormatsForConnectedProviders,
 } from './content-inventory-health';
@@ -47,6 +48,25 @@ describe('content inventory health', () => {
     ]);
     expect(requiredContentFormatsForConnectedProviders(['instagram', 'linkedin']))
       .toEqual(REQUIRED_CONTENT_FORMATS);
+  });
+
+  it('keeps temporarily unavailable configured providers in the format contract', () => {
+    expect(inventoryProvidersForAccounts([
+      { provider_name: 'instagram', status: 'token_expired' },
+      { provider_name: 'linkedin', status: 'error' },
+      { provider_name: 'instagram', status: 'revoked' },
+      { provider_name: 'instagram', status: 'draft' },
+      { provider_name: 'linkedin', status: 'disconnected' },
+      { provider_name: 'x', status: 'connected' },
+    ])).toEqual(['instagram', 'linkedin']);
+  });
+
+  it('does not invent social obligations when no provider was configured', () => {
+    const providers = inventoryProvidersForAccounts([
+      { provider_name: 'instagram', status: 'draft' },
+      { provider_name: 'linkedin', status: 'disconnected' },
+    ]);
+    expect(requiredContentFormatsForConnectedProviders(providers)).toEqual(['blog:article']);
   });
 
   it('queries beyond the 12-day floor by one full cadence interval', () => {
