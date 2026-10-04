@@ -58,7 +58,7 @@ function db(candidate = row) {
         chain.limit = vi.fn(async () => ({ data: [] }));
         return chain;
       }
-      if (columns === 'content_id,title,draft_markdown') {
+      if (columns === 'content_id,title,topic_cluster,draft_markdown') {
         const chain: any = {};
         chain.eq = vi.fn(() => chain);
         chain.limit = vi.fn(async () => ({ data: [{ content_id:'existing', title:'Existing', draft_markdown:'Existing answer.' }], error:null }));
@@ -115,6 +115,36 @@ describe('autonomous editorial engine', () => {
     }, [{ content_id: 'published-2', title: 'Original title', draft_markdown: `${repeatedLead}\n\n## Earlier section\n\nEarlier details.` }])).toMatchObject({ contentId: 'published-2', reason: 'duplicate_lead' });
   });
 
+  it('rejects a near-equivalent published title while preserving differentiated series entries', () => {
+    const published = [{
+      content_id: 'schema-pattern',
+      title: 'Developing a Schema Strategy for AI-Search Readiness',
+      topic_cluster: 'schema_strategy',
+      draft_markdown: 'A case pattern with a distinct lead.',
+    }];
+
+    expect(findPublishedEditorialDuplicate({
+      title: 'AI-Search Readiness for MSPs: Developing a Schema Strategy',
+      markdown: 'A checklist with a different lead.',
+      topicCluster: 'schema_strategy',
+    }, published)).toMatchObject({
+      contentId: 'schema-pattern',
+      reason: 'duplicate_title_overlap',
+    });
+
+    expect(findPublishedEditorialDuplicate({
+      title: 'Schema Quality Checklist for MSP Websites',
+      markdown: 'A checklist with a different lead.',
+      topicCluster: 'schema_strategy',
+    }, published)).toBeNull();
+
+    expect(findPublishedEditorialDuplicate({
+      title: 'AI-Search Readiness for MSPs: Developing a Schema Strategy',
+      markdown: 'A checklist with a different lead.',
+      topicCluster: 'different_topic',
+    }, published)).toBeNull();
+  });
+
   it('quarantines a deterministic duplicate before hero spend or review', async () => {
     const supabase = db();
     supabase.from = vi.fn((table: string) => ({
@@ -133,7 +163,7 @@ describe('autonomous editorial engine', () => {
           chain.eq = vi.fn(() => chain); chain.gte = vi.fn(() => chain); chain.limit = vi.fn(async () => ({ data: [] }));
           return chain;
         }
-        if (columns === 'content_id,title,draft_markdown') {
+        if (columns === 'content_id,title,topic_cluster,draft_markdown') {
           const chain: any = {};
           chain.eq = vi.fn(() => chain);
           chain.limit = vi.fn(async () => ({ data: [{ content_id:'published-1', title:'Repeated public title', draft_markdown:'Published answer.' }], error:null }));
@@ -461,7 +491,7 @@ Use [an AI-search readiness audit](/blog/ai-search-readiness-audit) to establish
           chain.eq = vi.fn(() => chain); chain.gte = vi.fn(() => chain); chain.limit = vi.fn(async () => ({ data: [] }));
           return chain;
         }
-        if (columns === 'content_id,title,draft_markdown') {
+        if (columns === 'content_id,title,topic_cluster,draft_markdown') {
           const chain: any = {};
           chain.eq = vi.fn(() => chain); chain.limit = vi.fn(async () => ({ data: [], error:null }));
           return chain;
