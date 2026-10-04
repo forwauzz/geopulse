@@ -167,9 +167,19 @@ function normalizedEditorialTitle(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function editorialTitleTokenOverlap(left: string, right: string): number {
+  const leftTokens = new Set(normalizedEditorialTitle(left).split(' ').filter(Boolean));
+  const rightTokens = new Set(normalizedEditorialTitle(right).split(' ').filter(Boolean));
+  if (leftTokens.size < 5 || rightTokens.size < 5) return 0;
+  const intersection = [...leftTokens].filter((token) => rightTokens.has(token)).length;
+  const union = new Set([...leftTokens, ...rightTokens]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
 type PublishedEditorialCandidate = {
   readonly content_id?: string | null;
   readonly title?: string | null;
+  readonly topic_cluster?: string | null;
   readonly draft_markdown?: string | null;
 };
 
@@ -189,9 +199,9 @@ function normalizedEditorialLead(markdown: string): string {
 }
 
 export function findPublishedEditorialDuplicate(
-  draft: { readonly title: string; readonly markdown: string },
+  draft: { readonly title: string; readonly markdown: string; readonly topicCluster?: string | null },
   published: readonly PublishedEditorialCandidate[],
-): { readonly contentId: string; readonly title: string; readonly reason: 'duplicate_title' | 'duplicate_lead' } | null {
+): { readonly contentId: string; readonly title: string; readonly reason: 'duplicate_title' | 'duplicate_title_overlap' | 'duplicate_lead' } | null {
   const draftTitle = normalizedEditorialTitle(draft.title);
   const draftLead = normalizedEditorialLead(draft.markdown);
   for (const row of published) {
@@ -200,6 +210,11 @@ export function findPublishedEditorialDuplicate(
     if (!contentId || !title) continue;
     if (draftTitle && normalizedEditorialTitle(title) === draftTitle) {
       return { contentId, title, reason: 'duplicate_title' };
+    }
+    const sameTopic = draft.topicCluster
+      && normalizedEditorialTitle(String(row.topic_cluster ?? '')) === normalizedEditorialTitle(draft.topicCluster);
+    if (sameTopic && editorialTitleTokenOverlap(draft.title, title) >= 0.85) {
+      return { contentId, title, reason: 'duplicate_title_overlap' };
     }
     const lead = normalizedEditorialLead(String(row.draft_markdown ?? ''));
     if (draftLead.length >= 120 && lead === draftLead) {
@@ -328,7 +343,7 @@ export async function runAutonomousEditorialEngine(args: {
 
   const { data: existing, error: existingError } = await args.supabase
     .from('content_items')
-    .select('content_id,title,draft_markdown')
+    .select('content_id,title,topic_cluster,draft_markdown')
     .eq('content_type', 'article')
     .eq('status', 'published')
     .limit(250);
@@ -353,7 +368,10 @@ export async function runAutonomousEditorialEngine(args: {
     };
   }
 
-  const duplicate = findPublishedEditorialDuplicate(draft, existing ?? []);
+  const duplicate = findPublishedEditorialDuplicate({
+    ...draft,
+    topicCluster: candidate.topic_cluster,
+  }, existing ?? []);
   if (duplicate) {
     const { error: quarantineError } = await args.supabase.from('content_items').update({
       status: 'archived',
