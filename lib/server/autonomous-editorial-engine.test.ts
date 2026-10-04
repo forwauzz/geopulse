@@ -5,6 +5,7 @@ import {
   editorialDraftTopic,
   ensureEditorialInternalBlogLink,
   findPublishedEditorialDuplicate,
+  findUnsupportedEditorialClaim,
   mergeEditorialCandidates,
   removeRedundantEditorialH1,
   runAutonomousEditorialEngine,
@@ -143,6 +144,54 @@ describe('autonomous editorial engine', () => {
       markdown: 'A checklist with a different lead.',
       topicCluster: 'different_topic',
     }, published)).toBeNull();
+  });
+
+  it('fails closed on unsupported cross-engine ranking claims while allowing bounded freshness guidance', () => {
+    expect(findUnsupportedEditorialClaim(
+      'Freshness refers to how often a page is updated. AI search engines prioritize fresh content, as it is more likely to be relevant.'
+    )).toMatchObject({
+      code: 'search_system_priority_claim',
+      excerpt: 'AI search engines prioritize fresh content, as it is more likely to be relevant.',
+    });
+
+    expect(findUnsupportedEditorialClaim(
+      'Check the visible publication and update dates, then review search and conversion evidence over time.'
+    )).toBeNull();
+    expect(findUnsupportedEditorialClaim(
+      'Do AI search engines prioritize recently updated pages? Test that question against dated observations.'
+    )).toBeNull();
+  });
+
+  it('quarantines an unsupported search-system claim before hero spend or review', async () => {
+    const supabase = db();
+    const hero = vi.fn(async () => ({ url:'https://example.com/hero.jpg', alt:'Hero', provider:'deterministic' as const }));
+    const review = vi.fn(async () => ({ approved:true, reasons:[] }));
+
+    const result = await runAutonomousEditorialEngine({ supabase, provider: {
+      draft: async () => ({
+        title:'Freshness checklist',
+        markdown:'## Answer\n\nAI search engines prioritize fresh content, so every page should be updated weekly.',
+        sources:['https://example.com/source'],
+      }),
+      hero,
+      review,
+    }});
+
+    expect(result).toEqual({
+      status:'rejected',
+      reason:'unsupported_editorial_claim:search_system_priority_claim',
+    });
+    expect(hero).not.toHaveBeenCalled();
+    expect(review).not.toHaveBeenCalled();
+    expect(supabase.update).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'archived',
+      metadata: expect.objectContaining({
+        archived_reason: 'unsupported_editorial_claim',
+        autonomous_editorial_rejection: expect.objectContaining({
+          reason: 'search_system_priority_claim',
+        }),
+      }),
+    }));
   });
 
   it('quarantines a deterministic duplicate before hero spend or review', async () => {

@@ -224,6 +224,30 @@ export function findPublishedEditorialDuplicate(
   return null;
 }
 
+export type UnsupportedEditorialClaim = {
+  readonly code: 'search_system_priority_claim';
+  readonly excerpt: string;
+};
+
+const SEARCH_SYSTEM_PRIORITY_CLAIM_RE = /\b(?:(?:ai|artificial intelligence)\s+(?:(?:search|answer)\s+engines?|search\s+systems?)|(?:answer|generative)\s+engines?)\s+(?:prioritize|prefer|reward|rank|cite|recommend)\b/i;
+
+export function findUnsupportedEditorialClaim(markdown: string): UnsupportedEditorialClaim | null {
+  const plainText = markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[\s>*+-]+/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const sentence = plainText
+    .split(/(?<=[.!?])\s+/)
+    .find((candidate) => !candidate.endsWith('?') && SEARCH_SYSTEM_PRIORITY_CLAIM_RE.test(candidate));
+  return sentence
+    ? { code: 'search_system_priority_claim', excerpt: sentence.slice(0, 280) }
+    : null;
+}
+
 export function removeRedundantEditorialH1(markdown: string, title: string): string {
   const match = /^\s*#(?!#)\s+(.+?)\s*(?:\r?\n|$)/.exec(markdown);
   if (!match) return markdown;
@@ -366,6 +390,25 @@ export async function runAutonomousEditorialEngine(args: {
       status: 'rejected',
       reason: providerFailure ? `incomplete_draft:${providerFailure}` : 'incomplete_draft',
     };
+  }
+
+  const unsupportedClaim = findUnsupportedEditorialClaim(draft.markdown);
+  if (unsupportedClaim) {
+    const { error: quarantineError } = await args.supabase.from('content_items').update({
+      status: 'archived',
+      metadata: {
+        ...(candidate.metadata ?? {}),
+        editorial_retry_required: false,
+        archived_reason: 'unsupported_editorial_claim',
+        autonomous_editorial_rejection: {
+          rejected_at: now.toISOString(),
+          reason: unsupportedClaim.code,
+          excerpt: unsupportedClaim.excerpt,
+        },
+      },
+    }).eq('content_id', candidate.content_id);
+    if (quarantineError) return { status: 'failed', reason: quarantineError.message };
+    return { status: 'rejected', reason: `unsupported_editorial_claim:${unsupportedClaim.code}` };
   }
 
   const duplicate = findPublishedEditorialDuplicate({
