@@ -249,6 +249,32 @@ describe('runtime incident control', () => {
     });
   });
 
+  it('routes an exhausted disconnected distribution lane to credential restoration', () => {
+    const [social] = classifyRuntimeIncidents([{
+      event: 'autonomous_campaign_execution',
+      level: 'info',
+      created_at: '2026-10-06T12:02:48.000Z',
+      data: {
+        inventoryHealthy: false,
+        inventoryReason: 'missing_required_formats:instagram:short_video_post,instagram:carousel_post',
+        socialRetryReason: 'connected_distribution_account_unavailable',
+      },
+    }]);
+
+    expect(planRuntimeIncidentLoop(social!, {
+      attempt_count: 3,
+      max_attempts: 3,
+      last_attempted_at: '2026-10-06T11:02:48.000Z',
+      metadata: { attempt_semantics_version: 'runtime-repair-v2' },
+    }, new Date('2026-10-06T12:03:00.000Z'))).toMatchObject({
+      state: 'blocked',
+      founderRequired: true,
+      requiresGit: false,
+      blocker: expect.stringContaining('distribution credential'),
+      nextAction: expect.stringContaining('Instagram OAuth'),
+    });
+  });
+
   it('routes exhausted recurring measurement to provider capacity instead of another code retry', () => {
     const gpm = classifyRuntimeIncidents([{
       event: 'gpm_sweep_completed_with_errors',

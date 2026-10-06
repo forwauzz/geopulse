@@ -39,7 +39,17 @@ const DEFERRED_RETRY_REASONS = new Set([
   'reel_review_retry_pending',
 ]);
 
-const EXTERNAL_CAPACITY_EXHAUSTED_REASONS = new Map([
+const EXTERNAL_CAPACITY_EXHAUSTED_REASONS = new Map<string, {
+  blocker: string;
+  nextAction: string;
+}>([
+  [
+    'connected_distribution_account_unavailable',
+    {
+      blocker: 'The approved social cadence has no usable production distribution credential; retries cannot publish until an existing channel is reconnected.',
+      nextAction: 'Founder reconnects the existing Instagram OAuth account, or completes the LinkedIn developer-app/Page OAuth setup; Marcus then reconciles provider state and runs one duplicate-safe canary through media QA and publication proof.',
+    },
+  ],
   [
     'reel_review_attempts_exhausted',
     {
@@ -268,9 +278,7 @@ export function planRuntimeIncidentLoop(
       ? Math.min(maxAttempts, currentAttempts + 1)
       : currentAttempts;
   const founderRequired = !deferred && attemptCount >= maxAttempts;
-  const externalCapacityBlock = EXTERNAL_CAPACITY_EXHAUSTED_REASONS.get(
-    signal.reason as 'reel_review_attempts_exhausted',
-  );
+  const externalCapacityBlock = EXTERNAL_CAPACITY_EXHAUSTED_REASONS.get(signal.reason ?? '');
   const retryAt = Date.parse(signal.retryAfter ?? '');
   const dueAt = deferred && Number.isFinite(retryAt) && retryAt > now.getTime()
     ? new Date(retryAt).toISOString()
