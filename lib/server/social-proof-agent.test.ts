@@ -8,6 +8,9 @@ import {
   assignedSocialCandidate,
   assignedSocialCandidates,
   autonomousDistributionGateReason,
+  preparedInstagramAssetQueueReason,
+  socialInventoryProviderFamily,
+  shouldPrepareInstagramInventory,
   filterCampaignAssignedSocial,
   hasRecordedDailyTrendAttempt,
   growthCampaignForSocialCandidate,
@@ -275,6 +278,48 @@ describe('Social Proof Agent safeguards', () => {
     );
     expect(autonomousDistributionGateReason('draft', null)).toBeNull();
     expect(autonomousDistributionGateReason('approval', null)).toBeNull();
+  });
+
+  it('prepares provider-scoped Instagram inventory before OAuth is restored', () => {
+    const requiredFormats = [
+      'instagram:short_video_post',
+      'instagram:carousel_post',
+      'instagram:single_image_post',
+    ];
+
+    expect(socialInventoryProviderFamily(null, requiredFormats)).toBe('instagram');
+    expect(shouldPrepareInstagramInventory(null, requiredFormats)).toBe(true);
+    expect(autonomousDistributionGateReason('autonomous', null)).toBe(
+      'connected_distribution_account_unavailable',
+    );
+  });
+
+  it('does not invent an Instagram preparation target without an account or format obligation', () => {
+    expect(socialInventoryProviderFamily(null, ['blog:article'])).toBe('generic');
+    expect(shouldPrepareInstagramInventory(null, ['blog:article'])).toBe(false);
+  });
+
+  it('queues prepared image inventory only after campaign, safety, and media gates pass', () => {
+    const prepared = {
+      provider_family: 'instagram',
+      asset_type: 'single_image_post',
+      growth_campaign_id: 'msp-primary',
+      metadata: {
+        prepared_without_account: true,
+        autonomous_publish_eligible: true,
+        client_safe: true,
+        claim_boundary: 'observed_or_directional_no_ranking_guarantee',
+      },
+    };
+    const media = [{ media_kind: 'image', provider_ready_status: 'ready' }];
+
+    expect(preparedInstagramAssetQueueReason(prepared as never, media as never)).toBeNull();
+    expect(preparedInstagramAssetQueueReason(
+      { ...prepared, growth_campaign_id: null } as never,
+      media as never,
+    )).toBe('campaign_scope_missing');
+    expect(preparedInstagramAssetQueueReason(prepared as never, []))
+      .toBe('image_media_incomplete');
   });
 
   it('is fail-closed when disabled or killed', () => {
