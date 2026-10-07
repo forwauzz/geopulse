@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  agentBlockerRemediation,
   agentCampaignIsOperationallyRelevant,
   agentNeedsOperationalAction,
   blockingRuntimeIncident,
@@ -37,6 +38,23 @@ describe('agentNeedsOperationalAction', () => {
   it('does not turn an intentional fail-closed pause into repair work', () => {
     expect(agentNeedsOperationalAction({ blockers: [] })).toBe(false);
     expect(agentNeedsOperationalAction({ blockers: ['credential missing'] })).toBe(true);
+  });
+});
+
+describe('agentBlockerRemediation', () => {
+  it('requires founder authority when a distribution account or OAuth connection is missing', () => {
+    expect(agentBlockerRemediation([
+      'No connected distribution account — the agent can draft, but it cannot schedule or publish',
+    ])).toMatchObject({ resolution: 'approval' });
+    expect(agentBlockerRemediation([
+      'LinkedIn developer app OAuth permission is missing',
+    ])).toMatchObject({ resolution: 'approval' });
+  });
+
+  it('keeps code and migration repairs assigned to the operating agent', () => {
+    expect(agentBlockerRemediation([
+      'Migration 067 is required before SEO runs can be recorded',
+    ])).toMatchObject({ resolution: 'agent' });
   });
 });
 
