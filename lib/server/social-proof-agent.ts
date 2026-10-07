@@ -23,10 +23,12 @@ import { loadAutomationSetting } from './automation-settings';
 import {
   createDistributionEngineRepository,
   type DistributionAccountRow,
+  type DistributionAssetMediaRow,
   type DistributionAssetRow,
   type DistributionAssetType,
   type DistributionProviderFamily,
 } from './distribution-engine-repository';
+import { validateInstagramVisualSafety } from './instagram-visual-safety';
 import {
   renderSocialCardSet,
   type BrowserRunBinding,
@@ -1169,6 +1171,63 @@ function providerFamily(account: DistributionAccountRow | null): DistributionPro
     : 'generic';
 }
 
+export function socialInventoryProviderFamily(
+  account: DistributionAccountRow | null,
+  requiredFormats: readonly string[] = [],
+): DistributionProviderFamily {
+  const connectedFamily = providerFamily(account);
+  if (connectedFamily !== 'generic') return connectedFamily;
+  if (requiredFormats.some((format) => format.startsWith('instagram:'))) return 'instagram';
+  if (requiredFormats.some((format) => format.startsWith('linkedin:'))) return 'linkedin';
+  return 'generic';
+}
+
+export function shouldPrepareInstagramInventory(
+  account: DistributionAccountRow | null,
+  requiredFormats: readonly string[] = [],
+): boolean {
+  return account?.provider_name === 'instagram' ||
+    requiredFormats.some((format) => format.startsWith('instagram:'));
+}
+
+export function preparedInstagramAssetQueueReason(
+  asset: DistributionAssetRow,
+  mediaRows: readonly DistributionAssetMediaRow[],
+): string | null {
+  if (asset.provider_family !== 'instagram') return 'provider_mismatch';
+  if (asset.metadata['prepared_without_account'] !== true) return 'not_prepared_inventory';
+  if (!asset.growth_campaign_id) return 'campaign_scope_missing';
+  if (
+    asset.metadata['client_safe'] !== true ||
+    asset.metadata['claim_boundary'] !== 'observed_or_directional_no_ranking_guarantee'
+  ) return 'safety_contract_missing';
+  const readyMedia = mediaRows.filter((row) =>
+    row.provider_ready_status === 'ready' || row.provider_ready_status === 'uploaded'
+  );
+  if (asset.asset_type === 'short_video_post') {
+    if (
+      asset.metadata['reel_render_status'] !== 'complete' ||
+      asset.metadata['reel_review_status'] !== 'pass'
+    ) return 'reel_review_incomplete';
+    const visualSafety = validateInstagramVisualSafety(asset, mediaRows);
+    return visualSafety.safe ? null : visualSafety.reason;
+  }
+  if (asset.metadata['autonomous_publish_eligible'] !== true) {
+    return 'autonomous_publish_not_approved';
+  }
+  if (asset.asset_type === 'carousel_post') {
+    return readyMedia.filter((row) => row.media_kind === 'carousel_slide').length >= 2
+      ? null
+      : 'carousel_media_incomplete';
+  }
+  if (asset.asset_type === 'single_image_post') {
+    return readyMedia.some((row) => row.media_kind === 'image')
+      ? null
+      : 'image_media_incomplete';
+  }
+  return 'unsupported_prepared_asset_type';
+}
+
 export function preferredAccount(accounts: ReadonlyArray<DistributionAccountRow>): DistributionAccountRow | null {
   const priority = ['instagram', 'linkedin', 'x', 'facebook', 'threads'];
   const rank = (provider: string): number => {
@@ -1191,7 +1250,11 @@ export function autonomousDistributionGateReason(
     : null;
 }
 
-function assetStatusForMode(mode: SocialProofAgentMode): DistributionAssetRow['status'] {
+function assetStatusForMode(
+  mode: SocialProofAgentMode,
+  hasConnectedAccount = true,
+): DistributionAssetRow['status'] {
+  if (mode === 'autonomous' && !hasConnectedAccount) return 'review';
   if (mode === 'autonomous') return 'approved';
   return mode === 'approval' ? 'review' : 'draft';
 }
@@ -1432,42 +1495,6 @@ export async function runSocialProofAgent(args: {
 
     const account = preferredAccount(accounts);
     const distributionGateReason = autonomousDistributionGateReason(mode, account);
-    if (distributionGateReason) {
-      const result: SocialProofAgentResult = {
-        status: 'noop',
-        mode,
-        candidates: 0,
-        assetsCreated: 0,
-        jobsCreated: 0,
-        queuedContentItemIds: [],
-        reason: distributionGateReason,
-      };
-      await structuredLogWithClientAndWait(
-        args.supabase,
-        'social_proof_agent_run',
-        {
-          status: result.status,
-          mode,
-          candidates: 0,
-          assets_created: 0,
-          jobs_created: 0,
-          inventory_healthy: args.inventoryHealthyBefore === true,
-          account_provider: null,
-          trend_provider: null,
-          trend_reason: null,
-          performance_checked: 0,
-          performance_updated: 0,
-          performance_failed: 0,
-          reel_plan_eligible: false,
-          reel_plan_decision: 'connected_distribution_account_unavailable',
-          daily_capacity_remaining: 0,
-          retry_reason: distributionGateReason,
-          retry_after: null,
-        },
-        'info',
-      );
-      return result;
-    }
 
     let performanceLearning = { checked: 0, updated: 0, failed: 0 };
     if (config.learningEnabled && accountProviderIsInstagram(accounts)) {
@@ -1605,7 +1632,11 @@ export async function runSocialProofAgent(args: {
       }
     }
 
-    const family = providerFamily(account);
+    const family = socialInventoryProviderFamily(account, args.requiredFormats);
+    const prepareInstagramInventory = shouldPrepareInstagramInventory(
+      account,
+      args.requiredFormats,
+    );
     const occupiedInstagramSlots = new Set<string>();
     if (account?.provider_name === 'instagram') {
       const { data: scheduledJobs, error: scheduledJobsError } = await args.supabase
@@ -1631,6 +1662,57 @@ export async function runSocialProofAgent(args: {
         ? reserveInstagramCadenceSlot(desiredSlot, occupiedInstagramSlots)
         : reserveInstagramScheduleSlot(desiredSlot, occupiedInstagramSlots);
     };
+    let assetsCreated = 0;
+    let jobsCreated = 0;
+    const queuedContentItemIds: string[] = [];
+    if (mode === 'autonomous' && account?.provider_name === 'instagram') {
+      const preparedAssets = existingAssets
+        .filter((asset) => asset.metadata['prepared_without_account'] === true)
+        .sort((left, right) => left.created_at.localeCompare(right.created_at));
+      for (const asset of preparedAssets) {
+        if (!asset.source_key) continue;
+        const jobId = `proof_job_${account.account_id}_${asset.source_key}`
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]+/g, '-')
+          .slice(0, 150);
+        if (await repo.getJobByJobId(jobId)) continue;
+        const mediaRows = await repo.listMediaForAsset(asset.id);
+        if (preparedInstagramAssetQueueReason(asset, mediaRows)) continue;
+        await repo.upsertAsset({
+          assetId: asset.asset_id,
+          contentItemId: asset.content_item_id,
+          sourceType: asset.source_type,
+          sourceKey: asset.source_key,
+          assetType: asset.asset_type,
+          providerFamily: asset.provider_family,
+          title: asset.title,
+          bodyPlaintext: asset.body_plaintext,
+          captionText: asset.caption_text,
+          status: 'approved',
+          ctaUrl: asset.cta_url,
+          growthCampaignId: asset.growth_campaign_id,
+          growthInterventionId: asset.growth_intervention_id,
+          metadata: {
+            prepared_inventory_queued_at: now.toISOString(),
+            prepared_inventory_account_id: account.id,
+          },
+        });
+        await repo.createJob({
+          jobId,
+          distributionAssetId: asset.id,
+          distributionAccountId: account.id,
+          publishMode: 'scheduled',
+          scheduledFor: reserveInstagramSlot(
+            config.postingHoursLocal[
+              Math.min(jobsCreated, config.postingHoursLocal.length - 1)
+            ] ?? 19
+          ),
+          status: 'scheduled',
+        });
+        jobsCreated += 1;
+        if (asset.content_item_id) queuedContentItemIds.push(asset.content_item_id);
+      }
+    }
     const previousSequenceAnchor = latestSocialSequenceAnchor(existingAssets);
     const historicalPerformance = historicalPerformanceByKind(existingAssets);
     const baseOrderedCandidates = prioritizeRequiredFormatCandidates(
@@ -1648,7 +1730,7 @@ export async function runSocialProofAgent(args: {
       categories: config.reelCategories,
       publishMode: config.reelPublishMode,
     };
-    const reelPlanEligible = account?.provider_name === 'instagram'
+    const reelPlanEligible = prepareInstagramInventory
       ? shouldPlanJordanReel({
         now,
         timezone: config.timezone,
@@ -1699,9 +1781,6 @@ export async function runSocialProofAgent(args: {
           ),
         ]
       : baseOrderedCandidates;
-    let assetsCreated = 0;
-    let jobsCreated = 0;
-    const queuedContentItemIds: string[] = [];
     const dailyCapacity = remainingDailyAssetCapacity(
       existingAssets,
       now,
@@ -1724,7 +1803,7 @@ export async function runSocialProofAgent(args: {
       if (args.campaignScopeRequired && !campaign) continue;
       const growthCampaignId = explicitCampaignId || campaign?.id || null;
       const growthInterventionId = readString(candidate.evidence['growth_intervention_id']) || null;
-      if (account?.provider_name === 'instagram' && args.env) {
+      if (prepareInstagramInventory && args.env) {
         try {
           candidate = await materializeCandidateMedia({
             candidate,
@@ -1763,12 +1842,18 @@ export async function runSocialProofAgent(args: {
           ? 'draft'
           : mode === 'autonomous' && !candidate.safeForAutonomousPublish
             ? 'review'
-            : assetStatusForMode(mode),
-        ctaUrl: trackedProviderCta(candidate.ctaUrl, account?.provider_name ?? 'social', candidate.key),
+            : assetStatusForMode(mode, Boolean(account)),
+        ctaUrl: trackedProviderCta(
+          candidate.ctaUrl,
+          account?.provider_name ?? (family === 'generic' ? 'social' : family),
+          candidate.key,
+        ),
         growthCampaignId,
         growthInterventionId,
         metadata: {
           created_by_agent: 'jordan',
+          prepared_without_account: !account,
+          autonomous_publish_eligible: candidate.safeForAutonomousPublish,
           researched_by_agent:
             candidate.evidence['research_agent'] === 'sofia' ? 'sofia' : null,
           proof_kind: candidate.kind,
@@ -1806,7 +1891,7 @@ export async function runSocialProofAgent(args: {
           learning_enabled: config.learningEnabled,
           posting_hours_local: config.postingHoursLocal,
           visual_contract:
-            account?.provider_name === 'instagram'
+            prepareInstagramInventory
               ? 'instagram_4x5_feed_and_profile_grid_safe'
               : 'provider_ready',
           reel_publish_contract:
@@ -1924,13 +2009,15 @@ export async function runSocialProofAgent(args: {
     );
     const capacityDeferred = dailyCapacity === 0 && orderedCandidates.length > 0;
     const result: SocialProofAgentResult = {
-      status: assetsCreated > 0 ? 'created' : 'noop',
+      status: assetsCreated > 0 || jobsCreated > 0 ? 'created' : 'noop',
       mode,
       candidates: candidates.length,
       assetsCreated,
       jobsCreated,
       queuedContentItemIds,
-      ...(reelDeferral
+      ...(distributionGateReason
+        ? { reason: distributionGateReason }
+        : reelDeferral
         ? reelDeferral
         : candidates.length === 0
         ? { reason: 'no_safe_candidates' }
@@ -1959,8 +2046,8 @@ export async function runSocialProofAgent(args: {
         performance_failed: performanceLearning.failed,
         reel_plan_eligible: reelPlanEligible,
         reel_plan_decision:
-          account?.provider_name !== 'instagram'
-            ? 'instagram_account_unavailable'
+          !prepareInstagramInventory
+            ? 'instagram_inventory_not_required'
             : !reelPlanEligible
               ? 'schedule_or_inventory_gate'
               : reelSource
