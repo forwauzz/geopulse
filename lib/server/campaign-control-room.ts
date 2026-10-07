@@ -54,6 +54,24 @@ export function agentNeedsOperationalAction(
   return agent.blockers.length > 0;
 }
 
+export function agentBlockerRemediation(
+  blockers: readonly string[],
+): Pick<ChiefOfStaffAction, 'resolution' | 'playbook'> {
+  const requiresFounderAuthority = blockers.some((blocker) => (
+    /connect(?:ed|ion)?|credential|api key|oauth|permission|provider authority|distribution account|billing|budget|legal|consent/i.test(blocker)
+  ));
+
+  return requiresFounderAuthority
+    ? {
+        resolution: 'approval',
+        playbook: 'Founder restores only the missing external account, credential, or provider permission. Maya verifies the connection; the named capability owner resumes and proves the next successful run.',
+      }
+    : {
+        resolution: 'agent',
+        playbook: 'Maya routes the missing dependency or configuration to the named capability owner and verifies the next successful run.',
+      };
+}
+
 export function agentCampaignIsOperationallyRelevant(
   agent: Pick<AgentStatus, 'enabled' | 'blockers'> | undefined,
 ): boolean {
@@ -639,16 +657,15 @@ export async function loadCampaignControlRoom(args: {
 
   for (const agent of args.agents) {
     if (!agentNeedsOperationalAction(agent)) continue;
+    const remediation = agentBlockerRemediation(agent.blockers);
     actions.push({
       key: `agent:${agent.key}`,
       severity: agent.blockers.length > 0 ? 'now' : 'watch',
       owner: agent.key === 'social_proof' || agent.key === 'marketing_autopilot' ? 'Jordan' : 'Maya',
-      resolution: 'agent',
+      resolution: remediation.resolution,
       title: `${agent.name} ${agent.enabled ? 'is blocked' : 'is paused'}`,
       detail: agent.blockers.join(' ') || 'This capability is switched off.',
-      playbook: agent.blockers.length > 0
-        ? 'Maya routes the missing dependency or configuration to the named capability owner and verifies the next successful run.'
-        : 'Maya confirms whether this pause is intentional before changing the switch.',
+      playbook: remediation.playbook,
       href: '/admin/agents',
     });
   }
