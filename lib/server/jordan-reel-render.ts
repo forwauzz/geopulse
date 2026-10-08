@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   createDistributionEngineRepository,
+  type DistributionAssetMediaRow,
   type DistributionAssetRow,
 } from './distribution-engine-repository';
 import {
@@ -21,6 +22,7 @@ const MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const LEASE_MS = 2 * 60 * 60 * 1000;
 const REVIEW_RETRY_BACKOFF_MS = 6 * 60 * 60 * 1000;
+const MAX_REVIEW_RETRIES = 2;
 
 export type JordanReelBucket = {
   put(
@@ -31,6 +33,7 @@ export type JordanReelBucket = {
 };
 
 export type JordanReelRenderClaim = {
+  readonly action: 'render' | 'review_existing';
   readonly assetId: string;
   readonly attemptId: string;
   readonly title: string;
@@ -69,6 +72,9 @@ function retryableReviewerHold(
   ) {
     return false;
   }
+  if (Number(assetMetadata['reel_review_retry_count'] ?? 0) >= MAX_REVIEW_RETRIES) {
+    return false;
+  }
   const findings = assetMetadata['reel_review_findings'];
   if (
     !Array.isArray(findings) ||
@@ -86,6 +92,12 @@ function retryableReviewerHold(
   const reviewedAt = Date.parse(String(assetMetadata['reel_reviewed_at'] ?? ''));
   return Number.isFinite(reviewedAt) &&
     now.getTime() - reviewedAt >= REVIEW_RETRY_BACKOFF_MS;
+}
+
+function staleReviewLease(assetMetadata: Record<string, unknown>, now: Date): boolean {
+  if (assetMetadata['reel_render_status'] !== 'reviewing') return false;
+  const leasedAt = Date.parse(String(assetMetadata['reel_render_leased_at'] ?? ''));
+  return !Number.isFinite(leasedAt) || now.getTime() - leasedAt > LEASE_MS;
 }
 
 function reviewerHoldHistory(assetMetadata: Record<string, unknown>): unknown[] {
@@ -132,9 +144,12 @@ export async function claimNextJordanReel(
       const assetMetadata = metadata(asset);
       const status = String(assetMetadata['reel_render_status'] ?? '');
       const attempts = Number(assetMetadata['reel_render_attempt_count'] ?? 0);
-      if (assetMetadata['reel_render_terminal'] === true || attempts >= 3) return false;
+      if (assetMetadata['reel_render_terminal'] === true) return false;
+      if (retryableReviewerHold(assetMetadata, now) || staleReviewLease(assetMetadata, now)) {
+        return true;
+      }
+      if (attempts >= 3) return false;
       if (status === 'pending' || status === 'failed') return true;
-      if (retryableReviewerHold(assetMetadata, now)) return true;
       if (status !== 'rendering') return false;
       const leasedAt = new Date(String(assetMetadata['reel_render_leased_at'] ?? ''));
       return !Number.isFinite(leasedAt.getTime()) || now.getTime() - leasedAt.getTime() > LEASE_MS;
@@ -168,7 +183,8 @@ export async function claimNextJordanReel(
 
   const attemptId = randomUUID();
   const candidateMetadata = metadata(candidate);
-  const retryingReviewerHold = retryableReviewerHold(candidateMetadata, now);
+  const retryingReviewerHold = retryableReviewerHold(candidateMetadata, now) ||
+    staleReviewLease(candidateMetadata, now);
   const templateIds = [
     'diagnostic-kinetic-v1a',
     'diagnostic-kinetic-v1b',
@@ -218,6 +234,45 @@ export async function claimNextJordanReel(
     });
     return null;
   }
+  if (retryingReviewerHold) {
+    const incrementRetry = candidateMetadata['reel_render_status'] !== 'reviewing';
+    await repo.upsertAsset({
+      assetId: candidate.asset_id,
+      contentItemId: candidate.content_item_id,
+      sourceType: candidate.source_type,
+      sourceKey: candidate.source_key,
+      assetType: candidate.asset_type,
+      providerFamily: candidate.provider_family,
+      title: candidate.title,
+      bodyPlaintext: candidate.body_plaintext,
+      captionText: candidate.caption_text,
+      status: 'review',
+      ctaUrl: candidate.cta_url,
+      metadata: {
+        reel_render_status: 'reviewing',
+        reel_render_attempt_id: attemptId,
+        reel_render_leased_at: now.toISOString(),
+        reel_render_error: null,
+        reel_review_retry_after: null,
+        ...(incrementRetry
+          ? {
+              reel_review_history: reviewerHoldHistory(candidateMetadata),
+              reel_review_retry_count:
+                Number(candidateMetadata['reel_review_retry_count'] ?? 0) + 1,
+            }
+          : {}),
+      },
+    });
+    return {
+      action: 'review_existing',
+      assetId: candidate.asset_id,
+      attemptId,
+      title: candidate.title ?? 'GEO-Pulse AI visibility',
+      caption: candidate.caption_text ?? candidate.body_plaintext ?? '',
+      script,
+      templateId,
+    };
+  }
   const attemptCount = Number(metadata(candidate)['reel_render_attempt_count'] ?? 0) + 1;
   await repo.upsertAsset({
     assetId: candidate.asset_id,
@@ -241,22 +296,138 @@ export async function claimNextJordanReel(
       reel_render_terminal: false,
       reel_render_retryable: true,
       reel_review_retry_after: null,
-      ...(retryingReviewerHold
-        ? {
-            reel_review_history: reviewerHoldHistory(candidateMetadata),
-            reel_review_retry_count:
-              Number(candidateMetadata['reel_review_retry_count'] ?? 0) + 1,
-          }
-        : {}),
     },
   });
   return {
+    action: 'render',
     assetId: candidate.asset_id,
     attemptId,
     title: candidate.title ?? 'GEO-Pulse AI visibility',
     caption: candidate.caption_text ?? candidate.body_plaintext ?? '',
     script,
     templateId,
+  };
+}
+
+function videoMediaForReview(
+  media: ReadonlyArray<DistributionAssetMediaRow>
+): DistributionAssetMediaRow | null {
+  return media.find((item) => item.media_kind === 'video') ?? null;
+}
+
+export async function completeJordanReelReview(args: {
+  readonly supabase: SupabaseClient;
+  readonly assetId: string;
+  readonly attemptId: string;
+  readonly review: JordanReelReviewAttestation;
+  readonly now?: Date;
+}): Promise<{
+  readonly scheduled: boolean;
+  readonly videoUrl: string;
+  readonly reviewDecision: JordanReelReviewAttestation['decision'];
+}> {
+  const repo = createDistributionEngineRepository(args.supabase as never);
+  const asset = await repo.getAssetByAssetId(args.assetId);
+  if (!asset || asset.asset_type !== 'short_video_post') throw new Error('asset_not_found');
+  const assetMetadata = metadata(asset);
+  if (
+    assetMetadata['reel_render_status'] !== 'reviewing' ||
+    assetMetadata['reel_render_attempt_id'] !== args.attemptId
+  ) {
+    throw new Error('stale_review_attempt');
+  }
+  if (!validJordanReelScript(assetMetadata['reel_script'])) {
+    throw new Error('invalid_or_ungrounded_script');
+  }
+  const video = videoMediaForReview(await repo.listMediaForAsset(asset.id));
+  if (!video) throw new Error('review_media_missing');
+  const mediaSha256 = String(video.metadata['sha256'] ?? '');
+  if (!/^[a-f0-9]{64}$/.test(mediaSha256)) throw new Error('review_media_sha_missing');
+  validateReviewAttestation(args.review, mediaSha256);
+  if (assetMetadata['reel_master_url'] !== video.storage_url) {
+    throw new Error('review_media_identity_mismatch');
+  }
+
+  const now = args.now ?? new Date();
+  const retryCount = Number(assetMetadata['reel_review_retry_count'] ?? 0);
+  const reviewerUnavailable = args.review.decision === 'hold' &&
+    args.review.findings.length > 0 &&
+    args.review.findings.every((finding) => finding.code === 'reviewer_unavailable');
+  const retryable = reviewerUnavailable && retryCount < MAX_REVIEW_RETRIES;
+  const reviewRetryAfter = retryable
+    ? new Date(now.getTime() + REVIEW_RETRY_BACKOFF_MS).toISOString()
+    : null;
+  const { error: mediaError } = await args.supabase
+    .from('distribution_asset_media')
+    .update({
+      provider_ready_status: args.review.decision === 'pass' ? 'ready' : 'invalid',
+      metadata: {
+        ...video.metadata,
+        agent_review_required: true,
+        agent_review_decision: args.review.decision,
+        agent_review_reviewer: args.review.reviewer,
+        agent_review_provider: args.review.provider,
+        agent_review_model: args.review.model,
+        agent_review_version: args.review.reviewVersion,
+        agent_review_media_sha256: args.review.mediaSha256,
+        agent_reviewed_at: args.review.reviewedAt,
+        agent_review_summary: args.review.summary,
+        agent_review_findings: args.review.findings,
+        agent_review_attempts: args.review.attempts,
+      },
+    })
+    .eq('id', video.id);
+  if (mediaError) throw mediaError;
+
+  const { data: jobs } = await args.supabase
+    .from('distribution_jobs')
+    .select('id,publish_mode,status')
+    .eq('distribution_asset_id', asset.id)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  const job = jobs?.[0] as { id: string; publish_mode: string; status: string } | undefined;
+  const scheduled = job?.publish_mode === 'scheduled' && args.review.decision === 'pass';
+  if (job) {
+    await repo.updateJob(job.id, {
+      status: scheduled ? 'scheduled' : 'draft',
+      lastError: args.review.decision === 'pass'
+        ? null
+        : `reel_agent_review_${args.review.decision}`,
+    });
+  }
+  await repo.upsertAsset({
+    assetId: asset.asset_id,
+    contentItemId: asset.content_item_id,
+    sourceType: asset.source_type,
+    sourceKey: asset.source_key,
+    assetType: asset.asset_type,
+    providerFamily: asset.provider_family,
+    title: asset.title,
+    bodyPlaintext: asset.body_plaintext,
+    captionText: asset.caption_text,
+    status: scheduled ? 'approved' : 'review',
+    ctaUrl: asset.cta_url,
+    metadata: {
+      reel_render_status: args.review.decision === 'pass' ? 'complete' : 'review_failed',
+      reel_review_status: args.review.decision,
+      reel_review_reviewer: args.review.reviewer,
+      reel_review_provider: args.review.provider,
+      reel_review_model: args.review.model,
+      reel_review_version: args.review.reviewVersion,
+      reel_review_media_sha256: args.review.mediaSha256,
+      reel_reviewed_at: args.review.reviewedAt,
+      reel_review_summary: args.review.summary,
+      reel_review_findings: args.review.findings,
+      reel_review_attempts: args.review.attempts,
+      reel_render_retryable: retryable,
+      reel_review_retry_after: reviewRetryAfter,
+      reel_review_terminal: reviewerUnavailable && !retryable,
+    },
+  });
+  return {
+    scheduled,
+    videoUrl: video.storage_url,
+    reviewDecision: args.review.decision,
   };
 }
 

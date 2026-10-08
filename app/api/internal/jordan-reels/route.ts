@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import {
   claimNextJordanReel,
+  completeJordanReelReview,
   completeJordanReelRender,
   failJordanReelRender,
   validJordanReelScript,
@@ -93,6 +94,64 @@ export async function POST(request: Request): Promise<Response> {
 
   if ((request.headers.get('content-type') ?? '').includes('application/json')) {
     const body = await request.json().catch(() => null) as Record<string, unknown> | null;
+    if (
+      body?.['action'] === 'review_existing' &&
+      typeof body['assetId'] === 'string' &&
+      typeof body['attemptId'] === 'string'
+    ) {
+      try {
+        const repo = createDistributionEngineRepository(supabase as never);
+        const existing = await repo.getAssetByAssetId(body['assetId']);
+        const script = existing?.metadata?.['reel_script'];
+        if (!existing || existing.asset_type !== 'short_video_post') throw new Error('asset_not_found');
+        if (
+          existing.metadata?.['reel_render_status'] !== 'reviewing' ||
+          existing.metadata?.['reel_render_attempt_id'] !== body['attemptId']
+        ) throw new Error('stale_review_attempt');
+        if (!validJordanReelScript(script)) throw new Error('invalid_or_ungrounded_script');
+        const media = await repo.listMediaForAsset(existing.id);
+        const video = media.find((item) => item.media_kind === 'video');
+        if (!video) throw new Error('review_media_missing');
+        const allowedPrefix = `${config.SOCIAL_MEDIA_PUBLIC_BASE.replace(/\/+$/, '')}/social/jordan/reels/`;
+        if (!video.storage_url.startsWith(allowedPrefix)) throw new Error('review_media_url_untrusted');
+        const mediaResponse = await fetch(video.storage_url);
+        if (!mediaResponse.ok) throw new Error(`review_media_http_${mediaResponse.status}`);
+        const videoBytes = await mediaResponse.arrayBuffer();
+        validateJordanReelVideoBytes(new Uint8Array(videoBytes));
+        const mediaSha256 = createHash('sha256').update(new Uint8Array(videoBytes)).digest('hex');
+        if (mediaSha256 !== video.metadata['sha256']) throw new Error('review_media_sha_mismatch');
+        const durationSeconds = Number(video.metadata['duration_seconds'] ?? 0);
+        const review = await reviewJordanReel({
+          apiKey: config.GEMINI_API_KEY,
+          model: config.JORDAN_REEL_REVIEW_MODEL,
+          video: videoBytes,
+          mediaSha256,
+          durationSeconds,
+          script,
+        });
+        const result = await completeJordanReelReview({
+          supabase,
+          assetId: body['assetId'],
+          attemptId: body['attemptId'],
+          review,
+        });
+        structuredLog('jordan_reel_review_retried', {
+          asset_id: body['assetId'],
+          scheduled: result.scheduled,
+          review_decision: result.reviewDecision,
+          review_model: review.model,
+          media_sha256: mediaSha256,
+        }, 'info');
+        return Response.json({ status: 'complete', reviewOnly: true, ...result });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'unknown';
+        structuredLog('jordan_reel_review_retry_failed', {
+          asset_id: body['assetId'],
+          error: message,
+        }, 'error');
+        return Response.json({ error: message }, { status: 422 });
+      }
+    }
     if (
       !body ||
       body['action'] !== 'fail' ||
