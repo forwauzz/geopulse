@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const repo = vi.hoisted(() => ({
   listAssets: vi.fn(),
+  listMediaForAsset: vi.fn(),
   getAssetByAssetId: vi.fn(),
   upsertAsset: vi.fn(),
   replaceAssetMedia: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('./distribution-engine-repository', async (importOriginal) => {
 
 import {
   claimNextJordanReel,
+  completeJordanReelReview,
   completeJordanReelRender,
   failJordanReelRender,
 } from './jordan-reel-render';
@@ -129,6 +131,7 @@ describe('Jordan Reel render handoff', () => {
       new Date('2026-07-26T14:00:00.000Z')
     );
     expect(claim).toMatchObject({
+      action: 'render',
       assetId: 'proof_instagram_jordan-reel-2026-07-26-d0',
       script,
       templateId: 'diagnostic-kinetic-v1a',
@@ -157,7 +160,7 @@ describe('Jordan Reel render handoff', () => {
     expect(claim?.templateId).toBe('diagnostic-kinetic-v1c');
   });
 
-  it('retries the same held Reel after reviewer transport backoff without consuming a new creative slot', async () => {
+  it('leases only the existing media review after reviewer transport backoff', async () => {
     repo.listAssets.mockResolvedValue([
       asset({
         reel_render_status: 'review_failed',
@@ -181,18 +184,101 @@ describe('Jordan Reel render handoff', () => {
     );
 
     expect(claim).toMatchObject({
+      action: 'review_existing',
       assetId: 'proof_instagram_jordan-reel-2026-07-26-d0',
       templateId: 'diagnostic-kinetic-v1b',
     });
     expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
       metadata: expect.objectContaining({
-        reel_render_status: 'rendering',
-        reel_render_attempt_count: 2,
+        reel_render_status: 'reviewing',
         reel_review_retry_count: 1,
         reel_review_history: [expect.objectContaining({
           decision: 'hold',
           media_sha256: 'held-sha',
         })],
+      }),
+    }));
+    const metadata = repo.upsertAsset.mock.calls[0]?.[0]?.metadata;
+    expect(metadata).not.toHaveProperty('reel_render_attempt_count');
+  });
+
+  it('applies a retry review to the immutable stored master without replacing media', async () => {
+    const mediaSha256 = 'a'.repeat(64);
+    const videoUrl = 'https://media.example/social/jordan/reels/exact-master.mp4';
+    repo.getAssetByAssetId.mockResolvedValue(asset({
+      reel_render_status: 'reviewing',
+      reel_render_attempt_id: 'review-attempt-1',
+      reel_render_attempt_count: 1,
+      reel_review_retry_count: 1,
+      reel_master_url: videoUrl,
+      reel_script: script,
+    }));
+    repo.listMediaForAsset.mockResolvedValue([{
+      id: 'media-row',
+      distribution_asset_id: 'asset-row',
+      media_kind: 'video',
+      storage_url: videoUrl,
+      mime_type: 'video/mp4',
+      alt_text: null,
+      caption: null,
+      sort_order: 0,
+      provider_ready_status: 'invalid',
+      metadata: { sha256: mediaSha256, duration_seconds: 28 },
+      created_at: '2026-07-26T14:00:00.000Z',
+      updated_at: '2026-07-26T14:00:00.000Z',
+    }]);
+    repo.updateJob.mockResolvedValue({});
+    repo.upsertAsset.mockResolvedValue({});
+    const mediaUpdates: Record<string, unknown>[] = [];
+    const reviewSupabase = {
+      from(table: string) {
+        let updatePayload: Record<string, unknown> | null = null;
+        const chain = {
+          update(value: Record<string, unknown>) {
+            updatePayload = value;
+            mediaUpdates.push(value);
+            return chain;
+          },
+          select() { return chain; },
+          eq() {
+            return updatePayload ? Promise.resolve({ error: null }) : chain;
+          },
+          order() { return chain; },
+          limit: vi.fn(async () => table === 'distribution_jobs'
+            ? { data: [{ id: 'job-row', publish_mode: 'scheduled', status: 'draft' }] }
+            : { data: [] }),
+        };
+        return chain;
+      },
+    } as never;
+
+    const result = await completeJordanReelReview({
+      supabase: reviewSupabase,
+      assetId: 'proof_instagram_jordan-reel-2026-07-26-d0',
+      attemptId: 'review-attempt-1',
+      review: passingReview(mediaSha256),
+      now: new Date('2026-07-26T20:30:00.000Z'),
+    });
+
+    expect(result).toEqual({
+      scheduled: true,
+      videoUrl,
+      reviewDecision: 'pass',
+    });
+    expect(repo.replaceAssetMedia).not.toHaveBeenCalled();
+    expect(mediaUpdates).toEqual([expect.objectContaining({
+      provider_ready_status: 'ready',
+      metadata: expect.objectContaining({
+        sha256: mediaSha256,
+        agent_review_media_sha256: mediaSha256,
+      }),
+    })]);
+    expect(repo.upsertAsset).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'approved',
+      metadata: expect.objectContaining({
+        reel_render_status: 'complete',
+        reel_review_media_sha256: mediaSha256,
+        reel_render_retryable: false,
       }),
     }));
   });

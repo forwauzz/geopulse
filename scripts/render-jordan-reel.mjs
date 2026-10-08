@@ -21,6 +21,27 @@ try {
   claim = payload.claim;
   if (!claim?.assetId || !claim?.attemptId || !claim?.script) throw new Error('invalid_claim');
 
+  if (claim.action === 'review_existing') {
+    const reviewResponse = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${secret}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'review_existing',
+        assetId: claim.assetId,
+        attemptId: claim.attemptId,
+      }),
+    });
+    const reviewResult = await reviewResponse.json();
+    if (!reviewResponse.ok) {
+      throw new Error(`review_existing_http_${reviewResponse.status}_${reviewResult.error ?? 'unknown'}`);
+    }
+    console.log(JSON.stringify(reviewResult));
+    process.exit(0);
+  }
+
   const working = join(tmpdir(), `jordan-reel-${claim.attemptId}`);
   cpSync(resolve('reels/jordan-kinetic'), working, { recursive: true });
   mkdirSync(join(working, 'assets'), { recursive: true });
@@ -177,7 +198,7 @@ try {
   if (!complete.ok) throw new Error(`complete_http_${complete.status}_${result.error ?? 'unknown'}`);
   console.log(JSON.stringify(result));
 } catch (error) {
-  if (claim?.assetId && claim?.attemptId) {
+  if (claim?.assetId && claim?.attemptId && claim.action !== 'review_existing') {
     await fetch(endpoint, {
       method: 'POST',
       headers: {
