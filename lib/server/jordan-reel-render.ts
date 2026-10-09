@@ -23,6 +23,8 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const LEASE_MS = 2 * 60 * 60 * 1000;
 const REVIEW_RETRY_BACKOFF_MS = 6 * 60 * 60 * 1000;
 const MAX_REVIEW_RETRIES = 2;
+const REVIEWER_CAPACITY_CIRCUIT_MS = 24 * 60 * 60 * 1000;
+const REVIEWER_CAPACITY_TERMINAL_THRESHOLD = 2;
 
 export type JordanReelBucket = {
   put(
@@ -117,6 +119,39 @@ function reviewerHoldHistory(assetMetadata: Record<string, unknown>): unknown[] 
   ];
 }
 
+function reviewerUnavailableHold(assetMetadata: Record<string, unknown>): boolean {
+  const findings = assetMetadata['reel_review_findings'];
+  return assetMetadata['reel_review_status'] === 'hold' &&
+    Array.isArray(findings) &&
+    findings.length > 0 &&
+    findings.every((finding) => (
+      finding &&
+      typeof finding === 'object' &&
+      (finding as Record<string, unknown>)['code'] === 'reviewer_unavailable'
+    ));
+}
+
+function reviewerCapacityCircuitOpen(
+  assets: ReadonlyArray<DistributionAssetRow>,
+  now: Date
+): boolean {
+  const terminalFailures = assets.filter((asset) => {
+    const assetMetadata = metadata(asset);
+    return asset.asset_type === 'short_video_post' &&
+      assetMetadata['reel_review_terminal'] === true &&
+      reviewerUnavailableHold(assetMetadata);
+  });
+  if (terminalFailures.length < REVIEWER_CAPACITY_TERMINAL_THRESHOLD) return false;
+
+  const latestUnavailableReview = assets.reduce((latest, asset) => {
+    if (!reviewerUnavailableHold(metadata(asset))) return latest;
+    const reviewedAt = Date.parse(String(metadata(asset)['reel_reviewed_at'] ?? ''));
+    return Number.isFinite(reviewedAt) ? Math.max(latest, reviewedAt) : latest;
+  }, Number.NEGATIVE_INFINITY);
+  return Number.isFinite(latestUnavailableReview) &&
+    now.getTime() - latestUnavailableReview < REVIEWER_CAPACITY_CIRCUIT_MS;
+}
+
 export function validJordanReelScript(value: unknown): value is JordanReelScript {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
@@ -138,23 +173,28 @@ export async function claimNextJordanReel(
 ): Promise<JordanReelRenderClaim | null> {
   const repo = createDistributionEngineRepository(supabase as never);
   const assets = await repo.listAssets({ providerFamily: 'instagram' });
-  const candidate = assets
-    .filter((asset) => asset.asset_type === 'short_video_post')
-    .find((asset) => {
-      const assetMetadata = metadata(asset);
-      const status = String(assetMetadata['reel_render_status'] ?? '');
-      const attempts = Number(assetMetadata['reel_render_attempt_count'] ?? 0);
-      if (assetMetadata['reel_render_terminal'] === true) return false;
-      if (retryableReviewerHold(assetMetadata, now) || staleReviewLease(assetMetadata, now)) {
-        return true;
-      }
-      if (attempts >= 3) return false;
-      if (status === 'pending' || status === 'failed') return true;
-      if (status !== 'rendering') return false;
-      const leasedAt = new Date(String(assetMetadata['reel_render_leased_at'] ?? ''));
-      return !Number.isFinite(leasedAt.getTime()) || now.getTime() - leasedAt.getTime() > LEASE_MS;
-    });
+  const reels = assets.filter((asset) => asset.asset_type === 'short_video_post');
+  const reviewCandidate = reels.find((asset) => {
+    const assetMetadata = metadata(asset);
+    if (assetMetadata['reel_render_terminal'] === true) return false;
+    return retryableReviewerHold(assetMetadata, now) || staleReviewLease(assetMetadata, now);
+  });
+  const renderCandidate = reels.find((asset) => {
+    const assetMetadata = metadata(asset);
+    const status = String(assetMetadata['reel_render_status'] ?? '');
+    const attempts = Number(assetMetadata['reel_render_attempt_count'] ?? 0);
+    if (assetMetadata['reel_render_terminal'] === true) return false;
+    if (attempts >= 3) return false;
+    if (status === 'pending' || status === 'failed') return true;
+    if (status !== 'rendering') return false;
+    const leasedAt = new Date(String(assetMetadata['reel_render_leased_at'] ?? ''));
+    return !Number.isFinite(leasedAt.getTime()) || now.getTime() - leasedAt.getTime() > LEASE_MS;
+  });
+  const candidate = reviewCandidate ?? renderCandidate;
   if (!candidate) return null;
+  // Two independently exhausted reviewer-capacity lineages are enough evidence
+  // to stop spending render/review work until one bounded daily recovery probe.
+  if (reviewerCapacityCircuitOpen(reels, now)) return null;
 
   const script = metadata(candidate)['reel_script'];
   if (!validJordanReelScript(script)) {

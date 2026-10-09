@@ -63,7 +63,10 @@ function passingReview(mediaSha256: string): JordanReelReviewAttestation {
   };
 }
 
-function asset(metadata: Record<string, unknown>) {
+function asset(
+  metadata: Record<string, unknown>,
+  overrides: Record<string, unknown> = {}
+) {
   return {
     id: 'asset-row',
     asset_id: 'proof_instagram_jordan-reel-2026-07-26-d0',
@@ -79,6 +82,7 @@ function asset(metadata: Record<string, unknown>) {
     cta_url: 'https://getgeopulse.com/?utm_source=instagram',
     metadata,
     created_at: '2026-07-26T13:00:00.000Z',
+    ...overrides,
   } as never;
 }
 
@@ -301,6 +305,198 @@ describe('Jordan Reel render handoff', () => {
     await expect(claimNextJordanReel(
       supabaseStub(),
       new Date('2026-07-26T12:59:59.000Z')
+    )).resolves.toBeNull();
+    expect(repo.upsertAsset).not.toHaveBeenCalled();
+  });
+
+  it('prioritizes a due immutable review over a newer pending render', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset(
+        { reel_render_status: 'pending', reel_script: script },
+        {
+          id: 'new-asset-row',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-27-d1',
+          created_at: '2026-07-27T09:00:00.000Z',
+        }
+      ),
+      asset({
+        reel_render_status: 'review_failed',
+        reel_render_retryable: true,
+        reel_render_attempt_count: 1,
+        reel_template_id: 'diagnostic-kinetic-v1b',
+        reel_script: script,
+        reel_review_status: 'hold',
+        reel_reviewed_at: '2026-07-26T06:00:00.000Z',
+        reel_review_retry_after: '2026-07-26T12:00:00.000Z',
+        reel_review_findings: [{ code: 'reviewer_unavailable' }],
+      }),
+    ]);
+    repo.upsertAsset.mockImplementation(async (input) => input);
+
+    const claim = await claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-27T10:00:00.000Z')
+    );
+
+    expect(claim).toMatchObject({
+      action: 'review_existing',
+      assetId: 'proof_instagram_jordan-reel-2026-07-26-d0',
+    });
+  });
+
+  it('opens a 24-hour circuit after two terminal reviewer-capacity lineages', async () => {
+    const assets = [
+      asset(
+        { reel_render_status: 'pending', reel_script: script },
+        {
+          id: 'new-asset-row',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-28-d2',
+          created_at: '2026-07-28T09:00:00.000Z',
+        }
+      ),
+      asset({
+        reel_render_status: 'review_failed',
+        reel_review_terminal: true,
+        reel_render_retryable: false,
+        reel_review_status: 'hold',
+        reel_reviewed_at: '2026-07-28T08:00:00.000Z',
+        reel_review_findings: [{ code: 'reviewer_unavailable' }],
+        reel_script: script,
+      }),
+      asset(
+        {
+          reel_render_status: 'review_failed',
+          reel_review_terminal: true,
+          reel_render_retryable: false,
+          reel_review_status: 'hold',
+          reel_reviewed_at: '2026-07-27T08:00:00.000Z',
+          reel_review_findings: [{ code: 'reviewer_unavailable' }],
+          reel_script: script,
+        },
+        {
+          id: 'older-terminal-row',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-27-d1',
+          created_at: '2026-07-27T07:00:00.000Z',
+        }
+      ),
+    ];
+    repo.listAssets.mockResolvedValue(assets);
+
+    await expect(claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-28T12:00:00.000Z')
+    )).resolves.toBeNull();
+    expect(repo.upsertAsset).not.toHaveBeenCalled();
+  });
+
+  it('allows one recovery canary after the reviewer-capacity cooldown', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset(
+        { reel_render_status: 'pending', reel_script: script },
+        {
+          id: 'new-asset-row',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-29-d3',
+          created_at: '2026-07-29T09:00:00.000Z',
+        }
+      ),
+      asset({
+        reel_render_status: 'review_failed',
+        reel_review_terminal: true,
+        reel_render_retryable: false,
+        reel_review_status: 'hold',
+        reel_reviewed_at: '2026-07-28T08:00:00.000Z',
+        reel_review_findings: [{ code: 'reviewer_unavailable' }],
+        reel_script: script,
+      }),
+      asset(
+        {
+          reel_render_status: 'review_failed',
+          reel_review_terminal: true,
+          reel_render_retryable: false,
+          reel_review_status: 'hold',
+          reel_reviewed_at: '2026-07-27T08:00:00.000Z',
+          reel_review_findings: [{ code: 'reviewer_unavailable' }],
+          reel_script: script,
+        },
+        {
+          id: 'older-terminal-row',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-27-d1',
+          created_at: '2026-07-27T07:00:00.000Z',
+        }
+      ),
+    ]);
+    repo.upsertAsset.mockImplementation(async (input) => input);
+
+    const claim = await claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-29T08:00:00.001Z')
+    );
+
+    expect(claim).toMatchObject({
+      action: 'render',
+      assetId: 'proof_instagram_jordan-reel-2026-07-29-d3',
+    });
+  });
+
+  it('reopens the circuit for 24 hours after a recovery review is still unavailable', async () => {
+    repo.listAssets.mockResolvedValue([
+      asset(
+        { reel_render_status: 'pending', reel_script: script },
+        {
+          id: 'new-asset-row',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-29-d3',
+          created_at: '2026-07-29T09:00:00.000Z',
+        }
+      ),
+      asset({
+        reel_render_status: 'review_failed',
+        reel_render_retryable: true,
+        reel_render_attempt_count: 1,
+        reel_review_retry_count: 1,
+        reel_template_id: 'diagnostic-kinetic-v1b',
+        reel_script: script,
+        reel_review_status: 'hold',
+        reel_reviewed_at: '2026-07-29T08:00:00.000Z',
+        reel_review_retry_after: '2026-07-29T14:00:00.000Z',
+        reel_review_findings: [{ code: 'reviewer_unavailable' }],
+      }),
+      asset(
+        {
+          reel_render_status: 'review_failed',
+          reel_review_terminal: true,
+          reel_render_retryable: false,
+          reel_review_status: 'hold',
+          reel_reviewed_at: '2026-07-28T08:00:00.000Z',
+          reel_review_findings: [{ code: 'reviewer_unavailable' }],
+          reel_script: script,
+        },
+        {
+          id: 'terminal-row-1',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-28-d2',
+          created_at: '2026-07-28T07:00:00.000Z',
+        }
+      ),
+      asset(
+        {
+          reel_render_status: 'review_failed',
+          reel_review_terminal: true,
+          reel_render_retryable: false,
+          reel_review_status: 'hold',
+          reel_reviewed_at: '2026-07-27T08:00:00.000Z',
+          reel_review_findings: [{ code: 'reviewer_unavailable' }],
+          reel_script: script,
+        },
+        {
+          id: 'terminal-row-2',
+          asset_id: 'proof_instagram_jordan-reel-2026-07-27-d1',
+          created_at: '2026-07-27T07:00:00.000Z',
+        }
+      ),
+    ]);
+
+    await expect(claimNextJordanReel(
+      supabaseStub(),
+      new Date('2026-07-29T16:00:00.000Z')
     )).resolves.toBeNull();
     expect(repo.upsertAsset).not.toHaveBeenCalled();
   });
