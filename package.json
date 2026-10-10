@@ -59,6 +59,7 @@
     "intelligence:marts:preview": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-marts-preview.ts",
     "intelligence:retrieval:experiment": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/intelligence-retrieval-experiment.ts",
     "operations:hands-off-audit": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/hands-off-readiness-audit.ts",
+    "seo:legacy-links:reconcile": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/reconcile-search-console-legacy-links.ts",
     "contacts:intake": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/agency-contact-intake.ts",
     "vci8:acceptance": "node --env-file-if-exists=.env.local --env-file-if-exists=.dev.vars ./node_modules/tsx/dist/cli.mjs scripts/vci8-acceptance-packet.ts",
     "audit-campaign:acceptance": "tsx scripts/audit-campaign-acceptance.ts",

@@ -10,6 +10,7 @@ export type PublicLegacyRedirect = {
  */
 export const PUBLIC_LEGACY_REDIRECTS: readonly PublicLegacyRedirect[] = [
   { source: '/scan', destination: '/', permanent: true },
+  { source: '/&', destination: '/', permanent: true },
   {
     source: '/blog/publish-governance-checklist-for-100-topic-programs',
     destination: '/blog/what-a-lean-content-governance-model-looks-like',
@@ -75,6 +76,36 @@ export const PUBLIC_LEGACY_REDIRECTS: readonly PublicLegacyRedirect[] = [
     destination: '/blog/canonical-site-first-newsletter-second-explained',
     permanent: true,
   },
+  {
+    source: '/blog/information-freshness-is-becoming-a-separate-ai-visibility-problem',
+    destination: '/blog/high-traffic-stale-guides-pattern',
+    permanent: true,
+  },
+  {
+    source: '/blog/share-of-voice-and-citation-audits-solve-different-jobs',
+    destination: '/blog/what-citation-rate-share-of-voice-and-coverage-mean',
+    permanent: true,
+  },
+  {
+    source: '/blog/what-is-geo-pulse',
+    destination: '/blog/seo-ge-pulse',
+    permanent: true,
+  },
+  {
+    source: '/blog/unlocking-geo',
+    destination: '/blog/seo-geo-optimization',
+    permanent: true,
+  },
+  {
+    source: '/blog/entity-mapping-for-ai-search',
+    destination: '/blog/inconsistent-naming-that-lowers-citation-confidence',
+    permanent: true,
+  },
+  {
+    source: '/blog/how-to-use-grounded-evidence-in-content-decisioning',
+    destination: '/blog/grounding-quality-checklist-for-internal-reviews',
+    permanent: true,
+  },
 ] as const;
 
 const PUBLIC_LEGACY_REDIRECT_SOURCES = new Set(
@@ -83,4 +114,32 @@ const PUBLIC_LEGACY_REDIRECT_SOURCES = new Set(
 
 export function isPublicLegacyRedirectSource(path: string): boolean {
   return PUBLIC_LEGACY_REDIRECT_SOURCES.has(path);
+}
+
+export type PublicLegacyMarkdownLinkReplacement = {
+  readonly source: string;
+  readonly destination: string;
+  readonly count: number;
+};
+
+export function replacePublicLegacyMarkdownLinks(markdown: string): {
+  readonly markdown: string;
+  readonly replacements: readonly PublicLegacyMarkdownLinkReplacement[];
+} {
+  let next = markdown;
+  const replacements: PublicLegacyMarkdownLinkReplacement[] = [];
+
+  for (const redirect of PUBLIC_LEGACY_REDIRECTS) {
+    const legacyLink = `](${redirect.source})`;
+    const count = next.split(legacyLink).length - 1;
+    if (count === 0) continue;
+    next = next.replaceAll(legacyLink, `](${redirect.destination})`);
+    replacements.push({
+      source: redirect.source,
+      destination: redirect.destination,
+      count,
+    });
+  }
+
+  return { markdown: next, replacements };
 }
