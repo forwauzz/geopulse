@@ -201,7 +201,7 @@ function normalizedEditorialLead(markdown: string): string {
 export function findPublishedEditorialDuplicate(
   draft: { readonly title: string; readonly markdown: string; readonly topicCluster?: string | null },
   published: readonly PublishedEditorialCandidate[],
-): { readonly contentId: string; readonly title: string; readonly reason: 'duplicate_title' | 'duplicate_title_overlap' | 'duplicate_lead' } | null {
+): { readonly contentId: string; readonly title: string; readonly reason: 'duplicate_title' | 'duplicate_title_overlap' | 'duplicate_lead' | 'duplicate_lead_overlap' } | null {
   const draftTitle = normalizedEditorialTitle(draft.title);
   const draftLead = normalizedEditorialLead(draft.markdown);
   for (const row of published) {
@@ -219,6 +219,9 @@ export function findPublishedEditorialDuplicate(
     const lead = normalizedEditorialLead(String(row.draft_markdown ?? ''));
     if (draftLead.length >= 120 && lead === draftLead) {
       return { contentId, title, reason: 'duplicate_lead' };
+    }
+    if (draftLead.length >= 120 && lead.length >= 120 && editorialTitleTokenOverlap(draftLead, lead) >= 0.8) {
+      return { contentId, title, reason: 'duplicate_lead_overlap' };
     }
   }
   return null;

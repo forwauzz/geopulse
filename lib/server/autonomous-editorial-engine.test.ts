@@ -116,6 +116,27 @@ describe('autonomous editorial engine', () => {
     }, [{ content_id: 'published-2', title: 'Original title', draft_markdown: `${repeatedLead}\n\n## Earlier section\n\nEarlier details.` }])).toMatchObject({ contentId: 'published-2', reason: 'duplicate_lead' });
   });
 
+  it('rejects near-duplicate published leads while allowing a materially different opening', () => {
+    const published = [{
+      content_id: 'published-generic-lead',
+      title: 'Earlier MSP evidence guide',
+      draft_markdown: 'To determine whether an MSP website gives AI answer engines sufficient evidence to understand its services, operators should measure crawler access, answer clarity, source quality, and repeated visibility with a consistent weekly review.',
+    }];
+
+    expect(findPublishedEditorialDuplicate({
+      title: 'A new social evidence guide',
+      markdown: 'To determine if an MSP website provides AI answer engines with sufficient evidence to understand its services, operators should measure answer clarity, crawler access, source quality, and repeatable visibility through a consistent weekly review.',
+    }, published)).toMatchObject({
+      contentId: 'published-generic-lead',
+      reason: 'duplicate_lead_overlap',
+    });
+
+    expect(findPublishedEditorialDuplicate({
+      title: 'A field guide to evidence reviews',
+      markdown: 'A Toronto managed-service provider found that its highest-intent prospects repeatedly paused on the same unsupported service claim. The team replaced that claim with a dated customer-safe proof block and measured the effect on qualified scan starts.',
+    }, published)).toBeNull();
+  });
+
   it('rejects a near-equivalent published title while preserving differentiated series entries', () => {
     const published = [{
       content_id: 'schema-pattern',
