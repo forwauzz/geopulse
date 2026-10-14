@@ -353,6 +353,42 @@ describe('runtime incident control', () => {
     expect(twice).toMatchObject({ active: true, consecutiveFailures: 2 });
   });
 
+  it('surfaces exhausted active-campaign editorial inventory as operator-owned work', () => {
+    const editorial = classifyRuntimeIncidents([
+      {
+        event: 'seo_editorial_cron_run',
+        level: 'warning',
+        created_at: '2026-10-14T02:00:00.000Z',
+        data: { status: 'rejected', reason: 'no_active_campaign_candidate' },
+      },
+      {
+        event: 'seo_editorial_cron_run',
+        level: 'warning',
+        created_at: '2026-10-14T01:00:00.000Z',
+        data: { status: 'rejected', reason: 'no_active_campaign_candidate' },
+      },
+    ]).find((signal) => signal.definition.key === 'seo-editorial');
+
+    expect(editorial).toMatchObject({
+      active: true,
+      consecutiveFailures: 2,
+      reason: 'no_active_campaign_candidate',
+    });
+    expect(planRuntimeIncidentLoop(editorial!, {
+      attempt_count: 3,
+      max_attempts: 3,
+      last_attempted_at: '2026-10-14T02:00:00.000Z',
+      metadata: { attempt_semantics_version: 'runtime-repair-v2' },
+    }, new Date('2026-10-14T02:05:00.000Z'))).toMatchObject({
+      attemptCount: 2,
+      founderRequired: false,
+      state: 'executing',
+      owner: 'Jordan',
+      requiresGit: false,
+      nextAction: expect.stringContaining('source-linked brief'),
+    });
+  });
+
   it('closes an editorial incident only after a newer published editorial signal', () => {
     const editorial = classifyRuntimeIncidents([
       {

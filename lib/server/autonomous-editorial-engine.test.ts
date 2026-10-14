@@ -39,7 +39,7 @@ const challengerCampaign: GrowthCampaign = {
   allocation_percent: 20,
 };
 const row = { content_id: 'content-1', slug: 'useful-page', content_type: 'article', title: 'MSP brief', topic_cluster: 'msp_ai_search_readiness', status: 'brief', growth_campaign_id: 'campaign-primary', metadata: { campaign_vertical: 'msp_it_services' } };
-function db(candidate = row) {
+function db(candidate: typeof row | null = row) {
   const update = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }));
   return { update, from: vi.fn((table: string) => ({
     select: vi.fn((columns: string) => {
@@ -69,7 +69,7 @@ function db(candidate = row) {
       chain.eq = vi.fn(() => chain);
       chain.in = vi.fn(() => chain);
       chain.order = vi.fn(() => chain);
-      chain.limit = vi.fn(async () => ({ data:[candidate], error:null }));
+      chain.limit = vi.fn(async () => ({ data: candidate ? [candidate] : [], error:null }));
       return chain;
     }),
     update,
@@ -77,6 +77,23 @@ function db(candidate = row) {
 }
 
 describe('autonomous editorial engine', () => {
+  it('reports exhausted active-campaign inventory as a rejected health signal', async () => {
+    const provider = {
+      draft: vi.fn(() => { throw new Error('draft must not run without an eligible candidate'); }),
+      hero: vi.fn(() => { throw new Error('hero must not run without an eligible candidate'); }),
+      review: vi.fn(() => { throw new Error('review must not run without an eligible candidate'); }),
+    };
+
+    await expect(runAutonomousEditorialEngine({
+      supabase: db(null),
+      provider,
+    })).resolves.toEqual({
+      status: 'rejected',
+      reason: 'no_active_campaign_candidate',
+    });
+    expect(provider.draft).not.toHaveBeenCalled();
+  });
+
   it('removes a generated H1 only when the page title already supplies the same title', () => {
     expect(removeRedundantEditorialH1('# AI Visibility Audit\n\nUseful lead.', 'AI Visibility Audit')).toBe(
       'Useful lead.'

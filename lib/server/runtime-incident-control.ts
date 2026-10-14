@@ -33,6 +33,21 @@ type ExistingRuntimeIncidentLoop = {
   readonly metadata?: Record<string, unknown> | null;
 };
 
+type RuntimeIncidentOwner = RuntimeIncidentDefinition['owner'];
+
+const OPERATOR_REMEDIATION_REASONS = new Map<string, {
+  owner: RuntimeIncidentOwner;
+  nextAction: string;
+}>([
+  [
+    'no_active_campaign_candidate',
+    {
+      owner: 'Jordan',
+      nextAction: 'Create one source-linked brief for the active primary or challenger campaign, attach the approved campaign metadata, then require the next editorial run to publish or fail closed with a specific quality reason.',
+    },
+  ],
+] as const);
+
 const DEFERRED_RETRY_REASONS = new Set([
   'daily_asset_cap_reached',
   'partial_recovery_pending',
@@ -215,7 +230,10 @@ function success(row: Row, definition: RuntimeIncidentDefinition): boolean {
     && row.event === 'autonomous_campaign_execution'
     && payload.inventoryHealthy === false
   ) return false;
-  if (definition.key === 'seo-editorial' && status === 'rejected') return false;
+  if (
+    definition.key === 'seo-editorial'
+    && status === 'rejected'
+  ) return false;
   return status !== 'failed';
 }
 
@@ -260,24 +278,28 @@ export function planRuntimeIncidentLoop(
   readonly nextAction: string;
   readonly deferred: boolean;
   readonly requiresGit: boolean;
+  readonly owner: RuntimeIncidentOwner;
 } {
   const maxAttempts = Math.max(1, Number(existing?.max_attempts ?? 3));
   const currentAttempts = Math.max(0, Number(existing?.attempt_count ?? 0));
   const deferred = DEFERRED_RETRY_REASONS.has(signal.reason ?? '');
+  const operatorRemediation = OPERATOR_REMEDIATION_REASONS.get(signal.reason ?? '');
   const legacyDerivedAttempts = existing?.metadata?.['attempt_semantics_version'] !== 'runtime-repair-v2';
   const latestFailure = Date.parse(signal.latestFailureAt ?? '');
   const lastAttempt = Date.parse(existing?.last_attempted_at ?? '');
   const hasNewRepairFailure = Boolean(existing)
     && Number.isFinite(latestFailure)
     && (!Number.isFinite(lastAttempt) || latestFailure > lastAttempt);
-  const attemptCount = deferred
+  const attemptCount = operatorRemediation
+    ? Math.min(currentAttempts, maxAttempts - 1)
+    : deferred
     ? legacyDerivedAttempts
       ? Math.min(currentAttempts, maxAttempts - 1)
       : currentAttempts
     : hasNewRepairFailure
       ? Math.min(maxAttempts, currentAttempts + 1)
       : currentAttempts;
-  const founderRequired = !deferred && attemptCount >= maxAttempts;
+  const founderRequired = !deferred && !operatorRemediation && attemptCount >= maxAttempts;
   const externalCapacityBlock = EXTERNAL_CAPACITY_EXHAUSTED_REASONS.get(signal.reason ?? '');
   const retryAt = Date.parse(signal.retryAfter ?? '');
   const dueAt = deferred && Number.isFinite(retryAt) && retryAt > now.getTime()
@@ -299,13 +321,16 @@ export function planRuntimeIncidentLoop(
       ? externalCapacityBlock?.nextAction
         ?? signal.definition.exhaustedNextAction
         ?? 'Open a Codex engineering repair task from this incident; deploy the fix and wait for the replacement success signal.'
+      : operatorRemediation
+        ? operatorRemediation.nextAction
       : deferred
         ? `Wait for the bounded retry window at ${dueAt}; then require replacement inventory or count one real repair failure.`
         : signal.definition.nextAction,
     deferred,
-    requiresGit: externalCapacityBlock
+    requiresGit: operatorRemediation || externalCapacityBlock
       ? false
       : signal.definition.exhaustedRequiresGit ?? true,
+    owner: operatorRemediation?.owner ?? signal.definition.owner,
   };
 }
 
@@ -408,7 +433,7 @@ export async function syncRuntimeIncidentLoops(args: {
     const plan = planRuntimeIncidentLoop(signal, existing, now);
     const payload = {
       lane: signal.definition.lane,
-      owner: signal.definition.owner,
+      owner: plan.owner,
       state: plan.state,
       severity: plan.severity,
       title: signal.definition.title,
