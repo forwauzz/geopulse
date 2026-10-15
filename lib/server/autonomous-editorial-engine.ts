@@ -342,7 +342,7 @@ export async function runAutonomousEditorialEngine(args: {
   );
   const candidate = scopedCandidate?.opportunity;
   if (!candidate?.content_id || !candidate.topic_cluster || !scopedCandidate) {
-    return { status: 'skipped', reason: 'no_active_campaign_candidate' };
+    return { status: 'rejected', reason: 'no_active_campaign_candidate' };
   }
 
   const publicPath = candidate.slug ? `/blog/${candidate.slug}` : null;
