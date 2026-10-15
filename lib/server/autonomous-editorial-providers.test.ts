@@ -56,7 +56,11 @@ Read [the MSP evidence guide](/blog/msp-service-claims-verifiable-evidence).
       (run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[1]?.content
     );
     expect(prompt).toContain('/ai-visibility-audit');
+    expect(prompt).toContain('/solutions/agencies');
     expect(prompt).not.toContain('/blog/ai-search-readiness-audit');
+    expect(String(
+      (run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[0]?.content
+    )).toContain('Never print campaign keys');
   });
 
   it('returns a bounded provider code instead of exposing writer failure text', async () => {
