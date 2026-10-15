@@ -139,17 +139,63 @@ export function editorialDraftTopic(
   candidate: EditorialCandidate,
   scoped: Pick<CampaignScopedOpportunity<EditorialCandidate & { readonly id: string }>, 'campaign' | 'gateReason'>,
 ): string {
+  const publicVertical = scoped.campaign.vertical === 'marketing_agencies'
+    ? 'small marketing agencies'
+    : 'managed service providers (MSPs)';
+  const publicVerticalPath = scoped.campaign.vertical === 'marketing_agencies'
+    ? '/solutions/agencies'
+    : '/solutions/msps';
+  const publicTopic = String(candidate.topic_cluster ?? candidate.title ?? 'AI-search readiness')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   return [
-    `Topic cluster: ${candidate.topic_cluster ?? candidate.title ?? 'AI-search readiness'}`,
-    `Active campaign: ${scoped.campaign.campaign_key} (${scoped.campaign.role})`,
+    `Topic: ${publicTopic}`,
     `Buyer: ${scoped.campaign.buyer_role}`,
-    `Vertical: ${scoped.campaign.vertical}`,
-    scoped.campaign.subvertical ? `Subvertical: ${scoped.campaign.subvertical}` : null,
+    `Vertical: ${publicVertical}`,
+    scoped.campaign.subvertical
+      ? `Specialization: ${scoped.campaign.subvertical.replace(/[_-]+/g, ' ')}`
+      : null,
     scoped.campaign.geo_region ? `Market: ${scoped.campaign.geo_region}` : null,
     `Buyer problem: ${scoped.campaign.primary_problem}`,
-    `Offer and CTA boundary: ${scoped.campaign.offer_key} -> ${scoped.campaign.cta_goal}`,
-    `Campaign gate: ${scoped.gateReason}`,
+    `Relevant solution page: ${publicVerticalPath}`,
+    'CTA: Invite the reader to run the free GEO-Pulse AI-search readiness scan at /. Do not print campaign keys, offer keys, CTA goal codes, database fields, or other internal identifiers.',
   ].filter(Boolean).join('\n');
+}
+
+export type EditorialConversionContractViolation = {
+  readonly code: 'internal_identifier_exposed' | 'wrong_vertical_solution_link';
+  readonly excerpt: string;
+};
+
+export function findEditorialConversionContractViolation(
+  markdown: string,
+  campaign: Pick<GrowthCampaign, 'campaign_key' | 'offer_key' | 'cta_goal' | 'vertical'>,
+): EditorialConversionContractViolation | null {
+  const normalized = markdown.toLowerCase();
+  const forbiddenIdentifiers = [campaign.campaign_key, campaign.offer_key, campaign.cta_goal]
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length >= 3);
+  const leaked = forbiddenIdentifiers.find((identifier) => normalized.includes(identifier));
+  if (leaked) {
+    const offset = normalized.indexOf(leaked);
+    return {
+      code: 'internal_identifier_exposed',
+      excerpt: markdown.slice(Math.max(0, offset - 60), offset + leaked.length + 60).replace(/\s+/g, ' ').slice(0, 180),
+    };
+  }
+
+  const wrongPath = campaign.vertical === 'marketing_agencies'
+    ? '/solutions/msps'
+    : '/solutions/agencies';
+  const wrongPathOffset = normalized.indexOf(wrongPath);
+  if (wrongPathOffset >= 0) {
+    return {
+      code: 'wrong_vertical_solution_link',
+      excerpt: markdown.slice(Math.max(0, wrongPathOffset - 60), wrongPathOffset + wrongPath.length + 60).replace(/\s+/g, ' ').slice(0, 180),
+    };
+  }
+  return null;
 }
 
 const EDITORIAL_FALLBACK_INTERNAL_LINK =
@@ -412,6 +458,17 @@ export async function runAutonomousEditorialEngine(args: {
     }).eq('content_id', candidate.content_id);
     if (quarantineError) return { status: 'failed', reason: quarantineError.message };
     return { status: 'rejected', reason: `unsupported_editorial_claim:${unsupportedClaim.code}` };
+  }
+
+  const conversionViolation = findEditorialConversionContractViolation(
+    draft.markdown,
+    scopedCandidate.campaign,
+  );
+  if (conversionViolation) {
+    return {
+      status: 'rejected',
+      reason: `unsafe_conversion_contract:${conversionViolation.code}`,
+    };
   }
 
   const duplicate = findPublishedEditorialDuplicate({

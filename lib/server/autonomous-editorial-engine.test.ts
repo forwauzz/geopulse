@@ -4,6 +4,7 @@ import {
   EDITORIAL_FALLBACK_SCAN_LIMIT,
   editorialDraftTopic,
   ensureEditorialInternalBlogLink,
+  findEditorialConversionContractViolation,
   findPublishedEditorialDuplicate,
   findUnsupportedEditorialClaim,
   mergeEditorialCandidates,
@@ -500,15 +501,52 @@ describe('autonomous editorial engine', () => {
     expect(selected?.opportunity.content_id).toBe('msp');
   });
 
-  it('injects the active buyer and offer boundary into the writer topic', () => {
-    expect(editorialDraftTopic(row, {
+  it('gives the writer public campaign context without exposing internal identifiers', () => {
+    const topic = editorialDraftTopic(row, {
       campaign: primaryCampaign,
       gateReason: 'explicit_campaign_id',
-    })).toContain('Buyer: MSP owner');
-    expect(editorialDraftTopic(row, {
-      campaign: primaryCampaign,
-      gateReason: 'explicit_campaign_id',
-    })).toContain('Offer and CTA boundary: free_scan -> free_scan');
+    });
+    expect(topic).toContain('Buyer: MSP owner');
+    expect(topic).toContain('Relevant solution page: /solutions/msps');
+    expect(topic).not.toContain(primaryCampaign.campaign_key);
+    expect(topic).not.toContain(primaryCampaign.offer_key);
+    expect(topic).not.toContain(primaryCampaign.cta_goal);
+    expect(topic).not.toContain('explicit_campaign_id');
+  });
+
+  it('rejects internal campaign identifiers and cross-vertical solution links', () => {
+    expect(findEditorialConversionContractViolation(
+      'Start at agency_client_visibility_baseline.',
+      { ...challengerCampaign, cta_goal: 'agency_client_visibility_baseline' },
+    )).toMatchObject({ code: 'internal_identifier_exposed' });
+    expect(findEditorialConversionContractViolation(
+      'Agencies can learn more at [the MSP page](/solutions/msps).',
+      challengerCampaign,
+    )).toMatchObject({ code: 'wrong_vertical_solution_link' });
+    expect(findEditorialConversionContractViolation(
+      'Agencies can learn more at [the agency page](/solutions/agencies).',
+      challengerCampaign,
+    )).toBeNull();
+  });
+
+  it('fails closed before hero generation when a draft leaks an internal campaign key', async () => {
+    const supabase = db();
+    const hero = vi.fn(async () => null);
+    const result = await runAutonomousEditorialEngine({ supabase, provider: {
+      draft: async () => ({
+        title: 'Useful answer',
+        markdown: `A source-backed answer.\n\n## What should the team do?\n\nUse campaign msp-primary to begin.\n\nRead [audit](/blog/ai-search-readiness-audit).`,
+        sources: ['https://example.com'],
+      }),
+      hero,
+      review: async () => ({ approved:true, reasons:[] }),
+    }});
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'unsafe_conversion_contract:internal_identifier_exposed',
+    });
+    expect(hero).not.toHaveBeenCalled();
   });
 
   it('persists the resolved campaign identity on a published article', async () => {
