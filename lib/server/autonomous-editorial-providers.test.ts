@@ -40,6 +40,41 @@ Check [the readiness guide](/blog/ai-search-readiness-audit).`);
     expect(String((run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[0]?.content)).toContain('Do not invent');
   });
 
+  it('uses verified brief sources and context instead of the generic source pair', async () => {
+    const cisa = 'https://www.cisa.gov/stopransomware/guide';
+    const nist = 'https://www.nist.gov/cyberframework';
+    const run = vi.fn().mockResolvedValue({ response: `<article_title>What should an MSP incident-response page make clear?</article_title>
+<article_markdown>A buyer should be able to distinguish the provider's work from the customer's responsibilities.
+
+## Which responsibilities should be explicit?
+
+Use the [CISA guide](${cisa}) and [NIST framework](${nist}) only for the claims they support.
+</article_markdown>` });
+    const provider = createAutonomousEditorialProvider({ AI: { run } });
+
+    const draft = await provider.draft({
+      topic: 'MSP incident-response responsibility evidence',
+      existingTitles: [],
+      briefTitle: 'What an MSP incident-response page should make clear',
+      briefMarkdown: 'Do not imply certification or guaranteed security.',
+      targetPersona: 'Quebec MSP owner',
+      primaryProblem: 'Responsibility boundaries are unclear.',
+      verifiedSourceLinks: [`${cisa}?utm_campaign=brief`, nist, 'http://unsafe.example.com/source'],
+    });
+
+    expect(draft.sources).toEqual([cisa, nist]);
+    expect(draft.markdown).toContain(`](${cisa})`);
+    expect(draft.markdown).toContain(`](${nist})`);
+    expect(draft.markdown).not.toContain(TRUSTED_EDITORIAL_SOURCES[0].url);
+    const prompt = String(
+      (run.mock.calls[0]?.[1] as { messages?: Array<{ content?: string }> })?.messages?.[1]?.content
+    );
+    expect(prompt).toContain('What an MSP incident-response page should make clear');
+    expect(prompt).toContain('Responsibility boundaries are unclear.');
+    expect(prompt).toContain(cisa);
+    expect(prompt).not.toContain('unsafe.example.com');
+  });
+
   it('routes the bounded audit CTA to the commercial audit surface', async () => {
     const run = vi.fn().mockResolvedValue({ response: `<article_title>What should an MSP verify?</article_title>
 <article_markdown>Start with observable evidence.

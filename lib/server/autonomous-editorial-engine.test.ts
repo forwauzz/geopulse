@@ -11,6 +11,7 @@ import {
   removeRedundantEditorialH1,
   runAutonomousEditorialEngine,
   selectEditorialCandidateForActiveCampaign,
+  verifiedEditorialBriefSources,
 } from './autonomous-editorial-engine';
 import type { GrowthCampaign } from './growth-campaign-intelligence';
 
@@ -328,6 +329,56 @@ describe('autonomous editorial engine', () => {
       [{ content_id: 'retry' }],
       [{ content_id: 'normal' }, { content_id: 'retry' }],
     ).map((row) => row.content_id)).toEqual(['retry', 'normal']);
+  });
+
+  it('uses source links only when the brief records verification evidence', () => {
+    expect(verifiedEditorialBriefSources({
+      ...row,
+      source_links: ['https://www.cisa.gov/example'],
+      metadata: { ...row.metadata, source_verified_at: '2026-10-15T12:00:00Z' },
+    })).toEqual(['https://www.cisa.gov/example']);
+    expect(verifiedEditorialBriefSources({
+      ...row,
+      source_links: ['https://www.cisa.gov/example'],
+      metadata: row.metadata,
+    })).toEqual([]);
+  });
+
+  it('preserves verified brief grounding and buyer context for the writer', async () => {
+    const groundedRow = {
+      ...row,
+      title: 'What an MSP incident-response page should make clear',
+      source_links: ['https://www.cisa.gov/stopransomware/guide'],
+      brief_markdown: 'Distinguish public responsibility statements from certification claims.',
+      target_persona: 'Quebec MSP owner',
+      primary_problem: 'Buyers cannot tell which incident-response tasks belong to the MSP.',
+      metadata: {
+        ...row.metadata,
+        source_verified_at: '2026-10-15T12:05:10Z',
+      },
+    };
+    const draft = vi.fn(async () => ({
+      title: 'Incident-response responsibility evidence for MSP buyers',
+      markdown: 'A distinct source-backed answer for buyers.',
+      sources: ['https://www.cisa.gov/stopransomware/guide'],
+    }));
+
+    await runAutonomousEditorialEngine({
+      supabase: db(groundedRow as any),
+      provider: {
+        draft,
+        hero: async () => null,
+        review: async () => ({ approved: true, reasons: [] }),
+      },
+    });
+
+    expect(draft).toHaveBeenCalledWith(expect.objectContaining({
+      briefTitle: groundedRow.title,
+      briefMarkdown: groundedRow.brief_markdown,
+      targetPersona: groundedRow.target_persona,
+      primaryProblem: groundedRow.primary_problem,
+      verifiedSourceLinks: groundedRow.source_links,
+    }));
   });
 
   it('rejects third-vertical fallback seeds and keeps active primary/challenger candidates eligible', () => {
