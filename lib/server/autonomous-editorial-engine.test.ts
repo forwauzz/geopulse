@@ -563,9 +563,11 @@ describe('autonomous editorial engine', () => {
     expect(topic).not.toContain(primaryCampaign.offer_key);
     expect(topic).not.toContain(primaryCampaign.cta_goal);
     expect(topic).not.toContain('explicit_campaign_id');
+    expect(topic).toContain('Required public CTA copy:');
+    expect(topic).toContain('Address the buyer directly');
   });
 
-  it('rejects internal campaign identifiers and cross-vertical solution links', () => {
+  it('rejects internal campaign identifiers, cross-vertical links, and leaked writer instructions', () => {
     expect(findEditorialConversionContractViolation(
       'Start at agency_client_visibility_baseline.',
       { ...challengerCampaign, cta_goal: 'agency_client_visibility_baseline' },
@@ -578,6 +580,34 @@ describe('autonomous editorial engine', () => {
       'Agencies can learn more at [the agency page](/solutions/agencies).',
       challengerCampaign,
     )).toBeNull();
+    expect(findEditorialConversionContractViolation(
+      'Invite the reader to run the free GEO-Pulse AI-search readiness scan at /.',
+      primaryCampaign,
+    )).toMatchObject({ code: 'editorial_instruction_exposed' });
+    expect(findEditorialConversionContractViolation(
+      'Run a [free GEO-Pulse AI-search readiness scan](/) to inspect the public evidence on your site.',
+      primaryCampaign,
+    )).toBeNull();
+  });
+
+  it('fails closed before hero generation when a draft leaks a writer instruction', async () => {
+    const supabase = db();
+    const hero = vi.fn(async () => null);
+    const result = await runAutonomousEditorialEngine({ supabase, provider: {
+      draft: async () => ({
+        title: 'Useful answer',
+        markdown: 'A source-backed answer.\n\n## Next step\n\nInvite the reader to run the free scan at /.\n\nRead [the audit guide](/blog/ai-search-readiness-audit).',
+        sources: ['https://example.com'],
+      }),
+      hero,
+      review: async () => ({ approved:true, reasons:[] }),
+    }});
+
+    expect(result).toEqual({
+      status: 'rejected',
+      reason: 'unsafe_conversion_contract:editorial_instruction_exposed',
+    });
+    expect(hero).not.toHaveBeenCalled();
   });
 
   it('fails closed before hero generation when a draft leaks an internal campaign key', async () => {

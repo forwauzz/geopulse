@@ -172,7 +172,7 @@ export function editorialDraftTopic(
     scoped.campaign.geo_region ? `Market: ${scoped.campaign.geo_region}` : null,
     `Buyer problem: ${scoped.campaign.primary_problem}`,
     `Relevant solution page: ${publicVerticalPath}`,
-    'CTA: Invite the reader to run the free GEO-Pulse AI-search readiness scan at /. Do not print campaign keys, offer keys, CTA goal codes, database fields, or other internal identifiers.',
+    'Required public CTA copy: "Run a [free GEO-Pulse AI-search readiness scan](/) to see which public website signals are clear and which need work." Address the buyer directly; never print writer instructions such as "invite the reader" or "add a CTA".',
   ].filter(Boolean).join('\n');
 }
 
@@ -185,9 +185,11 @@ export function verifiedEditorialBriefSources(candidate: EditorialCandidate): re
 }
 
 export type EditorialConversionContractViolation = {
-  readonly code: 'internal_identifier_exposed' | 'wrong_vertical_solution_link';
+  readonly code: 'internal_identifier_exposed' | 'wrong_vertical_solution_link' | 'editorial_instruction_exposed';
   readonly excerpt: string;
 };
+
+const EDITORIAL_INSTRUCTION_LEAK_RE = /\b(?:invite|tell|encourage|ask)\s+(?:the\s+)?reader\s+to\b|\b(?:add|include|write)\s+(?:an?\s+)?(?:public\s+)?cta\b/i;
 
 export function findEditorialConversionContractViolation(
   markdown: string,
@@ -214,6 +216,17 @@ export function findEditorialConversionContractViolation(
     return {
       code: 'wrong_vertical_solution_link',
       excerpt: markdown.slice(Math.max(0, wrongPathOffset - 60), wrongPathOffset + wrongPath.length + 60).replace(/\s+/g, ' ').slice(0, 180),
+    };
+  }
+
+  const instructionLeak = EDITORIAL_INSTRUCTION_LEAK_RE.exec(markdown);
+  if (instructionLeak?.index !== undefined) {
+    return {
+      code: 'editorial_instruction_exposed',
+      excerpt: markdown
+        .slice(Math.max(0, instructionLeak.index - 60), instructionLeak.index + instructionLeak[0].length + 120)
+        .replace(/\s+/g, ' ')
+        .slice(0, 220),
     };
   }
   return null;
