@@ -24,12 +24,21 @@ import {
 
 type Db = { from(table: string): any; rpc?(name: string, args: Record<string, unknown>): any };
 export const AUTONOMOUS_EDITORIAL_SOURCE_TYPE = 'internal_plus_research' as const;
+export type EditorialDraftInput = {
+  readonly topic: string;
+  readonly existingTitles: string[];
+  readonly briefTitle?: string;
+  readonly briefMarkdown?: string;
+  readonly targetPersona?: string;
+  readonly primaryProblem?: string;
+  readonly verifiedSourceLinks?: readonly string[];
+};
 export type EditorialProvider = {
   readonly heroSpend?: {
     readonly provider: 'openai';
     readonly estimatedCostUsd: number;
   };
-  draft(input: { topic: string; existingTitles: string[] }): Promise<{
+  draft(input: EditorialDraftInput): Promise<{
     title: string;
     markdown: string;
     sources: string[];
@@ -73,6 +82,10 @@ type EditorialCandidate = {
   readonly title?: string | null;
   readonly status?: string | null;
   readonly growth_campaign_id?: string | null;
+  readonly source_links?: readonly string[] | null;
+  readonly brief_markdown?: string | null;
+  readonly target_persona?: string | null;
+  readonly primary_problem?: string | null;
   readonly metadata?: Readonly<Record<string, unknown>> | null;
   readonly [key: string]: unknown;
 };
@@ -161,6 +174,14 @@ export function editorialDraftTopic(
     `Relevant solution page: ${publicVerticalPath}`,
     'CTA: Invite the reader to run the free GEO-Pulse AI-search readiness scan at /. Do not print campaign keys, offer keys, CTA goal codes, database fields, or other internal identifiers.',
   ].filter(Boolean).join('\n');
+}
+
+export function verifiedEditorialBriefSources(candidate: EditorialCandidate): readonly string[] {
+  const verifiedAt = candidate.metadata?.['source_verified_at'];
+  if (typeof verifiedAt !== 'string' || !verifiedAt.trim()) return [];
+  return Array.isArray(candidate.source_links)
+    ? candidate.source_links.filter((value): value is string => typeof value === 'string')
+    : [];
 }
 
 export type EditorialConversionContractViolation = {
@@ -336,7 +357,7 @@ export async function runAutonomousEditorialEngine(args: {
 
   const retryCandidatesResult = await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at,growth_campaign_id')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,source_links,brief_markdown,target_persona,primary_problem,canonical_url,published_at,updated_at,growth_campaign_id')
     .eq('content_type', 'article')
     .eq('metadata->>editorial_retry_required', 'true')
     .in('status', ['brief', 'draft'])
@@ -345,7 +366,7 @@ export async function runAutonomousEditorialEngine(args: {
 
   const seoCandidatesResult = await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at,growth_campaign_id')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,source_links,brief_markdown,target_persona,primary_problem,canonical_url,published_at,updated_at,growth_campaign_id')
     .eq('content_type', 'article')
     .eq('metadata->>proposed_by', 'seo_agent')
     .in('status', ['brief', 'draft'])
@@ -357,7 +378,7 @@ export async function runAutonomousEditorialEngine(args: {
     ? { data: [], error: null }
     : await args.supabase
     .from('content_items')
-    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,canonical_url,published_at,updated_at,growth_campaign_id')
+    .select('content_id,slug,title,status,topic_cluster,metadata,content_type,cta_goal,source_type,source_links,brief_markdown,target_persona,primary_problem,canonical_url,published_at,updated_at,growth_campaign_id')
     .eq('content_type', 'article')
     // Archived topic-registry items are deliberately excluded from the public site until this
     // engine replaces their thin planning seed with a source-backed editorial draft.
@@ -424,6 +445,11 @@ export async function runAutonomousEditorialEngine(args: {
   const providerDraft = await args.provider.draft({
     topic: editorialDraftTopic(candidate, scopedCandidate),
     existingTitles: (existing ?? []).map((x: any) => String(x.title ?? '')),
+    briefTitle: String(candidate.title ?? '').trim() || undefined,
+    briefMarkdown: String(candidate.brief_markdown ?? '').trim() || undefined,
+    targetPersona: String(candidate.target_persona ?? '').trim() || undefined,
+    primaryProblem: String(candidate.primary_problem ?? '').trim() || undefined,
+    verifiedSourceLinks: verifiedEditorialBriefSources(candidate),
   });
   const draft = {
     ...providerDraft,
