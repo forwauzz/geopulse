@@ -515,6 +515,47 @@ describe('autonomous editorial engine', () => {
     )?.opportunity.content_id).toBe('retired');
   });
 
+  it('does not resurrect a rejected or stopped editorial experiment without an explicit retry', () => {
+    const stopped = {
+      content_id: 'stopped-experiment',
+      slug: 'stopped-experiment',
+      content_type: 'article',
+      title: 'Stopped experiment',
+      topic_cluster: 'msp_backup_recovery_claim_evidence_for_ai_search',
+      status: 'archived',
+      growth_campaign_id: 'campaign-primary',
+      metadata: {
+        campaign_vertical: 'msp_it_services',
+        rejected_at: '2026-10-17T04:02:05.952Z',
+        rejection_signal: 'sources_did_not_support_the_ai_search_bridge',
+        experiment_disposition: 'stopped_after_automatic_editorial_rejection',
+        editorial_retry_required: false,
+      },
+    };
+    const neutral = {
+      content_id: 'neutral',
+      slug: 'evidence-checklist',
+      content_type: 'article',
+      title: 'Evidence checklist',
+      topic_cluster: 'trust_signals_and_evidence_hygiene',
+      status: 'archived',
+      metadata: {},
+    };
+
+    expect(selectEditorialCandidateForActiveCampaign(
+      [stopped, neutral],
+      [primaryCampaign, challengerCampaign],
+    )?.opportunity.content_id).toBe('neutral');
+    expect(selectEditorialCandidateForActiveCampaign(
+      [{
+        ...stopped,
+        status: 'draft',
+        metadata: { ...stopped.metadata, editorial_retry_required: true },
+      }],
+      [primaryCampaign, challengerCampaign],
+    )?.opportunity.content_id).toBe('stopped-experiment');
+  });
+
   it('keeps the primary lane ahead of an available challenger by using a neutral seed', () => {
     const selected = selectEditorialCandidateForActiveCampaign([
       {
