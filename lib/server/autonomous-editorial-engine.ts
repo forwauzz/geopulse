@@ -98,6 +98,10 @@ export function selectEditorialCandidateForActiveCampaign(
     const archivedReason = candidate.metadata?.['archived_reason'];
     const retiredAt = candidate.metadata?.['retired_at'];
     const retiredReason = candidate.metadata?.['retired_reason'];
+    const rejectedAt = candidate.metadata?.['rejected_at'];
+    const rejectionSignal = candidate.metadata?.['rejection_signal'];
+    const autonomousRejection = candidate.metadata?.['autonomous_editorial_rejection'];
+    const experimentDisposition = candidate.metadata?.['experiment_disposition'];
     const isExplicitRetry = candidate.metadata?.['editorial_retry_required'] === true;
     if (typeof archivedReason === 'string' && archivedReason.trim() && !isExplicitRetry) {
       return false;
@@ -105,6 +109,14 @@ export function selectEditorialCandidateForActiveCampaign(
     if ((
       (typeof retiredAt === 'string' && retiredAt.trim())
       || (typeof retiredReason === 'string' && retiredReason.trim())
+    ) && !isExplicitRetry) {
+      return false;
+    }
+    if ((
+      (typeof rejectedAt === 'string' && rejectedAt.trim())
+      || (typeof rejectionSignal === 'string' && rejectionSignal.trim())
+      || (autonomousRejection !== null && typeof autonomousRejection === 'object')
+      || (typeof experimentDisposition === 'string' && experimentDisposition.trim())
     ) && !isExplicitRetry) {
       return false;
     }
