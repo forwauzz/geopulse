@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { getClientIp, getScanApiEnv } from '@/lib/server/cf-env';
 import { checkSessionEventRateLimit } from '@/lib/server/rate-limit-kv';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import { resolvePublishedArticleContentId } from '@/lib/server/marketing-session-attribution';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 
 export const runtime = 'nodejs';
@@ -62,6 +63,7 @@ export async function POST(request: Request): Promise<Response> {
   const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   // Prefer the server-visible cookie for the anonymous id; fall back to the client-reported value.
   const anonymousId = anonFromCookie(request) ?? parsed.data.anonymous_id ?? null;
+  const contentId = await resolvePublishedArticleContentId(supabase, parsed.data.landing_path);
 
   await emitMarketingEvent(supabase, 'session_started', {
     anonymous_id: anonymousId,
@@ -72,6 +74,7 @@ export async function POST(request: Request): Promise<Response> {
     utm_term: parsed.data.utm_term ?? null,
     referrer_url: parsed.data.referrer_url ?? null,
     landing_path: parsed.data.landing_path ?? null,
+    content_id: contentId,
   });
 
   return Response.json({ ok: true });
