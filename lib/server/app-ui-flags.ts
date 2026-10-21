@@ -5,7 +5,7 @@
  * (`unstable_cache`, tag `app-ui-flags`) and backed by a public-readable table. Missing rows fall
  * back to code defaults, so the app renders sanely even before the migration is applied.
  */
-import { unstable_cache, revalidateTag } from 'next/cache';
+import { unstable_cache, updateTag } from 'next/cache';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export type UiFlagKey =
@@ -82,6 +82,6 @@ export async function setUiFlag(key: UiFlagKey, enabled: boolean, updatedBy: str
     .from('app_ui_flags')
     .upsert({ key, enabled, updated_by: updatedBy, updated_at: new Date().toISOString() }, { onConflict: 'key' });
   if (error) return { ok: false, error: error.message };
-  revalidateTag(UI_FLAGS_TAG);
+  updateTag(UI_FLAGS_TAG);
   return { ok: true };
 }
