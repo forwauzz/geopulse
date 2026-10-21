@@ -102,6 +102,9 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
 
+  eslint: {
+    ignoreDuringBuilds: false,
+  },
 } satisfies NextConfig;
 
 export default nextConfig;
