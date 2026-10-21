@@ -13,6 +13,10 @@ import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { structuredLog } from '@/lib/server/structured-log';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 import { optionalAttributionFields } from '@services/marketing-attribution/attribution-params';
+import {
+  checkScanStoreReadiness,
+  scanServiceUnavailableResponse,
+} from '@/lib/server/scan-store-readiness';
 
 export const runtime = 'nodejs';
 
@@ -122,6 +126,19 @@ export async function POST(request: Request): Promise<Response> {
   );
   const supabaseForAttr = supabase;
 
+  const scanStoreReadiness = await checkScanStoreReadiness(supabase);
+  if (!scanStoreReadiness.available) {
+    structuredLog(
+      'scan_store_unavailable',
+      {
+        reason: scanStoreReadiness.reason,
+        errorCode: scanStoreReadiness.errorCode,
+      },
+      'warning'
+    );
+    return scanServiceUnavailableResponse();
+  }
+
   let agencyContext: { agencyAccountId: string | null; agencyClientId: string | null } | null = null;
   let startupContext: { startupWorkspaceId: string } | null = null;
 
@@ -194,14 +211,20 @@ export async function POST(request: Request): Promise<Response> {
     }
   }
 
-  const scanModelPolicy = await resolveAgencyModelPolicy({
-    supabase,
-    agencyAccountId: agencyContext?.agencyAccountId ?? null,
-    agencyClientId: agencyContext?.agencyClientId ?? null,
-    productSurface: 'free_scan',
-    fallbackProvider: 'gemini',
-    fallbackModelId: env.GEMINI_MODEL,
-  });
+  let scanModelPolicy;
+  try {
+    scanModelPolicy = await resolveAgencyModelPolicy({
+      supabase,
+      agencyAccountId: agencyContext?.agencyAccountId ?? null,
+      agencyClientId: agencyContext?.agencyClientId ?? null,
+      productSurface: 'free_scan',
+      fallbackProvider: 'gemini',
+      fallbackModelId: env.GEMINI_MODEL,
+    });
+  } catch {
+    structuredLog('scan_model_policy_unavailable', {}, 'warning');
+    return scanServiceUnavailableResponse();
+  }
 
   const llm: LLMProvider = env.GEMINI_API_KEY
     ? new GeminiProvider({
@@ -249,10 +272,12 @@ export async function POST(request: Request): Promise<Response> {
         .single();
 
       if (error || !row?.id) {
-        return Response.json(
-          { error: { code: 'scan_failed', message: scan.reason } },
-          { status: 400 }
+        structuredLog(
+          'blocked_scan_persistence_failed',
+          { errorCode: error?.code ?? null },
+          'error'
         );
+        return scanServiceUnavailableResponse();
       }
 
       await emitMarketingEvent(supabaseForAttr, 'scan_completed', {
@@ -315,10 +340,12 @@ export async function POST(request: Request): Promise<Response> {
     .single();
 
   if (error || !row?.id) {
-    return Response.json(
-      { error: { code: 'db_error', message: error?.message ?? 'insert failed' } },
-      { status: 500 }
+    structuredLog(
+      'scan_persistence_failed',
+      { errorCode: error?.code ?? null },
+      'error'
     );
+    return scanServiceUnavailableResponse();
   }
 
   structuredLog(
