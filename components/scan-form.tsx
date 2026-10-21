@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useLongWaitEffect } from '@/components/long-wait-provider';
 import { scanLoadingJourney } from '@/lib/client/loading-journeys';
 import { getAttributionContext } from '@/lib/client/attribution';
+import { messageFromScanError } from '@/lib/shared/scan-api-error';
 
 type ScanFormProps = {
   siteKey: string;
@@ -41,19 +42,6 @@ function isTurnstileBypassEnabled(): boolean {
     __GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__?: boolean;
   };
   return maybeWindow.__GEO_PULSE_DISABLE_E2E_TURNSTILE_BYPASS__ !== true;
-}
-
-function messageFromScanError(data: unknown): string {
-  if (!data || typeof data !== 'object' || !('error' in data)) return 'Scan failed';
-  const err = (data as { error?: unknown }).error;
-  if (!err || typeof err !== 'object') return 'Scan failed';
-  const code = 'code' in err && typeof (err as { code?: string }).code === 'string' ? (err as { code: string }).code : '';
-  const raw = (err as { message?: unknown }).message;
-  let detail = '';
-  if (typeof raw === 'string') detail = raw;
-  else if (raw !== undefined) detail = JSON.stringify(raw);
-  const prefix = code ? `${code}: ` : '';
-  return `${prefix}${detail || 'Scan failed'}`;
 }
 
 function turnstileErrorMessage(errorCode: string | number | undefined): string {

@@ -46,6 +46,33 @@ test.describe('public smoke flows', () => {
     await expect(page).toHaveURL(/\/$/);
   });
 
+  test('scan form shows a safe temporary outage instead of database details', async ({ page }) => {
+    await page.route('**/api/scan', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          error: {
+            code: 'service_unavailable',
+            message: 'private database host detail',
+          },
+        }),
+      });
+    });
+
+    await page.goto('/');
+    await page.getByLabel('Website URL').fill('https://example.com');
+    await page.getByRole('button', { name: /audit website/i }).click();
+
+    await expect(
+      page.getByRole('alert').filter({
+        hasText: 'The free audit is temporarily unavailable. Please try again shortly.',
+      })
+    ).toHaveText('The free audit is temporarily unavailable. Please try again shortly.');
+    await expect(page.getByText(/private database host detail/i)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/$/);
+  });
+
   test('scan form submits and renders results with mocked scan APIs', async ({ page }) => {
     await page.route('**/api/scan', async (route) => {
       const request = route.request();
