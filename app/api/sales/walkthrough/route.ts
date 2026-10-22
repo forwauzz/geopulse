@@ -7,7 +7,7 @@ import {
   buildWalkthroughOperatorEmail,
   sendSalesEmail,
 } from '@/lib/server/sales-email';
-import { structuredLogWithClientAndWait } from '@/lib/server/structured-log';
+import { structuredError, structuredLogWithClientAndWait } from '@/lib/server/structured-log';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
@@ -31,6 +31,26 @@ const bodySchema = z.object({
   referrer_url: z.string().url().max(2048).nullish(),
   landing_path: z.string().max(2048).nullish(),
 });
+
+const WALKTHROUGH_RETRY_AFTER_SECONDS = 300;
+
+function walkthroughServiceUnavailableResponse(): Response {
+  return Response.json(
+    {
+      error: {
+        code: 'service_unavailable',
+        message: 'Walkthrough requests are temporarily unavailable. Please try again shortly.',
+      },
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': String(WALKTHROUGH_RETRY_AFTER_SECONDS),
+      },
+    }
+  );
+}
 
 async function hashEmail(email: string): Promise<string> {
   const bytes = new TextEncoder().encode(emailRateKey(email));
@@ -86,7 +106,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: { code: 'server_misconfigured' } }, { status: 503 });
+    structuredError('sales_walkthrough_store_unavailable', { reason: 'configuration_missing' });
+    return walkthroughServiceUnavailableResponse();
   }
 
   const supabase = createServiceRoleClient(
@@ -95,31 +116,41 @@ export async function POST(request: Request): Promise<Response> {
   );
   const normalizedEmail = emailRateKey(parsed.data.email);
   const note = parsed.data.note || null;
-  const { data: lead, error } = await supabase
-    .from('leads')
-    .insert({
-      email: normalizedEmail,
-      url: parsed.data.website,
-      score: null,
-      scan_id: null,
-      source: parsed.data.source,
-      name: parsed.data.name,
-      company: parsed.data.company,
-      request_type: 'walkthrough',
-      message: note,
-      status: 'new',
-      owner: 'elena',
-      next_action: 'review site and respond personally with a focused walkthrough',
-      closure_condition: 'reply, disqualification, or active recurring subscription',
-    })
-    .select('id')
-    .single();
+  let lead: { id?: unknown } | null = null;
+  let errorCode: string | null = null;
+  try {
+    const result = await supabase
+      .from('leads')
+      .insert({
+        email: normalizedEmail,
+        url: parsed.data.website,
+        score: null,
+        scan_id: null,
+        source: parsed.data.source,
+        name: parsed.data.name,
+        company: parsed.data.company,
+        request_type: 'walkthrough',
+        message: note,
+        status: 'new',
+        owner: 'elena',
+        next_action: 'review site and respond personally with a focused walkthrough',
+        closure_condition: 'reply, disqualification, or active recurring subscription',
+      })
+      .select('id')
+      .single();
+    lead = result.data;
+    errorCode = typeof result.error?.code === 'string' ? result.error.code : null;
+  } catch {
+    structuredError('sales_walkthrough_store_unavailable', { reason: 'request_failed' });
+    return walkthroughServiceUnavailableResponse();
+  }
 
-  if (error || !lead?.id) {
-    return Response.json(
-      { error: { code: 'db_error', message: error?.message ?? 'lead_insert_failed' } },
-      { status: 500 }
-    );
+  if (!lead?.id) {
+    structuredError('sales_walkthrough_store_unavailable', {
+      reason: 'insert_failed',
+      errorCode,
+    });
+    return walkthroughServiceUnavailableResponse();
   }
 
   const leadId = lead.id as string;
