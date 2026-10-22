@@ -4,6 +4,7 @@ const leadInsert = vi.fn();
 const emitMarketingEvent = vi.fn();
 const sendSalesEmail = vi.fn();
 const structuredLogWithClientAndWait = vi.fn();
+const structuredError = vi.fn();
 
 const leadSingle = vi.fn();
 const leadSelect = vi.fn(() => ({ single: leadSingle }));
@@ -55,6 +56,7 @@ vi.mock('@/lib/server/sales-email', async (importOriginal) => {
 
 vi.mock('@/lib/server/structured-log', () => ({
   structuredLogWithClientAndWait,
+  structuredError,
 }));
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -139,5 +141,53 @@ describe('POST /api/sales/walkthrough', () => {
     expect(response.status).toBe(400);
     expect(leadInsert).not.toHaveBeenCalled();
     expect(sendSalesEmail).not.toHaveBeenCalled();
+  });
+
+  it('returns a sanitized retryable outage when the lead store rejects the write', async () => {
+    leadSingle.mockResolvedValue({
+      data: null,
+      error: { code: 'PGRST001', message: 'database host and private provider detail' },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('retry-after')).toBe('300');
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'service_unavailable',
+        message: 'Walkthrough requests are temporarily unavailable. Please try again shortly.',
+      },
+    });
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
+    expect(sendSalesEmail).not.toHaveBeenCalled();
+    expect(structuredLogWithClientAndWait).not.toHaveBeenCalled();
+    expect(structuredError).toHaveBeenCalledWith(
+      'sales_walkthrough_store_unavailable',
+      { reason: 'insert_failed', errorCode: 'PGRST001' }
+    );
+  });
+
+  it('returns the same sanitized outage when the lead-store request throws', async () => {
+    leadSingle.mockRejectedValue(new Error('private network detail'));
+
+    const { POST } = await import('./route');
+    const response = await POST(request());
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: {
+        code: 'service_unavailable',
+        message: 'Walkthrough requests are temporarily unavailable. Please try again shortly.',
+      },
+    });
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
+    expect(sendSalesEmail).not.toHaveBeenCalled();
+    expect(structuredError).toHaveBeenCalledWith(
+      'sales_walkthrough_store_unavailable',
+      { reason: 'request_failed' }
+    );
   });
 });
