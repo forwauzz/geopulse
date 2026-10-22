@@ -5,6 +5,7 @@ const scanMaybeSingle = vi.fn();
 const monitorMaybeSingle = vi.fn();
 const userMaybeSingle = vi.fn();
 const customerCreate = vi.fn();
+const customerLinkUpdate = vi.fn();
 const subscriptionsList = vi.fn();
 const checkoutCreate = vi.fn();
 const emitMarketingEvent = vi.fn();
@@ -45,9 +46,13 @@ vi.mock('@/lib/supabase/service-role', () => ({
   createServiceRoleClient: vi.fn(() => ({
     from: vi.fn((table: string) => {
       const chain: Record<string, unknown> = {};
-      for (const method of ['select', 'eq', 'in', 'order', 'limit', 'update']) {
+      for (const method of ['select', 'eq', 'in', 'order', 'limit']) {
         chain[method] = vi.fn(() => chain);
       }
+      chain['update'] =
+        table === 'users'
+          ? vi.fn(() => ({ eq: customerLinkUpdate }))
+          : vi.fn(() => chain);
       chain['maybeSingle'] =
         table === 'scans'
           ? scanMaybeSingle
@@ -90,6 +95,7 @@ describe('monitor subscription checkout', () => {
     userMaybeSingle.mockResolvedValue({ data: { stripe_customer_id: 'cus_existing' }, error: null });
     subscriptionsList.mockResolvedValue({ data: [] });
     customerCreate.mockResolvedValue({ id: 'cus_created' });
+    customerLinkUpdate.mockResolvedValue({ error: null });
     checkoutCreate.mockResolvedValue({ id: 'cs_monitor_1', url: 'https://stripe.test/monitor' });
     emitMarketingEvent.mockResolvedValue(undefined);
   });
@@ -112,6 +118,23 @@ describe('monitor subscription checkout', () => {
     const response = await POST(request());
     expect(response.status).toBe(401);
     expect(checkoutCreate).not.toHaveBeenCalled();
+  });
+
+  it('returns a retryable outage response when account verification is unavailable', async () => {
+    authGetUser.mockRejectedValueOnce(new Error('sensitive auth provider detail'));
+
+    const { POST } = await import('./route');
+    const response = await POST(request());
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Retry-After')).toBe('300');
+    expect(body.error.code).toBe('service_unavailable');
+    expect(JSON.stringify(body)).not.toContain('sensitive auth provider detail');
+    expect(customerCreate).not.toHaveBeenCalled();
+    expect(checkoutCreate).not.toHaveBeenCalled();
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
   });
 
   it('reuses the account customer and creates an account-managed subscription checkout', async () => {
@@ -190,5 +213,53 @@ describe('monitor subscription checkout', () => {
     const response = await POST(request());
     expect(response.status).toBe(409);
     expect(checkoutCreate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['scan lookup', scanMaybeSingle],
+    ['monitor lookup', monitorMaybeSingle],
+    ['billing customer lookup', userMaybeSingle],
+  ])('fails closed before Stripe when the %s is unavailable', async (_stage, lookup) => {
+    lookup.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST000', message: 'sensitive database outage detail' },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(request());
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Retry-After')).toBe('300');
+    expect(body).toEqual({
+      error: {
+        code: 'service_unavailable',
+        message: 'Monitoring checkout is temporarily unavailable. Please try again shortly.',
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('sensitive database outage detail');
+    expect(customerCreate).not.toHaveBeenCalled();
+    expect(subscriptionsList).not.toHaveBeenCalled();
+    expect(checkoutCreate).not.toHaveBeenCalled();
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a newly created Stripe customer cannot be linked durably', async () => {
+    userMaybeSingle.mockResolvedValueOnce({ data: { stripe_customer_id: null }, error: null });
+    customerLinkUpdate.mockResolvedValueOnce({
+      error: { code: 'PGRST000', message: 'sensitive database outage detail' },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(request());
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    expect(response.status).toBe(503);
+    expect(body.error.code).toBe('service_unavailable');
+    expect(JSON.stringify(body)).not.toContain('sensitive database outage detail');
+    expect(customerCreate).toHaveBeenCalledTimes(1);
+    expect(checkoutCreate).not.toHaveBeenCalled();
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
   });
 });

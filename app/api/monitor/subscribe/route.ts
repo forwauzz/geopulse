@@ -29,6 +29,29 @@ const bodySchema = z.object({
   turnstileToken: z.string().min(1),
 }).extend(optionalAttributionFields.shape);
 
+function databaseUnavailable(stage: string, error: unknown): Response {
+  const errorCode =
+    error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : 'unavailable';
+  structuredLog('monitor_subscribe_database_unavailable', { stage, errorCode }, 'error');
+  return Response.json(
+    {
+      error: {
+        code: 'service_unavailable',
+        message: 'Monitoring checkout is temporarily unavailable. Please try again shortly.',
+      },
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '300',
+      },
+    }
+  );
+}
+
 export async function POST(request: Request): Promise<Response> {
   const env = await getPaymentApiEnv();
   const ip = getClientIp(request);
@@ -83,25 +106,40 @@ export async function POST(request: Request): Promise<Response> {
 
   const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   const userSupabase = await createSupabaseServerClient();
+  let authResult;
+  try {
+    authResult = await userSupabase.auth.getUser();
+  } catch (error) {
+    return databaseUnavailable('auth_lookup', error);
+  }
   const {
     data: { user },
     error: authError,
-  } = await userSupabase.auth.getUser();
+  } = authResult;
   const email = user?.email?.trim().toLowerCase() ?? '';
-  if (authError || !user || !email) {
+  if (authError) {
+    return databaseUnavailable('auth_lookup', authError);
+  }
+  if (!user || !email) {
     return Response.json(
       { error: { code: 'unauthenticated', message: 'Create or sign in to your free account first.' } },
       { status: 401 }
     );
   }
 
-  const { data: scan, error: scanErr } = await supabase
-    .from('scans')
-    .select('id,url,status')
-    .eq('id', parsed.data.scanId)
-    .maybeSingle();
+  let scanResult;
+  try {
+    scanResult = await supabase
+      .from('scans')
+      .select('id,url,status')
+      .eq('id', parsed.data.scanId)
+      .maybeSingle();
+  } catch (error) {
+    return databaseUnavailable('scan_lookup', error);
+  }
+  const { data: scan, error: scanErr } = scanResult;
   if (scanErr) {
-    return Response.json({ error: { code: 'db_error', message: scanErr.message } }, { status: 500 });
+    return databaseUnavailable('scan_lookup', scanErr);
   }
   if (!scan || scan.status !== 'complete' || !scan.url) {
     return Response.json({ error: { code: 'invalid_scan', message: 'Scan is not eligible for monitoring' } }, { status: 400 });
@@ -115,15 +153,24 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: { code: 'invalid_scan', message: 'Scan URL is invalid' } }, { status: 400 });
   }
 
-  const { data: existingMonitor } = await supabase
-    .from('monitoring_subscriptions')
-    .select('id,status')
-    .eq('email', email)
-    .eq('domain', domain)
-    .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let existingMonitorResult;
+  try {
+    existingMonitorResult = await supabase
+      .from('monitoring_subscriptions')
+      .select('id,status')
+      .eq('email', email)
+      .eq('domain', domain)
+      .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+  } catch (error) {
+    return databaseUnavailable('monitor_lookup', error);
+  }
+  const { data: existingMonitor, error: existingMonitorError } = existingMonitorResult;
+  if (existingMonitorError) {
+    return databaseUnavailable('monitor_lookup', existingMonitorError);
+  }
   if (existingMonitor) {
     return Response.json(
       {
@@ -138,11 +185,20 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const { data: userRow } = await supabase
-    .from('users')
-    .select('stripe_customer_id')
-    .eq('id', user.id)
-    .maybeSingle();
+  let userResult;
+  try {
+    userResult = await supabase
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .maybeSingle();
+  } catch (error) {
+    return databaseUnavailable('billing_customer_lookup', error);
+  }
+  const { data: userRow, error: userError } = userResult;
+  if (userError) {
+    return databaseUnavailable('billing_customer_lookup', userError);
+  }
   let stripeCustomerId = userRow?.stripe_customer_id?.trim() ?? '';
   if (!stripeCustomerId) {
     try {
@@ -151,31 +207,37 @@ export async function POST(request: Request): Promise<Response> {
         metadata: { user_id: user.id },
       });
       stripeCustomerId = customer.id;
-      const { error: customerLinkError } = await supabase
-        .from('users')
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq('id', user.id);
-      if (customerLinkError) {
-        structuredLog('monitor_customer_link_failed', {
-          userId: user.id,
-          stripeCustomerId,
-          error: customerLinkError.message,
-        }, 'error');
-        return Response.json(
-          { error: { code: 'db_error', message: 'Could not link your billing account. Please try again.' } },
-          { status: 500 }
-        );
-      }
     } catch (error) {
+      structuredLog(
+        'monitor_subscribe_stripe_unavailable',
+        {
+          stage: 'customer_create',
+          errorName: error instanceof Error ? error.name : 'unknown',
+        },
+        'error'
+      );
       return Response.json(
         {
           error: {
             code: 'stripe_error',
-            message: error instanceof Error ? error.message : 'Could not create billing account',
+            message: 'Could not create a billing account. Please try again shortly.',
           },
         },
         { status: 502 }
       );
+    }
+
+    let customerLinkResult;
+    try {
+      customerLinkResult = await supabase
+        .from('users')
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq('id', user.id);
+    } catch (error) {
+      return databaseUnavailable('billing_customer_link', error);
+    }
+    if (customerLinkResult.error) {
+      return databaseUnavailable('billing_customer_link', customerLinkResult.error);
     }
   }
 
