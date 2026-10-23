@@ -33,6 +33,29 @@ function checkoutFailure(
   return Response.json({ error: { code, message } }, { status });
 }
 
+function databaseUnavailable(stage: string, error: unknown): Response {
+  const errorCode =
+    error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : 'unavailable';
+  structuredError('billing_subscribe_database_unavailable', { stage, errorCode });
+  return Response.json(
+    {
+      error: {
+        code: 'service_unavailable',
+        message: 'Subscription checkout is temporarily unavailable. Please try again shortly.',
+      },
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '300',
+      },
+    }
+  );
+}
+
 const bodySchema = z.object({
   bundleKey: z.string().min(1).max(64),
   turnstileToken: z.string().min(1),
@@ -93,13 +116,22 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const userSupabase = await createSupabaseServerClient();
+    let authResult;
+    try {
+      const userSupabase = await createSupabaseServerClient();
+      authResult = await userSupabase.auth.getUser();
+    } catch (error) {
+      return databaseUnavailable('auth_lookup', error);
+    }
     const {
       data: { user },
       error: authErr,
-    } = await userSupabase.auth.getUser();
+    } = authResult;
 
-    if (authErr || !user) {
+    if (authErr) {
+      return databaseUnavailable('auth_lookup', authErr);
+    }
+    if (!user) {
       return Response.json(
         { error: { code: 'unauthenticated', message: 'You must be signed in to subscribe.' } },
         { status: 401 }
@@ -122,13 +154,22 @@ export async function POST(request: Request): Promise<Response> {
       env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const { data: bundle, error: bundleErr } = await adminDb
-      .from('service_bundles')
-      .select('bundle_key, billing_mode, stripe_price_id, trial_period_days, monthly_price_cents')
-      .eq('bundle_key', bundleKey)
-      .maybeSingle();
+    let bundleResult;
+    try {
+      bundleResult = await adminDb
+        .from('service_bundles')
+        .select('bundle_key, billing_mode, stripe_price_id, trial_period_days, monthly_price_cents')
+        .eq('bundle_key', bundleKey)
+        .maybeSingle();
+    } catch (error) {
+      return databaseUnavailable('bundle_lookup', error);
+    }
+    const { data: bundle, error: bundleErr } = bundleResult;
 
-    if (bundleErr || !bundle) {
+    if (bundleErr) {
+      return databaseUnavailable('bundle_lookup', bundleErr);
+    }
+    if (!bundle) {
       structuredLog('billing_subscribe_bundle_not_found', { bundleKey, userId: user.id }, 'warning');
       return Response.json(
         { error: { code: 'bundle_not_found', message: 'Bundle not found.' } },
@@ -149,13 +190,22 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const { data: existing } = await adminDb
-      .from('user_subscriptions')
-      .select('id, status, stripe_subscription_id')
-      .eq('user_id', user.id)
-      .eq('bundle_key', bundleKey)
-      .in('status', ['active', 'trialing', 'incomplete'])
-      .maybeSingle();
+    let existingResult;
+    try {
+      existingResult = await adminDb
+        .from('user_subscriptions')
+        .select('id, status, stripe_subscription_id')
+        .eq('user_id', user.id)
+        .eq('bundle_key', bundleKey)
+        .in('status', ['active', 'trialing', 'incomplete'])
+        .maybeSingle();
+    } catch (error) {
+      return databaseUnavailable('subscription_lookup', error);
+    }
+    const { data: existing, error: existingError } = existingResult;
+    if (existingError) {
+      return databaseUnavailable('subscription_lookup', existingError);
+    }
 
     if (existing) {
       structuredLog(
@@ -276,20 +326,32 @@ export async function POST(request: Request): Promise<Response> {
 
     const stripe = createStripeClient(env.STRIPE_SECRET_KEY);
 
-    const { data: userRow } = await adminDb
-      .from('users')
-      .select('stripe_customer_id')
-      .eq('id', user.id)
-      .maybeSingle();
+    let userResult;
+    try {
+      userResult = await adminDb
+        .from('users')
+        .select('stripe_customer_id')
+        .eq('id', user.id)
+        .maybeSingle();
+    } catch (error) {
+      return databaseUnavailable('billing_customer_lookup', error);
+    }
+    const { data: userRow, error: userError } = userResult;
+    if (userError || !userRow) {
+      return databaseUnavailable('billing_customer_lookup', userError ?? { code: 'missing_profile' });
+    }
 
     let stripeCustomerId: string = userRow?.stripe_customer_id ?? '';
 
     if (!stripeCustomerId.trim()) {
       try {
-        const customer = await stripe.customers.create({
-          email: user.email ?? undefined,
-          metadata: { user_id: user.id },
-        });
+        const customer = await stripe.customers.create(
+          {
+            email: user.email ?? undefined,
+            metadata: { user_id: user.id },
+          },
+          { idempotencyKey: `billing-customer-${user.id}` }
+        );
         stripeCustomerId = customer.id;
       } catch (error) {
         return checkoutFailure('stripe_customer_create_failed', 'Unable to create Stripe customer.', 502, {
@@ -299,10 +361,18 @@ export async function POST(request: Request): Promise<Response> {
         });
       }
 
-      await adminDb
-        .from('users')
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq('id', user.id);
+      let customerLinkResult;
+      try {
+        customerLinkResult = await adminDb
+          .from('users')
+          .update({ stripe_customer_id: stripeCustomerId })
+          .eq('id', user.id);
+      } catch (error) {
+        return databaseUnavailable('billing_customer_link', error);
+      }
+      if (customerLinkResult.error) {
+        return databaseUnavailable('billing_customer_link', customerLinkResult.error);
+      }
 
       structuredLog('billing_stripe_customer_created', { userId: user.id, customerId: stripeCustomerId }, 'info');
     }
