@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { loadUiFlags } from '@/lib/server/app-ui-flags';
+import { loadUiFlagSnapshot } from '@/lib/server/app-ui-flags';
 import { PricingBundleCard, type PricingBundleCardProps } from '@/components/pricing-bundle-card';
 import { SubscriptionStatusBanner } from '@/components/subscription-status-banner';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
@@ -142,8 +142,8 @@ async function loadPricingData(userId: string | null): Promise<{
 const DISPLAY_ORDER = ['startup_dev', 'agency_core', 'agency_pro'];
 
 export async function generateMetadata(): Promise<Metadata> {
-  const baseUrl = await loadBaseUrl();
-  return buildPublicPageMetadata({
+  const [baseUrl, uiFlagSnapshot] = await Promise.all([loadBaseUrl(), loadUiFlagSnapshot()]);
+  const metadata = buildPublicPageMetadata({
     baseUrl,
     title: 'Pricing | GEO-Pulse',
     description:
@@ -151,11 +151,49 @@ export async function generateMetadata(): Promise<Metadata> {
     canonicalPath: '/pricing',
     openGraphType: 'website',
   });
+  if (uiFlagSnapshot.status === 'unavailable') {
+    return {
+      ...metadata,
+      title: 'Pricing temporarily unavailable | GEO-Pulse',
+      robots: { index: false, follow: true },
+    };
+  }
+  return metadata;
+}
+
+function PricingUnavailable() {
+  return (
+    <main className="mx-auto max-w-6xl px-6 py-14 md:px-10 md:py-20">
+      <section className="editorial-panel-warm mx-auto max-w-5xl px-7 py-10 text-center md:px-12 md:py-14">
+        <p className="editorial-kicker">Pricing</p>
+        <h1 className="mt-4 text-balance font-headline text-4xl font-semibold leading-[1.05] tracking-[-0.04em] text-on-background md:text-6xl">
+          Pricing and checkout are temporarily unavailable.
+        </h1>
+        <p className="mx-auto mt-6 max-w-2xl font-body text-lg leading-relaxed text-on-surface-variant">
+          We could not verify the live plan configuration, so GEO-Pulse is not showing a price or starting checkout. Nothing has been charged or started. Please try again later.
+        </p>
+      </section>
+
+      <section className="mx-auto mt-10 grid max-w-5xl gap-6 md:grid-cols-3" aria-label="GEO-Pulse plan overview">
+        {DISPLAY_ORDER.map((key) => {
+          const plan = BUNDLE_META[key]!;
+          return (
+            <article key={key} className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-7 shadow-float">
+              <p className="font-label text-xs font-semibold uppercase tracking-widest text-primary">{plan.name}</p>
+              <p className="mt-4 font-body leading-7 text-on-surface-variant">{plan.tagline}</p>
+            </article>
+          );
+        })}
+      </section>
+    </main>
+  );
 }
 
 export default async function PricingPage() {
-  // Hidden by the super-admin App Settings flag → send visitors to sign-in instead of a dead page.
-  if (!(await loadUiFlags()).show_pricing) redirect('/login');
+  const uiFlagSnapshot = await loadUiFlagSnapshot();
+  if (uiFlagSnapshot.status === 'unavailable') return <PricingUnavailable />;
+  // Intentionally hidden by the super-admin App Settings flag.
+  if (!uiFlagSnapshot.flags.show_pricing) redirect('/login');
   const userSupabase = await createSupabaseServerClient();
   const {
     data: { user },
