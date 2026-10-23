@@ -20,6 +20,11 @@ export type UiFlagKey =
 
 export type UiFlags = Record<UiFlagKey, boolean>;
 
+export type UiFlagSnapshot = {
+  readonly flags: UiFlags;
+  readonly status: 'loaded' | 'unavailable';
+};
+
 /** OSS-simplifying defaults — used when a row is absent (or the table isn't there yet). */
 export const UI_FLAG_DEFAULTS: UiFlags = {
   show_pricing: false,
@@ -49,28 +54,37 @@ export const UI_FLAG_LABELS: Record<UiFlagKey, { label: string; help: string }> 
 export const UI_FLAG_KEYS = Object.keys(UI_FLAG_DEFAULTS) as UiFlagKey[];
 const UI_FLAGS_TAG = 'app-ui-flags';
 
-async function readUiFlagsUncached(): Promise<UiFlags> {
+async function readUiFlagSnapshotUncached(): Promise<UiFlagSnapshot> {
   const url = process.env['NEXT_PUBLIC_SUPABASE_URL'];
   const key = process.env['SUPABASE_SERVICE_ROLE_KEY'];
-  if (!url || !key) return { ...UI_FLAG_DEFAULTS };
+  if (!url || !key) {
+    return { flags: { ...UI_FLAG_DEFAULTS }, status: 'unavailable' };
+  }
   try {
     const supabase = createServiceRoleClient(url, key);
     const { data, error } = await supabase.from('app_ui_flags').select('key, enabled');
-    if (error || !data) return { ...UI_FLAG_DEFAULTS };
+    if (error || !data) {
+      return { flags: { ...UI_FLAG_DEFAULTS }, status: 'unavailable' };
+    }
     const map = new Map<string, boolean>(data.map((r: { key: string; enabled: boolean }) => [r.key, r.enabled]));
     const out = { ...UI_FLAG_DEFAULTS };
     for (const k of UI_FLAG_KEYS) if (map.has(k)) out[k] = Boolean(map.get(k));
-    return out;
+    return { flags: out, status: 'loaded' };
   } catch {
-    return { ...UI_FLAG_DEFAULTS };
+    return { flags: { ...UI_FLAG_DEFAULTS }, status: 'unavailable' };
   }
 }
 
-/** Cached read (60s / tag-invalidated). Safe to call from any server component. */
-export const loadUiFlags = unstable_cache(readUiFlagsUncached, ['app-ui-flags'], {
+/** Cached read (60s / tag-invalidated) with source health for fail-closed public decisions. */
+export const loadUiFlagSnapshot = unstable_cache(readUiFlagSnapshotUncached, ['app-ui-flags'], {
   tags: [UI_FLAGS_TAG],
   revalidate: 60,
 });
+
+/** Backward-compatible flag-only read for surfaces where conservative defaults are sufficient. */
+export async function loadUiFlags(): Promise<UiFlags> {
+  return (await loadUiFlagSnapshot()).flags;
+}
 
 /** Update one flag (service-role) and bust the cache so the change is immediate. */
 export async function setUiFlag(key: UiFlagKey, enabled: boolean, updatedBy: string | null): Promise<{ ok: boolean; error?: string }> {
