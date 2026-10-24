@@ -11,6 +11,7 @@ import { validateStartupWorkspaceScanContext } from '@/lib/server/startup-scan-c
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { isLegacyPaidEnabled, type DeepAuditCheckoutMode } from '@/lib/shared/deep-audit-checkout-mode';
+import { scanResultsUnavailableResponse } from '@/lib/server/scan-results-unavailable';
 
 export const runtime = 'nodejs';
 
@@ -30,7 +31,7 @@ export async function GET(
     if (user?.id) {
       const env = await getScanApiEnv();
       if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-        return Response.json({ error: { code: 'server_misconfigured' } }, { status: 503 });
+        return scanResultsUnavailableResponse();
       }
 
       const adminDb = createServiceRoleClient(
@@ -45,10 +46,7 @@ export async function GET(
         .maybeSingle();
 
       if (scanErr) {
-        return Response.json(
-          { error: { code: 'db_error', message: scanErr.message } },
-          { status: 500 }
-        );
+        return scanResultsUnavailableResponse();
       }
       if (!scan) {
         return Response.json({ error: { code: 'not_found' } }, { status: 404 });
@@ -173,10 +171,19 @@ export async function GET(
 
   const env = await getScanApiEnv();
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: { code: 'server_misconfigured' } }, { status: 503 });
+    return scanResultsUnavailableResponse();
   }
 
-  const result = await getScanForPublicShare(id, env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  let result: Awaited<ReturnType<typeof getScanForPublicShare>>;
+  try {
+    result = await getScanForPublicShare(
+      id,
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  } catch {
+    return scanResultsUnavailableResponse();
+  }
 
   if (!result.ok) {
     if (result.code === 'invalid_id') {
@@ -186,10 +193,7 @@ export async function GET(
       );
     }
     if (result.code === 'db_error') {
-      return Response.json(
-        { error: { code: 'db_error', message: result.message ?? 'Database error' } },
-        { status: 500 }
-      );
+      return scanResultsUnavailableResponse();
     }
     if (result.code === 'not_found') {
       return Response.json({ error: { code: 'not_found' } }, { status: 404 });
