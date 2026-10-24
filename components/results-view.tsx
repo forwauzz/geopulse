@@ -57,7 +57,14 @@ type Props = {
   /** When set, load the scan via the public share-slug route (issue #128) instead of by id. */
   shareSlug?: string;
 };
-type LoadError = 'not_found' | 'expired' | 'forbidden' | 'load_failed' | 'network' | null;
+type LoadError =
+  | 'not_found'
+  | 'expired'
+  | 'forbidden'
+  | 'service_unavailable'
+  | 'load_failed'
+  | 'network'
+  | null;
 
 function getCheckoutModeCopy(mode: DeepAuditCheckoutMode): string {
   if (mode === 'startup_bypass') {
@@ -101,6 +108,7 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
       if (res.status === 404) return { data: null, error: 'not_found' };
       if (res.status === 403) return { data: null, error: 'forbidden' };
       if (res.status === 410) return { data: null, error: 'expired' };
+      if (res.status === 503) return { data: null, error: 'service_unavailable' };
       return { data: null, error: 'load_failed' };
     }
     const j = (await res.json()) as {
@@ -224,6 +232,18 @@ export function ResultsView({ scanId, turnstileSiteKey, checkoutState, showCompe
         <h1 className="font-headline text-2xl font-bold text-on-background">This scan is private</h1>
         <p className="mt-2 font-body text-on-surface-variant">
           Sign in with the purchase email to access private scans and reports from your dashboard.
+        </p>
+      </div>
+    );
+  }
+  if (error === 'service_unavailable') {
+    return (
+      <div className="rounded-xl bg-surface-container-low px-6 py-16">
+        <h1 className="font-headline text-2xl font-bold text-on-background">
+          Results temporarily unavailable
+        </h1>
+        <p className="mt-2 font-body text-on-surface-variant">
+          We can&apos;t retrieve this scan right now. Please try again shortly.
         </p>
       </div>
     );

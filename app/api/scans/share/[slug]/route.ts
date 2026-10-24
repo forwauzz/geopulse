@@ -3,6 +3,7 @@ import { getScoreBenchmark } from '@/lib/server/get-score-benchmark';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { isLegacyPaidEnabled, type DeepAuditCheckoutMode } from '@/lib/shared/deep-audit-checkout-mode';
+import { scanResultsUnavailableResponse } from '@/lib/server/scan-results-unavailable';
 
 export const runtime = 'nodejs';
 
@@ -19,17 +20,26 @@ export async function GET(
 
   const env = await getScanApiEnv();
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: { code: 'server_misconfigured' } }, { status: 503 });
+    return scanResultsUnavailableResponse();
   }
 
-  const result = await getScanForShareSlug(slug, env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  let result: Awaited<ReturnType<typeof getScanForShareSlug>>;
+  try {
+    result = await getScanForShareSlug(
+      slug,
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  } catch {
+    return scanResultsUnavailableResponse();
+  }
 
   if (!result.ok) {
     if (result.code === 'invalid_id') {
       return Response.json({ error: { code: 'invalid_id', message: 'Invalid share link' } }, { status: 400 });
     }
     if (result.code === 'db_error') {
-      return Response.json({ error: { code: 'db_error', message: result.message ?? 'Database error' } }, { status: 500 });
+      return scanResultsUnavailableResponse();
     }
     if (result.code === 'not_found') {
       return Response.json({ error: { code: 'not_found' } }, { status: 404 });
