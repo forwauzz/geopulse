@@ -27,6 +27,29 @@ const bodySchema = z.object({
   email: z.string().email().max(320).nullish(),
 });
 
+function databaseUnavailable(stage: string, error: unknown): Response {
+  const errorCode =
+    error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : 'unavailable';
+  structuredLog('deep_audit_checkout_database_unavailable', { stage, errorCode }, 'error');
+  return Response.json(
+    {
+      error: {
+        code: 'service_unavailable',
+        message: 'Deep audit checkout is temporarily unavailable. Please try again shortly.',
+      },
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '300',
+      },
+    }
+  );
+}
+
 export async function POST(request: Request): Promise<Response> {
   const env = await getPaymentApiEnv();
   const ip = getClientIp(request);
@@ -82,17 +105,20 @@ export async function POST(request: Request): Promise<Response> {
     env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const { data: scan, error: scanErr } = await supabase
-    .from('scans')
-    .select('id,user_id,url,status,agency_account_id,agency_client_id,startup_workspace_id')
-    .eq('id', parsed.data.scanId)
-    .maybeSingle();
+  let scanResult;
+  try {
+    scanResult = await supabase
+      .from('scans')
+      .select('id,user_id,url,status,agency_account_id,agency_client_id,startup_workspace_id')
+      .eq('id', parsed.data.scanId)
+      .maybeSingle();
+  } catch (error) {
+    return databaseUnavailable('scan_lookup', error);
+  }
+  const { data: scan, error: scanErr } = scanResult;
 
   if (scanErr) {
-    return Response.json(
-      { error: { code: 'db_error', message: scanErr.message } },
-      { status: 500 }
-    );
+    return databaseUnavailable('scan_lookup', scanErr);
   }
   if (!scan || scan.status !== 'complete') {
     structuredLog('deep_audit_checkout_invalid_scan', {
