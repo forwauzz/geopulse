@@ -182,6 +182,66 @@ describe('deep audit checkout route', () => {
     expect(emitMarketingEvent).not.toHaveBeenCalled();
   });
 
+  it('fails closed before report or Stripe effects when scan storage is unavailable', async () => {
+    scanMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'PGRST000', message: 'sensitive database outage detail' },
+    });
+
+    const { POST } = await import('./route');
+    const request = new Request('https://example.com/api/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scanId: '9fa517bd-cb3f-4072-9110-ec629ea1bd1f',
+        email: 'owner@example.com',
+        turnstileToken: 'token-1',
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Retry-After')).toBe('300');
+    expect(body).toEqual({
+      error: {
+        code: 'service_unavailable',
+        message: 'Deep audit checkout is temporarily unavailable. Please try again shortly.',
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('sensitive database outage detail');
+    expect(handleCheckoutSessionCompleted).not.toHaveBeenCalled();
+    expect(stripeCheckoutCreate).not.toHaveBeenCalled();
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when scan storage throws before checkout', async () => {
+    scanMaybeSingle.mockRejectedValueOnce(new Error('sensitive network failure detail'));
+
+    const { POST } = await import('./route');
+    const request = new Request('https://example.com/api/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scanId: '9fa517bd-cb3f-4072-9110-ec629ea1bd1f',
+        email: 'owner@example.com',
+        turnstileToken: 'token-1',
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json() as { error: { code: string; message: string } };
+
+    expect(response.status).toBe(503);
+    expect(body.error.code).toBe('service_unavailable');
+    expect(JSON.stringify(body)).not.toContain('sensitive network failure detail');
+    expect(handleCheckoutSessionCompleted).not.toHaveBeenCalled();
+    expect(stripeCheckoutCreate).not.toHaveBeenCalled();
+    expect(emitMarketingEvent).not.toHaveBeenCalled();
+  });
+
   it('bypasses Stripe for a ready startup workspace scan', async () => {
     scanMaybeSingle.mockResolvedValueOnce({
       data: {
