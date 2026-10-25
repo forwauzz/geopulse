@@ -5,9 +5,33 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { verifyTurnstileToken } from '@/lib/server/turnstile';
 import { emitMarketingEvent } from '@services/marketing-attribution/emit';
 import { buildSavedPreviewEmail, sendLeadEmail } from '@/lib/server/lead-email';
-import { structuredLogWithClientAndWait } from '@/lib/server/structured-log';
+import { structuredError, structuredLogWithClientAndWait } from '@/lib/server/structured-log';
 
 export const runtime = 'nodejs';
+
+const LEAD_RETRY_AFTER_SECONDS = 300;
+
+function leadServiceUnavailableResponse(reason: string, errorCode?: string): Response {
+  structuredError('lead_preview_store_unavailable', {
+    reason,
+    errorCode: errorCode ?? null,
+  });
+  return Response.json(
+    {
+      error: {
+        code: 'service_unavailable',
+        message: 'Saving this preview is temporarily unavailable. Please try again shortly.',
+      },
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': String(LEAD_RETRY_AFTER_SECONDS),
+      },
+    }
+  );
+}
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -66,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: { code: 'server_misconfigured' } }, { status: 503 });
+    return leadServiceUnavailableResponse('configuration_missing');
   }
 
   const supabase = createServiceRoleClient(
@@ -74,20 +98,29 @@ export async function POST(request: Request): Promise<Response> {
     env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const { data: lead, error } = await supabase
-    .from('leads')
-    .insert({
-      email: parsed.data.email,
-      url: parsed.data.url,
-      score: parsed.data.score,
-      scan_id: parsed.data.scanId,
-      source: 'organic',
-    })
-    .select('id')
-    .single();
+  let leadResult;
+  try {
+    leadResult = await supabase
+      .from('leads')
+      .insert({
+        email: parsed.data.email,
+        url: parsed.data.url,
+        score: parsed.data.score,
+        scan_id: parsed.data.scanId,
+        source: 'organic',
+      })
+      .select('id')
+      .single();
+  } catch {
+    return leadServiceUnavailableResponse('request_failed');
+  }
+  const { data: lead, error } = leadResult;
 
-  if (error) {
-    return Response.json({ error: { code: 'db_error', message: error.message } }, { status: 500 });
+  if (error || !lead?.id) {
+    return leadServiceUnavailableResponse(
+      'insert_failed',
+      typeof error?.code === 'string' ? error.code : undefined
+    );
   }
 
   await emitMarketingEvent(supabase, 'lead_submitted', {
