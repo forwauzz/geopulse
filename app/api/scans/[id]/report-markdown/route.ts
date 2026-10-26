@@ -1,6 +1,7 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getScanForPublicShare } from '@/lib/server/get-scan-for-public-share';
 import { getScanApiEnv } from '@/lib/server/cf-env';
+import { scanResultsUnavailableResponse } from '@/lib/server/scan-results-unavailable';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
@@ -73,10 +74,7 @@ export async function GET(
         .maybeSingle();
 
       if (scanErr) {
-        return Response.json(
-          { error: { code: 'db_error', message: scanErr.message } },
-          { status: 500 }
-        );
+        return scanResultsUnavailableResponse();
       }
       if (!scan) {
         return Response.json({ error: { code: 'not_found' } }, { status: 404 });
@@ -94,10 +92,7 @@ export async function GET(
         .maybeSingle();
 
       if (reportErr) {
-        return Response.json(
-          { error: { code: 'db_error', message: reportErr.message } },
-          { status: 500 }
-        );
+        return scanResultsUnavailableResponse();
       }
       if (!report?.markdown_url) {
         const bucketMarkdown = await readMarkdownFromBucket(id);
@@ -163,11 +158,16 @@ export async function GET(
     return Response.json({ error: { code: 'server_misconfigured' } }, { status: 503 });
   }
 
-  const result = await getScanForPublicShare(
-    id,
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  let result: Awaited<ReturnType<typeof getScanForPublicShare>>;
+  try {
+    result = await getScanForPublicShare(
+      id,
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.SUPABASE_SERVICE_ROLE_KEY
+    );
+  } catch {
+    return scanResultsUnavailableResponse();
+  }
 
   if (!result.ok) {
     if (result.code === 'invalid_id') {
@@ -182,7 +182,10 @@ export async function GET(
     if (result.code === 'expired') {
       return Response.json({ error: { code: 'expired' } }, { status: 410 });
     }
-    return Response.json({ error: { code: 'db_error', message: result.message } }, { status: 500 });
+    if (result.code === 'db_error') {
+      return scanResultsUnavailableResponse();
+    }
+    return Response.json({ error: { code: 'unknown' } }, { status: 500 });
   }
 
   if (!result.data.markdownUrl) {
