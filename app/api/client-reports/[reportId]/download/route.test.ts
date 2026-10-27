@@ -56,7 +56,10 @@ const snapshot = buildAgencyReportSnapshot({
   }),
 });
 
-function admin(contextVersion = CONTEXT_VERSION) {
+function admin(
+  contextVersion = CONTEXT_VERSION,
+  failure?: { table: string; mode: 'returned' | 'thrown' },
+) {
   const rows: Record<string, Record<string, unknown>> = {
     gpm_reports: {
       id: REPORT_ID, config_id: CONFIG_ID, agency_client_id: CLIENT_ID,
@@ -83,7 +86,14 @@ function admin(contextVersion = CONTEXT_VERSION) {
       const chain: any = {
         select() { return chain; },
         eq() { return chain; },
-        async maybeSingle() { return { data: rows[table] ?? null, error: null }; },
+        async maybeSingle() {
+          if (failure?.table === table) {
+            const error = Object.assign(new Error('provider detail must stay private'), { code: 'PGRST000' });
+            if (failure.mode === 'thrown') throw error;
+            return { data: null, error };
+          }
+          return { data: rows[table] ?? null, error: null };
+        },
         insert() { return Promise.resolve({ error: null }); },
       };
       return chain;
@@ -116,5 +126,51 @@ describe('client report download integrity', () => {
     );
     expect(response.status).toBe(404);
     expect(mocks.bucketGet).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['gpm_reports', 'returned'],
+    ['agency_clients', 'thrown'],
+    ['benchmark_domains', 'returned'],
+    ['client_benchmark_configs', 'thrown'],
+  ] as const)('returns a sanitized retryable outage when %s lookup has a %s failure', async (table, mode) => {
+    mocks.admin = admin(CONTEXT_VERSION, { table, mode });
+    const response = await GET(
+      new Request(`https://getgeopulse.com/api/client-reports/${REPORT_ID}/download?share=share-safe`),
+      { params: Promise.resolve({ reportId: REPORT_ID }) },
+    );
+    const body = await response.json() as {
+      error: { code: string; message: string };
+    };
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('retry-after')).toBe('300');
+    expect(body).toEqual({
+      error: {
+        code: 'service_unavailable',
+        message: 'This report is temporarily unavailable. Please try again shortly.',
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('provider detail');
+    expect(mocks.bucketGet).not.toHaveBeenCalled();
+  });
+
+  it('returns the same sanitized retryable outage when object storage throws', async () => {
+    mocks.admin = admin();
+    mocks.bucketGet.mockRejectedValue(Object.assign(new Error('R2 provider detail'), { code: 'storage_unavailable' }));
+    const response = await GET(
+      new Request(`https://getgeopulse.com/api/client-reports/${REPORT_ID}/download?share=share-safe`),
+      { params: Promise.resolve({ reportId: REPORT_ID }) },
+    );
+    const body = await response.json() as {
+      error: { code: string; message: string };
+    };
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('retry-after')).toBe('300');
+    expect(body.error.code).toBe('service_unavailable');
+    expect(JSON.stringify(body)).not.toContain('R2 provider detail');
   });
 });
