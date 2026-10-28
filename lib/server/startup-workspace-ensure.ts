@@ -9,7 +9,20 @@ export type EnsureStartupWorkspaceResult =
   | { readonly kind: 'provisioned'; readonly workspaceId: string }
   | { readonly kind: 'no_stripe_customer' }
   | { readonly kind: 'no_stripe_subscription' }
+  | { readonly kind: 'database_unavailable'; readonly stage: string }
+  | { readonly kind: 'provider_unavailable'; readonly provider: 'stripe' }
   | { readonly kind: 'provision_failed' };
+
+function databaseUnavailable(stage: string, error: unknown): EnsureStartupWorkspaceResult {
+  structuredError('ensure_startup_workspace_database_unavailable', {
+    stage,
+    errorCode:
+      error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code ?? 'unknown')
+        : 'unknown',
+  });
+  return { kind: 'database_unavailable', stage };
+}
 
 /**
  * Self-healing workspace provisioner.
@@ -33,15 +46,24 @@ export async function ensureStartupWorkspace(args: {
   const { supabase, stripeSecretKey, userId } = args;
 
   // ── Case A: subscription row exists ─────────────────────────────────────────
-  const { data: sub } = await supabase
-    .from('user_subscriptions')
-    .select('id, bundle_key, stripe_subscription_id, stripe_customer_id, status, startup_workspace_id, metadata')
-    .eq('user_id', userId)
-    .eq('bundle_key', 'startup_dev')
-    .in('status', ['active', 'trialing', 'incomplete'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  let subscriptionResult;
+  try {
+    subscriptionResult = await supabase
+      .from('user_subscriptions')
+      .select('id, bundle_key, stripe_subscription_id, stripe_customer_id, status, startup_workspace_id, metadata')
+      .eq('user_id', userId)
+      .eq('bundle_key', 'startup_dev')
+      .in('status', ['active', 'trialing', 'incomplete'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+  } catch (error) {
+    return databaseUnavailable('subscription_lookup', error);
+  }
+  if (subscriptionResult.error) {
+    return databaseUnavailable('subscription_lookup', subscriptionResult.error);
+  }
+  const sub = subscriptionResult.data;
 
   if (sub) {
     if (sub.startup_workspace_id) {
@@ -50,11 +72,20 @@ export async function ensureStartupWorkspace(args: {
     }
 
     // Subscription exists but workspace wasn't provisioned — provision now
-    const { data: userRow } = await supabase
-      .from('users')
-      .select('email')
-      .eq('id', userId)
-      .maybeSingle();
+    let userResult;
+    try {
+      userResult = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .maybeSingle();
+    } catch (error) {
+      return databaseUnavailable('user_email_lookup', error);
+    }
+    if (userResult.error) {
+      return databaseUnavailable('user_email_lookup', userResult.error);
+    }
+    const userRow = userResult.data;
 
     const organizationName =
       (sub.metadata as Record<string, string> | null)?.['organization_name'] ?? null;
@@ -80,11 +111,20 @@ export async function ensureStartupWorkspace(args: {
   }
 
   // ── Case B: no subscription row — sync from Stripe ──────────────────────────
-  const { data: userRow } = await supabase
-    .from('users')
-    .select('stripe_customer_id')
-    .eq('id', userId)
-    .maybeSingle();
+  let userResult;
+  try {
+    userResult = await supabase
+      .from('users')
+      .select('stripe_customer_id')
+      .eq('id', userId)
+      .maybeSingle();
+  } catch (error) {
+    return databaseUnavailable('stripe_customer_lookup', error);
+  }
+  if (userResult.error) {
+    return databaseUnavailable('stripe_customer_lookup', userResult.error);
+  }
+  const userRow = userResult.data;
 
   if (!userRow?.stripe_customer_id) {
     structuredLog('ensure_startup_workspace_no_stripe_customer', { userId }, 'info');
@@ -104,7 +144,7 @@ export async function ensureStartupWorkspace(args: {
       userId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return { kind: 'provision_failed' };
+    return { kind: 'provider_unavailable', provider: 'stripe' };
   }
 
   const startupSubs = subscriptions.data.filter(
@@ -131,11 +171,20 @@ export async function ensureStartupWorkspace(args: {
     }
 
     // Check if workspace was provisioned by the upsert
-    const { data: refreshed } = await supabase
-      .from('user_subscriptions')
-      .select('startup_workspace_id')
-      .eq('stripe_subscription_id', stripeSub.id)
-      .maybeSingle();
+    let refreshedResult;
+    try {
+      refreshedResult = await supabase
+        .from('user_subscriptions')
+        .select('startup_workspace_id')
+        .eq('stripe_subscription_id', stripeSub.id)
+        .maybeSingle();
+    } catch (error) {
+      return databaseUnavailable('workspace_refresh', error);
+    }
+    if (refreshedResult.error) {
+      return databaseUnavailable('workspace_refresh', refreshedResult.error);
+    }
+    const refreshed = refreshedResult.data;
 
     if (refreshed?.startup_workspace_id) {
       structuredLog('ensure_startup_workspace_provisioned_from_stripe', {
