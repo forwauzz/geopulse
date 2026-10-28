@@ -4,6 +4,24 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role';
 
 export const runtime = 'nodejs';
 
+function progressUnavailableResponse(): Response {
+  return Response.json(
+    {
+      error: {
+        code: 'service_unavailable',
+        message: 'Audit progress is temporarily unavailable. Please try again shortly.',
+      },
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '300',
+      },
+    },
+  );
+}
+
 /**
  * Live progress for a scan's full-audit run. Same access model as `/api/scans/[id]`: the scan id
  * is the capability. Returns only progress facts (counts + the URL currently being reviewed on the
@@ -20,16 +38,20 @@ export async function GET(
 
   const env = await getScanApiEnv();
   if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    return Response.json({ error: { code: 'not_configured' } }, { status: 503 });
+    return progressUnavailableResponse();
   }
   const supabase = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    const { data: run } = await supabase
+    const { data: run, error: runError } = await supabase
       .from('scan_runs')
       .select('id, config')
       .eq('scan_id', id)
       .maybeSingle();
+
+    if (runError) {
+      return progressUnavailableResponse();
+    }
 
     let pageLimit: number | null = null;
     let pagesDone = 0;
@@ -40,7 +62,7 @@ export async function GET(
       const rawLimit = config?.['page_limit'];
       pageLimit = typeof rawLimit === 'number' && rawLimit > 0 ? rawLimit : null;
 
-      const [{ count }, { data: latest }] = await Promise.all([
+      const [pageCountResult, latestPageResult] = await Promise.all([
         supabase.from('scan_pages').select('id', { count: 'exact', head: true }).eq('run_id', run.id),
         supabase
           .from('scan_pages')
@@ -50,16 +72,23 @@ export async function GET(
           .limit(1)
           .maybeSingle(),
       ]);
-      pagesDone = count ?? 0;
-      latestPageUrl = (latest?.url as string | undefined) ?? null;
+      if (pageCountResult.error || latestPageResult.error) {
+        return progressUnavailableResponse();
+      }
+      pagesDone = pageCountResult.count ?? 0;
+      latestPageUrl = (latestPageResult.data?.url as string | undefined) ?? null;
     }
 
-    const { data: report } = await supabase
+    const { data: report, error: reportError } = await supabase
       .from('reports')
       .select('id')
       .eq('scan_id', id)
       .eq('type', 'deep_audit')
       .maybeSingle();
+
+    if (reportError) {
+      return progressUnavailableResponse();
+    }
 
     return Response.json(
       buildScanProgress({
@@ -71,9 +100,6 @@ export async function GET(
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch {
-    return Response.json(
-      buildScanProgress({ pageLimit: null, pagesDone: 0, latestPageUrl: null, reportDelivered: false }),
-      { headers: { 'Cache-Control': 'no-store' } }
-    );
+    return progressUnavailableResponse();
   }
 }
