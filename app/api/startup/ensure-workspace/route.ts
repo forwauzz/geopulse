@@ -2,15 +2,52 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
 import { ensureStartupWorkspace } from '@/lib/server/startup-workspace-ensure';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
+import { structuredError } from '@/lib/server/structured-log';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function serviceUnavailable(stage: string, error?: unknown): Response {
+  structuredError('startup_workspace_recovery_unavailable', {
+    stage,
+    errorCode:
+      error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code ?? 'unknown')
+        : 'unknown',
+  });
+  return Response.json(
+    {
+      error: {
+        code: 'service_unavailable',
+        message: 'Workspace setup is temporarily unavailable. Please try again shortly.',
+      },
+    },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': '300',
+      },
+    }
+  );
+}
+
 export async function POST(): Promise<Response> {
-  const sessionClient = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await sessionClient.auth.getUser();
+  let sessionClient;
+  try {
+    sessionClient = await createSupabaseServerClient();
+  } catch (error) {
+    return serviceUnavailable('session_client', error);
+  }
+
+  let authResult;
+  try {
+    authResult = await sessionClient.auth.getUser();
+  } catch (error) {
+    return serviceUnavailable('auth_lookup', error);
+  }
+  if (authResult.error) return serviceUnavailable('auth_lookup', authResult.error);
+  const user = authResult.data.user;
 
   if (!user) {
     return Response.json({ error: 'unauthenticated' }, { status: 401 });
@@ -31,11 +68,16 @@ export async function POST(): Promise<Response> {
     env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const result = await ensureStartupWorkspace({
-    supabase,
-    stripeSecretKey: env.STRIPE_SECRET_KEY,
-    userId: user.id,
-  });
+  let result;
+  try {
+    result = await ensureStartupWorkspace({
+      supabase,
+      stripeSecretKey: env.STRIPE_SECRET_KEY,
+      userId: user.id,
+    });
+  } catch (error) {
+    return serviceUnavailable('workspace_recovery', error);
+  }
 
   if (result.kind === 'already_exists' || result.kind === 'provisioned') {
     return Response.json({ ok: true, kind: result.kind, workspaceId: result.workspaceId });
@@ -46,5 +88,13 @@ export async function POST(): Promise<Response> {
     return Response.json({ ok: false, kind: result.kind, redirectTo: '/pricing?onboarding=1' });
   }
 
-  return Response.json({ ok: false, kind: result.kind }, { status: 500 });
+  if (result.kind === 'database_unavailable') {
+    return serviceUnavailable(result.stage);
+  }
+
+  if (result.kind === 'provider_unavailable') {
+    return serviceUnavailable(`${result.provider}_lookup`);
+  }
+
+  return serviceUnavailable('workspace_provision');
 }
