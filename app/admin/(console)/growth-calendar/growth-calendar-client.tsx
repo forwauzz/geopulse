@@ -239,10 +239,30 @@ export function GrowthCalendarClient({ data }: { readonly data: GrowthCalendarDa
   useEffect(() => setExpandedDays(new Set()), [weekStart, showHistory, activeChannels]);
   const toggleChannel = (channel: GrowthCalendarChannel) => setActiveChannels((current) => { const next = new Set(current); if (next.has(channel)) next.delete(channel); else next.add(channel); return next; });
   const toggleDay = (key: string) => setExpandedDays((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  if (data.sourceHealth.status === 'unavailable') {
+    return (
+      <div className="space-y-5">
+        <header>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Marketing operations</p>
+          <h1 className="mt-2 font-headline text-3xl font-black text-on-background md:text-4xl">Growth calendar</h1>
+        </header>
+        <section className="rounded-3xl border border-error/30 bg-error-container/30 p-6 shadow-float" role="alert">
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-error">Temporarily unavailable</p>
+          <h2 className="mt-2 font-headline text-2xl font-bold text-on-background">Inventory figures are withheld</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-on-surface-variant">
+            Growth Calendar source data could not be loaded. Live, upcoming, and needs-help counts are not zero; they are unavailable until the data service recovers.
+          </p>
+          <p className="mt-3 text-xs text-on-surface-variant">
+            {data.sourceHealth.failed} of {data.sourceHealth.attempted} sources failed. Retry after the production data plane is healthy.
+          </p>
+        </section>
+      </div>
+    );
+  }
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Marketing operations</p><h1 className="mt-2 font-headline text-3xl font-black text-on-background md:text-4xl">Growth calendar</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-on-surface-variant">See what went live, what goes out next and what needs help. Select any card to preview it.</p></div><div className="flex rounded-xl bg-surface-container p-1"><button type="button" onClick={() => setView('calendar')} className={`rounded-lg px-4 py-2 text-sm font-bold ${view === 'calendar' ? 'bg-surface-container-lowest shadow-sm' : 'text-on-surface-variant'}`}>Calendar</button><button type="button" onClick={() => setView('inbox')} className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${view === 'inbox' ? 'bg-surface-container-lowest shadow-sm' : 'text-on-surface-variant'}`}>Action inbox <span className="text-[10px] font-medium">all work</span>{data.inbox.length > 0 ? <span className="rounded-full bg-error px-1.5 py-0.5 text-[10px] text-on-error">{data.inbox.length}</span> : null}</button></div></header>
-      {data.warnings.length > 0 ? <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200"><strong>{data.warnings.length} source sync issue{data.warnings.length === 1 ? '' : 's'}:</strong> {data.warnings.join(' · ')}</div> : null}
+      {data.warnings.length > 0 ? <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200"><strong>Data is incomplete — {data.warnings.length} source sync issue{data.warnings.length === 1 ? '' : 's'}:</strong> {data.warnings.join(' · ')}</div> : null}
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
         [live, '✓ LIVE', 'this week', 'border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/30'],
         [next, '◷ NEXT', 'this week', 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30'],

@@ -94,6 +94,11 @@ export type GrowthCalendarCampaign = {
 
 export type GrowthCalendarData = {
   readonly generatedAt: string;
+  readonly sourceHealth: {
+    readonly status: 'available' | 'degraded' | 'unavailable';
+    readonly attempted: number;
+    readonly failed: number;
+  };
   readonly activities: readonly GrowthCalendarActivity[];
   readonly inbox: readonly GrowthCalendarInboxItem[];
   readonly campaigns: readonly GrowthCalendarCampaign[];
@@ -166,15 +171,25 @@ function displayStateFor(status: unknown, options?: { readonly manuallyPublished
   return options?.hasDependency ? 'action' : 'next';
 }
 
-async function rows(label: string, promise: PromiseLike<{ data?: unknown; error?: unknown }>, warnings: string[]): Promise<Row[]> {
+type SourceHealthAccumulator = { attempted: number; failed: number };
+
+async function rows(
+  label: string,
+  promise: PromiseLike<{ data?: unknown; error?: unknown }>,
+  warnings: string[],
+  sourceHealth: SourceHealthAccumulator,
+): Promise<Row[]> {
+  sourceHealth.attempted += 1;
   try {
     const result = await promise;
     if (result.error) {
+      sourceHealth.failed += 1;
       warnings.push(`${label} could not be loaded`);
       return [];
     }
     return Array.isArray(result.data) ? (result.data as Row[]) : [];
   } catch {
+    sourceHealth.failed += 1;
     warnings.push(`${label} could not be loaded`);
     return [];
   }
@@ -186,20 +201,21 @@ function isoDay(value: string): string {
 
 export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<GrowthCalendarData> {
   const warnings: string[] = [];
+  const sourceHealth: SourceHealthAccumulator = { attempted: 0, failed: 0 };
   const [campaignRows, interventionRows, contentRows, assetRows, mediaRows, jobRows, accountRows, prospectRows, sendRows, templateRows, replyRows, leadRows, loopRows] = await Promise.all([
-    rows('Campaigns', supabase.from('growth_campaigns').select('id,name,role,vertical,status,allocation_percent,success_condition,stop_condition,metadata').order('role', { ascending: true }), warnings),
-    rows('Experiments', supabase.from('growth_campaign_interventions').select('id,campaign_id,intervention_key,name,channel,status,success_condition,stop_condition,started_at,ended_at,updated_at,metadata').order('updated_at', { ascending: false }).limit(100), warnings),
-    rows('Content', supabase.from('content_items').select('id,content_id,title,status,content_type,draft_markdown,canonical_url,approved_at,published_at,created_at,updated_at,growth_campaign_id,growth_intervention_id,metadata').order('updated_at', { ascending: false }).limit(200), warnings),
-    rows('Distribution assets', supabase.from('distribution_assets').select('id,asset_id,content_item_id,asset_type,provider_family,title,body_plaintext,caption_text,status,cta_url,approved_at,created_at,updated_at,growth_campaign_id,growth_intervention_id,metadata').order('updated_at', { ascending: false }).limit(200), warnings),
-    rows('Media', supabase.from('distribution_asset_media').select('distribution_asset_id,media_kind,storage_url,alt_text,provider_ready_status,sort_order').order('sort_order', { ascending: true }).limit(500), warnings),
-    rows('Publishing jobs', supabase.from('distribution_jobs').select('id,job_id,distribution_asset_id,distribution_account_id,publish_mode,scheduled_for,status,destination_url,provider_post_id,last_error,completed_at,created_at,updated_at').order('updated_at', { ascending: false }).limit(250), warnings),
-    rows('Publishing accounts', supabase.from('distribution_accounts').select('id,provider_name,account_label,status').limit(100), warnings),
-    rows('Outreach cohorts', supabase.from('outreach_prospects').select('id,segment,template_id,lifecycle_status,sequence_step,max_sequence_steps,next_run_at,last_run_at,last_error,owner,next_action,closure_condition,consecutive_failures,max_attempts,growth_campaign_id,growth_intervention_id,enabled').order('next_run_at', { ascending: true }).limit(500), warnings),
-    rows('Outreach sends', supabase.from('outreach_sends').select('id,prospect_id,sent_at,opened_at,delivery_status,sequence_step,delivery_error').order('sent_at', { ascending: false }).limit(500), warnings),
-    rows('Outreach templates', supabase.from('outreach_templates').select('id,name,subject_template,body_template,is_default,updated_at').order('updated_at', { ascending: false }).limit(100), warnings),
-    rows('Outreach replies', supabase.from('outreach_reply_events').select('provider_event_id,prospect_id,lead_id,classification,processing_status,received_at').order('received_at', { ascending: false }).limit(100), warnings),
-    rows('Sales leads', supabase.from('leads').select('id,company,request_type,status,owner,next_action,closure_condition,created_at').not('request_type', 'is', null).order('created_at', { ascending: false }).limit(100), warnings),
-    rows('Action loops', supabase.from('agent_work_loops').select('id,source_type,source_key,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,max_attempts,founder_required,blocker,metadata,created_at,updated_at').in('state', ['discovered', 'assigned', 'executing', 'verifying', 'blocked']).order('due_at', { ascending: true }).limit(250), warnings),
+    rows('Campaigns', supabase.from('growth_campaigns').select('id,name,role,vertical,status,allocation_percent,success_condition,stop_condition,metadata').order('role', { ascending: true }), warnings, sourceHealth),
+    rows('Experiments', supabase.from('growth_campaign_interventions').select('id,campaign_id,intervention_key,name,channel,status,success_condition,stop_condition,started_at,ended_at,updated_at,metadata').order('updated_at', { ascending: false }).limit(100), warnings, sourceHealth),
+    rows('Content', supabase.from('content_items').select('id,content_id,title,status,content_type,draft_markdown,canonical_url,approved_at,published_at,created_at,updated_at,growth_campaign_id,growth_intervention_id,metadata').order('updated_at', { ascending: false }).limit(200), warnings, sourceHealth),
+    rows('Distribution assets', supabase.from('distribution_assets').select('id,asset_id,content_item_id,asset_type,provider_family,title,body_plaintext,caption_text,status,cta_url,approved_at,created_at,updated_at,growth_campaign_id,growth_intervention_id,metadata').order('updated_at', { ascending: false }).limit(200), warnings, sourceHealth),
+    rows('Media', supabase.from('distribution_asset_media').select('distribution_asset_id,media_kind,storage_url,alt_text,provider_ready_status,sort_order').order('sort_order', { ascending: true }).limit(500), warnings, sourceHealth),
+    rows('Publishing jobs', supabase.from('distribution_jobs').select('id,job_id,distribution_asset_id,distribution_account_id,publish_mode,scheduled_for,status,destination_url,provider_post_id,last_error,completed_at,created_at,updated_at').order('updated_at', { ascending: false }).limit(250), warnings, sourceHealth),
+    rows('Publishing accounts', supabase.from('distribution_accounts').select('id,provider_name,account_label,status').limit(100), warnings, sourceHealth),
+    rows('Outreach cohorts', supabase.from('outreach_prospects').select('id,segment,template_id,lifecycle_status,sequence_step,max_sequence_steps,next_run_at,last_run_at,last_error,owner,next_action,closure_condition,consecutive_failures,max_attempts,growth_campaign_id,growth_intervention_id,enabled').order('next_run_at', { ascending: true }).limit(500), warnings, sourceHealth),
+    rows('Outreach sends', supabase.from('outreach_sends').select('id,prospect_id,sent_at,opened_at,delivery_status,sequence_step,delivery_error').order('sent_at', { ascending: false }).limit(500), warnings, sourceHealth),
+    rows('Outreach templates', supabase.from('outreach_templates').select('id,name,subject_template,body_template,is_default,updated_at').order('updated_at', { ascending: false }).limit(100), warnings, sourceHealth),
+    rows('Outreach replies', supabase.from('outreach_reply_events').select('provider_event_id,prospect_id,lead_id,classification,processing_status,received_at').order('received_at', { ascending: false }).limit(100), warnings, sourceHealth),
+    rows('Sales leads', supabase.from('leads').select('id,company,request_type,status,owner,next_action,closure_condition,created_at').not('request_type', 'is', null).order('created_at', { ascending: false }).limit(100), warnings, sourceHealth),
+    rows('Action loops', supabase.from('agent_work_loops').select('id,source_type,source_key,lane,owner,state,severity,title,detail,next_action,due_at,attempt_count,max_attempts,founder_required,blocker,metadata,created_at,updated_at').in('state', ['discovered', 'assigned', 'executing', 'verifying', 'blocked']).order('due_at', { ascending: true }).limit(250), warnings, sourceHealth),
   ]);
 
   const campaignById = new Map(campaignRows.map((row) => [String(row.id), row]));
@@ -681,6 +697,15 @@ export async function loadGrowthCalendar(supabase: SupabaseLike): Promise<Growth
 
   return {
     generatedAt: new Date().toISOString(),
+    sourceHealth: {
+      status: sourceHealth.failed === 0
+        ? 'available'
+        : sourceHealth.failed === sourceHealth.attempted
+          ? 'unavailable'
+          : 'degraded',
+      attempted: sourceHealth.attempted,
+      failed: sourceHealth.failed,
+    },
     activities,
     inbox,
     campaigns: campaignRows.map((row) => ({

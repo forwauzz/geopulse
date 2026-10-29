@@ -12,6 +12,69 @@ function query(data: unknown[]) {
 }
 
 describe('loadGrowthCalendar', () => {
+  it('marks the calendar unavailable instead of reporting empty inventory when every source fails', async () => {
+    function failedQuery(): any {
+      const builder: any = Promise.resolve({
+        data: null,
+        error: { message: 'Database is unavailable', code: 'PGRST000' },
+      });
+      builder.eq = () => builder;
+      builder.in = () => builder;
+      builder.not = () => builder;
+      builder.limit = () => builder;
+      builder.order = () => builder;
+      return builder;
+    }
+
+    const data = await loadGrowthCalendar({
+      from: () => ({ select: () => failedQuery() }),
+    });
+
+    expect(data.sourceHealth).toEqual({
+      status: 'unavailable',
+      attempted: 13,
+      failed: 13,
+    });
+    expect(data.activities).toEqual([]);
+    expect(data.warnings).toHaveLength(13);
+  });
+
+  it('keeps partial source failures visible without discarding healthy calendar data', async () => {
+    const healthyCampaign = {
+      id: 'campaign-1',
+      name: 'Quebec MSP first recurring customer',
+      role: 'primary',
+      vertical: 'msp_it_services',
+      status: 'active',
+      allocation_percent: 80,
+      metadata: {},
+    };
+
+    const data = await loadGrowthCalendar({
+      from(table: string) {
+        if (table === 'growth_campaigns') return { select: () => query([healthyCampaign]) };
+        return {
+          select: () => {
+            const builder: any = Promise.resolve({ data: null, error: { message: 'source failed' } });
+            for (const method of ['select', 'order', 'limit', 'in', 'not', 'gte', 'eq']) {
+              builder[method] = () => builder;
+            }
+            return builder;
+          },
+        };
+      },
+    });
+
+    expect(data.sourceHealth).toEqual({
+      status: 'degraded',
+      attempted: 13,
+      failed: 12,
+    });
+    expect(data.campaigns).toEqual([
+      expect.objectContaining({ id: 'campaign-1', role: 'primary', allocationPercent: 80 }),
+    ]);
+  });
+
   it('shows an approved manual LinkedIn post with its preview media and campaign lineage', async () => {
     const tables: Record<string, unknown[]> = {
       growth_campaigns: [{
