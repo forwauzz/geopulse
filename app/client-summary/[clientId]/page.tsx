@@ -8,10 +8,19 @@ import { AgencyReportView } from '@/components/agency-report-view';
 import { PrintScorecardButton } from '@/components/print-scorecard-button';
 import { isClientReportSharingHeld } from '@/lib/server/report-quarantine';
 import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
+import { structuredError } from '@/lib/server/structured-log';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false } };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function failClientSummaryRead(stage: string, error: unknown): never {
+  const errorCode = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code ?? 'unknown')
+    : 'unknown';
+  structuredError('client_summary_database_unavailable', { stage, errorCode });
+  throw new Error('client_summary_unavailable');
+}
 
 export default async function ClientSummaryPage({
   params,
@@ -23,30 +32,36 @@ export default async function ClientSummaryPage({
   const [{ clientId }, sp, env] = await Promise.all([params, searchParams, getScanApiEnv()]);
   if (!UUID.test(clientId) || !sp.share || !env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) notFound();
   const admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  const { data: client } = await admin
+  const clientResult = await admin
     .from('agency_clients')
     .select('id,agency_account_id,name,display_name,canonical_domain,metadata,agency_accounts(name,metadata)')
     .eq('id', clientId)
     .maybeSingle();
+  if (clientResult.error) failClientSummaryRead('client_lookup', clientResult.error);
+  const client = clientResult.data;
   if (!client?.metadata || typeof client.metadata !== 'object') notFound();
   const clientMetadata = client.metadata as Record<string, unknown>;
   if (isClientReportSharingHeld(clientMetadata)) notFound();
   if (clientMetadata['client_summary_share_token'] !== sp.share) notFound();
   const domain = typeof client.canonical_domain === 'string' ? client.canonical_domain : null;
   if (!domain) notFound();
-  const { data: benchmarkDomain } = await admin
+  const benchmarkDomainResult = await admin
     .from('benchmark_domains')
     .select('id')
     .eq('canonical_domain', domain.toLowerCase().replace(/^www\./, ''))
     .maybeSingle();
-  const { data: config } = benchmarkDomain?.id
+  if (benchmarkDomainResult.error) failClientSummaryRead('benchmark_domain_lookup', benchmarkDomainResult.error);
+  const benchmarkDomain = benchmarkDomainResult.data;
+  const configResult = benchmarkDomain?.id
     ? await admin
         .from('client_benchmark_configs')
         .select('query_set_id,platforms_enabled,metadata')
         .eq('agency_account_id', client.agency_account_id)
         .eq('benchmark_domain_id', benchmarkDomain.id)
         .maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
+  if (configResult.error) failClientSummaryRead('benchmark_config_lookup', configResult.error);
+  const config = configResult.data;
   const measurementScope: ClientMeasurementScope | undefined = typeof config?.query_set_id === 'string'
     ? {
         querySetId: config.query_set_id,
@@ -88,6 +103,7 @@ export default async function ClientSummaryPage({
     loadLatestAgencyReport({ supabase: admin, agencyClientId: clientId }),
     scansPromise,
   ]);
+  if (scansResult.error) failClientSummaryRead('scan_history_lookup', scansResult.error);
   const scans = (scansResult.data ?? []) as Array<{
     score: number | null;
     created_at: string;
