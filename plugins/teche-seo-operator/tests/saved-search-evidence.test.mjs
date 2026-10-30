@@ -35,6 +35,9 @@ test('saved Search Console evidence preserves authenticated snapshot provenance 
   const repeated=parseSavedSearchEvidence(JSON.stringify(transportVariant),requested,new Date('2026-10-30T10:00:00Z'));
   assert.equal(repeated.sourceSha256,parsed.sourceSha256);
   assert.notEqual(repeated.responseSha256,parsed.responseSha256);
+  const complete=parseSavedSearchEvidence(fixture({source_status:'complete'}),requested,new Date('2026-10-30T10:00:00Z'));
+  assert.equal(complete.sourceStatus,'complete');
+  assert.throws(()=>parseSavedSearchEvidence(fixture({source_status:'failed',error_code:'provider_failure'}),requested,new Date('2026-10-30T10:00:00Z')),/saved_evidence_source_failed/);
 });
 
 test('saved evidence parser rejects wrong scope, writes, malformed lineage, future evidence and no-overlap ranges',()=>{
@@ -69,15 +72,25 @@ test('saved evidence bridge invokes only fixed read-only Wrangler arguments',asy
 test('operator stores saved evidence as partial provenance and exposes it to status and planning',async()=>{
   const store=new LocalStore(await mkdtemp(join(tmpdir(),'teche-saved-test-')));
   const saved=parseSavedSearchEvidence(fixture(),requested,new Date('2026-10-30T10:00:00Z'));
-  const operator=new Operator(store,{},undefined,async()=>saved);
-  const sync=await operator.call('teche_sync_search_evidence',requested);
-  assert.equal(sync.status,'partial');
-  assert.equal(sync.sourceMode,'authenticated_saved_evidence');
-  assert.equal(sync.directLiveApiCall,false);
+  let clock=new Date('2026-10-30T10:00:00Z');
+  const operator=new Operator(store,{},undefined,async()=>saved,()=>clock);
+  for(let attempt=0;attempt<4;attempt++){
+    const sync=await operator.call('teche_sync_search_evidence',requested);
+    assert.equal(sync.status,'partial');
+    assert.equal(sync.sourceMode,'authenticated_saved_evidence');
+    assert.equal(sync.directLiveApiCall,false);
+  }
   const status=await operator.call('teche_get_status',{});
   assert.equal(status.providers.searchConsoleEvidence.sourceRunId,saved.sourceRunId);
   assert.equal(status.providers.searchConsoleEvidence.status,'partial');
+  assert.equal(status.providers.searchConsoleEvidence.freshness,'current_snapshot');
+  clock=new Date('2026-11-03T10:00:00Z');
+  const agedStatus=await operator.call('teche_get_status',{});
+  assert.equal(agedStatus.providers.searchConsoleEvidence.freshness,'stale_snapshot');
   const plan=await operator.call('teche_build_action_plan',{});
   assert.equal(plan.searchEvidence.sourceMode,'authenticated_saved_evidence');
   assert.equal(plan.searchEvidence.status,'partial');
+  assert.equal(plan.searchEvidence.freshness,'stale_snapshot');
+  const stored=(await store.entries()).filter(entry=>entry.kind==='result'&&entry.data.tool==='teche_sync_search_evidence').at(-1);
+  assert.equal(stored.data.freshness,'current_snapshot');
 });

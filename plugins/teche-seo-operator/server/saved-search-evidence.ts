@@ -35,8 +35,8 @@ LIMIT ${MAX_ROWS}`;
 const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const rowSchema=z.object({
   source_run_id:z.string().uuid(),collected_at:z.string().min(1),start_date:date,end_date:date,
-  source_status:z.enum(['completed','partial']),source_row_count:z.number().int().min(1).max(MAX_ROWS),
-  error_code:z.null(),property:z.literal(PROPERTY),fetched_at:z.string().min(1),
+  source_status:z.enum(['complete','partial','failed']),source_row_count:z.number().int().min(1).max(MAX_ROWS),
+  error_code:z.string().min(1).max(128).nullable(),property:z.literal(PROPERTY),fetched_at:z.string().min(1),
   row_index:z.number().int().min(0).max(MAX_ROWS-1),query:z.string().min(1).max(2048),
   page:z.string().min(1).max(4096),clicks:z.number().finite().min(0),
   impressions:z.number().finite().min(0),ctr:z.number().finite().min(0).max(1),
@@ -87,6 +87,12 @@ function sameMetadata(a:z.infer<typeof rowSchema>,b:z.infer<typeof rowSchema>){
     a.property===b.property&&a.fetched_at===b.fetched_at;
 }
 
+export function savedEvidenceFreshness(fetchedAt:string,now=new Date()){
+  const timestamp=Date.parse(fetchedAt);
+  if(!Number.isFinite(timestamp)||timestamp>now.getTime()+FUTURE_TOLERANCE_MS)return 'unknown';
+  return now.getTime()-timestamp<=CURRENT_SNAPSHOT_MS?'current_snapshot':'stale_snapshot';
+}
+
 export function parseSavedSearchEvidence(raw:string,requested:RequestedRange,now=new Date()){
   if(!validDate(requested.startDate)||!validDate(requested.endDate)||dateNumber(requested.endDate)<dateNumber(requested.startDate)){
     throw new SavedEvidenceError('saved_evidence_requested_range_rejected');
@@ -101,6 +107,7 @@ export function parseSavedSearchEvidence(raw:string,requested:RequestedRange,now
   const rows=parsed.data.results;
   const first=rows[0];
   if(!first)throw new SavedEvidenceError('saved_evidence_schema_rejected');
+  if(first.source_status==='failed'||first.error_code!==null)throw new SavedEvidenceError('saved_evidence_source_failed');
   if(rows.length!==first.source_row_count)throw new SavedEvidenceError('saved_evidence_row_count_rejected');
   if(!validDate(first.start_date)||!validDate(first.end_date)||dateNumber(first.end_date)<dateNumber(first.start_date)){
     throw new SavedEvidenceError('saved_evidence_range_rejected');
@@ -117,12 +124,12 @@ export function parseSavedSearchEvidence(raw:string,requested:RequestedRange,now
   const requestedStart=dateNumber(requested.startDate),requestedEnd=dateNumber(requested.endDate);
   if(sourceEnd<requestedStart||sourceStart>requestedEnd)throw new SavedEvidenceError('saved_evidence_out_of_range');
   const coverage=sourceStart<=requestedStart&&sourceEnd>=requestedEnd?'covers_requested_range':'partial_overlap';
-  const freshness=now.getTime()-fetchedAt<=CURRENT_SNAPSHOT_MS?'current_snapshot':'stale_snapshot';
+  const freshness=savedEvidenceFreshness(first.fetched_at,now);
   const evidenceRows=rows.map(row=>({
     query:row.query,page:row.page,clicks:row.clicks,impressions:row.impressions,ctr:row.ctr,position:row.position
   }));
   const sourceSha256=createHash('sha256').update(JSON.stringify({
-    sourceRunId:first.source_run_id,sourceStatus:first.source_status,sourceRowCount:first.source_row_count,
+    sourceRunId:first.source_run_id,sourceStatus:first.source_status,sourceRowCount:first.source_row_count,errorCode:first.error_code,
     collectedAt:first.collected_at,fetchedAt:first.fetched_at,property:first.property,
     evidenceRange:{startDate:first.start_date,endDate:first.end_date},rows:evidenceRows
   })).digest('hex');
