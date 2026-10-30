@@ -257,4 +257,34 @@ describe('visibility scorecard service', () => {
       reportFilesPublicBase: null,
     })).resolves.toBeNull();
   });
+
+  it('does not convert a public scorecard database outage into a missing scorecard', async () => {
+    const unavailable = {
+      from(table: string) {
+        expect(table).toBe('startup_workspaces');
+        const chain: any = {
+          select() {
+            return chain;
+          },
+          eq() {
+            return chain;
+          },
+          async maybeSingle() {
+            return { data: null, error: { code: 'PGRST000' } };
+          },
+        };
+        return chain;
+      },
+    };
+
+    await expect(loadVisibilityScorecard({
+      supabase: unavailable,
+      subject: { kind: 'startup_workspace', id: 'ws-1' },
+      shareToken: 'a'.repeat(32),
+      reportFilesPublicBase: null,
+    })).rejects.toMatchObject({
+      name: 'VisibilityScorecardUnavailableError',
+      stage: 'subject_lookup',
+    });
+  });
 });
