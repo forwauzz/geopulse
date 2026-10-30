@@ -140,24 +140,26 @@ export async function canManageVisibilityScorecard(args: {
   if (!subjectRow) return false;
 
   if (args.subject.kind === 'startup_workspace') {
-    const { data: membership } = await args.supabase
+    const { data: membership, error: membershipError } = await args.supabase
       .from('startup_workspace_users')
       .select('role')
       .eq('startup_workspace_id', args.subject.id)
       .eq('user_id', args.userId)
       .eq('status', 'active')
       .maybeSingle();
+    if (membershipError) failVisibilityScorecardRead('startup_membership_lookup', membershipError);
     if (membership?.role !== 'founder' && membership?.role !== 'admin') return false;
   } else {
     const accountId = String(subjectRow['agency_account_id'] ?? '');
     if (!accountId) return false;
-    const { data: membership } = await args.supabase
+    const { data: membership, error: membershipError } = await args.supabase
       .from('agency_users')
       .select('role')
       .eq('agency_account_id', accountId)
       .eq('user_id', args.userId)
       .eq('status', 'active')
       .maybeSingle();
+    if (membershipError) failVisibilityScorecardRead('agency_membership_lookup', membershipError);
     if (!membership || membership.role === 'viewer') return false;
   }
 
@@ -225,9 +227,10 @@ export async function listVisibilityReports(args: {
   query = args.subject.kind === 'startup_workspace'
     ? query.eq('startup_workspace_id', args.subject.id)
     : query.eq('agency_account_id', args.agencyAccountId ?? '');
-  const { data } = await query
+  const { data, error } = await query
     .order('generated_at', { ascending: false })
     .limit(100);
+  if (error) failVisibilityScorecardRead('report_history_lookup', error);
   const limit = Math.min(Math.max(args.limit ?? 12, 1), 50);
   return ((data ?? []) as Array<{
     id: string;
