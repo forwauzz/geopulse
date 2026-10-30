@@ -4,6 +4,7 @@ import { LocalStore } from './store';
 import { DOMAIN,ORIGIN,MAX_PAGES,createSiteFetch,withSiteBudget,siteUrl,secureRequest } from './policy';
 import * as engine from './engines';
 import {buildPrivateMarkdown,buildPrivatePdf} from './presentation';
+import {loadSavedSearchEvidence,savedEvidenceBridgeConfigured,savedEvidenceFreshness,savedEvidenceReason} from './saved-search-evidence';
 
 const date=z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const urls=z.array(z.string().max(2048)).min(1).max(MAX_PAGES);
@@ -25,6 +26,8 @@ export const descriptions={
 };
 type Tool=keyof typeof schemas;
 type Env=Record<string,string|undefined>;
+type SavedEvidenceLoader=(args:{startDate:string;endDate:string},env:Env)=>Promise<any>;
+type Clock=()=>Date;
 const queries=[
   'Which consultants help Quebec clinics select and implement electronic medical records?',
   'Which consultants help Quebec clinics improve clinical operations and workflows?'
@@ -43,14 +46,20 @@ function cap(env:Env,key:string,max:number){
 export class Operator {
   private queue:Promise<unknown>=Promise.resolve();
   constructor(readonly store=new LocalStore(),readonly env:Env=process.env,
-    private readonly providerTransport:typeof secureRequest=secureRequest){}
+    private readonly providerTransport:typeof secureRequest=secureRequest,
+    private readonly savedEvidenceLoader:SavedEvidenceLoader=loadSavedSearchEvidence,
+    private readonly now:Clock=()=>new Date()){}
   call(name:string,input:unknown):Promise<any>{
     const next=this.queue.then(()=>this.store.locked(()=>this.execute(name,input)));
     this.queue=next.catch(()=>{});return next;
   }
   availability(){
+    const direct=Boolean(this.env.GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN);
+    const saved=savedEvidenceBridgeConfigured(this.env);
     return {
-      searchConsole:this.env.GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN?'configured_unverified':'unavailable',
+      searchConsole:direct?'direct_live_api_configured_unverified':saved?'saved_evidence_bridge_configured_unverified':'unavailable',
+      searchConsoleDirectApi:direct?'configured_unverified':'unavailable',
+      searchConsoleSavedEvidence:saved?'configured_unverified':'unavailable',
       perplexity:this.env.PERPLEXITY_API_KEY?'configured_unverified':'unavailable',
       dataForSeo:'skipped',
       dataForSeoReason:'No rank requests in the six-tool v1 contract; paid rank execution cap is zero.',
@@ -72,7 +81,13 @@ export class Operator {
     }
     const entries=await this.store.entries();
     if(tool==='teche_get_status')return {
-      domain:DOMAIN,providers:this.availability(),entries:entries.length,
+      domain:DOMAIN,providers:{...this.availability(),searchConsoleEvidence:(()=>{
+        const latest=entries.filter(e=>e.kind==='result'&&e.data.tool==='teche_sync_search_evidence').at(-1)?.data;
+        return latest?{status:latest.status,sourceMode:latest.sourceMode??null,sourceRunId:latest.sourceRunId??null,
+          fetchedAt:latest.fetchedAt??null,evidenceRange:latest.evidenceRange??null,coverage:latest.coverage??null,
+          freshness:latest.sourceMode==='authenticated_saved_evidence'&&latest.fetchedAt
+            ?savedEvidenceFreshness(latest.fetchedAt,this.now()):latest.freshness??null}:null;
+      })()},entries:entries.length,
       latestRun:(()=>{const latest=entries.filter(e=>e.kind==='result').at(-1)?.data;
         return latest?{runId:latest.runId,tool:latest.tool,status:latest.status,at:latest.at,
           reviewHold:entries.some(e=>e.kind==='review_hold'&&e.data.runId===latest.runId)}:null;})(),
@@ -81,7 +96,13 @@ export class Operator {
     const lineage=hash({tool,args});
     const history=entries.filter(e=>e.data.lineage===lineage);
     let failures=0;
-    for(const e of history.slice().reverse()){if(e.kind==='result'&&e.data.status==='completed')break;if(e.kind==='attempt')failures++;}
+    for(const e of history.slice().reverse()){
+      const validSavedImport=e.kind==='result'&&e.data.tool==='teche_sync_search_evidence'&&
+        e.data.status==='partial'&&e.data.sourceMode==='authenticated_saved_evidence'&&
+        e.data.readOnlyQuery===true&&Array.isArray(e.data.rows)&&e.data.rows.length>0;
+      if(e.kind==='result'&&(e.data.status==='completed'||validSavedImport))break;
+      if(e.kind==='attempt')failures++;
+    }
     if(failures>=3)throw Error('lineage_retry_limit');
     const runId=randomUUID();
     await this.store.append('attempt',{tool,runId,lineage});
@@ -168,7 +189,18 @@ export class Operator {
   }
   private async search(args:{startDate:string;endDate:string}){
     const token=this.env.GOOGLE_SEARCH_CONSOLE_ACCESS_TOKEN;
-    if(!token)return {status:'unavailable',provider:'search_console',reason:'existing_host_token_unavailable',rows:null};
+    if(!token){
+      try{
+        const saved=await this.savedEvidenceLoader(args,this.env);
+        const status=saved.sourceStatus==='complete'&&saved.coverage==='covers_requested_range'&&saved.freshness==='current_snapshot'
+          ?'completed':'partial';
+        return {status,provider:'search_console',...args,...saved,
+          dataForSeo:{status:'skipped',reason:'rank_execution_disabled_zero_cap'}};
+      }catch(error){
+        return {status:'unavailable',provider:'search_console',sourceMode:'authenticated_saved_evidence',
+          directLiveApiCall:false,reason:savedEvidenceReason(error),rows:null};
+      }
+    }
     const fetcher=(async(input:any,init:any)=>{
       const expected='https://www.googleapis.com/webmasters/v3/sites/'+encodeURIComponent('sc-domain:'+DOMAIN)+'/searchAnalytics/query';
       if(input!==expected)throw Error('provider_endpoint_rejected');
@@ -182,8 +214,12 @@ export class Operator {
       if(row.page){try{await siteUrl(row.page);}catch{continue;}}
       safe.push(row);
     }
+    const fetchedAt=new Date().toISOString();
     return {status:'completed',provider:'search_console',property:'sc-domain:'+DOMAIN,...args,rows:safe,
-      coverage:'At most500 final query/page rows; omitted/anonymized queries are unknown.',dataForSeo:{status:'skipped',reason:'rank_execution_disabled_zero_cap'}};
+      sourceMode:'direct_live_api',directLiveApiCall:true,sourceRunId:null,sourceStatus:'complete',sourceRowCount:safe.length,
+      collectedAt:fetchedAt,fetchedAt,requestedRange:{...args},evidenceRange:{...args},coverage:'covers_requested_range',
+      freshness:'current_live_response',limitations:'At most 500 final query/page rows; omitted or anonymized queries are unknown.',
+      dataForSeo:{status:'skipped',reason:'rank_execution_disabled_zero_cap'}};
   }
   private async visibility(runId:string){
     if(!this.env.PERPLEXITY_API_KEY)return {status:'unavailable',provider:'perplexity',reason:'existing_host_key_unavailable',observations:null};
@@ -227,13 +263,18 @@ export class Operator {
   private plan(entries:any[]){
     const held=new Set(entries.filter(e=>e.kind==='review_hold').map(e=>e.data.runId));
     const audit=entries.filter(e=>e.kind==='result'&&e.data.tool==='teche_run_site_audit'&&e.data.status==='completed'&&!held.has(e.data.runId)).at(-1);
-    const search=entries.filter(e=>e.kind==='result'&&e.data.tool==='teche_sync_search_evidence'&&e.data.status==='completed').at(-1);
+    const search=entries.filter(e=>e.kind==='result'&&e.data.tool==='teche_sync_search_evidence'&&
+      (e.data.status==='completed'||e.data.status==='partial')&&Array.isArray(e.data.rows)).at(-1);
     const opportunities=search?engine.aggregateSearchConsoleRows(search.data.rows).flatMap(row=>{
       if(/medesync|priorx/i.test(row.query))return [];
       const draft=engine.classifySearchConsoleOpportunity(row);
       return draft?[{...draft,owner:'TJ preparation / website implementation / Andere approval',sourcePage:row.page}]:[];
     }):null;
     return {status:audit||search?'completed':'unavailable',auditRunId:audit?.data.runId??null,searchRunId:search?.data.runId??null,
+      searchEvidence:search?{status:search.data.status,sourceMode:search.data.sourceMode??null,sourceRunId:search.data.sourceRunId??null,
+        fetchedAt:search.data.fetchedAt??null,evidenceRange:search.data.evidenceRange??null,coverage:search.data.coverage??null,
+        freshness:search.data.sourceMode==='authenticated_saved_evidence'&&search.data.fetchedAt
+          ?savedEvidenceFreshness(search.data.fetchedAt,this.now()):search.data.freshness??null}:null,
       opportunities,technicalFindings:audit?.data.findings?.filter((i:any)=>i.status==='FAIL'||i.status==='WARNING').slice(0,5)??null,
       approvalBoundary:'Review-only. No WordPress, content, redirect, hosting or public change authorized.'};
   }

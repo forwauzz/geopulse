@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { builtinModules } from 'node:module';
 await mkdir('server/dist', {recursive:true});
 const result = await build({
-  entryPoints: ['server/index.ts', 'server/operator.ts', 'server/policy.ts', 'server/store.ts', 'server/presentation.ts', 'server/engines.ts'],
+  entryPoints: ['server/index.ts', 'server/operator.ts', 'server/policy.ts', 'server/store.ts', 'server/presentation.ts', 'server/engines.ts', 'server/saved-search-evidence.ts'],
   outdir:'server/dist', outExtension:{'.js':'.mjs'}, bundle:true, platform:'node', format:'esm',
   target:'node22', nodePaths:[resolve('node_modules')],
   banner:{js:"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"},

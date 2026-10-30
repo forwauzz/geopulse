@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { Operator,schemas,descriptions,installSiteTransport } from './operator';
 installSiteTransport();
 const operator=new Operator();
-const server=new McpServer({name:'teche-seo-operator',version:'0.1.2'});
+const server=new McpServer({name:'teche-seo-operator',version:'0.1.3'});
 for(const [name,schema] of Object.entries(schemas)){
   server.registerTool(name,{description:descriptions[name as keyof typeof descriptions],
     inputSchema:schema,

@@ -1,6 +1,6 @@
 {
   "name":"teche-seo-operator",
-  "version":"0.1.2",
+  "version":"0.1.3",
   "description":"Private local read-only SEO evidence for techehealthservices.com.",
   "mcpServers":"./mcp.json",
   "skills":"./skills/"
