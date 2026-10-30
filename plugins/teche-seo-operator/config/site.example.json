@@ -1,0 +1,7 @@
+{
+  "domain": "techehealthservices.com",
+  "note": "Documentation only. Domain and maximums are compiled constants, not user-overridable tool inputs.",
+  "maxPages": 5, "maxRequestsPerRun": 24, "maxResponseBytes": 1500000,
+  "paidProviders": "disabled unless existing host credentials AND explicit per-run/monthly request caps are present; zero default",
+  "searchProperty": "sc-domain:techehealthservices.com"
+}
