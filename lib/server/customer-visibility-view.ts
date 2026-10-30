@@ -6,6 +6,7 @@ import {
   readVisibilityScorecardShareToken,
   type VisibilityReportSummary,
 } from './visibility-scorecard-service';
+import { structuredError } from './structured-log';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -39,6 +40,24 @@ const EMPTY_OUTCOME: OutcomeEngineView = {
   methodology: 'No AI visibility result is shown until a real blind provider run has completed.',
 };
 
+export class CustomerVisibilityUnavailableError extends Error {
+  readonly stage: string;
+
+  constructor(stage: string) {
+    super('customer_visibility_unavailable');
+    this.name = 'CustomerVisibilityUnavailableError';
+    this.stage = stage;
+  }
+}
+
+function failCustomerVisibilityRead(stage: string, error: unknown): never {
+  const errorCode = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code ?? 'unknown')
+    : 'unknown';
+  structuredError('customer_visibility_database_unavailable', { stage, errorCode });
+  throw new CustomerVisibilityUnavailableError(stage);
+}
+
 function baselineStatus(metadata: Record<string, unknown> | null): CustomerVisibilityView['status'] {
   const value = metadata?.['baseline_status'];
   return value === 'queued' || value === 'running' || value === 'measured' || value === 'failed'
@@ -71,7 +90,7 @@ export async function loadCustomerVisibilityView(args: {
   readonly supabase: SupabaseLike;
   readonly userId: string;
 }): Promise<CustomerVisibilityView | null> {
-  const { data: membership } = await args.supabase
+  const { data: membership, error: membershipError } = await args.supabase
     .from('startup_workspace_users')
     .select('startup_workspace_id')
     .eq('user_id', args.userId)
@@ -79,21 +98,24 @@ export async function loadCustomerVisibilityView(args: {
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (membershipError) failCustomerVisibilityRead('workspace_membership_lookup', membershipError);
   if (!membership?.startup_workspace_id) return null;
 
-  const { data: workspace } = await args.supabase
+  const { data: workspace, error: workspaceError } = await args.supabase
     .from('startup_workspaces')
     .select('id,name,canonical_domain,metadata')
     .eq('id', membership.startup_workspace_id)
     .maybeSingle();
+  if (workspaceError) failCustomerVisibilityRead('workspace_lookup', workspaceError);
   if (!workspace?.id) return null;
 
-  const { data: workspaceDomain } = await args.supabase
+  const { data: workspaceDomain, error: workspaceDomainError } = await args.supabase
     .from('startup_workspace_domains')
     .select('canonical_domain')
     .eq('startup_workspace_id', workspace.id)
     .eq('is_primary', true)
     .maybeSingle();
+  if (workspaceDomainError) failCustomerVisibilityRead('workspace_domain_lookup', workspaceDomainError);
   const domain = workspaceDomain?.canonical_domain ?? workspace.canonical_domain ?? null;
   if (!domain) {
     return {
@@ -113,7 +135,7 @@ export async function loadCustomerVisibilityView(args: {
     };
   }
 
-  const [{ data: domainRow }, { data: latestScan }] = await Promise.all([
+  const [domainResult, latestScanResult] = await Promise.all([
     args.supabase.from('benchmark_domains').select('id').eq('canonical_domain', domain).maybeSingle(),
     args.supabase
       .from('scans')
@@ -123,14 +145,20 @@ export async function loadCustomerVisibilityView(args: {
       .limit(1)
       .maybeSingle(),
   ]);
-  const { data: config } = domainRow?.id
+  if (domainResult.error) failCustomerVisibilityRead('benchmark_domain_lookup', domainResult.error);
+  if (latestScanResult.error) failCustomerVisibilityRead('latest_scan_lookup', latestScanResult.error);
+  const domainRow = domainResult.data;
+  const latestScan = latestScanResult.data;
+  const configResult = domainRow?.id
     ? await args.supabase
         .from('client_benchmark_configs')
         .select('id,query_set_id,competitor_list,platforms_enabled,metadata')
         .eq('startup_workspace_id', workspace.id)
         .eq('benchmark_domain_id', domainRow.id)
         .maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
+  if (configResult.error) failCustomerVisibilityRead('benchmark_config_lookup', configResult.error);
+  const config = configResult.data;
   const metadata =
     config?.metadata && typeof config.metadata === 'object'
       ? config.metadata as Record<string, unknown>
@@ -167,6 +195,7 @@ export async function loadCustomerVisibilityView(args: {
       ? listVisibilityReports({ supabase: args.supabase, subject, configId: config.id })
       : Promise.resolve([]),
   ]);
+  if (queryResult.error) failCustomerVisibilityRead('benchmark_query_lookup', queryResult.error);
   const queryRows = queryResult.data;
 
   return {

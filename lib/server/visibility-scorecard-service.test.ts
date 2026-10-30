@@ -9,7 +9,7 @@ import {
 
 type Row = Record<string, unknown>;
 
-function makeSupabase(seed: Record<string, Row[]>) {
+function makeSupabase(seed: Record<string, Row[]>, errors: Record<string, unknown> = {}) {
   const updates: Array<{ table: string; values: Row; column: string; value: string }> = [];
   return {
     updates,
@@ -49,7 +49,7 @@ function makeSupabase(seed: Record<string, Row[]>) {
             return chain;
           },
           async maybeSingle() {
-            return { data: rows()[0] ?? null, error: null };
+            return { data: rows()[0] ?? null, error: errors[table] ?? null };
           },
           update(values: Row) {
             return {
@@ -59,8 +59,8 @@ function makeSupabase(seed: Record<string, Row[]>) {
               },
             };
           },
-          then(resolve: (value: { data: Row[]; error: null }) => unknown) {
-            return Promise.resolve({ data: rows(), error: null }).then(resolve);
+          then(resolve: (value: { data: Row[]; error: unknown }) => unknown) {
+            return Promise.resolve({ data: rows(), error: errors[table] ?? null }).then(resolve);
           },
         };
         return chain;
@@ -115,6 +115,31 @@ describe('visibility scorecard service', () => {
       userId: 'viewer',
       subject: { kind: 'agency_client', id: 'client-1' },
     })).resolves.toBe(false);
+  });
+
+  it('fails closed when membership or report history cannot be read', async () => {
+    const membershipFailure = makeSupabase({
+      startup_workspaces: [{ id: 'ws-1', metadata: {} }],
+      startup_workspace_users: [{ startup_workspace_id: 'ws-1', user_id: 'u-1', status: 'active', role: 'founder' }],
+    }, { startup_workspace_users: { code: 'PGRST000' } });
+    await expect(canManageVisibilityScorecard({
+      supabase: membershipFailure.db,
+      userId: 'u-1',
+      subject: { kind: 'startup_workspace', id: 'ws-1' },
+    })).rejects.toMatchObject({
+      name: 'VisibilityScorecardUnavailableError',
+      stage: 'startup_membership_lookup',
+    });
+
+    const reportFailure = makeSupabase({}, { gpm_reports: { code: 'PGRST000' } });
+    await expect(listVisibilityReports({
+      supabase: reportFailure.db,
+      subject: { kind: 'startup_workspace', id: 'ws-1' },
+      configId: 'config-1',
+    })).rejects.toMatchObject({
+      name: 'VisibilityScorecardUnavailableError',
+      stage: 'report_history_lookup',
+    });
   });
 
   it('rotates and disables Business links without replacing unrelated metadata', async () => {
