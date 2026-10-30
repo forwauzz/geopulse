@@ -1,0 +1,12 @@
+import {mkdir,copyFile,cp,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const root=resolve('test-output/local-marketplace');
+const target=resolve(root,'plugin');
+await mkdir(target,{recursive:true});
+for(const name of ['plugin.json','mcp.json','README.md'])await copyFile(name,resolve(target,name));
+for(const dir of ['.codex-plugin','skills'])await cp(dir,resolve(target,dir),{recursive:true});
+await mkdir(resolve(target,'server/dist'),{recursive:true});
+for(const name of ['index.mjs','engine-inputs.json'])await copyFile('server/dist/'+name,resolve(target,'server/dist',name));
+await mkdir(resolve(root,'.agents/plugins'),{recursive:true});
+await writeFile(resolve(root,'.agents/plugins/marketplace.json'),JSON.stringify({name:'teche-local',interface:{displayName:'Teché Private Local'},plugins:[{name:'teche-seo-operator',source:{source:'local',path:'./plugin'},policy:{installation:'AVAILABLE',authentication:'ON_INSTALL'},category:'Productivity'}]},null,2));
+console.log(root);

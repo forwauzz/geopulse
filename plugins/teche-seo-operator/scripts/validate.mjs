@@ -1,0 +1,14 @@
+import {readFile,access} from 'node:fs/promises';
+import assert from 'node:assert/strict';
+const read=async p=>JSON.parse(await readFile(p,'utf8'));
+const plugin=await read('plugin.json'),mcp=await read('mcp.json'),compat=await read('.codex-plugin/plugin.json');
+assert.equal(plugin.name,'teche-seo-operator');assert.equal(plugin.version,compat.version);
+assert.ok(/^\d+\.\d+\.\d+$/.test(plugin.version));
+assert.ok(plugin.extensions['com.openai'].interface.shortDescription.length<=30);
+assert.deepEqual(Object.keys(mcp.mcpServers),['teche-seo-operator']);
+const server=mcp.mcpServers['teche-seo-operator'];assert.equal(server.command,'node');
+assert.deepEqual(server.args,['${PLUGIN_ROOT}/server/dist/index.mjs']);assert.equal(server.cwd,'${PLUGIN_ROOT}');
+for(const f of ['server/dist/index.mjs','skills/teche-seo-operator/SKILL.md'])await access(f);
+const inputs=await read('server/dist/engine-inputs.json');
+assert.ok(!inputs.some(p=>/supabase|stripe|next\/|autonomous-seo-agent|run-deep-audit/.test(p)));
+console.log('Local manifest structure, runtime entrypoint, skill and engine boundary passed.');
