@@ -9,6 +9,7 @@ import {
 import { getTrackedPromptPanel, type TrackedPromptPanel } from './tracked-prompts';
 import { isClientReportSharingHeld, isReportQuarantined } from './report-quarantine';
 import type { ClientMeasurementScope } from './client-measurement-scope';
+import { structuredError } from './structured-log';
 
 type SupabaseLike = { from(table: string): any };
 
@@ -48,6 +49,24 @@ export type VisibilityScorecardSharingResult =
 const SHARE_TOKEN_KEY = 'visibility_scorecard_share_token';
 const LEGACY_AGENCY_SHARE_TOKEN_KEY = 'client_summary_share_token';
 
+export class VisibilityScorecardUnavailableError extends Error {
+  readonly stage: string;
+
+  constructor(stage: string) {
+    super('visibility_scorecard_unavailable');
+    this.name = 'VisibilityScorecardUnavailableError';
+    this.stage = stage;
+  }
+}
+
+function failVisibilityScorecardRead(stage: string, error: unknown): never {
+  const errorCode = error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code ?? 'unknown')
+    : 'unknown';
+  structuredError('visibility_scorecard_database_unavailable', { stage, errorCode });
+  throw new VisibilityScorecardUnavailableError(stage);
+}
+
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? { ...(value as Record<string, unknown>) } : {};
 }
@@ -77,11 +96,12 @@ async function loadSubjectRow(
   const columns = subject.kind === 'startup_workspace'
     ? 'id,name,canonical_domain,metadata'
     : 'id,agency_account_id,name,display_name,canonical_domain,metadata';
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from(subjectTable(subject))
     .select(columns)
     .eq('id', subject.id)
     .maybeSingle();
+  if (error) failVisibilityScorecardRead('subject_lookup', error);
   return data ? (data as Record<string, unknown>) : null;
 }
 
@@ -97,7 +117,7 @@ async function hasActivePaidScope(args: {
     ? args.subject.id
     : String(args.subjectRow['agency_account_id'] ?? '');
   if (!scopeId) return false;
-  const { data } = await args.supabase
+  const { data, error } = await args.supabase
     .from('user_subscriptions')
     .select('bundle_key')
     .eq(column, scopeId)
@@ -105,6 +125,7 @@ async function hasActivePaidScope(args: {
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (error) failVisibilityScorecardRead('subscription_lookup', error);
   return resolveGeoPerformanceCaps(
     typeof data?.bundle_key === 'string' ? data.bundle_key : null
   ) !== null;
@@ -243,33 +264,36 @@ export async function loadVisibilityScorecard(args: {
   let brandScope: BrandScope;
 
   if (args.subject.kind === 'startup_workspace') {
-    const { data: primaryDomain } = await args.supabase
+    const { data: primaryDomain, error: primaryDomainError } = await args.supabase
       .from('startup_workspace_domains')
       .select('canonical_domain')
       .eq('startup_workspace_id', args.subject.id)
       .eq('is_primary', true)
       .maybeSingle();
+    if (primaryDomainError) failVisibilityScorecardRead('primary_domain_lookup', primaryDomainError);
     domain = primaryDomain?.canonical_domain ?? domain;
     brandScope = { table: 'startup_workspaces', id: args.subject.id };
   } else {
     agencyAccountId = String(row['agency_account_id'] ?? '') || null;
     if (!agencyAccountId) return null;
-    const { data: account } = await args.supabase
+    const { data: account, error: accountError } = await args.supabase
       .from('agency_accounts')
       .select('name')
       .eq('id', agencyAccountId)
       .maybeSingle();
+    if (accountError) failVisibilityScorecardRead('agency_account_lookup', accountError);
     preparedByFallback = typeof account?.name === 'string' ? account.name : 'Your marketing partner';
     brandScope = { table: 'agency_accounts', id: agencyAccountId };
   }
   if (!domain) return null;
 
   const canonicalDomain = domain.toLowerCase().replace(/^www\./, '');
-  const { data: domainRow } = await args.supabase
+  const { data: domainRow, error: domainError } = await args.supabase
     .from('benchmark_domains')
     .select('id')
     .eq('canonical_domain', canonicalDomain)
     .maybeSingle();
+  if (domainError) failVisibilityScorecardRead('benchmark_domain_lookup', domainError);
   let configQuery = domainRow?.id
     ? args.supabase
         .from('client_benchmark_configs')
@@ -281,9 +305,10 @@ export async function loadVisibilityScorecard(args: {
       ? configQuery.eq('startup_workspace_id', args.subject.id)
       : configQuery.eq('agency_account_id', agencyAccountId);
   }
-  const { data: config } = configQuery
+  const { data: config, error: configError } = configQuery
     ? await configQuery.maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
+  if (configError) failVisibilityScorecardRead('benchmark_config_lookup', configError);
 
   let scanQuery = args.supabase
     .from('scans')
@@ -292,9 +317,10 @@ export async function loadVisibilityScorecard(args: {
   scanQuery = args.subject.kind === 'startup_workspace'
     ? scanQuery.eq('startup_workspace_id', args.subject.id)
     : scanQuery.eq('agency_client_id', args.subject.id);
-  const { data: scans } = await scanQuery
+  const { data: scans, error: scansError } = await scanQuery
     .order('created_at', { ascending: false })
     .limit(10);
+  if (scansError) failVisibilityScorecardRead('scan_history_lookup', scansError);
   const scanRows = (scans ?? []) as Array<{
     id: string;
     score: number | null;
