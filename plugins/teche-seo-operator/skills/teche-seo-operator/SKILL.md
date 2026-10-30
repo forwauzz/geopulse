@@ -7,7 +7,7 @@ Call teche_get_status first. Use only the six scoped MCP tools. The domain, page
 
 Run a bounded site audit, inspect the returned QA and coverage, and review both Markdown and PDF before using recommendations. Keep page-specific findings scoped to their observed URLs. A warning is not proof of blocked access. Noindex may be intentional on archive/utility pages. Scores are readiness observations, not rankings or evidence of AI citations.
 
-Use search evidence only when existing host credentials are available. Unavailable, skipped and not tested mean unknown, never zero. AI mentions are unverified responses, not citations, customer demand or revenue. DataForSEO is deliberately disabled with zero per-run/monthly caps in v1. Do not acquire credentials or increase spend caps.
+Use search evidence only when an existing direct host token is available or when the tool returns validated `authenticated_saved_evidence` from Teché's existing collector. Do not call saved evidence a live Google connection. Carry its source run, fetch time, evidence range, coverage, freshness, source status and row limitations into recommendations. Unavailable, stale, partial, skipped and not tested mean unknown or bounded evidence, never zero. AI mentions are unverified responses, not citations, customer demand or revenue. DataForSEO is deliberately disabled with zero per-run/monthly caps in v1. Do not acquire credentials or increase spend caps.
 
 Build the action plan from retained evidence. Send review and implementation coordination through Andere using existing authorized channels. No automatic email, outreach, publication, WordPress edit, redirect, canonical, robots, sitemap, DNS or hosting changes. Those require a separate scoped approval.
 

@@ -41,7 +41,8 @@ test('store refuses concurrent writers and overwrites, preserves complete immuta
  await assert.rejects(()=>s.locked(async()=>{}),/recovery_required/);
 });
 test('missing providers are unknown, concurrent calls serialize, three attempts halt unchanged lineage',async()=>{
- const s=await fresh(),op=new Operator(s,{});
+ const unavailableSavedEvidence=async()=>{throw Error('saved evidence unavailable fixture');};
+ const s=await fresh(),op=new Operator(s,{},undefined,unavailableSavedEvidence);
  const results=await Promise.all(Array.from({length:3},()=>op.call('teche_measure_ai_visibility',{})));
  assert.ok(results.every(r=>r.status==='unavailable'&&r.observations===null));
  await assert.rejects(()=>op.call('teche_measure_ai_visibility',{}),/retry_limit/);
