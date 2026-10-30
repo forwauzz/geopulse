@@ -97,7 +97,10 @@ export class Operator {
     const history=entries.filter(e=>e.data.lineage===lineage);
     let failures=0;
     for(const e of history.slice().reverse()){
-      if(e.kind==='result'&&(e.data.status==='completed'||e.data.status==='partial'))break;
+      const validSavedImport=e.kind==='result'&&e.data.tool==='teche_sync_search_evidence'&&
+        e.data.status==='partial'&&e.data.sourceMode==='authenticated_saved_evidence'&&
+        e.data.readOnlyQuery===true&&Array.isArray(e.data.rows)&&e.data.rows.length>0;
+      if(e.kind==='result'&&(e.data.status==='completed'||validSavedImport))break;
       if(e.kind==='attempt')failures++;
     }
     if(failures>=3)throw Error('lineage_retry_limit');

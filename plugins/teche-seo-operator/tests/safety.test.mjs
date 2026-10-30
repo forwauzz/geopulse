@@ -84,3 +84,15 @@ test('request and dollar caps independently constrain provider attempts; failed 
   assert.equal(calls,scenario.expected);assert.equal((await s.entries()).filter(e=>e.kind==='provider_reservation').length,calls);
  }
 });
+test('all-failed partial AI runs keep the retry stop and reject a fourth transport attempt',async()=>{
+ let calls=0;const store=await fresh();
+ const operator=new Operator(store,{PERPLEXITY_API_KEY:'fixture',TECHE_PERPLEXITY_RUN_REQUEST_CAP:'1',TECHE_PERPLEXITY_MONTH_REQUEST_CAP:'30',TECHE_PERPLEXITY_RESERVED_USD_PER_REQUEST:'0.1',TECHE_PERPLEXITY_MONTH_USD_CAP:'5'},async()=>{
+  calls++;return new Response('provider failure',{status:503});
+ });
+ for(let attempt=0;attempt<3;attempt++){
+  const result=await operator.call('teche_measure_ai_visibility',{});
+  assert.equal(result.status,'partial');assert.equal(result.observations[0].status,'failed');
+ }
+ await assert.rejects(()=>operator.call('teche_measure_ai_visibility',{}),/retry_limit/);
+ assert.equal(calls,3);
+});
