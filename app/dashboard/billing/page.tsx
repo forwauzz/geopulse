@@ -4,6 +4,10 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { ManageSubscriptionButton } from './manage-button';
 import { getPaymentApiEnv } from '@/lib/server/cf-env';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
+import {
+  BillingDashboardUnavailableError,
+  readBillingDashboardData,
+} from '@/lib/server/billing-dashboard-read';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,61 +67,76 @@ function formatBundlePrice(
 
 export default async function BillingPage() {
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await readBillingDashboardData(
+    'auth_lookup',
+    supabase.auth.getUser(),
+  );
 
   if (!user) {
     redirect('/login?next=/dashboard/billing');
   }
 
-  const [subResult, userResult, bundleResult] = await Promise.all([
-    supabase
-      .from('user_subscriptions')
-      .select('bundle_key, status, current_period_end, created_at, stripe_customer_id')
-      .eq('user_id', user.id)
-      .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from('users')
-      .select('scans_this_month, stripe_customer_id')
-      .eq('id', user.id)
-      .maybeSingle(),
-    supabase
-      .from('service_bundles')
-      .select('bundle_key, monthly_price_cents, billing_mode')
-      .in('bundle_key', ['startup_lite', 'startup_dev', 'agency_core', 'agency_pro']),
+  const [sub, userRow, bundles] = await Promise.all([
+    readBillingDashboardData(
+      'subscription_lookup',
+      supabase
+        .from('user_subscriptions')
+        .select('bundle_key, status, current_period_end, created_at, stripe_customer_id')
+        .eq('user_id', user.id)
+        .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ),
+    readBillingDashboardData(
+      'user_lookup',
+      supabase
+        .from('users')
+        .select('scans_this_month, stripe_customer_id')
+        .eq('id', user.id)
+        .maybeSingle(),
+    ),
+    readBillingDashboardData(
+      'bundle_lookup',
+      supabase
+        .from('service_bundles')
+        .select('bundle_key, monthly_price_cents, billing_mode')
+        .in('bundle_key', ['startup_lite', 'startup_dev', 'agency_core', 'agency_pro']),
+    ),
   ]);
 
-  const sub = subResult.data;
   const currentBundle = sub
-    ? bundleResult.data?.find((bundle) => bundle.bundle_key === sub.bundle_key)
+    ? bundles?.find((bundle) => bundle.bundle_key === sub.bundle_key)
     : null;
   const currentBundlePrice = formatBundlePrice(
     currentBundle?.monthly_price_cents,
     currentBundle?.billing_mode,
   );
   const env = await getPaymentApiEnv();
-  const monitor =
-    user.email && env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY
-      ? (
-          await createServiceRoleClient(
-            env.NEXT_PUBLIC_SUPABASE_URL,
-            env.SUPABASE_SERVICE_ROLE_KEY
-          )
-            .from('monitoring_subscriptions')
-            .select('domain,plan,status,current_period_end,next_audit_at,stripe_customer_id,created_at')
-            .eq('email', user.email.trim().toLowerCase())
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-        ).data
-      : null;
-  const scansUsed = userResult.data?.scans_this_month ?? 0;
+  let monitor = null;
+  if (user.email) {
+    if (!env.NEXT_PUBLIC_SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+      throw new BillingDashboardUnavailableError(
+        'monitoring_subscription_configuration',
+      );
+    }
+    monitor = await readBillingDashboardData(
+      'monitoring_subscription_lookup',
+      createServiceRoleClient(
+        env.NEXT_PUBLIC_SUPABASE_URL,
+        env.SUPABASE_SERVICE_ROLE_KEY
+      )
+        .from('monitoring_subscriptions')
+        .select('domain,plan,status,current_period_end,next_audit_at,stripe_customer_id,created_at')
+        .eq('email', user.email.trim().toLowerCase())
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    );
+  }
+  const scansUsed = userRow?.scans_this_month ?? 0;
   const stripeCustomerId =
-    userResult.data?.stripe_customer_id ??
+    userRow?.stripe_customer_id ??
     sub?.stripe_customer_id ??
     monitor?.stripe_customer_id ??
     null;
