@@ -1,4 +1,5 @@
 import { verifyAuditFullReportCapability } from '@/lib/server/audit-report-capability';
+import { auditCampaignUnavailableResponse } from '@/lib/server/audit-campaign-unavailable';
 import { getScanApiEnv } from '@/lib/server/cf-env';
 import { scanContextFromRow } from '@/lib/server/email-campaign-scan-context';
 import { createServiceRoleClient } from '@/lib/supabase/service-role';
@@ -6,6 +7,12 @@ import { buildAuditCampaignThumbnailHtml, renderAuditCampaignThumbnail } from '@
 import { buildCoverDesign } from '@workers/report/design-agent';
 
 export const runtime = 'nodejs';
+
+type CampaignScanRow = Parameters<typeof scanContextFromRow>[0] & {
+  readonly share_slug: string | null;
+  readonly user_id: string | null;
+  readonly run_source: string | null;
+};
 
 export async function GET(_request: Request, context: { params: Promise<{ token: string }> }): Promise<Response> {
   const env = await getScanApiEnv();
@@ -18,13 +25,22 @@ export async function GET(_request: Request, context: { params: Promise<{ token:
   if (!verified.ok) return Response.json({ error: verified.code }, { status: verified.code === 'expired' ? 410 : 403 });
 
   const db = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  const [{ data: scan }, { data: report }] = await Promise.all([
-    db.from('scans')
-      .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,share_slug,user_id,run_source')
-      .eq('id', verified.payload.scanId)
-      .maybeSingle(),
-    db.from('reports').select('pdf_url').eq('scan_id', verified.payload.scanId).eq('type', 'deep_audit').not('pdf_url', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-  ]);
+  let scan: CampaignScanRow | null = null;
+  let report: { readonly pdf_url: string | null } | null = null;
+  try {
+    const [scanResult, reportResult] = await Promise.all([
+      db.from('scans')
+        .select('id,url,domain,score,letter_grade,issues_json,full_results_json,created_at,share_slug,user_id,run_source')
+        .eq('id', verified.payload.scanId)
+        .maybeSingle(),
+      db.from('reports').select('pdf_url').eq('scan_id', verified.payload.scanId).eq('type', 'deep_audit').not('pdf_url', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ]);
+    if (scanResult.error || reportResult.error) return auditCampaignUnavailableResponse();
+    scan = scanResult.data as CampaignScanRow | null;
+    report = reportResult.data as { readonly pdf_url: string | null } | null;
+  } catch {
+    return auditCampaignUnavailableResponse();
+  }
   if (!scan || scan.domain?.toLowerCase() !== verified.payload.domain || scan.run_source === 'internal_benchmark'
     || (scan.user_id !== null && !scan.share_slug) || !report?.pdf_url) {
     return Response.json({ error: 'capability_target_mismatch' }, { status: 403 });
