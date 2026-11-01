@@ -18,6 +18,7 @@ import {
   buildStartupActionBacklog,
 } from '@/lib/server/startup-dashboard-shell';
 import { subscriptionNeedsWorkspaceProvisioning } from '@/lib/server/subscription-provisioning-gap';
+import { readDashboardHistoryData } from '@/lib/server/dashboard-history-read';
 
 export const dynamic = 'force-dynamic';
 
@@ -226,9 +227,7 @@ function ScanRow({
 export default async function DashboardHistoryPage({ searchParams }: Props) {
   const sp = (await searchParams) ?? {};
   const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await readDashboardHistoryData('auth_lookup', supabase.auth.getUser());
 
   if (!user) {
     redirect('/login?next=/dashboard');
@@ -240,32 +239,35 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
   });
   const siteKey = getTurnstileSiteKey();
 
-  const [
-    { data: scans, error: scansErr },
-    { data: reports },
-    { data: userSubs },
-    agencyDashboard,
-    startupDashboard,
-  ] = await Promise.all([
-    supabase
-      .from('scans')
-      // `categoryScores` is projected from the jsonb so the history charts get per-category trends
-      // without pulling the whole (large) full_results_json blob for every scan.
-      .select('id, url, domain, score, letter_grade, created_at, categoryScores:full_results_json->categoryScores')
-      .eq('user_id', user.id)
-      .is('agency_account_id', null)
-      .is('startup_workspace_id', null)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('reports')
-      .select('id, scan_id, type, email_delivered_at, pdf_generated_at, pdf_url')
-      .eq('user_id', user.id)
-      .is('agency_account_id', null)
-      .is('startup_workspace_id', null),
-    supabase
-      .from('user_subscriptions')
-      .select('id, bundle_key, status, startup_workspace_id, agency_account_id')
-      .eq('user_id', user.id),
+  const [scans, reports, userSubs, agencyDashboard, startupDashboard] = await Promise.all([
+    readDashboardHistoryData(
+      'personal_scans',
+      supabase
+        .from('scans')
+        // `categoryScores` is projected from the jsonb so the history charts get per-category trends
+        // without pulling the whole (large) full_results_json blob for every scan.
+        .select('id, url, domain, score, letter_grade, created_at, categoryScores:full_results_json->categoryScores')
+        .eq('user_id', user.id)
+        .is('agency_account_id', null)
+        .is('startup_workspace_id', null)
+        .order('created_at', { ascending: false }),
+    ),
+    readDashboardHistoryData(
+      'personal_reports',
+      supabase
+        .from('reports')
+        .select('id, scan_id, type, email_delivered_at, pdf_generated_at, pdf_url')
+        .eq('user_id', user.id)
+        .is('agency_account_id', null)
+        .is('startup_workspace_id', null),
+    ),
+    readDashboardHistoryData(
+      'personal_subscriptions',
+      supabase
+        .from('user_subscriptions')
+        .select('id, bundle_key, status, startup_workspace_id, agency_account_id')
+        .eq('user_id', user.id),
+    ),
     getAgencyDashboardData({
       supabase,
       userId: user.id,
@@ -284,14 +286,6 @@ export default async function DashboardHistoryPage({ searchParams }: Props) {
     .map((r) => ({ id: r.id, bundle_key: r.bundle_key }));
 
   const reportList = reports ?? [];
-
-  if (scansErr) {
-    return (
-      <div className="rounded-xl bg-surface-container-lowest p-6 text-sm text-error">
-        Could not load scans. Please refresh the page.
-      </div>
-    );
-  }
 
   // ── Report maps ─────────────────────────────────────────────
   const reportByScan = new Map<string, (typeof reportList)[number]>();
