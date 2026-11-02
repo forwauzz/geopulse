@@ -89,7 +89,12 @@ function toSchedule(r: ScheduleRow): RecurringSchedule {
 }
 
 export async function loadUserSchedule(supabase: SupabaseClient, userId: string): Promise<RecurringSchedule | null> {
-  const { data } = await supabase.from('recurring_audit_schedules').select('*').eq('user_id', userId).maybeSingle();
+  const { data, error } = await supabase
+    .from('recurring_audit_schedules')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
   return data ? toSchedule(data as ScheduleRow) : null;
 }
 
