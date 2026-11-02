@@ -75,12 +75,13 @@ export async function saveMyRecurringAudit(formData: FormData): Promise<void> {
     redirect('/dashboard/workspace?recurring=bad_url');
   }
 
-  const { data: membership } = await admin
+  const { data: membership, error: membershipError } = await admin
     .from('startup_workspace_users')
     .select('startup_workspace_id')
     .eq('user_id', user.id)
     .limit(1)
     .maybeSingle();
+  if (membershipError) redirect('/dashboard/workspace?recurring=error');
 
   const res = await upsertUserSchedule(admin, {
     userId: user.id,

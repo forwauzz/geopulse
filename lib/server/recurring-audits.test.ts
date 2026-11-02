@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { CADENCE_DAYS, computeNextRun, findingsForRecurringDelta } from './recurring-audits';
+import {
+  CADENCE_DAYS,
+  computeNextRun,
+  findingsForRecurringDelta,
+  loadUserSchedule,
+} from './recurring-audits';
 
 describe('computeNextRun', () => {
   const base = Date.parse('2026-07-19T00:00:00.000Z');
@@ -22,5 +27,35 @@ describe('findingsForRecurringDelta', () => {
     expect(findingsForRecurringDelta('https://clinic.ca/', [
       { checkId: 'canonical', passed: false, status: 'FAIL', fix: 'Add canonical.' },
     ])).toEqual([{ checkId: 'canonical', url: 'https://clinic.ca/', status: 'FAIL', fix: 'Add canonical.' }]);
+  });
+});
+
+describe('loadUserSchedule', () => {
+  function scheduleClient(result: { data: unknown; error: unknown }) {
+    return {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => result,
+          }),
+        }),
+      }),
+    };
+  }
+
+  it('preserves a successful empty schedule as no schedule', async () => {
+    await expect(loadUserSchedule(
+      scheduleClient({ data: null, error: null }) as never,
+      'user-1'
+    )).resolves.toBeNull();
+  });
+
+  it('does not convert a database failure into an absent schedule', async () => {
+    const error = Object.assign(new Error('database unavailable'), { code: 'PGRST000' });
+
+    await expect(loadUserSchedule(
+      scheduleClient({ data: null, error }) as never,
+      'user-1'
+    )).rejects.toBe(error);
   });
 });
