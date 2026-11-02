@@ -24,6 +24,10 @@ import { loadUiFlags } from '@/lib/server/app-ui-flags';
 import { resolveOnboardingGoal } from '@/lib/server/onboarding-profile';
 import { OnboardingGoalPanel } from '@/components/onboarding-goal-panel';
 import type { ClientMeasurementScope } from '@/lib/server/client-measurement-scope';
+import {
+  readDashboardHomeData,
+  readDashboardHomeResult,
+} from '@/lib/server/dashboard-home-read';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +42,7 @@ export default async function DashboardHomePage({
 }) {
   const sp = (await searchParams) ?? {};
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { user } = await readDashboardHomeData('auth_lookup', supabase.auth.getUser());
   if (!user) redirect('/login?next=/dashboard');
 
   const agencyWorkspace = await loadCurrentAgencyWorkspace({ userId: user.id, supabase });
@@ -67,18 +71,17 @@ export default async function DashboardHomePage({
   let admin: ReturnType<typeof createServiceRoleClient> | null = null;
   const env = await getScanApiEnv();
   if (env.NEXT_PUBLIC_SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-      const { data } = await admin
+    admin = createServiceRoleClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+    const data = await readDashboardHomeData(
+      'startup_membership',
+      admin
         .from('startup_workspace_users')
         .select('startup_workspace_id')
         .eq('user_id', user.id)
         .limit(1)
-        .maybeSingle();
-      startupWorkspaceId = (data?.startup_workspace_id as string | undefined) ?? null;
-    } catch {
-      startupWorkspaceId = null;
-    }
+        .maybeSingle(),
+    );
+    startupWorkspaceId = (data?.startup_workspace_id as string | undefined) ?? null;
   }
 
   if (!startupWorkspaceId && shouldRecoverOnboarding({
@@ -87,11 +90,14 @@ export default async function DashboardHomePage({
     hasStartupWorkspace: false,
     hasCompletedScan: false,
   })) {
-    const { count } = await supabase
-      .from('scans')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-      .eq('status', 'complete');
+    const { count } = await readDashboardHomeResult(
+      'completed_scan_count',
+      supabase
+        .from('scans')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('status', 'complete'),
+    );
     if (
       shouldRecoverOnboarding({
         metadata: user.user_metadata,
@@ -104,34 +110,34 @@ export default async function DashboardHomePage({
     }
   }
 
-  // The user's own audits, newest first — personal and workspace-attributed alike. Fail-soft:
-  // a broken overview query must never take down the scan box.
-  let scanRows: AuditScanRow[] = [];
-  try {
-    const { data } = await supabase
+  // The user's own audits, newest first — personal and workspace-attributed alike. A failed read
+  // must not be presented as an empty account with an enabled scan path.
+  const scanRows = (await readDashboardHomeData(
+    'personal_scans',
+    supabase
       .from('scans')
       .select('id, url, domain, score, letter_grade, created_at, issues_json, full_results_json')
       .eq('user_id', user.id)
       .eq('status', 'complete')
       .order('created_at', { ascending: false })
-      .limit(10);
-    scanRows = (data ?? []) as AuditScanRow[];
-  } catch {
-    scanRows = [];
-  }
+      .limit(10),
+  ) ?? []) as AuditScanRow[];
 
   const view = buildAuditDashboardView(scanRows);
   const uiFlags = await loadUiFlags();
   let isMonitored = false;
   if (admin && user.email && view.latest?.domain) {
-    const { data: monitor } = await admin
-      .from('monitoring_subscriptions')
-      .select('id')
-      .eq('email', user.email.trim().toLowerCase())
-      .eq('domain', view.latest.domain)
-      .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
-      .limit(1)
-      .maybeSingle();
+    const monitor = await readDashboardHomeData(
+      'monitoring_subscription',
+      admin
+        .from('monitoring_subscriptions')
+        .select('id')
+        .eq('email', user.email.trim().toLowerCase())
+        .eq('domain', view.latest.domain)
+        .in('status', ['active', 'trialing', 'past_due', 'incomplete'])
+        .limit(1)
+        .maybeSingle(),
+    );
     isMonitored = Boolean(monitor?.id);
   }
 
@@ -143,19 +149,25 @@ export default async function DashboardHomePage({
   let measurementScope: ClientMeasurementScope | undefined;
   if (admin && view.latest?.domain && startupWorkspaceId) {
     const canonical = view.latest.domain.toLowerCase().replace(/^www\./, '');
-    const { data: benchmarkDomain } = await admin
-      .from('benchmark_domains')
-      .select('id')
-      .eq('canonical_domain', canonical)
-      .maybeSingle();
-    const { data: config } = benchmarkDomain?.id
-      ? await admin
-          .from('client_benchmark_configs')
-          .select('query_set_id,platforms_enabled,metadata')
-          .eq('startup_workspace_id', startupWorkspaceId)
-          .eq('benchmark_domain_id', benchmarkDomain.id)
-          .maybeSingle()
-      : { data: null };
+    const benchmarkDomain = await readDashboardHomeData(
+      'benchmark_domain',
+      admin
+        .from('benchmark_domains')
+        .select('id')
+        .eq('canonical_domain', canonical)
+        .maybeSingle(),
+    );
+    const config = benchmarkDomain?.id
+      ? await readDashboardHomeData(
+          'measurement_scope',
+          admin
+            .from('client_benchmark_configs')
+            .select('query_set_id,platforms_enabled,metadata')
+            .eq('startup_workspace_id', startupWorkspaceId)
+            .eq('benchmark_domain_id', benchmarkDomain.id)
+            .maybeSingle(),
+        )
+      : null;
     if (typeof config?.query_set_id === 'string') {
       measurementScope = {
         querySetId: config.query_set_id,
